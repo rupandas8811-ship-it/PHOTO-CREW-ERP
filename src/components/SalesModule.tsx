@@ -4,6 +4,7 @@ import {
   Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight
 } from 'lucide-react';
 import { Lead, CurrentStage } from '../types';
+import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour } from '../utils';
 
 export const SalesModule: React.FC = () => {
   const { currentRole, leads, addLead, updateLeadFollowUp, confirmOrder } = useRole();
@@ -22,18 +23,21 @@ export const SalesModule: React.FC = () => {
   const [filterSalesPerson, setFilterSalesPerson] = useState('');
   const [filterDate, setFilterDate] = useState('');
 
+  // Extra state for "Other" lead source name input
+  const [otherSource, setOtherSource] = useState('');
+
   // Screen 2 Form State
   const [createForm, setCreateForm] = useState({
     customer_name: '',
-    mobile: '',
-    alternate_mobile: '',
+    mobile: '+91 ',
+    alternate_mobile: '+91 ',
     email: '',
     lead_source: 'Website Form',
     event_type: 'Wedding Shoot',
     event_date: '',
     event_time: '12:00',
     event_location: '',
-    budget: 3500,
+    budget: 35000,
     remarks: '',
   });
 
@@ -79,12 +83,24 @@ export const SalesModule: React.FC = () => {
       return;
     }
 
+    // Validate Indian mobile numbers
+    if (!validateIndianMobile(createForm.mobile)) {
+      alert('Please enter a valid Indian mobile number starting with 6, 7, 8, or 9 (10 digits).');
+      return;
+    }
+    if (createForm.alternate_mobile && createForm.alternate_mobile.trim() !== '' && createForm.alternate_mobile.trim() !== '+91' && !validateIndianMobile(createForm.alternate_mobile)) {
+      alert('Please enter a valid alternate Indian mobile number starting with 6, 7, 8, or 9 (10 digits).');
+      return;
+    }
+
+    const finalSource = createForm.lead_source === 'Other' ? (otherSource ? `Other: ${otherSource}` : 'Other') : createForm.lead_source;
+
     const newId = addLead({
       customer_name: createForm.customer_name,
       mobile: createForm.mobile,
-      alternate_mobile: createForm.alternate_mobile || undefined,
+      alternate_mobile: (createForm.alternate_mobile && createForm.alternate_mobile.trim() !== '' && createForm.alternate_mobile.trim() !== '+91') ? createForm.alternate_mobile : undefined,
       email: createForm.email,
-      lead_source: createForm.lead_source,
+      lead_source: finalSource,
       event_type: createForm.event_type,
       event_date: createForm.event_date || new Date().toISOString().split('T')[0],
       event_time: createForm.event_time,
@@ -95,17 +111,18 @@ export const SalesModule: React.FC = () => {
 
     setCreateForm({
       customer_name: '',
-      mobile: '',
-      alternate_mobile: '',
+      mobile: '+91 ',
+      alternate_mobile: '+91 ',
       email: '',
       lead_source: 'Website Form',
       event_type: 'Wedding Shoot',
       event_date: '',
       event_time: '12:00',
       event_location: '',
-      budget: 3500,
+      budget: 35000,
       remarks: '',
     });
+    setOtherSource('');
 
     setActiveTab('list');
     alert(`Lead created with ID: ${newId}`);
@@ -227,7 +244,7 @@ export const SalesModule: React.FC = () => {
       </div>
 
       {/* Main Sandbox Area */}
-      {selectedLead && (
+      {false && selectedLead && (
         <div className="hidden lg:grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
           {/* Column A: Lead Details & Meta */}
@@ -251,12 +268,12 @@ export const SalesModule: React.FC = () => {
             <div className="space-y-3.5 text-xs">
               <div className="flex items-center gap-2.5 text-slate-350">
                 <Phone className="w-4 h-4 text-slate-500 flex-shrink-0" />
-                <span className="font-mono text-slate-200">{selectedLead.mobile}</span>
+                <span className="font-mono text-slate-200">{formatIndianPhoneNumber(selectedLead.mobile)}</span>
               </div>
               {selectedLead.alternate_mobile && (
                 <div className="flex items-center gap-2.5 text-slate-350">
                   <Phone className="w-4 h-4 text-slate-505 flex-shrink-0" />
-                  <span>Alt: <span className="font-mono text-slate-200">{selectedLead.alternate_mobile}</span></span>
+                  <span>Alt: <span className="font-mono text-slate-200">{formatIndianPhoneNumber(selectedLead.alternate_mobile)}</span></span>
                 </div>
               )}
               <div className="flex items-center gap-2.5 text-slate-350">
@@ -281,11 +298,11 @@ export const SalesModule: React.FC = () => {
               </div>
               <div>
                 <span className="text-slate-500 block">Date Scheduled</span>
-                <strong className="text-slate-200 font-medium">{selectedLead.event_date} @ {selectedLead.event_time}</strong>
+                <strong className="text-slate-200 font-medium">{selectedLead.event_date} @ {formatTime12Hour(selectedLead.event_time)}</strong>
               </div>
               <div>
                 <span className="text-slate-500 block">Current Budget</span>
-                <strong className="text-amber-400 font-extrabold font-mono">${selectedLead.budget.toLocaleString()}</strong>
+                <strong className="text-amber-400 font-extrabold font-mono">{formatINR(selectedLead.budget)}</strong>
               </div>
             </div>
 
@@ -354,7 +371,7 @@ export const SalesModule: React.FC = () => {
                   {/* Proposed budget */}
                   <div>
                     <label className="block text-xs font-medium text-slate-400 mb-1">
-                      Negotiated Quotation Amount ($) *
+                      Negotiated Quotation Amount (₹) *
                     </label>
                     <input
                       type="number"
@@ -426,14 +443,15 @@ export const SalesModule: React.FC = () => {
       )}
 
       {/* Main Sandbox Area & Mobile Base view */}
-      <div className={selectedLead ? "hidden lg:block space-y-6" : "space-y-6"}>
+      <div className="space-y-6">
         {activeTab === 'create' ? (
-        /* SCREEN 2: Create Lead Layout */
-        <div className="bg-slate-850 p-6 rounded-xl border border-slate-800 max-w-3xl mx-auto space-y-6">
-          <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
-            <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-              <span>✍️</span> Screen 2: Capture New Inbound Query
-            </h3>
+        /* SCREEN 2: Create Lead Layout as centered Popup Modal */
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto animate-fade-in text-left">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl relative flex flex-col p-6 space-y-6 text-left">
+            <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+              <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                <span>✍️</span> Capture New Inbound Query
+              </h3>
             <button 
               onClick={() => setActiveTab('list')}
               className="p-1 px-2.5 bg-slate-805 hover:bg-slate-800 text-slate-400 text-xs rounded transition-all cursor-pointer"
@@ -526,21 +544,39 @@ export const SalesModule: React.FC = () => {
               </div>
 
               {/* Lead Source */}
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">
-                  Inbound Lead Channel Source
-                </label>
-                <select
-                  value={createForm.lead_source}
-                  onChange={(e) => setCreateForm({ ...createForm, lead_source: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none"
-                >
-                  <option value="Website Form">Website Form</option>
-                  <option value="Instagram">Instagram</option>
-                  <option value="Facebook Ad">Facebook Ad</option>
-                  <option value="Google Search">Google Search</option>
-                  <option value="Referral">Referral</option>
-                </select>
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">
+                    Inbound Lead Channel Source
+                  </label>
+                  <select
+                    value={createForm.lead_source}
+                    onChange={(e) => setCreateForm({ ...createForm, lead_source: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none"
+                  >
+                    <option value="Website Form">Website Form</option>
+                    <option value="Instagram">Instagram</option>
+                    <option value="Facebook Ad">Facebook Ad</option>
+                    <option value="Google Search">Google Search</option>
+                    <option value="Referral">Referral</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                {createForm.lead_source === 'Other' && (
+                  <div>
+                    <label className="block text-xs font-mono font-bold text-amber-500 mb-1 animate-fade-in-down">
+                      Specify Custom Lead Source Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. YouTube, Billboard, Event Flyer"
+                      value={otherSource}
+                      onChange={(e) => setOtherSource(e.target.value)}
+                      className="w-full bg-slate-900 border border-amber-500/50 rounded-lg py-1.5 px-3 text-xs text-amber-200 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Event Date */}
@@ -574,7 +610,7 @@ export const SalesModule: React.FC = () => {
               {/* Budget */}
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1">
-                  Initial Proposed Budget ($)
+                  Initial Proposed Budget (₹)
                 </label>
                 <input
                   type="number"
@@ -633,6 +669,7 @@ export const SalesModule: React.FC = () => {
               </button>
             </div>
           </form>
+          </div>
         </div>
       ) : (
         /* SCREEN 1: Lead List datagrid */
@@ -707,22 +744,6 @@ export const SalesModule: React.FC = () => {
               </select>
             </div>
 
-            {/* Sales Representative */}
-            <div>
-              <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
-                Sales Agent
-              </label>
-              <select
-                value={filterSalesPerson}
-                onChange={(e) => setFilterSalesPerson(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100"
-              >
-                <option value="">All Agents</option>
-                <option value="Sarah Jenkins">Sarah Jenkins</option>
-                <option value="Michael Chang">Michael Chang</option>
-              </select>
-            </div>
-
             {/* Clear filters trigger */}
             <div className="flex items-center gap-1.5">
               <button
@@ -774,7 +795,7 @@ export const SalesModule: React.FC = () => {
                             {lead.customer_name}
                           </td>
                           <td className="p-3.5 font-mono text-zinc-400">
-                            {lead.mobile}
+                            {formatIndianPhoneNumber(lead.mobile)}
                           </td>
                           <td className="p-3.5">
                             <span className="bg-zinc-950 text-amber-400 border border-zinc-850 px-2 py-0.5 rounded text-[10px] font-bold font-mono">
@@ -872,21 +893,21 @@ export const SalesModule: React.FC = () => {
                 {/* Quotation Amt */}
                 <div>
                   <label className="block font-medium text-slate-400 mb-1">
-                    Final Contract Price ($) *
+                    Final Contract Price (₹) *
                   </label>
                   <input
                     type="number"
                     required
                     value={confirmForm.quotation_amount}
                     onChange={(e) => setConfirmForm({ ...confirmForm, quotation_amount: Number(e.target.value) })}
-                    className="w-full bg-slate-900 border border-slate-755 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none font-mono"
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none font-mono"
                   />
                 </div>
 
                 {/* Advance Amount */}
                 <div>
                   <label className="block font-medium text-slate-400 mb-1">
-                    Advance Collected ($) *
+                    Advance Collected (₹) *
                   </label>
                   <input
                     type="number"
@@ -902,7 +923,7 @@ export const SalesModule: React.FC = () => {
               <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center justify-between">
                 <span className="text-slate-350">Balance Outstanding Due:</span>
                 <strong className="text-emerald-400 font-mono font-black">
-                  ${Math.max(0, confirmForm.quotation_amount - confirmForm.advance_received).toLocaleString()}
+                  {formatINR(Math.max(0, confirmForm.quotation_amount - confirmForm.advance_received))}
                 </strong>
               </div>
 
@@ -931,7 +952,7 @@ export const SalesModule: React.FC = () => {
 
       {/* Mobile/Tablet Popup Modal for Lead Follow-up Details */}
       {selectedLead && (
-        <div id="lead_details_mobile_modal" className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 lg:hidden overflow-y-auto animate-fade-in">
+        <div id="lead_details_mobile_modal" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
           <div className="bg-slate-900 border border-slate-805 rounded-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl relative flex flex-col">
             <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-850 sticky top-0 z-10 backdrop-blur-md">
               <h3 className="text-xs font-black text-white flex items-center gap-1.5 font-mono uppercase tracking-wider">
@@ -961,12 +982,12 @@ export const SalesModule: React.FC = () => {
                 <div className="space-y-3 text-xs">
                   <div className="flex items-center gap-2.5 text-slate-350">
                     <Phone className="w-4 h-4 text-slate-500 flex-shrink-0" />
-                    <span className="font-mono text-slate-205">{selectedLead.mobile}</span>
+                    <span className="font-mono text-slate-205">{formatIndianPhoneNumber(selectedLead.mobile)}</span>
                   </div>
                   {selectedLead.alternate_mobile && (
                     <div className="flex items-center gap-2.5 text-slate-350">
                       <Phone className="w-4 h-4 text-slate-505 flex-shrink-0" />
-                      <span>Alt: <span className="font-mono text-slate-205">{selectedLead.alternate_mobile}</span></span>
+                      <span>Alt: <span className="font-mono text-slate-205">{formatIndianPhoneNumber(selectedLead.alternate_mobile)}</span></span>
                     </div>
                   )}
                   <div className="flex items-center gap-2.5 text-slate-350">
@@ -991,35 +1012,35 @@ export const SalesModule: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-slate-500 block">Date Scheduled</span>
-                    <strong className="text-slate-205 font-medium">{selectedLead.event_date} @ {selectedLead.event_time}</strong>
+                    <strong className="text-slate-205 font-medium">{selectedLead.event_date} @ {formatTime12Hour(selectedLead.event_time)}</strong>
                   </div>
                   <div>
-                    <span className="text-slate-500 block">Current Budget</span>
-                    <strong className="text-amber-455 font-extrabold font-mono">${selectedLead.budget.toLocaleString()}</strong>
+                    <span className="text-slate-505 block">Current Budget</span>
+                    <strong className="text-amber-455 font-extrabold font-mono">{formatINR(selectedLead.budget)}</strong>
                   </div>
                 </div>
-
-                <div className="border-t border-slate-800 pt-3 text-[11px]">
-                  <span className="text-slate-500 block mb-1">Remarks & Audits</span>
-                  <div className="bg-slate-900/60 p-2.5 rounded border border-slate-800 font-mono text-[10px] text-slate-400 max-h-36 overflow-y-auto whitespace-pre-wrap">
-                    {selectedLead.remarks || 'No remarks recorded.'}
-                  </div>
-                </div>
-
-                {/* Convert Lead button */}
-                {canEdit && (
-                  <div className="border-t border-slate-800 pt-3">
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmModal(true)}
-                      className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold py-2.5 px-4 rounded-xl shadow-lg text-xs transition-all cursor-pointer font-bold"
-                    >
-                      <CheckSquare className="w-4 h-4" />
-                      <span>CONFIRM ORDER CONTRACT</span>
-                    </button>
-                  </div>
-                )}
               </div>
+
+              <div className="border-t border-slate-800 pt-3 text-[11px]">
+                <span className="text-slate-500 block mb-1">Remarks & Audits</span>
+                <div className="bg-slate-900/60 p-2.5 rounded border border-slate-800 font-mono text-[10px] text-slate-400 max-h-36 overflow-y-auto whitespace-pre-wrap">
+                  {selectedLead.remarks || 'No remarks recorded.'}
+                </div>
+              </div>
+
+              {/* Convert Lead button */}
+              {canEdit && (
+                <div className="border-t border-slate-800 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmModal(true)}
+                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold py-2.5 px-4 rounded-xl shadow-lg text-xs transition-all cursor-pointer font-bold"
+                  >
+                    <CheckSquare className="w-4 h-4" />
+                    <span>CONFIRM ORDER CONTRACT</span>
+                  </button>
+                </div>
+              )}
 
               {/* Column B: Activity Logger */}
               <div className="bg-slate-850 rounded-xl border border-slate-800 p-4 space-y-4">
@@ -1064,7 +1085,7 @@ export const SalesModule: React.FC = () => {
                       {/* Quotation amount */}
                       <div>
                         <label className="block text-[11px] font-medium text-slate-455 mb-1">
-                          Negotiated Quotation Amount ($) *
+                          Negotiated Quotation Amount (₹) *
                         </label>
                         <input
                           type="number"

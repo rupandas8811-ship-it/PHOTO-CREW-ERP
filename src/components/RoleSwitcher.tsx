@@ -5,7 +5,6 @@ import { UserRole } from '../types';
 
 export const RoleSwitcher: React.FC = () => {
   const { currentRole, currentUser, logout, resetAllData } = useRole();
-  const [confirmLogout, setConfirmLogout] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
 
   if (!currentUser) return null;
@@ -79,56 +78,19 @@ export const RoleSwitcher: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Side: Quick System Reset & Secure Sign-out */}
+        {/* Right Side: Secure Sign-out */}
         <div className="flex items-center justify-end gap-3.5">
-          {/* Reset sandbox with beautiful cinematic design */}
-          <button
-            id="btn_reset_db"
-            onClick={() => {
-              if (confirmReset) {
-                resetAllData();
-                setConfirmReset(false);
-              } else {
-                setConfirmReset(true);
-                setConfirmLogout(false);
-              }
-            }}
-            onMouseLeave={() => setConfirmReset(false)}
-            className={`group flex items-center gap-2 px-3.5 py-1.5 text-[11px] font-bold transition-all duration-200 cursor-pointer rounded-xl border ${
-              confirmReset
-                ? 'bg-amber-500/20 text-amber-200 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.15)]'
-                : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100 border-zinc-850 hover:border-zinc-750'
-            }`}
-            title="Reset Database sandbox to initial pre-seeded state"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 text-amber-500/80 ${confirmReset ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
-            <span>{confirmReset ? 'Confirm Reset Sandbox?' : 'Reload Demo Sandbox'}</span>
-          </button>
-
-          <div className="h-6 w-px bg-zinc-850 hidden sm:block" />
-
           {/* Log out */}
           <button
             id="btn_logout"
             onClick={() => {
-              if (confirmLogout) {
-                logout();
-                setConfirmLogout(false);
-              } else {
-                setConfirmLogout(true);
-                setConfirmReset(false);
-              }
+              logout();
             }}
-            onMouseLeave={() => setConfirmLogout(false)}
-            className={`flex items-center gap-2 px-4 py-1.5 text-[11px] font-bold transition-all duration-200 cursor-pointer shadow-md rounded-xl ${
-              confirmLogout
-                ? 'bg-rose-500/20 text-rose-200 border-rose-500/60 shadow-[0_0_15px_rgba(239,68,68,0.2)]'
-                : 'bg-rose-500/5 hover:bg-rose-500/15 text-rose-400 border border-rose-500/10 hover:border-rose-500/30'
-            }`}
-            title="Securely terminate session"
+            className="flex items-center gap-2 px-4 py-1.5 text-[11px] font-bold transition-all duration-200 cursor-pointer shadow-md rounded-xl bg-rose-500/5 hover:bg-rose-500/15 text-rose-400 border border-rose-500/10 hover:border-rose-500/30"
+            title="Securely log out"
           >
             <LogOut className="w-3.5 h-3.5 text-rose-400" />
-            <span>{confirmLogout ? 'Confirm Logout?' : 'Terminate Session'}</span>
+            <span>Logout</span>
           </button>
         </div>
 

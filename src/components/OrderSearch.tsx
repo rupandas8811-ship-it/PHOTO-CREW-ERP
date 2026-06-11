@@ -3,6 +3,7 @@ import { useRole } from './RoleContext';
 import { 
   Search, ShieldAlert, Key, Landmark, HelpCircle, MapPin, Calendar, Clock, DollarSign, Camera, FileCheck
 } from 'lucide-react';
+import { formatINR, formatIndianPhoneNumber, formatTime12Hour } from '../utils';
 
 export const OrderSearch: React.FC = () => {
   const { leads, orders, operations, production, payments } = useRole();
@@ -124,10 +125,10 @@ export const OrderSearch: React.FC = () => {
                     <span className="text-[10px] font-bold text-slate-500 font-mono tracking-wider block uppercase">
                       📞 Client CRM Info
                     </span>
-                    <p className="text-slate-350 truncate">Mobile: <strong className="text-slate-200">{lead.mobile}</strong></p>
+                    <p className="text-slate-350 truncate">Mobile: <strong className="text-slate-200">{formatIndianPhoneNumber(lead.mobile)}</strong></p>
                     <p className="text-slate-350 truncate">Email: <span className="text-slate-200">{lead.email}</span></p>
                     <p className="text-slate-350">Event Location: <span className="text-slate-200">{lead.event_location}</span></p>
-                    <p className="text-slate-350">Date: <span className="text-slate-200">{lead.event_date}</span></p>
+                    <p className="text-slate-350">Date & Time: <span className="text-slate-200">{lead.event_date} @ {formatTime12Hour(lead.event_time)}</span></p>
                   </div>
 
                   {/* Card 2: Assigned Operations Team (CREW) */}
@@ -171,13 +172,13 @@ export const OrderSearch: React.FC = () => {
                     </span>
                     {pay ? (
                       <div className="space-y-1 text-slate-350 text-[11px]">
-                        <p>Price: <strong className="text-slate-200">${pay.quotation_amount.toLocaleString()}</strong></p>
-                        <p>Advance: <span className="text-emerald-400 font-mono">${pay.advance_received.toLocaleString()}</span></p>
-                        <p>Final Recv: <span className="text-emerald-400 font-mono">${pay.final_payment_received.toLocaleString()}</span></p>
+                        <p>Price: <strong className="text-slate-200">{formatINR(pay.quotation_amount)}</strong></p>
+                        <p>Advance: <span className="text-emerald-400 font-mono">{formatINR(pay.advance_received)}</span></p>
+                        <p>Final Recv: <span className="text-emerald-400 font-mono">{formatINR(pay.final_payment_received)}</span></p>
                         <p className="border-t border-slate-800/80 pt-1 flex items-center justify-between">
                           <span>Bal Due:</span>
                           <strong className={pay.balance_due > 0 ? "text-rose-400 font-mono font-bold" : "text-emerald-400 font-mono font-bold"}>
-                            ${pay.balance_due.toLocaleString()}
+                            {formatINR(pay.balance_due)}
                           </strong>
                         </p>
                       </div>

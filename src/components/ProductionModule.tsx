@@ -74,7 +74,7 @@ export const ProductionModule: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         {/* Column Left: Production Queue */}
-        <div className="lg:col-span-12 xl:col-span-5 bg-zinc-900/40 backdrop-blur-sm rounded-2xl border border-zinc-850 overflow-hidden shadow-2xl relative">
+        <div className="lg:col-span-12 xl:col-span-12 bg-zinc-900/40 backdrop-blur-sm rounded-2xl border border-zinc-850 overflow-hidden shadow-2xl relative">
           <div className="p-4 border-b border-zinc-850 bg-zinc-950/70 flex justify-between items-center flex-wrap gap-2">
             <h3 className="text-[10px] font-black text-zinc-350 uppercase tracking-widest flex items-center gap-1.5 font-mono">
               <Layers className="w-3.5 h-3.5 text-violet-400" />
@@ -138,7 +138,7 @@ export const ProductionModule: React.FC = () => {
         </div>
 
         {/* Column Right: Workflow Controls */}
-        <div className="hidden xl:block xl:col-span-7 space-y-6 w-full">
+        <div className="hidden space-y-6 w-full">
           {selectedProdId ? (
             (() => {
               const prodItem = production.find((p) => p.production_id === selectedProdId)!;
@@ -380,9 +380,9 @@ export const ProductionModule: React.FC = () => {
 
       </div>
 
-      {/* Mobile/Tablet Popup Modal for Details */}
+      {/* Popup Modal for Details (Centered & Responsive for Desktop, Tablet, and Mobile) */}
       {selectedProdId && (
-        <div id="production_details_mobile_modal" className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 xl:hidden overflow-y-auto">
+        <div id="production_details_mobile_modal" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-zinc-950 border border-zinc-850 rounded-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl relative flex flex-col">
             <div className="p-4 border-b border-zinc-855 flex items-center justify-between bg-zinc-900/60 sticky top-0 z-10 backdrop-blur-md animate-fade-in">
               <h3 className="text-xs font-black text-white flex items-center gap-1.5 font-mono uppercase tracking-wider">

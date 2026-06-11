@@ -4,6 +4,7 @@ import {
   Users, Calendar, FileText, CheckCircle, Landmark, TrendingUp, AlertCircle, Clock, ShieldAlert, Sparkles, Filter, Sliders, ChevronRight
 } from 'lucide-react';
 import { CurrentStage } from '../types';
+import { formatINR, formatTime12Hour } from '../utils';
 
 export const Dashboard: React.FC = () => {
   const { leads, orders, production, payments, logs } = useRole();
@@ -236,7 +237,7 @@ export const Dashboard: React.FC = () => {
           </div>
           <div className="mt-5 flex items-baseline justify-between">
             <span className="text-3xl font-black text-amber-400 font-mono tracking-tight">
-              ${totalCollected.toLocaleString()}
+              {formatINR(totalCollected)}
             </span>
             <span className="text-[9px] px-2.5 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded font-mono font-bold">
               CLEARED FUNDS
@@ -253,7 +254,7 @@ export const Dashboard: React.FC = () => {
           </div>
           <div className="mt-5 flex items-baseline justify-between">
             <span className="text-3xl font-black text-rose-400 font-mono tracking-tight">
-              ${totalOutstanding.toLocaleString()}
+              {formatINR(totalOutstanding)}
             </span>
             <span className="text-[9.5px] font-mono text-zinc-550 font-bold uppercase">UNPAID</span>
           </div>
@@ -466,7 +467,7 @@ export const Dashboard: React.FC = () => {
                     {log.record_id}
                   </td>
                   <td className="p-3.5 text-right text-[10px] text-zinc-500 pr-5 font-mono">
-                    {new Date(log.timestamp).toLocaleTimeString()}
+                    {formatTime12Hour(log.timestamp)}
                   </td>
                 </tr>
               ))}

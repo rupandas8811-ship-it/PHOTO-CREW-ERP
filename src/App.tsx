@@ -10,11 +10,21 @@ import { OrderSearch } from './components/OrderSearch';
 import { LoginScreen } from './components/LoginScreen';
 import { UserManagementModule } from './components/UserManagementModule';
 import { 
-  Briefcase, Camera, Video, Landmark, Shield, Users, Search, Info, Target, Sparkles
+  Briefcase, Camera, Video, Landmark, Shield, Users, Search, Info, Target, Sparkles, Menu, RefreshCw
 } from 'lucide-react';
 
 const MainAppContent: React.FC = () => {
-  const { currentUser, currentRole } = useRole();
+  const { currentUser, currentRole, resetAllData, refreshData } = useRole();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    refreshData();
+    setTimeout(() => {
+      setIsRefreshing(false);
+    }, 600);
+  };
 
   // Initialize correct default tab according to user role to avoid visual flashes
   const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'operations' | 'production' | 'payments' | 'search' | 'users'>(() => {
@@ -65,10 +75,31 @@ const MainAppContent: React.FC = () => {
       {/* Main Container */}
       <div className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col lg:flex-row gap-6">
         
-        {/* Left Side: Modular Navigation Sidebar */}
-        <aside className="lg:w-64 flex-shrink-0 space-y-4">
-          
-          <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 rounded-2xl border border-zinc-850 p-4 space-y-4 shadow-xl relative">
+        {/* Left Side: Navigation Sidebar Container */}
+        <div className={`flex-shrink-0 flex flex-col gap-3 transition-all duration-200 ${sidebarOpen ? 'w-full lg:w-64' : 'w-auto'}`}>
+          <div className="flex items-center gap-2">
+            <button
+              id="btn_sidebar_toggle"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="p-2.5 w-10 h-10 flex items-center justify-center bg-zinc-900 hover:bg-zinc-800 text-zinc-350 hover:text-white border border-zinc-850 hover:border-zinc-700 rounded-xl transition-all cursor-pointer shadow-md select-none"
+              title={sidebarOpen ? "Collapse Menu" : "Expand Menu"}
+            >
+              <Menu className="w-5 h-5 text-amber-500" />
+            </button>
+            <button
+              id="btn_refresh_data"
+              onClick={handleRefresh}
+              className="p-2.5 px-3 h-10 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-350 hover:text-white border border-zinc-850 hover:border-zinc-700 rounded-xl transition-all cursor-pointer shadow-md select-none text-xs font-bold font-mono"
+              title="Refresh Displayed Data"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-emerald-500 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="text-[10px] tracking-wide uppercase">Refresh</span>
+            </button>
+          </div>
+
+          {sidebarOpen && (
+            <aside className="w-full space-y-4">
+              <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 rounded-2xl border border-zinc-850 p-4 space-y-4 shadow-xl relative">
             {/* Corner calibration tick marks */}
             <div className="absolute top-2 left-2 w-1 h-1 bg-amber-500/50" />
             <div className="absolute top-2 right-2 w-1 h-1 bg-amber-500/50" />
@@ -217,53 +248,16 @@ const MainAppContent: React.FC = () => {
                 </button>
               )}
             </nav>
-          </div>
-
-          {/* Elegant Division clearance info */}
-          <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 rounded-2xl border border-zinc-850 p-4 space-y-3.5 text-xs text-zinc-400 shadow-xl relative overflow-hidden">
-            <h4 className="font-extrabold text-zinc-350 flex items-center gap-1.5 font-mono text-[10px] tracking-wider uppercase">
-              <Info className="w-3.5 h-3.5 text-amber-500" />
-              <span>DIVISION CLEARANCE</span>
-            </h4>
             
-            <div className="space-y-2 text-[11px] text-zinc-400 leading-relaxed font-sans">
-              {currentRole === 'Business Owner' && (
-                <p className="border-l-2 border-amber-500/40 pl-2">Executive Access (Full Clearance). Authorized to supervise all shoots, control budget lines, and configure security rules.</p>
-              )}
-              {currentRole === 'Sales Team' && (
-                <p className="border-l-2 border-emerald-500/40 pl-2">Sales Access. Authorized to register inquiries, manage leads, propose pricing rates, and generate camera contracts.</p>
-              )}
-              {currentRole === 'Operations Team' && (
-                <p className="border-l-2 border-sky-500/40 pl-2">Operations Log. Authorized for drone/camera team logs, gear kit allocation, and setup configuration reports.</p>
-              )}
-              {currentRole === 'Production Team' && (
-                <p className="border-l-2 border-purple-500/40 pl-2">Production Suite. Authorized for raw file ingest, editor pipeline tracking, feedback routing, and watermarked pre-releases.</p>
-              )}
-            </div>
-            
-            <div className="pt-2.5 border-t border-zinc-850/80 flex items-center justify-between text-[10px] text-zinc-500 font-mono uppercase tracking-wider">
-              <span>Security Hub:</span>
-              <span className="text-amber-500 font-black">MIL-SPEC 256</span>
-            </div>
+            {/* Divider replaced with subtle spacer at bottom of nav */}
+            <div className="my-1" />
           </div>
         </aside>
+        )}
+      </div>
 
         {/* Right Side: Active Workspace panel */}
         <main className="flex-1 min-w-0 flex flex-col gap-5">
-          
-          {/* Privilege Status Indicators */}
-          <div className="p-4 bg-gradient-to-r from-zinc-900/90 to-zinc-950/90 border border-zinc-850 rounded-2xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xl relative">
-            <span className="font-extrabold text-zinc-300 flex items-center gap-2 font-mono text-[10px] tracking-wider">
-              <Shield className="w-4 h-4 text-amber-500" />
-              <span>{writeStatus.label}</span>
-            </span>
-            <div className="flex items-center gap-2 self-end sm:self-auto">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-[9px] font-mono text-zinc-550 tracking-widest uppercase">
-                NODE_ACTIVE_STABLE
-              </span>
-            </div>
-          </div>
 
           {/* Render Active View Container */}
           <div className="bg-transparent rounded-2xl relative">

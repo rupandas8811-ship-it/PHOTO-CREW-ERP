@@ -3,6 +3,7 @@ import { useRole } from './RoleContext';
 import { 
   Landmark, DollarSign, Calendar, FileText, CheckCircle2, AlertCircle, Sparkles, Ban
 } from 'lucide-react';
+import { formatINR } from '../utils';
 
 export const PaymentsModule: React.FC = () => {
   const { currentRole, payments, orders, recordPayment } = useRole();
@@ -55,7 +56,7 @@ export const PaymentsModule: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         {/* Column Left: Billing index list */}
-        <div className="lg:col-span-12 xl:col-span-7 bg-zinc-900/40 backdrop-blur-sm rounded-2xl border border-zinc-850 overflow-hidden shadow-2xl relative">
+        <div className="lg:col-span-12 xl:col-span-12 bg-zinc-900/40 backdrop-blur-sm rounded-2xl border border-zinc-850 overflow-hidden shadow-2xl relative">
           <div className="p-4 border-b border-zinc-850 bg-zinc-950/70 flex justify-between items-center flex-wrap gap-2">
             <h3 className="text-[10px] font-black text-zinc-350 uppercase tracking-widest flex items-center gap-1.5 font-mono">
               <Landmark className="w-4 h-4 text-rose-500" />
@@ -96,17 +97,17 @@ export const PaymentsModule: React.FC = () => {
                         {p.order_id}
                       </td>
                       <td className="p-3 font-mono text-zinc-200">
-                        ${p.quotation_amount.toLocaleString()}
+                        {formatINR(p.quotation_amount)}
                       </td>
                       <td className="p-3 font-mono text-emerald-400 font-medium">
-                        ${p.advance_received.toLocaleString()}
+                        {formatINR(p.advance_received)}
                       </td>
                       <td className="p-3 font-mono text-emerald-400 font-medium">
-                        ${p.final_payment_received.toLocaleString()}
+                        {formatINR(p.final_payment_received)}
                       </td>
                       <td className="p-3 font-mono">
                         <strong className={p.balance_due > 0 ? "text-rose-450 font-bold" : "text-emerald-450 font-bold"}>
-                          ${p.balance_due.toLocaleString()}
+                          {formatINR(p.balance_due)}
                         </strong>
                       </td>
                       <td className="p-3">
@@ -144,7 +145,7 @@ export const PaymentsModule: React.FC = () => {
         </div>
 
         {/* Column Right: Action Form panel */}
-        <div className="hidden xl:block xl:col-span-5 space-y-6 w-full">
+        <div className="hidden space-y-6 w-full">
           {selectedOrderId ? (
             (() => {
               const paymentItem = payments.find((p) => p.order_id === selectedOrderId)!;
@@ -168,21 +169,21 @@ export const PaymentsModule: React.FC = () => {
                     <div className="bg-zinc-950/80 rounded-xl p-4 border border-zinc-850 grid grid-cols-2 gap-3 text-[11px] font-mono">
                       <div>
                         <span className="text-zinc-500">Contract Value:</span>
-                        <p className="font-bold text-zinc-200 mt-0.5">${paymentItem.quotation_amount.toLocaleString()}</p>
+                        <p className="font-bold text-zinc-200 mt-0.5">{formatINR(paymentItem.quotation_amount)}</p>
                       </div>
                       <div>
                         <span className="text-zinc-550">Outstanding Due:</span>
-                        <p className="font-bold text-rose-455 mt-0.5">${paymentItem.balance_due.toLocaleString()}</p>
+                        <p className="font-bold text-rose-455 mt-0.5">{formatINR(paymentItem.balance_due)}</p>
                       </div>
                     </div>
 
                     {/* Commit Input */}
                     <div>
                       <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-1.5 font-mono">
-                        Amount to Collect ($) *
+                        Amount to Collect (₹) *
                       </label>
                       <div className="relative">
-                        <DollarSign className="w-4 h-4 text-rose-455 absolute left-3 top-3.5" />
+                        <span className="text-rose-455 absolute left-3.5 top-2.5 font-sans font-bold text-base select-none">₹</span>
                         <input
                           type="number"
                           required
@@ -269,9 +270,9 @@ export const PaymentsModule: React.FC = () => {
 
       </div>
 
-      {/* Mobile/Tablet Popup Modal for Details */}
+      {/* Popup Modal for Details (Centered & Responsive for Desktop, Tablet, and Mobile) */}
       {selectedOrderId && (
-        <div id="payments_details_mobile_modal" className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 xl:hidden overflow-y-auto">
+        <div id="payments_details_mobile_modal" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl relative flex flex-col">
             <div className="p-4 border-b border-zinc-850 flex items-center justify-between bg-zinc-900/60 sticky top-0 z-10 backdrop-blur-md">
               <h3 className="text-xs font-black text-white flex items-center gap-1.5 font-mono uppercase tracking-wider">
@@ -300,21 +301,21 @@ export const PaymentsModule: React.FC = () => {
                     <div className="bg-zinc-900/80 rounded-xl p-4 border border-zinc-850 grid grid-cols-2 gap-3 text-[11px] font-mono">
                       <div>
                         <span className="text-zinc-550">Contract Value:</span>
-                        <p className="font-bold text-zinc-200 mt-0.5">${paymentItem.quotation_amount.toLocaleString()}</p>
+                        <p className="font-bold text-zinc-200 mt-0.5">{formatINR(paymentItem.quotation_amount)}</p>
                       </div>
                       <div>
-                        <span className="text-zinc-550">Outstanding Due:</span>
-                        <p className="font-bold text-rose-455 mt-0.5">${paymentItem.balance_due.toLocaleString()}</p>
+                        <span className="text-zinc-555">Outstanding Due:</span>
+                        <p className="font-bold text-rose-455 mt-0.5">{formatINR(paymentItem.balance_due)}</p>
                       </div>
                     </div>
 
                     {/* Commit Input */}
                     <div>
                       <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-1.5 font-mono">
-                        Amount to Collect ($) *
+                        Amount to Collect (₹) *
                       </label>
                       <div className="relative">
-                        <DollarSign className="w-4 h-4 text-rose-455 absolute left-3 top-3.5" />
+                        <span className="text-rose-455 absolute left-3.5 top-2.5 font-sans font-bold text-base select-none">₹</span>
                         <input
                           type="number"
                           required

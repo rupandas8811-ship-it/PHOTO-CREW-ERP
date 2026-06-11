@@ -171,7 +171,7 @@ export const UserManagementModule: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         {/* Left Side: Users Directory Table */}
-        <div className="lg:col-span-8 bg-slate-850 border border-slate-800 rounded-xl overflow-hidden shadow-md">
+        <div className="lg:col-span-12 bg-slate-850 border border-slate-800 rounded-xl overflow-hidden shadow-md">
           <div className="p-4 bg-slate-900/30 border-b border-slate-800 flex items-center justify-between">
             <h3 className="text-xs font-semibold text-slate-350 uppercase tracking-widest flex items-center gap-1.5">
               <span>👥</span> Database Directory Users
@@ -323,7 +323,7 @@ export const UserManagementModule: React.FC = () => {
         </div>
 
         {/* Right Side Panel: Admin Forms */}
-        <div className="hidden lg:block lg:col-span-4 space-y-6">
+        <div className="hidden space-y-6">
           
           {/* Form container */}
           {showAddForm && (
@@ -628,7 +628,7 @@ export const UserManagementModule: React.FC = () => {
 
       {/* Mobile/Tablet Popup Modal for Forms */}
       {(showAddForm || editingUser || resettingPasswordUser) && (
-        <div id="user_forms_mobile_modal" className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 lg:hidden overflow-y-auto animate-fade-in">
+        <div id="user_forms_mobile_modal" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl relative flex flex-col">
             <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-850 sticky top-0 z-10 backdrop-blur-md">
               <h3 className="text-xs font-black text-white flex items-center gap-1.5 font-mono uppercase tracking-wider">

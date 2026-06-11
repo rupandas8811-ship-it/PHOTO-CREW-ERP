@@ -61,6 +61,7 @@ interface RoleContextType {
     proofUrl?: string
   ) => void;
   resetAllData: () => void;
+  refreshData: () => void;
   
   // User Management Admin features
   addUser: (name: string, email: string, mobile: string, role: UserRole, active: boolean, password?: string) => void;
@@ -292,6 +293,27 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentUserNameState('Rupand Das');
     localStorage.removeItem('erp_current_user');
     logActivity('Reset Database to Pre-seeded State', 'System', 'ALL');
+  };
+
+  const refreshData = () => {
+    const savedUsers = localStorage.getItem('erp_users');
+    if (savedUsers) setUsers(JSON.parse(savedUsers));
+    const savedLeads = localStorage.getItem('erp_leads');
+    if (savedLeads) setLeads(JSON.parse(savedLeads));
+    const savedOrders = localStorage.getItem('erp_orders');
+    if (savedOrders) setOrders(JSON.parse(savedOrders));
+    const savedOperations = localStorage.getItem('erp_operations');
+    if (savedOperations) setOperations(JSON.parse(savedOperations));
+    const savedRawFootage = localStorage.getItem('erp_raw_footage');
+    if (savedRawFootage) setRawFootage(JSON.parse(savedRawFootage));
+    const savedProduction = localStorage.getItem('erp_production');
+    if (savedProduction) setProduction(JSON.parse(savedProduction));
+    const savedPayments = localStorage.getItem('erp_payments');
+    if (savedPayments) setPayments(JSON.parse(savedPayments));
+    const savedLogs = localStorage.getItem('erp_logs');
+    if (savedLogs) setLogs(JSON.parse(savedLogs));
+    
+    logActivity('Refreshed Workspace Data', 'System', 'ALL');
   };
 
   // 1. Create Lead
@@ -738,6 +760,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         markDelivered,
         recordPayment,
         resetAllData,
+        refreshData,
         addUser,
         editUser,
         toggleUserStatus,
