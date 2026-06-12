@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, Lead, Order, Operation, RawFootage, Production, Payment, ActivityLog, UserRole, CurrentStage, EditingStatus } from '../types';
 import { INITIAL_USERS, INITIAL_LEADS, INITIAL_ORDERS, INITIAL_OPERATIONS, INITIAL_RAW_FOOTAGE, INITIAL_PRODUCTION, INITIAL_PAYMENTS, INITIAL_LOGS } from '../data';
+import { supabaseClient, updateDiagnosticMetric } from '../supabaseClient';
 
 interface RoleContextType {
   currentUser: User | null;
@@ -8,7 +9,7 @@ interface RoleContextType {
   currentUserName: string;
   setCurrentRole: (role: UserRole) => void;
   setCurrentUserName: (name: string) => void;
-  login: (emailOrUsername: string, password: string) => { success: boolean; error?: string };
+  login: (emailOrUsername: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   users: User[];
   leads: Lead[];
@@ -64,13 +65,36 @@ interface RoleContextType {
   refreshData: () => void;
   
   // User Management Admin features
-  addUser: (name: string, email: string, mobile: string, role: UserRole, active: boolean, password?: string) => void;
+  addUser: (name: string, email: string, mobile: string, role: UserRole, active: boolean, password?: string) => Promise<void>;
+  signUpUser: (name: string, username: string, email: string, mobile: string, role: UserRole, password: string) => Promise<any>;
   editUser: (id: string, updates: { name: string, email: string, mobile: string, role: UserRole, active: boolean }) => void;
   toggleUserStatus: (id: string) => void;
   resetUserPassword: (id: string, newPassword: string) => void;
 }
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
+
+// Stable UUID translator mapping helpers because Supabase 'public.users' id is UUID
+const mapToDbUserId = (id: string): string => {
+  if (id.startsWith('U-')) {
+    const num = id.substring(2).padStart(12, '0');
+    return `00000000-0000-0000-0000-${num}`;
+  }
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    return id;
+  }
+  return `00000000-0000-0000-0000-999999999999`;
+};
+
+const mapFromDbUserId = (uuid: string): string => {
+  if (uuid.startsWith('00000000-0000-0000-0000-')) {
+    const suffix = uuid.replace('00000000-0000-0000-0000-', '');
+    if (suffix === '999999999999') return 'U-temp';
+    const num = parseInt(suffix, 10);
+    return `U-${String(num).padStart(3, '0')}`;
+  }
+  return uuid;
+};
 
 export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Load initial values from localStorage to support persistency, or default to seeded data
@@ -127,7 +151,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return saved ? JSON.parse(saved) : INITIAL_LOGS;
   });
 
-  // Track state in localStorage
+  // Track state in localStorage as backup persistence layer
   useEffect(() => {
     localStorage.setItem('erp_users', JSON.stringify(users));
   }, [users]);
@@ -173,6 +197,176 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('erp_logs', JSON.stringify(logs));
   }, [logs]);
 
+  // Synchronous CRUD wrappers for updating Supabase in backgrounds
+  const pushInsert = async (table: string, record: any) => {
+    if (!supabaseClient) return;
+    try {
+      const { error } = await supabaseClient.from(table).insert(record);
+      if (error) {
+        console.error(`Supabase Insert error in ${table}:`, error);
+        updateDiagnosticMetric('insert', 'fail', error.message);
+      } else {
+        updateDiagnosticMetric('insert', 'ok');
+      }
+    } catch (err: any) {
+      updateDiagnosticMetric('insert', 'fail', err?.message || String(err));
+    }
+  };
+
+  const pushUpdate = async (table: string, matchColumn: string, matchValue: any, updates: any) => {
+    if (!supabaseClient) return;
+    try {
+      const { error } = await supabaseClient.from(table).update(updates).eq(matchColumn, matchValue);
+      if (error) {
+        console.error(`Supabase Update error in ${table}:`, error);
+        updateDiagnosticMetric('update', 'fail', error.message);
+      } else {
+        updateDiagnosticMetric('update', 'ok');
+      }
+    } catch (err: any) {
+      updateDiagnosticMetric('update', 'fail', err?.message || String(err));
+    }
+  };
+
+  const pushDelete = async (table: string, matchColumn: string, matchValue: any) => {
+    if (!supabaseClient) return;
+    try {
+      const { error } = await supabaseClient.from(table).delete().eq(matchColumn, matchValue);
+      if (error) {
+        console.error(`Supabase Delete error in ${table}:`, error);
+        updateDiagnosticMetric('delete', 'fail', error.message);
+      } else {
+        updateDiagnosticMetric('delete', 'ok');
+      }
+    } catch (err: any) {
+      updateDiagnosticMetric('delete', 'fail', err?.message || String(err));
+    }
+  };
+
+  const pushUpsert = async (table: string, record: any) => {
+    if (!supabaseClient) return;
+    try {
+      const { error } = await supabaseClient.from(table).upsert(record);
+      if (error) {
+        console.error(`Supabase Upsert error in ${table}:`, error);
+        updateDiagnosticMetric('insert', 'fail', error.message);
+      } else {
+        updateDiagnosticMetric('insert', 'ok');
+      }
+    } catch (err: any) {
+      updateDiagnosticMetric('insert', 'fail', err?.message || String(err));
+    }
+  };
+
+  // Fetch full dataset from Supabase
+  const fetchFromDb = async () => {
+    if (!supabaseClient) return;
+    try {
+      const [
+        { data: dbUsers, error: uErr },
+        { data: dbLeads, error: ldErr },
+        { data: dbOrders, error: ordErr },
+        { data: dbOperations, error: opErr },
+        { data: dbRawFootage, error: rfErr },
+        { data: dbProduction, error: prodErr },
+        { data: dbPayments, error: payErr },
+        { data: dbLogs, error: logErr }
+      ] = await Promise.all([
+        supabaseClient.from('users').select('*'),
+        supabaseClient.from('leads').select('*').order('created_date', { ascending: false }),
+        supabaseClient.from('orders').select('*').order('created_at', { ascending: false }),
+        supabaseClient.from('operations').select('*'),
+        supabaseClient.from('raw_footage').select('*'),
+        supabaseClient.from('production').select('*'),
+        supabaseClient.from('payments').select('*'),
+        supabaseClient.from('activity_logs').select('*').order('timestamp', { ascending: false })
+      ]);
+
+      if (uErr || ldErr || ordErr || opErr || rfErr || prodErr || payErr || logErr) {
+        console.warn('Could not read all tables from Supabase, syncing with cached state');
+        updateDiagnosticMetric('read', 'fail', (uErr || ldErr || ordErr || opErr || rfErr || prodErr || payErr || logErr)?.message);
+        return;
+      }
+
+      if (dbUsers) {
+        setUsers(dbUsers.map(u => ({ ...u, id: mapFromDbUserId(u.id) })));
+      }
+      if (dbLeads) setLeads(dbLeads);
+      if (dbOrders) setOrders(dbOrders as any);
+      if (dbOperations) setOperations(dbOperations);
+      if (dbRawFootage) setRawFootage(dbRawFootage as any);
+      if (dbProduction) setProduction(dbProduction as any);
+      if (dbPayments) setPayments(dbPayments as any);
+      if (dbLogs) setLogs(dbLogs as any);
+
+      updateDiagnosticMetric('read', 'ok');
+      updateDiagnosticMetric('connection', 'connected');
+    } catch (err: any) {
+      console.error('Fetch error:', err);
+      updateDiagnosticMetric('read', 'fail', err.message);
+    }
+  };
+
+  // Synchronous database fetching and real-time subscription channels
+  useEffect(() => {
+    fetchFromDb();
+
+    if (!supabaseClient) return;
+
+    const channels = [
+      { table: 'users', key: 'id', setter: setUsers },
+      { table: 'leads', key: 'lead_id', setter: setLeads },
+      { table: 'orders', key: 'order_id', setter: setOrders },
+      { table: 'operations', key: 'operation_id', setter: setOperations },
+      { table: 'raw_footage', key: 'tracking_id', setter: setRawFootage },
+      { table: 'production', key: 'production_id', setter: setProduction },
+      { table: 'payments', key: 'payment_id', setter: setPayments },
+      { table: 'activity_logs', key: 'log_id', setter: setLogs }
+    ].map(({ table, key, setter }) => {
+      return supabaseClient
+        .channel(`rt-${table}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table },
+          (payload) => {
+            updateDiagnosticMetric('realtime', 'ok');
+            if (payload.eventType === 'INSERT') {
+              setter((prev: any[]) => {
+                const item = payload.new;
+                const mappedItem = table === 'users' ? { ...item, id: mapFromDbUserId(item.id) } : item;
+                const exists = prev.some(x => x[key] === mappedItem[key]);
+                if (exists) return prev;
+                return [mappedItem, ...prev];
+              });
+            } else if (payload.eventType === 'UPDATE') {
+              setter((prev: any[]) => {
+                const item = payload.new;
+                const mappedItem = table === 'users' ? { ...item, id: mapFromDbUserId(item.id) } : item;
+                return prev.map(x => (x[key] === mappedItem[key] ? mappedItem : x));
+              });
+            } else if (payload.eventType === 'DELETE') {
+              setter((prev: any[]) => {
+                const oldItem = payload.old;
+                const matchVal = table === 'users' ? mapFromDbUserId(oldItem.id) : oldItem[key];
+                return prev.filter(x => x[key] !== matchVal);
+              });
+            }
+          }
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            updateDiagnosticMetric('realtime', 'ok');
+          } else {
+            updateDiagnosticMetric('realtime', 'fail');
+          }
+        });
+    });
+
+    return () => {
+      channels.forEach(ch => supabaseClient.removeChannel(ch));
+    };
+  }, []);
+
   // Handle auto-logout if user is deactivated
   useEffect(() => {
     if (currentUser) {
@@ -203,11 +397,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Login action
-  const login = (emailOrUsername: string, password: string) => {
+  const login = async (emailOrUsername: string, password: string) => {
     const cleanInput = emailOrUsername.trim().toLowerCase();
     const foundUser = users.find(u => 
       u.email.toLowerCase() === cleanInput || 
       u.name.toLowerCase() === cleanInput || 
+      (u.username && u.username.toLowerCase() === cleanInput) ||
       u.email.split('@')[0].toLowerCase() === cleanInput
     );
     
@@ -221,6 +416,50 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     if (foundUser.password !== password) {
       return { success: false, error: 'Incorrect email/username or password.' };
+    }
+
+    // Authenticate with Supabase Auth so auth.uid() becomes set and RLS triggers successfully
+    if (supabaseClient) {
+      try {
+        const { error: signInErr } = await supabaseClient.auth.signInWithPassword({
+          email: foundUser.email,
+          password: password
+        });
+
+        if (signInErr) {
+          console.warn('Supabase Auth signIn failed, attempting on-the-fly signUp:', signInErr.message);
+          // Try to sign up the user on the fly so they exist in Auth next time
+          const { error: signUpErr } = await supabaseClient.auth.signUp({
+            email: foundUser.email,
+            password: password,
+            options: {
+              data: {
+                name: foundUser.name,
+                username: foundUser.username || foundUser.email.split('@')[0],
+                mobile: foundUser.mobile,
+                role: foundUser.role,
+                password: password
+              }
+            }
+          });
+          if (signUpErr) {
+            console.error('On-the-fly signUp failed:', signUpErr.message);
+          } else {
+            console.log('On-the-fly signUp succeeded. Attempting clean sign-in...');
+            const { error: retrySignInErr } = await supabaseClient.auth.signInWithPassword({
+              email: foundUser.email,
+              password: password
+            });
+            if (retrySignInErr) {
+              console.error('Retry sign-in after signUp failed:', retrySignInErr.message);
+            }
+          }
+        } else {
+          console.log('Logged into Supabase Auth successfully as:', foundUser.email);
+        }
+      } catch (authErr) {
+        console.error('Unhandled auth error during login:', authErr);
+      }
     }
     
     // Successful login
@@ -241,6 +480,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       timestamp: new Date().toISOString(),
     };
     setLogs((prev) => [newLog, ...prev]);
+    pushInsert('activity_logs', newLog);
     
     return { success: true };
   };
@@ -258,6 +498,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         timestamp: new Date().toISOString(),
       };
       setLogs((prev) => [newLog, ...prev]);
+      pushInsert('activity_logs', newLog);
     }
     setCurrentUser(null);
     setCurrentRoleState('Business Owner');
@@ -277,6 +518,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       timestamp: new Date().toISOString(),
     };
     setLogs((prev) => [newLog, ...prev]);
+    pushInsert('activity_logs', newLog);
   };
 
   const resetAllData = () => {
@@ -292,27 +534,23 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentRoleState('Business Owner');
     setCurrentUserNameState('Rupand Das');
     localStorage.removeItem('erp_current_user');
+
+    if (supabaseClient) {
+      INITIAL_USERS.forEach(u => pushUpsert('users', { ...u, id: mapToDbUserId(u.id) }));
+      INITIAL_LEADS.forEach(l => pushUpsert('leads', l));
+      INITIAL_ORDERS.forEach(o => pushUpsert('orders', o));
+      INITIAL_OPERATIONS.forEach(op => pushUpsert('operations', op));
+      INITIAL_RAW_FOOTAGE.forEach(rf => pushUpsert('raw_footage', rf));
+      INITIAL_PRODUCTION.forEach(p => pushUpsert('production', p));
+      INITIAL_PAYMENTS.forEach(pay => pushUpsert('payments', pay));
+      INITIAL_LOGS.forEach(log => pushUpsert('activity_logs', log));
+    }
+
     logActivity('Reset Database to Pre-seeded State', 'System', 'ALL');
   };
 
   const refreshData = () => {
-    const savedUsers = localStorage.getItem('erp_users');
-    if (savedUsers) setUsers(JSON.parse(savedUsers));
-    const savedLeads = localStorage.getItem('erp_leads');
-    if (savedLeads) setLeads(JSON.parse(savedLeads));
-    const savedOrders = localStorage.getItem('erp_orders');
-    if (savedOrders) setOrders(JSON.parse(savedOrders));
-    const savedOperations = localStorage.getItem('erp_operations');
-    if (savedOperations) setOperations(JSON.parse(savedOperations));
-    const savedRawFootage = localStorage.getItem('erp_raw_footage');
-    if (savedRawFootage) setRawFootage(JSON.parse(savedRawFootage));
-    const savedProduction = localStorage.getItem('erp_production');
-    if (savedProduction) setProduction(JSON.parse(savedProduction));
-    const savedPayments = localStorage.getItem('erp_payments');
-    if (savedPayments) setPayments(JSON.parse(savedPayments));
-    const savedLogs = localStorage.getItem('erp_logs');
-    if (savedLogs) setLogs(JSON.parse(savedLogs));
-    
+    fetchFromDb();
     logActivity('Refreshed Workspace Data', 'System', 'ALL');
   };
 
@@ -328,6 +566,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       created_by: currentUserName,
     };
     setLeads((prev) => [newLead, ...prev]);
+    pushInsert('leads', newLead);
     logActivity(`Created Lead: ${newLead.customer_name}`, 'Sales', leadId);
     return leadId;
   };
@@ -344,12 +583,18 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLeads((prev) =>
       prev.map((ld) => {
         if (ld.lead_id === leadId) {
-          return {
+          const updated = {
             ...ld,
             status,
             budget: quotationAmount !== undefined ? quotationAmount : ld.budget,
             remarks: `${ld.remarks || ''}\n[Update ${new Date().toISOString().split('T')[0]}]: ${callNotes}. ${negotiationNotes ? 'Neg Notes: ' + negotiationNotes : ''}. Next follow-up: ${nextFollowUpDate}`,
           };
+          pushUpdate('leads', 'lead_id', leadId, {
+            status: updated.status,
+            budget: updated.budget,
+            remarks: updated.remarks
+          });
+          return updated;
         }
         return ld;
       })
@@ -371,6 +616,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLeads((prev) =>
       prev.map((ld) => (ld.lead_id === leadId ? { ...ld, status: 'Order Confirmed' } : ld))
     );
+    pushUpdate('leads', 'lead_id', leadId, { status: 'Order Confirmed' });
 
     const orderId = `ORD-${Math.floor(1012 + Math.random() * 800)}`;
     const newOrder: Order = {
@@ -406,6 +652,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setOrders((prev) => [newOrder, ...prev]);
     setPayments((prev) => [newPayment, ...prev]);
 
+    pushInsert('orders', newOrder);
+    pushInsert('payments', newPayment);
+
     logActivity(`Confirmed Order for ${targetLead.customer_name}. Package: ${packageName}`, 'Sales', orderId);
     return orderId;
   };
@@ -436,17 +685,21 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setOrders((prev) =>
       prev.map((ord) => (ord.order_id === orderId ? { ...ord, current_stage: 'Operations Assigned' } : ord))
     );
+    pushUpdate('orders', 'order_id', orderId, { current_stage: 'Operations Assigned' });
+
     const targetOrder = orders.find((o) => o.order_id === orderId);
     if (targetOrder) {
       setLeads((prev) =>
         prev.map((ld) => (ld.lead_id === targetOrder.lead_id ? { ...ld, status: 'Operations Assigned' } : ld))
       );
+      pushUpdate('leads', 'lead_id', targetOrder.lead_id, { status: 'Operations Assigned' });
     }
 
     setOperations((prev) => {
       const filtered = prev.filter((o) => o.order_id !== orderId); // remove old if exists
       return [newOp, ...filtered];
     });
+    pushUpsert('operations', newOp);
 
     logActivity(`Assigned Crew for Order: ${orderId}`, 'Operations', opId);
   };
@@ -480,21 +733,27 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setOperations((prev) =>
       prev.map((op) => (op.order_id === orderId ? { ...op, event_status: 'Completed' } : op))
     );
+    pushUpdate('operations', 'order_id', orderId, { event_status: 'Completed' });
 
     // Update order & lead stage to 'Event Completed'
     setOrders((prev) =>
       prev.map((ord) => (ord.order_id === orderId ? { ...ord, current_stage: 'Event Completed' } : ord))
     );
+    pushUpdate('orders', 'order_id', orderId, { current_stage: 'Event Completed' });
 
     const targetOrder = orders.find((o) => o.order_id === orderId);
     if (targetOrder) {
       setLeads((prev) =>
         prev.map((ld) => (ld.lead_id === targetOrder.lead_id ? { ...ld, status: 'Event Completed' } : ld))
       );
+      pushUpdate('leads', 'lead_id', targetOrder.lead_id, { status: 'Event Completed' });
     }
 
     setRawFootage((prev) => [newRawFootage, ...prev]);
     setProduction((prev) => [newProd, ...prev]);
+
+    pushInsert('raw_footage', newRawFootage);
+    pushInsert('production', newProd);
 
     logActivity(`Marked Event Completed for Order ${orderId}. Raw Footage recorded: ${trackingId}`, 'Operations', orderId);
   };
@@ -509,7 +768,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       prev.map((prod) => {
         if (prod.production_id === productionId) {
           trackingIdToUpdate = prod.tracking_id;
-          return { ...prod, ...updates };
+          const updated = { ...prod, ...updates };
+          pushUpdate('production', 'production_id', productionId, updates);
+          return updated;
         }
         return prod;
       })
@@ -526,12 +787,24 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const rf = rawFootage.find((f) => f.tracking_id === trackingIdToUpdate);
       if (rf) {
         setOrders((prev) =>
-          prev.map((ord) => (ord.order_id === rf.order_id ? { ...ord, current_stage: nextStage! } : ord))
+          prev.map((ord) => {
+            if (ord.order_id === rf.order_id) {
+              pushUpdate('orders', 'order_id', rf.order_id, { current_stage: nextStage! });
+              return { ...ord, current_stage: nextStage! };
+            }
+            return ord;
+          })
         );
         const tgtOrder = orders.find((o) => o.order_id === rf.order_id);
         if (tgtOrder) {
           setLeads((prev) =>
-            prev.map((ld) => (ld.lead_id === tgtOrder.lead_id ? { ...ld, status: nextStage! } : ld))
+            prev.map((ld) => {
+              if (ld.lead_id === tgtOrder.lead_id) {
+                pushUpdate('leads', 'lead_id', tgtOrder.lead_id, { status: nextStage! });
+                return { ...ld, status: nextStage! };
+              }
+              return ld;
+            })
           );
         }
       }
@@ -553,18 +826,36 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Update raw footage state status
     setRawFootage((prev) =>
-      prev.map((footage) => (footage.tracking_id === trackingId ? { ...footage, status: 'Received' as const } : footage))
+      prev.map((footage) => {
+        if (footage.tracking_id === trackingId) {
+          pushUpdate('raw_footage', 'tracking_id', trackingId, { status: 'Received' });
+          return { ...footage, status: 'Received' as const };
+        }
+        return footage;
+      })
     );
 
     // Update order & lead stage
     setOrders((prev) =>
-      prev.map((ord) => (ord.order_id === orderId ? { ...ord, current_stage: 'Raw Footage Received' } : ord))
+      prev.map((ord) => {
+        if (ord.order_id === orderId) {
+          pushUpdate('orders', 'order_id', orderId, { current_stage: 'Raw Footage Received' });
+          return { ...ord, current_stage: 'Raw Footage Received' };
+        }
+        return ord;
+      })
     );
 
     const targetOrder = orders.find((o) => o.order_id === orderId);
     if (targetOrder) {
       setLeads((prev) =>
-        prev.map((ld) => (ld.lead_id === targetOrder.lead_id ? { ...ld, status: 'Raw Footage Received' } : ld))
+        prev.map((ld) => {
+          if (ld.lead_id === targetOrder.lead_id) {
+            pushUpdate('leads', 'lead_id', targetOrder.lead_id, { status: 'Raw Footage Received' });
+            return { ...ld, status: 'Raw Footage Received' };
+          }
+          return ld;
+        })
       );
     }
 
@@ -580,27 +871,47 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Update production status
     setProduction((prev) =>
-      prev.map((prod) =>
-        prod.tracking_id === trackingId
-          ? {
-              ...prod,
-              editing_status: 'Delivered',
-              customer_review_status: 'Approved',
-              delivery_date: new Date().toISOString().split('T')[0],
-              remarks: `${prod.remarks || ''}\n${remarks || 'Delivered to client.'}`,
-            }
-          : prod
-      )
+      prev.map((prod) => {
+        if (prod.tracking_id === trackingId) {
+          const updated = {
+            ...prod,
+            editing_status: 'Delivered' as const,
+            customer_review_status: 'Approved' as const,
+            delivery_date: new Date().toISOString().split('T')[0],
+            remarks: `${prod.remarks || ''}\n${remarks || 'Delivered to client.'}`,
+          };
+          pushUpdate('production', 'production_id', prod.production_id, {
+            editing_status: 'Delivered',
+            customer_review_status: 'Approved',
+            delivery_date: updated.delivery_date,
+            remarks: updated.remarks
+          });
+          return updated;
+        }
+        return prod;
+      })
     );
 
     // Update order & lead stage
     setOrders((prev) =>
-      prev.map((ord) => (ord.order_id === orderId ? { ...ord, current_stage: 'Delivered', order_status: 'Delivered' } : ord))
+      prev.map((ord) => {
+        if (ord.order_id === orderId) {
+          pushUpdate('orders', 'order_id', orderId, { current_stage: 'Delivered', order_status: 'Delivered' });
+          return { ...ord, current_stage: 'Delivered', order_status: 'Delivered' };
+        }
+        return ord;
+      })
     );
     const tgtOrder = orders.find((o) => o.order_id === orderId);
     if (tgtOrder) {
       setLeads((prev) =>
-        prev.map((ld) => (ld.lead_id === tgtOrder.lead_id ? { ...ld, status: 'Delivered' } : ld))
+        prev.map((ld) => {
+          if (ld.lead_id === tgtOrder.lead_id) {
+            pushUpdate('leads', 'lead_id', tgtOrder.lead_id, { status: 'Delivered' });
+            return { ...ld, status: 'Delivered' };
+          }
+          return ld;
+        })
       );
     }
 
@@ -634,14 +945,22 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const totalPaid = pay.advance_received + pay.final_payment_received + amountReceived;
           const outstanding = Math.max(0, pay.quotation_amount - totalPaid);
           isFullyPaid = outstanding === 0;
-          return {
+          const updated = {
             ...pay,
             final_payment_received: pay.final_payment_received + amountReceived,
             balance_due: outstanding,
             payment_date: paymentDate,
             payment_proof_url: proofUrl || 'https://photocrew-receipts.s3.amazonaws.com/rec-custom.pdf',
-            payment_status: isFullyPaid ? 'Fully Paid' : 'Partially Paid',
+            payment_status: isFullyPaid ? ('Fully Paid' as const) : ('Partially Paid' as const),
           };
+          pushUpdate('payments', 'payment_id', pay.payment_id, {
+            final_payment_received: updated.final_payment_received,
+            balance_due: updated.balance_due,
+            payment_date: updated.payment_date,
+            payment_proof_url: updated.payment_proof_url,
+            payment_status: updated.payment_status
+          });
+          return updated;
         }
         return pay;
       })
@@ -653,11 +972,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const currentOrder = orders.find((o) => o.order_id === orderId);
     if (currentOrder) {
       if (isFullyPaid) {
-        if (currentOrder.current_stage === 'Delivered' || currentOrder.current_stage === 'Approved') {
-          nextStage = 'Closed';
-        } else {
-          nextStage = 'Closed'; // Automatically close completed paid orders if client desires
-        }
+        nextStage = 'Closed';
       } else {
         nextStage = 'Payment Pending';
       }
@@ -665,11 +980,17 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setOrders((prev) =>
         prev.map((ord) => {
           if (ord.order_id === orderId) {
+            const nextOutstanding = Math.max(0, ord.balance_amount - amountReceived);
+            pushUpdate('orders', 'order_id', orderId, {
+              current_stage: nextStage,
+              order_status: nextStage === 'Closed' ? 'Closed' : ord.order_status,
+              balance_amount: nextOutstanding
+            });
             return {
               ...ord,
               current_stage: nextStage,
-              order_status: nextStage === 'Closed' ? 'Closed' : ord.order_status,
-              balance_amount: Math.max(0, ord.balance_amount - amountReceived),
+              order_status: nextStage === 'Closed' ? ('Closed' as const) : ord.order_status,
+              balance_amount: nextOutstanding,
             };
           }
           return ord;
@@ -679,6 +1000,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLeads((prev) =>
         prev.map((ld) => {
           if (ld.lead_id === currentOrder.lead_id) {
+            pushUpdate('leads', 'lead_id', currentOrder.lead_id, { status: nextStage });
             return { ...ld, status: nextStage };
           }
           return ld;
@@ -690,24 +1012,204 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // User Management Admin features
-  const addUser = (name: string, email: string, mobile: string, role: UserRole, active: boolean, password?: string) => {
-    const id = `U-${Math.floor(100 + Math.random() * 900)}`;
-    const newUser: User = {
-      id,
-      name,
-      email,
-      mobile,
-      role,
-      active,
-      created_at: new Date().toISOString().split('T')[0],
-      password: password || 'temp123'
-    };
-    setUsers((prev) => [...prev, newUser]);
+  const addUser = async (name: string, email: string, mobile: string, role: UserRole, active: boolean, password?: string) => {
+    const pwd = password || 'temp123';
+    const username = email.split('@')[0];
+    let id = `U-${Math.floor(100 + Math.random() * 900)}`;
+
+    if (supabaseClient) {
+      try {
+        const { data, error } = await supabaseClient.auth.signUp({
+          email,
+          password: pwd,
+          options: {
+            data: {
+              name,
+              username,
+              mobile,
+              role,
+              password: pwd
+            }
+          }
+        });
+
+        if (error) {
+          console.error('Supabase auth.signUp error in addUser:', error.message);
+          // If auth fails (e.g. user already exists or trigger bypass needed), try to insert directly into users table as a fallback
+          const newUser: User = {
+            id,
+            name,
+            email,
+            mobile,
+            role,
+            active,
+            created_at: new Date().toISOString().split('T')[0],
+            password: pwd,
+            username
+          };
+          setUsers((prev) => {
+            if (prev.some(u => u.email === email)) return prev;
+            return [...prev, newUser];
+          });
+          await pushInsert('users', {
+            ...newUser,
+            id: mapToDbUserId(id)
+          });
+        } else if (data?.user) {
+          id = mapFromDbUserId(data.user.id);
+          const newUser: User = {
+            id,
+            name,
+            email,
+            mobile,
+            role,
+            active,
+            created_at: new Date().toISOString().split('T')[0],
+            password: pwd,
+            username
+          };
+          setUsers((prev) => {
+            if (prev.some(u => u.email === email)) return prev;
+            return [...prev, newUser];
+          });
+          // Let's call pushUpsert to make sure the users table has it immediately in real-time
+          await pushUpsert('users', {
+            ...newUser,
+            id: data.user.id
+          });
+        }
+      } catch (err) {
+        console.error('Error in addUser:', err);
+      }
+    } else {
+      const newUser: User = {
+        id,
+        name,
+        email,
+        mobile,
+        role,
+        active,
+        created_at: new Date().toISOString().split('T')[0],
+        password: pwd,
+        username
+      };
+      setUsers((prev) => [...prev, newUser]);
+    }
+
     logActivity(`Created User Account: ${name} (${role})`, 'UserManagement', id);
+  };
+
+  const signUpUser = async (name: string, username: string, email: string, mobile: string, role: UserRole, password: string) => {
+    let finalId = `U-${Math.floor(100 + Math.random() * 900)}`;
+    const dbId = mapToDbUserId(finalId);
+    if (supabaseClient) {
+      try {
+        const { data, error } = await supabaseClient.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              name,
+              username,
+              mobile,
+              role,
+              password
+            }
+          }
+        });
+
+        // Email rate limit / sign up disabled / configuration issue handled gracefully via direct insert fallback
+        if (error) {
+          console.warn('Supabase auth.signUp rate limit or configuration error, using direct profile registration fallback:', error.message);
+          const newUser: User = {
+            id: finalId,
+            name,
+            email,
+            mobile,
+            role,
+            active: true,
+            created_at: new Date().toISOString().split('T')[0],
+            password,
+            username
+          };
+          setUsers((prev) => {
+            if (prev.some(u => u.email === email)) return prev;
+            return [...prev, newUser];
+          });
+          await pushInsert('users', {
+            ...newUser,
+            id: dbId
+          });
+          return { success: true, user: newUser, warning: error.message };
+        }
+
+        if (data?.user) {
+          finalId = mapFromDbUserId(data.user.id);
+          const newUser: User = {
+            id: finalId,
+            name,
+            email,
+            mobile,
+            role,
+            active: true,
+            created_at: new Date().toISOString().split('T')[0],
+            password,
+            username
+          };
+          setUsers((prev) => {
+            if (prev.some(u => u.email === email)) return prev;
+            return [...prev, newUser];
+          });
+          // Call pushUpsert so the users table is populated with this specific user UUID immediately
+          await pushUpsert('users', {
+            ...newUser,
+            id: data.user.id
+          });
+          return { success: true, user: newUser };
+        }
+      } catch (err: any) {
+        console.error('Unhandled signup exception, registering as directory profile record directly:', err);
+        const newUser: User = {
+          id: finalId,
+          name,
+          email,
+          mobile,
+          role,
+          active: true,
+          created_at: new Date().toISOString().split('T')[0],
+          password,
+          username
+        };
+        setUsers((prev) => {
+          if (prev.some(u => u.email === email)) return prev;
+          return [...prev, newUser];
+        });
+        await pushInsert('users', {
+          ...newUser,
+          id: dbId
+        });
+        return { success: true, user: newUser, warning: err?.message };
+      }
+    } else {
+      const newUser: User = {
+        id: finalId,
+        name,
+        email,
+        mobile,
+        role,
+        active: true,
+        created_at: new Date().toISOString().split('T')[0],
+        password,
+        username
+      };
+      setUsers((prev) => [...prev, newUser]);
+      return { success: true, user: newUser };
+    }
   };
 
   const editUser = (id: string, updates: { name: string, email: string, mobile: string, role: UserRole, active: boolean }) => {
     setUsers((prev) => prev.map((u) => u.id === id ? { ...u, ...updates } : u));
+    pushUpdate('users', 'id', mapToDbUserId(id), updates);
     logActivity(`Updated User Account Profile: ${updates.name}`, 'UserManagement', id);
   };
 
@@ -715,6 +1217,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUsers((prev) => prev.map((u) => {
       if (u.id === id) {
         const nextActive = !u.active;
+        pushUpdate('users', 'id', mapToDbUserId(id), { active: nextActive });
         logActivity(`${nextActive ? 'Activated' : 'Deactivated'} User Account: ${u.name}`, 'UserManagement', id);
         return { ...u, active: nextActive };
       }
@@ -725,6 +1228,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const resetUserPassword = (id: string, newPassword: string) => {
     setUsers((prev) => prev.map((u) => {
       if (u.id === id) {
+        pushUpdate('users', 'id', mapToDbUserId(id), { password: newPassword });
         logActivity(`Reset Password for User account: ${u.name}`, 'UserManagement', id);
         return { ...u, password: newPassword };
       }
@@ -762,6 +1266,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resetAllData,
         refreshData,
         addUser,
+        signUpUser,
         editUser,
         toggleUserStatus,
         resetUserPassword,

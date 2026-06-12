@@ -1,12 +1,109 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRole } from './RoleContext';
 import { 
-  Users, UserPlus, Shield, ToggleLeft, ToggleRight, Key, Mail, Phone, Calendar, PenTool, CheckCircle, Ban, RefreshCw, X, AlertOctagon, HelpCircle
+  Users, UserPlus, Shield, ToggleLeft, ToggleRight, Key, Mail, Phone, Calendar, PenTool, CheckCircle, Ban, RefreshCw, X, AlertOctagon, HelpCircle, Activity, Server, Database, Check, AlertCircle, Terminal, HelpCircle as HelpIcon
 } from 'lucide-react';
 import { User, UserRole } from '../types';
+import { supabaseClient, currentDiagnosticReport, updateDiagnosticMetric } from '../supabaseClient';
 
 export const UserManagementModule: React.FC = () => {
   const { users, currentUser, addUser, editUser, toggleUserStatus, resetUserPassword } = useRole();
+
+  // Diagnostic states
+  const [localReport, setLocalReport] = useState(() => currentDiagnosticReport);
+  const [isTesting, setIsTesting] = useState(false);
+  const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
+
+  const runActiveDiagnostics = async () => {
+    setIsTesting(true);
+    if (!supabaseClient) {
+      updateDiagnosticMetric('connection', 'error', 'Supabase Client not initialized');
+      setLocalReport({ ...currentDiagnosticReport });
+      setIsTesting(false);
+      return;
+    }
+
+    try {
+      updateDiagnosticMetric('connection', 'checking');
+      setLocalReport({ ...currentDiagnosticReport });
+
+      // 1. Read check
+      const { error: queryErr } = await supabaseClient.from('leads').select('count', { count: 'exact', head: true });
+      if (queryErr) {
+        updateDiagnosticMetric('read', 'fail', queryErr.message);
+      } else {
+        updateDiagnosticMetric('read', 'ok');
+      }
+
+      // 2. Insert, Update, Delete test
+      const tempId = `LOG-MGMT-${Math.floor(1000 + Math.random() * 9000)}`;
+      const { error: insertErr } = await supabaseClient.from('activity_logs').insert({
+        log_id: tempId,
+        user_name: currentUser?.name || 'Admin Health',
+        role: currentUser?.role || 'Business Owner',
+        action: 'Dynamic Diagnostic Handshake',
+        module: 'System Security',
+        record_id: 'NONE',
+        timestamp: new Date().toISOString()
+      });
+
+      if (insertErr) {
+        updateDiagnosticMetric('insert', 'fail', insertErr.message);
+        updateDiagnosticMetric('update', 'untested');
+        updateDiagnosticMetric('delete', 'untested');
+      } else {
+        updateDiagnosticMetric('insert', 'ok');
+
+        const { error: updateErr } = await supabaseClient
+          .from('activity_logs')
+          .update({ action: 'Dynamic Diagnostic Handshake - Updated' })
+          .eq('log_id', tempId);
+
+        if (updateErr) {
+          updateDiagnosticMetric('update', 'fail', updateErr.message);
+        } else {
+          updateDiagnosticMetric('update', 'ok');
+        }
+
+        const { error: deleteErr } = await supabaseClient
+          .from('activity_logs')
+          .delete()
+          .eq('log_id', tempId);
+
+        if (deleteErr) {
+          updateDiagnosticMetric('delete', 'fail', deleteErr.message);
+        } else {
+          updateDiagnosticMetric('delete', 'ok');
+        }
+      }
+
+      // 3. Realtime check
+      const channel = supabaseClient.channel('mgmt_diag_channel');
+      channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          updateDiagnosticMetric('realtime', 'ok');
+          supabaseClient.removeChannel(channel);
+        } else {
+          updateDiagnosticMetric('realtime', 'fail');
+        }
+        updateDiagnosticMetric('connection', 'connected');
+        setLocalReport({ ...currentDiagnosticReport });
+      });
+
+    } catch (err: any) {
+      console.error('Local diagnostics error:', err);
+      updateDiagnosticMetric('connection', 'error', err?.message || String(err));
+    } finally {
+      setTimeout(() => {
+        setLocalReport({ ...currentDiagnosticReport });
+        setIsTesting(false);
+      }, 700);
+    }
+  };
+
+  useEffect(() => {
+    setLocalReport({ ...currentDiagnosticReport });
+  }, []);
 
   // Role Gate: Only Business Owner can edit
   const canAdministrate = currentUser?.role === 'Business Owner';
@@ -34,25 +131,29 @@ export const UserManagementModule: React.FC = () => {
   // Password reset state
   const [newResetPasswordValue, setNewResetPasswordValue] = useState('');
 
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim() || !newEmail.trim() || !newMobile.trim() || !newPassword.trim()) {
       alert('Please fill out all required fields.');
       return;
     }
 
-    addUser(newName, newEmail, newMobile, newRole, newActive, newPassword);
-    
-    // Clear state
-    setNewName('');
-    setNewEmail('');
-    setNewMobile('');
-    setNewRole('Sales Team');
-    setNewActive(true);
-    setNewPassword('');
-    setShowAddForm(false);
-    
-    alert('Staff account registered successfully in system directory!');
+    try {
+      await addUser(newName, newEmail, newMobile, newRole, newActive, newPassword);
+      
+      // Clear state
+      setNewName('');
+      setNewEmail('');
+      setNewMobile('');
+      setNewRole('Sales Team');
+      setNewActive(true);
+      setNewPassword('');
+      setShowAddForm(false);
+      
+      alert('Staff account registered successfully in system directory!');
+    } catch (err: any) {
+      alert(`Registration failed: ${err?.message || err}`);
+    }
   };
 
   const handleEditClick = (usr: User) => {
@@ -135,7 +236,7 @@ export const UserManagementModule: React.FC = () => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-slate-850 p-4 rounded-xl border border-slate-800 shadow-sm flex items-center justify-between">
           <div>
             <span className="text-[10px] uppercase font-mono font-semibold text-slate-500">Personnel Index</span>
@@ -164,6 +265,37 @@ export const UserManagementModule: React.FC = () => {
           <div className="p-2 bg-rose-600/10 rounded-lg">
             <Ban className="w-5 h-5 text-rose-400" />
           </div>
+        </div>
+
+        {/* Database Health bento box */}
+        <div className="bg-slate-850 p-4 rounded-xl border border-slate-800 shadow-sm flex items-center justify-between">
+          <div>
+            <span className="text-[10px] uppercase font-mono font-semibold text-slate-500 flex items-center gap-1.5 leading-none">
+              <Database className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Supabase engine</span>
+            </span>
+            <div className="flex items-center gap-1.5 mt-2">
+              <span className={`w-2 h-2 rounded-full ${localReport.connection === 'connected' ? 'bg-emerald-400 animate-pulse' : localReport.connection === 'checking' ? 'bg-amber-400 animate-pulse' : 'bg-rose-455'}`}></span>
+              <span className="text-sm font-bold text-slate-101 font-mono uppercase tracking-wide">
+                {localReport.connection === 'connected' ? 'ACTIVE CLEAR' : localReport.connection === 'checking' ? 'CHECKING...' : 'DEGRADED'}
+              </span>
+            </div>
+            <button
+              onClick={() => setShowDiagnosticModal(true)}
+              className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold tracking-wide uppercase mt-2 underline flex items-center gap-1 cursor-pointer select-none bg-transparent border-none p-0"
+            >
+              Live Handshake HUD ›
+            </button>
+          </div>
+          <button 
+            type="button"
+            onClick={runActiveDiagnostics}
+            disabled={isTesting}
+            className={`p-2 bg-slate-900 hover:bg-slate-800 hover:text-emerald-400 rounded-lg cursor-pointer transition-all border border-slate-800 ${isTesting ? 'opacity-50 animate-spin' : ''}`}
+            title="Diagnose database connection live"
+          >
+            <RefreshCw className="w-4 h-4 text-slate-400" />
+          </button>
         </div>
       </div>
 
@@ -893,6 +1025,191 @@ export const UserManagementModule: React.FC = () => {
         </div>
       )}
 
+      {/* Supabase Live Integration Diagnostics HUD Modal */}
+      {showDiagnosticModal && (
+        <div id="db_diagnostics_modal" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto animate-fade-in animate-duration-150">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[90vh]">
+            {/* Modal header */}
+            <div className="p-4 bg-slate-950/60 border-b border-slate-800/80 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-indigo-400 animate-pulse" />
+                <h3 className="text-xs font-mono font-bold tracking-wider text-slate-200 uppercase">
+                  Supabase Integration Diagnostics HUD
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowDiagnosticModal(false)}
+                className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer"
+              >
+                <X className="w-4.5 h-4.5" />
+              </button>
+            </div>
+
+            {/* Modal body */}
+            <div className="p-5 space-y-4 overflow-y-auto text-xs font-sans text-left flex-1">
+              <p className="text-slate-400 leading-relaxed text-[11px]">
+                This panel executes live handshakes with the active Supabase Postgres engine. Every CRUD operation must validate successfully to secure full real-time state synchronization.
+              </p>
+
+              {/* Status Table List */}
+              <div className="space-y-2.5">
+                {/* 1. Connection Status */}
+                <div className="flex items-center justify-between p-2.5 bg-slate-950/40 rounded-xl border border-slate-800/60 font-mono">
+                  <span className="text-slate-400 flex items-center gap-1.5 font-bold">
+                    <Server className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>Postgres Connected</span>
+                  </span>
+                  <span>
+                    {localReport.connection === 'connected' ? (
+                      <span className="text-emerald-400 font-bold">🟢 ONLINE</span>
+                    ) : localReport.connection === 'checking' ? (
+                      <span className="text-amber-400 font-bold animate-pulse">🟡 TESTING...</span>
+                    ) : (
+                      <span className="text-rose-400 font-bold">🔴 OFFLINE</span>
+                    )}
+                  </span>
+                </div>
+
+                {/* 2. Read access */}
+                <div className="flex items-center justify-between p-2.5 bg-slate-950/40 rounded-xl border border-slate-800/60 font-mono">
+                  <span className="text-slate-400 flex items-center gap-1.5 font-bold">
+                    <Database className="w-3.5 h-3.5 text-sky-450" />
+                    <span>Read Verification</span>
+                  </span>
+                  <span>
+                    {localReport.read === 'ok' ? (
+                      <span className="text-emerald-400 font-bold">🟢 GRANTED</span>
+                    ) : localReport.read === 'fail' ? (
+                      <span className="text-rose-400 font-bold">🔴 DENIED</span>
+                    ) : (
+                      <span className="text-slate-500 font-bold">⚪ UNTESTED</span>
+                    )}
+                  </span>
+                </div>
+
+                {/* 3. Insert access */}
+                <div className="flex items-center justify-between p-2.5 bg-slate-950/40 rounded-xl border border-slate-800/60 font-mono">
+                  <span className="text-slate-400 flex items-center gap-1.5 font-bold">
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Insert Verification</span>
+                  </span>
+                  <span>
+                    {localReport.insert === 'ok' ? (
+                      <span className="text-emerald-400 font-bold">🟢 GRANTED</span>
+                    ) : localReport.insert === 'fail' ? (
+                      <span className="text-rose-400 font-bold">🔴 DENIED</span>
+                    ) : (
+                      <span className="text-slate-500 font-bold">⚪ UNTESTED</span>
+                    )}
+                  </span>
+                </div>
+
+                {/* 4. Update access */}
+                <div className="flex items-center justify-between p-2.5 bg-slate-950/40 rounded-xl border border-slate-800/60 font-mono">
+                  <span className="text-slate-400 flex items-center gap-1.5 font-bold">
+                    <RefreshCw className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Update Verification</span>
+                  </span>
+                  <span>
+                    {localReport.update === 'ok' ? (
+                      <span className="text-emerald-400 font-bold">🟢 GRANTED</span>
+                    ) : localReport.update === 'fail' ? (
+                      <span className="text-rose-400 font-bold">🔴 DENIED</span>
+                    ) : (
+                      <span className="text-slate-500 font-bold">⚪ UNTESTED</span>
+                    )}
+                  </span>
+                </div>
+
+                {/* 5. Delete access */}
+                <div className="flex items-center justify-between p-2.5 bg-slate-950/40 rounded-xl border border-slate-800/60 font-mono">
+                  <span className="text-slate-400 flex items-center gap-1.5 font-bold">
+                    <TrashIcon className="w-3.5 h-3.5 text-red-400" />
+                    <span>Delete Verification</span>
+                  </span>
+                  <span>
+                    {localReport.delete === 'ok' ? (
+                      <span className="text-emerald-400 font-bold">🟢 GRANTED</span>
+                    ) : localReport.delete === 'fail' ? (
+                      <span className="text-rose-400 font-bold">🔴 DENIED</span>
+                    ) : (
+                      <span className="text-slate-500 font-bold">⚪ UNTESTED</span>
+                    )}
+                  </span>
+                </div>
+
+                {/* 6. Realtime Sync status */}
+                <div className="flex items-center justify-between p-2.5 bg-slate-950/40 rounded-xl border border-slate-800/60 font-mono">
+                  <span className="text-slate-400 flex items-center gap-1.5 font-bold">
+                    <Activity className="w-3.5 h-3.5 text-pink-500 animate-pulse" />
+                    <span>Real-time Sync Channel</span>
+                  </span>
+                  <span>
+                    {localReport.realtime === 'ok' ? (
+                      <span className="text-emerald-400 font-bold">🟢 SUBSCRIBED</span>
+                    ) : localReport.realtime === 'fail' ? (
+                      <span className="text-rose-400 font-bold">🔴 FAILURE</span>
+                    ) : (
+                      <span className="text-slate-500 font-bold">⚪ UNTESTED</span>
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              {/* Troubleshooting logs display if any query failed */}
+              {localReport.errorMessage && (
+                <div className="p-3 bg-slate-950/90 rounded-xl border border-red-950 text-[10.5px] font-mono text-slate-300 space-y-1.5">
+                  <div className="flex items-center gap-1 text-rose-400 font-bold">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>DIAGNOSTIC FAULT DETECTED:</span>
+                  </div>
+                  <pre className="max-h-24 overflow-y-auto whitespace-pre-wrap text-rose-300 font-mono select-all p-1 bg-black/25 rounded">
+                    {localReport.errorMessage}
+                  </pre>
+                  <p className="text-[9.5px]/1.4 text-slate-450 italic mt-1 font-sans">
+                    💡 Hint: This usually happens if the active personnel does not have writing role permissions in your project schema RLS controls. Use the role switcher to test with elevated credentials.
+                  </p>
+                </div>
+              )}
+
+              {/* Timestamp info */}
+              <div className="pt-2 text-center text-[10px] text-slate-500 font-mono flex items-center justify-center gap-1">
+                <span>Last Tested:</span>
+                <span className="text-slate-400">{new Date(localReport.lastChecked).toLocaleTimeString()} UTC</span>
+              </div>
+            </div>
+
+            {/* Modal footer controls */}
+            <div className="p-3.5 bg-slate-950/60 border-t border-slate-800/60 flex justify-between items-center bg-slate-900/40">
+              <span className="text-[10px] uppercase font-mono tracking-widest text-slate-500">SYSTEM HEALTH RIG</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={runActiveDiagnostics}
+                  disabled={isTesting}
+                  className="px-3 py-1.5 bg-indigo-650 hover:bg-indigo-555 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all select-none cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isTesting ? 'animate-spin' : ''}`} />
+                  <span>{isTesting ? 'Analyzing...' : 'Diagnose Connection'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDiagnosticModal(false)}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-705 text-slate-300 hover:text-white rounded-xl text-xs border border-slate-700 transition"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
+
+// Simple trash can icon replacement
+const TrashIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+);

@@ -9,8 +9,9 @@ import { PaymentsModule } from './components/PaymentsModule';
 import { OrderSearch } from './components/OrderSearch';
 import { LoginScreen } from './components/LoginScreen';
 import { UserManagementModule } from './components/UserManagementModule';
+import { DatabaseHealthModule } from './components/DatabaseHealthModule';
 import { 
-  Briefcase, Camera, Video, Landmark, Shield, Users, Search, Info, Target, Sparkles, Menu, RefreshCw
+  Briefcase, Camera, Video, Landmark, Shield, Users, Search, Info, Target, Sparkles, Menu, RefreshCw, Activity
 } from 'lucide-react';
 
 const MainAppContent: React.FC = () => {
@@ -27,7 +28,7 @@ const MainAppContent: React.FC = () => {
   };
 
   // Initialize correct default tab according to user role to avoid visual flashes
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'operations' | 'production' | 'payments' | 'search' | 'users'>(() => {
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'operations' | 'production' | 'payments' | 'search' | 'users' | 'diagnostics'>(() => {
     const savedUser = localStorage.getItem('erp_current_user');
     if (savedUser) {
       const user = JSON.parse(savedUser);
@@ -247,6 +248,25 @@ const MainAppContent: React.FC = () => {
                   <ChevronRightIcon active={activeTab === 'users'} />
                 </button>
               )}
+
+              {/* Database Health Diagnostics tab */}
+              {currentRole === 'Business Owner' && (
+                <button
+                  id="tab_diagnostics"
+                  onClick={() => setActiveTab('diagnostics')}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-bold rounded-xl transition-all duration-200 text-left border cursor-pointer ${
+                    activeTab === 'diagnostics'
+                      ? 'bg-gradient-to-r from-amber-500/10 to-orange-500/10 text-amber-400 border-amber-500/30 font-bold shadow-[0_0_12px_rgba(245,158,11,0.06)]'
+                      : 'text-zinc-400 bg-transparent border-transparent hover:bg-zinc-900/50 hover:text-white hover:border-zinc-800'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Activity className="w-4 h-4 flex-shrink-0 text-amber-500" />
+                    <span className="tracking-wide text-zinc-300">Database Health Rig</span>
+                  </div>
+                  <ChevronRightIcon active={activeTab === 'diagnostics'} />
+                </button>
+              )}
             </nav>
             
             {/* Divider replaced with subtle spacer at bottom of nav */}
@@ -268,6 +288,7 @@ const MainAppContent: React.FC = () => {
             {activeTab === 'payments' && currentRole === 'Business Owner' && <PaymentsModule />}
             {activeTab === 'search' && currentRole === 'Business Owner' && <OrderSearch />}
             {activeTab === 'users' && currentRole === 'Business Owner' && <UserManagementModule />}
+            {activeTab === 'diagnostics' && currentRole === 'Business Owner' && <DatabaseHealthModule />}
           </div>
         </main>
 

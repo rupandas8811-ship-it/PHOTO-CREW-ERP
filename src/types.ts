@@ -39,6 +39,7 @@ export interface User {
   active: boolean;
   created_at: string;
   password?: string;
+  username?: string;
 }
 
 export interface Lead {
