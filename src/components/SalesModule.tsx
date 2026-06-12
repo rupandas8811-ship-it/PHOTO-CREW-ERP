@@ -178,8 +178,35 @@ export const SalesModule: React.FC = () => {
     alert(`Lead Successfully Converted! Order Contract Generated: ${orderId}`);
   };
 
+  // Companion lead metadata parse
+  const getFollowUpDate = (remarks?: string) => {
+    if (!remarks) return null;
+    const match = remarks.match(/Next follow-up:\s*(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : null;
+  };
+
+  const todayStr = '2026-06-10';
+
+  const statNewLeads = leads.filter(l => l.status === 'New Lead').length;
+  const statTodayFollowups = leads.filter(l => l.status === 'Follow Up' && getFollowUpDate(l.remarks) === todayStr).length;
+  const statOverdueFollowups = leads.filter(l => {
+    if (l.status !== 'Follow Up') return false;
+    const fDate = getFollowUpDate(l.remarks);
+    return fDate ? fDate < todayStr : false;
+  }).length;
+  const statQuotesSent = leads.filter(l => l.status === 'Quotation Sent').length;
+  const statNegotiations = leads.filter(l => l.status === 'Negotiation').length;
+  const statConfirmedOrders = leads.filter(l => l.status === 'Order Confirmed').length;
+
   // Filter Leads List
   const filteredLeads = leads.filter((lead) => {
+    if (currentRole === 'Sales Team') {
+      const allowedStatuses = ['New Lead', 'Follow Up', 'Quotation Sent', 'Negotiation'];
+      if (!allowedStatuses.includes(lead.status)) {
+        return false;
+      }
+    }
+
     const matchesSearch = 
       lead.customer_name.toLowerCase().includes(filterQuery.toLowerCase()) || 
       lead.lead_id.toLowerCase().includes(filterQuery.toLowerCase()) ||
@@ -674,6 +701,26 @@ export const SalesModule: React.FC = () => {
       ) : (
         /* SCREEN 1: Lead List datagrid */
         <div className="space-y-4">
+
+          {/* Sales Performance Dashboard Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3.5 mt-2">
+            {[
+              { label: 'New Leads', val: statNewLeads, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
+              { label: "Today's Follow-ups", val: statTodayFollowups, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+              { label: 'Overdue Follow-ups', val: statOverdueFollowups, color: 'text-rose-400', bg: 'bg-rose-500/10 border-rose-500/20' },
+              { label: 'Quotations Sent', val: statQuotesSent, color: 'text-indigo-400', bg: 'bg-indigo-500/10 border-indigo-500/20' },
+              { label: 'Negotiations', val: statNegotiations, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
+              { label: 'Confirmed Orders', val: statConfirmedOrders, color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20' },
+            ].map((kpi, idx) => (
+              <div key={idx} className={`p-4 rounded-2xl border ${kpi.bg} flex flex-col justify-between shadow-sm relative overflow-hidden backdrop-blur-sm`}>
+                <div className="absolute top-2 right-2 w-1.5 h-1.5 border-t border-r border-current opacity-30" />
+                <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-400">{kpi.label}</span>
+                <div className={`text-2xl font-black ${kpi.color} font-mono tracking-tight mt-1.5`}>
+                  {kpi.val}
+                </div>
+              </div>
+            ))}
+          </div>
           
           {/* Quick Filters Panel */}
           <div className="bg-zinc-900/40 p-4 rounded-2xl border border-zinc-850 shadow-xl grid grid-cols-1 sm:grid-cols-5 gap-3 items-end relative overflow-hidden">

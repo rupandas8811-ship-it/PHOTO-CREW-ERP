@@ -28,28 +28,26 @@ CREATE INDEX IF NOT EXISTS idx_users_role ON public.users(role);
 -- 4. Re-enable Row Level Security (RLS) on public.users
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
--- 5. Drop old policies if they exist to avoid replication conflicts
-DROP POLICY IF EXISTS owner_users_policy ON public.users;
-DROP POLICY IF EXISTS select_users_policy ON public.users;
-DROP POLICY IF EXISTS self_update_users_policy ON public.users;
-DROP POLICY IF EXISTS anon_insert_users_policy ON public.users;
-
--- 6. Define Secure Row Level Security (RLS) Policies on public.users
+-- 5. Define Secure Row Level Security (RLS) Policies on public.users
 -- Policies allow read for all authenticated users, updates to self, full access to owner, and allow auth-triggered inserts.
 
 -- Business Owner can execute any write/read query
+DROP POLICY IF EXISTS owner_users_policy ON public.users;
 CREATE POLICY owner_users_policy ON public.users 
     FOR ALL USING (get_user_role() = 'Business Owner');
 
 -- Other authenticated users can view staff directories
+DROP POLICY IF EXISTS select_users_policy ON public.users;
 CREATE POLICY select_users_policy ON public.users 
     FOR SELECT TO authenticated USING (true);
 
 -- Users can update their own personal information
+DROP POLICY IF EXISTS self_update_users_policy ON public.users;
 CREATE POLICY self_update_users_policy ON public.users 
     FOR UPDATE TO authenticated USING (id = auth.uid());
 
 -- Allow anonymous inserts to allow fallback signup if not using security-definers
+DROP POLICY IF EXISTS anon_insert_users_policy ON public.users;
 CREATE POLICY anon_insert_users_policy ON public.users
     FOR INSERT WITH CHECK (true);
 

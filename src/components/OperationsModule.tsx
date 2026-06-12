@@ -3,16 +3,17 @@ import { useRole } from './RoleContext';
 import { 
   Users, Briefcase, Camera, Video, Compass, HelpCircle, HardDrive, Clock, Clipboard, FileCheck, CheckCircle, Ban
 } from 'lucide-react';
-import { Order } from '../types';
+import { Order, CurrentStage } from '../types';
 
 export const OperationsModule: React.FC = () => {
-  const { currentRole, orders, operations, assignOperations, markEventCompleted } = useRole();
+  const { currentRole, orders, operations, assignOperations, markEventCompleted, confirmRawFootageReceived } = useRole();
 
   // Role permissions gate
   const canEdit = currentRole === 'Operations Team' || currentRole === 'Business Owner';
 
   // Toggle selected order
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [formStage, setFormStage] = useState<CurrentStage>('Order Confirmed');
 
   // Assignment Form State
   const [form, setForm] = useState({
@@ -35,6 +36,7 @@ export const OperationsModule: React.FC = () => {
 
   const handleSelectOrder = (order: Order) => {
     setSelectedOrderId(order.order_id);
+    setFormStage(order.current_stage);
     const op = getOpDetails(order.order_id);
     if (op) {
       setForm({
@@ -69,6 +71,12 @@ export const OperationsModule: React.FC = () => {
       return;
     }
 
+    let finalStage = formStage;
+    if (finalStage === 'Order Confirmed') {
+      finalStage = 'Operations Assigned';
+      setFormStage('Operations Assigned');
+    }
+
     assignOperations(selectedOrderId, {
       photographer_assigned: form.photographer_assigned,
       videographer_assigned: form.videographer_assigned,
@@ -77,9 +85,10 @@ export const OperationsModule: React.FC = () => {
       equipment_kit: form.equipment_kit,
       reporting_time: form.reporting_time,
       remarks: form.remarks,
+      current_stage: finalStage,
     });
 
-    alert('Operations squad allocated successfully. Stage updated to [Operations Assigned]');
+    alert(`Operations squad allocated successfully. Stage updated to [${finalStage}]`);
   };
 
   // Mark completion
@@ -90,10 +99,29 @@ export const OperationsModule: React.FC = () => {
     alert('Event Shoot completed successfully. Tracking ID and Raw Footage node initialized for production!');
   };
 
+  const handleConfirmRawReceived = () => {
+    if (!selectedOrderId) return;
+    confirmRawFootageReceived(selectedOrderId);
+    setFormStage('Raw Footage Received');
+    alert('Raw Footage Received confirmed. Post-production editors have been notified and order moved directly to Production Ingest!');
+  };
+
   // Filter: Show all orders that are confirmed or operations-managed (i.e., not Closed)
   // Page 9: "Order Queue: Show only confirmed orders."
   // Valid orders are those loaded into ORDERS database table! Let's list those.
-  const activeOrders = orders.filter(o => o.current_stage !== 'Closed');
+  const activeOrders = orders.filter(o => {
+    if (currentRole === 'Operations Team') {
+      const allowedStages = ['Order Confirmed', 'Operations Assigned', 'Event Scheduled', 'Event Completed', 'Raw Footage Received'];
+      return allowedStages.includes(o.current_stage);
+    }
+    return o.current_stage !== 'Closed';
+  });
+
+  const statConfirmed = orders.filter(o => o.current_stage === 'Order Confirmed').length;
+  const statCrewAssigned = operations.filter(op => op.event_status === 'Assigned').length;
+  const statCompleted = operations.filter(op => op.event_status === 'Completed').length;
+  const statPending = orders.filter(o => o.current_stage === 'Order Confirmed').length;
+  const statEquipKits = operations.filter(op => op.equipment_kit && op.event_status !== 'Completed').length;
 
   return (
     <div id="operations_module" className="space-y-6">
@@ -106,6 +134,30 @@ export const OperationsModule: React.FC = () => {
         <p className="text-xs text-zinc-400 mt-0.5">
           Review booked orders, allocate crew personnel, deploy equipment kits, and execute shoot deliveries.
         </p>
+      </div>
+
+      {/* Operations Team Dashboard KPI Panel */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5 mt-2">
+        {[
+          { label: 'Total Confirmed Orders', val: statConfirmed, color: 'text-indigo-400', bg: 'bg-indigo-500/10 border-indigo-500/20', icon: FileCheck },
+          { label: 'Crew Assigned', val: statCrewAssigned, color: 'text-sky-400', bg: 'bg-sky-500/10 border-sky-500/20', icon: Users },
+          { label: 'Events Completed', val: statCompleted, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20', icon: CheckCircle },
+          { label: 'Pending Assignments', val: statPending, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20', icon: Clock },
+          { label: 'Equipment Allocated', val: statEquipKits, color: 'text-rose-400', bg: 'bg-rose-500/10 border-rose-500/20', icon: Briefcase },
+        ].map((kpi, idx) => {
+          const IconComponent = kpi.icon;
+          return (
+            <div key={idx} className={`p-4 rounded-2xl border ${kpi.bg} flex flex-col justify-between shadow-sm relative overflow-hidden backdrop-blur-sm`}>
+              <div className="absolute top-2 right-2 opacity-15">
+                <IconComponent className="w-8 h-8" />
+              </div>
+              <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-400">{kpi.label}</span>
+              <div className={`text-2xl font-black ${kpi.color} font-mono tracking-tight mt-1.5`}>
+                {kpi.val}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -139,6 +191,9 @@ export const OperationsModule: React.FC = () => {
                       <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-tight uppercase ${
                         ord.current_stage === 'Order Confirmed' ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' :
                         ord.current_stage === 'Operations Assigned' ? 'bg-sky-500/10 text-sky-450 border border-sky-500/20' :
+                        ord.current_stage === 'Event Scheduled' ? 'bg-emerald-500/10 text-emerald-450 border border-emerald-500/20' :
+                        ord.current_stage === 'Event Completed' ? 'bg-rose-500/10 text-rose-450 border border-rose-500/20' :
+                        ord.current_stage === 'Raw Footage Received' ? 'bg-violet-500/10 text-violet-400 border border-violet-500/20' :
                         'bg-slate-800 text-slate-400'
                       }`}>
                         {ord.current_stage}
@@ -311,6 +366,24 @@ export const OperationsModule: React.FC = () => {
                             onChange={(e) => setForm({ ...form, reporting_time: e.target.value })}
                             className="w-full bg-slate-900 border border-slate-755 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono"
                           />
+                        </div>
+
+                        {/* Current Stage Selection */}
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-400 mb-1">
+                            Event Stage / Status
+                          </label>
+                          <select
+                            value={formStage}
+                            onChange={(e) => setFormStage(e.target.value as CurrentStage)}
+                            className="w-full bg-slate-900 border border-slate-755 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono"
+                          >
+                            <option value="Order Confirmed">Order Confirmed</option>
+                            <option value="Operations Assigned">Operations Assigned</option>
+                            <option value="Event Scheduled">Event Scheduled</option>
+                            <option value="Event Completed">Event Completed</option>
+                            <option value="Raw Footage Received">Raw Footage Received</option>
+                          </select>
                         </div>
 
                       </div>
@@ -553,6 +626,24 @@ export const OperationsModule: React.FC = () => {
                             />
                           </div>
 
+                          {/* Event Stage Dropdown */}
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-400 mb-1">
+                              Event Stage / Status
+                            </label>
+                            <select
+                              value={formStage}
+                              onChange={(e) => setFormStage(e.target.value as CurrentStage)}
+                              className="w-full bg-slate-955 border border-slate-800 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono"
+                            >
+                              <option value="Order Confirmed">Order Confirmed</option>
+                              <option value="Operations Assigned">Operations Assigned</option>
+                              <option value="Event Scheduled">Event Scheduled</option>
+                              <option value="Event Completed">Event Completed</option>
+                              <option value="Raw Footage Received">Raw Footage Received</option>
+                            </select>
+                          </div>
+
                         </div>
 
                         {/* Operations Remarks */}
@@ -594,37 +685,66 @@ export const OperationsModule: React.FC = () => {
                     {/* Completing Action Button - Page 9 */}
                     {op && canEdit && (
                       <div className="border-t border-slate-800 pt-5 space-y-3">
-                        <div className="flex flex-col gap-1">
-                          <h4 className="text-xs font-semibold text-slate-205 flex items-center gap-1">
-                            <span>🎬</span> Master Action: Mark Event Shoot Completed
-                          </h4>
-                          <p className="text-[10px] text-slate-400">
-                            Clicking this initiates raw video storage, produces a tracking handle, and transitions to the post-production editor pipeline.
-                          </p>
-                        </div>
+                        {order.current_stage !== 'Event Completed' && order.current_stage !== 'Raw Footage Received' ? (
+                          <>
+                            <div className="flex flex-col gap-1">
+                              <h4 className="text-xs font-semibold text-slate-205 flex items-center gap-1">
+                                <span>🎬</span> Master Action: Mark Event Shoot Completed
+                              </h4>
+                              <p className="text-[10px] text-slate-400">
+                                Clicking this initiates raw video storage, produces a tracking handle, and transitions to the post-production editor pipeline.
+                              </p>
+                            </div>
 
-                        {/* Path to serve bucket */}
-                        <div className="grid grid-cols-1 gap-2.5">
-                          <label className="text-[10px] text-slate-450 uppercase font-mono font-bold">
-                            Raw Footage Server Directory Path (S3/OSS)
-                          </label>
-                          <input
-                            type="text"
-                            value={serverPath}
-                            onChange={(e) => setServerPath(e.target.value)}
-                            className="w-full bg-slate-955 border border-slate-800 rounded-lg py-1.5 px-2.5 text-xs text-slate-100 font-mono"
-                          />
-                        </div>
+                            {/* Path to serve bucket */}
+                            <div className="grid grid-cols-1 gap-2.5">
+                              <label className="text-[10px] text-slate-450 uppercase font-mono font-bold">
+                                Raw Footage Server Directory Path (S3/OSS)
+                              </label>
+                              <input
+                                type="text"
+                                value={serverPath}
+                                onChange={(e) => setServerPath(e.target.value)}
+                                className="w-full bg-slate-955 border border-slate-800 rounded-lg py-1.5 px-2.5 text-xs text-slate-100 font-mono"
+                              />
+                            </div>
 
-                        <button
-                          type="button"
-                          id="btn_mark_event_completed_mobile"
-                          onClick={handleMarkCompleted}
-                          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-sky-650 to-blue-600 hover:from-sky-550 hover:to-blue-500 text-white font-semibold py-2.5 px-4 rounded-xl shadow-lg shadow-sky-950/20 text-xs transition-all cursor-pointer"
-                        >
-                          <FileCheck className="w-4 h-4" />
-                          <span>MARK EVENT COMPLETED & SEND TO PRODUCTION</span>
-                        </button>
+                            <button
+                              type="button"
+                              id="btn_mark_event_completed_mobile"
+                              onClick={handleMarkCompleted}
+                              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-sky-650 to-blue-600 hover:from-sky-550 hover:to-blue-500 text-white font-semibold py-2.5 px-4 rounded-xl shadow-lg shadow-sky-950/20 text-xs transition-all cursor-pointer"
+                            >
+                              <FileCheck className="w-4 h-4" />
+                              <span>MARK EVENT COMPLETED & SEND TO PRODUCTION</span>
+                            </button>
+                          </>
+                        ) : order.current_stage === 'Event Completed' ? (
+                          <>
+                            <div className="flex flex-col gap-1">
+                              <h4 className="text-xs font-semibold text-emerald-400 flex items-center gap-1">
+                                <span>🎥</span> Master Action: Confirm Raw Footage Received
+                              </h4>
+                              <p className="text-[10px] text-zinc-400">
+                                This confirms that the raw footage directories have been successfully transferred and ingested in PhotoCrew vaults. Moving to the post-production queue.
+                              </p>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={handleConfirmRawReceived}
+                              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-650 hover:from-emerald-500 hover:to-teal-550 text-white font-semibold py-2.5 px-4 rounded-xl shadow-lg shadow-emerald-950/20 text-xs transition-all cursor-pointer"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                              <span>CONFIRM RAW FOOTAGE RECEIVED</span>
+                            </button>
+                          </>
+                        ) : (
+                          <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-2 text-xs text-emerald-400">
+                            <CheckCircle className="w-4 h-4" />
+                            <span>Raw Footage Received & Ingested successfully.</span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

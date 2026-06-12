@@ -11,10 +11,13 @@ export type CurrentStage =
   | 'Negotiation'
   | 'Order Confirmed'
   | 'Operations Assigned'
+  | 'Event Scheduled'
   | 'Event Completed'
   | 'Raw Footage Received'
+  | 'Editor Assigned'
   | 'Editing Started'
   | 'Customer Review'
+  | 'Revision Required'
   | 'Approved'
   | 'Delivered'
   | 'Payment Pending'
@@ -33,10 +36,12 @@ export type PaymentStatus = 'Pending' | 'Partially Paid' | 'Fully Paid';
 export interface User {
   id: string;
   name: string;
+  full_name?: string;
   mobile: string;
   email: string;
   role: UserRole;
   active: boolean;
+  status?: string;
   created_at: string;
   password?: string;
   username?: string;
@@ -59,6 +64,8 @@ export interface Lead {
   status: CurrentStage;
   remarks?: string;
   created_by: string;
+  updated_by?: string;
+  updated_at?: string;
 }
 
 export interface Order {
@@ -78,6 +85,8 @@ export interface Order {
   current_stage: CurrentStage;
   sales_person: string;
   created_at: string;
+  updated_by?: string;
+  updated_at?: string;
 }
 
 export interface Operation {
@@ -138,4 +147,8 @@ export interface ActivityLog {
   module: string;
   record_id: string;
   timestamp: string;
+  previous_stage?: string;
+  new_stage?: string;
+  date?: string;
+  time?: string;
 }

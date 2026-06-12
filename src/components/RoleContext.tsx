@@ -46,9 +46,11 @@ interface RoleContextType {
       equipment_kit: string;
       reporting_time: string;
       remarks?: string;
+      current_stage?: CurrentStage;
     }
   ) => void;
   markEventCompleted: (orderId: string, serverPath: string) => void;
+  confirmRawFootageReceived: (orderId: string) => void;
   acceptRawFootage: (trackingId: string) => void;
   updateProduction: (
     productionId: string, 
@@ -97,11 +99,8 @@ const mapFromDbUserId = (uuid: string): string => {
 };
 
 export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Load initial values from localStorage to support persistency, or default to seeded data
-  const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('erp_users');
-    return saved ? JSON.parse(saved) : INITIAL_USERS;
-  });
+  // Initialize state arrays as empty so data is always loaded directly from Supabase (the single source of truth) without relying on cached or stale demo data
+  const [users, setUsers] = useState<User[]>([]);
 
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('erp_current_user');
@@ -116,46 +115,15 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return localStorage.getItem('erp_user_name') || 'Rupand Das';
   });
 
-  const [leads, setLeads] = useState<Lead[]>(() => {
-    const saved = localStorage.getItem('erp_leads');
-    return saved ? JSON.parse(saved) : INITIAL_LEADS;
-  });
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [operations, setOperations] = useState<Operation[]>([]);
+  const [rawFootage, setRawFootage] = useState<RawFootage[]>([]);
+  const [production, setProduction] = useState<Production[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
 
-  const [orders, setOrders] = useState<Order[]>(() => {
-    const saved = localStorage.getItem('erp_orders');
-    return saved ? JSON.parse(saved) : INITIAL_ORDERS;
-  });
-
-  const [operations, setOperations] = useState<Operation[]>(() => {
-    const saved = localStorage.getItem('erp_operations');
-    return saved ? JSON.parse(saved) : INITIAL_OPERATIONS;
-  });
-
-  const [rawFootage, setRawFootage] = useState<RawFootage[]>(() => {
-    const saved = localStorage.getItem('erp_raw_footage');
-    return saved ? JSON.parse(saved) : INITIAL_RAW_FOOTAGE;
-  });
-
-  const [production, setProduction] = useState<Production[]>(() => {
-    const saved = localStorage.getItem('erp_production');
-    return saved ? JSON.parse(saved) : INITIAL_PRODUCTION;
-  });
-
-  const [payments, setPayments] = useState<Payment[]>(() => {
-    const saved = localStorage.getItem('erp_payments');
-    return saved ? JSON.parse(saved) : INITIAL_PAYMENTS;
-  });
-
-  const [logs, setLogs] = useState<ActivityLog[]>(() => {
-    const saved = localStorage.getItem('erp_logs');
-    return saved ? JSON.parse(saved) : INITIAL_LOGS;
-  });
-
-  // Track state in localStorage as backup persistence layer
-  useEffect(() => {
-    localStorage.setItem('erp_users', JSON.stringify(users));
-  }, [users]);
-
+  // Track session/auth state in localStorage to keep developer/user logged-in across refreshes
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('erp_current_user', JSON.stringify(currentUser));
@@ -168,34 +136,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('erp_role', currentRole);
     localStorage.setItem('erp_user_name', currentUserName);
   }, [currentRole, currentUserName]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_leads', JSON.stringify(leads));
-  }, [leads]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_orders', JSON.stringify(orders));
-  }, [orders]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_operations', JSON.stringify(operations));
-  }, [operations]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_raw_footage', JSON.stringify(rawFootage));
-  }, [rawFootage]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_production', JSON.stringify(production));
-  }, [production]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_payments', JSON.stringify(payments));
-  }, [payments]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_logs', JSON.stringify(logs));
-  }, [logs]);
 
   // Synchronous CRUD wrappers for updating Supabase in backgrounds
   const pushInsert = async (table: string, record: any) => {
@@ -259,6 +199,33 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Fetch full dataset from Supabase
+  const seedDatabase = async () => {
+    if (!supabaseClient) return;
+    try {
+      console.log('Database is empty, starting automated initial seeding to Supabase...');
+      for (const u of INITIAL_USERS) {
+        await supabaseClient.from('users').upsert({
+          ...u,
+          id: mapToDbUserId(u.id),
+          username: u.username || u.email.split('@')[0]
+        });
+      }
+      // Upsert other tables
+      if (INITIAL_LEADS?.length > 0) await supabaseClient.from('leads').upsert(INITIAL_LEADS);
+      if (INITIAL_ORDERS?.length > 0) await supabaseClient.from('orders').upsert(INITIAL_ORDERS);
+      if (INITIAL_OPERATIONS?.length > 0) await supabaseClient.from('operations').upsert(INITIAL_OPERATIONS);
+      if (INITIAL_RAW_FOOTAGE?.length > 0) await supabaseClient.from('raw_footage').upsert(INITIAL_RAW_FOOTAGE);
+      if (INITIAL_PRODUCTION?.length > 0) await supabaseClient.from('production').upsert(INITIAL_PRODUCTION);
+      if (INITIAL_PAYMENTS?.length > 0) await supabaseClient.from('payments').upsert(INITIAL_PAYMENTS);
+      if (INITIAL_LOGS?.length > 0) await supabaseClient.from('activity_logs').upsert(INITIAL_LOGS);
+
+      console.log('Database initial seeding completed successfully.');
+    } catch (err: any) {
+      console.error('Automated database seeding failed:', err);
+    }
+  };
+
+  // Fetch full dataset from Supabase
   const fetchFromDb = async () => {
     if (!supabaseClient) return;
     try {
@@ -285,6 +252,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (uErr || ldErr || ordErr || opErr || rfErr || prodErr || payErr || logErr) {
         console.warn('Could not read all tables from Supabase, syncing with cached state');
         updateDiagnosticMetric('read', 'fail', (uErr || ldErr || ordErr || opErr || rfErr || prodErr || payErr || logErr)?.message);
+        return;
+      }
+
+      if (dbUsers && dbUsers.length === 0) {
+        await seedDatabase();
+        // retry fetch once
+        await fetchFromDb();
         return;
       }
 
@@ -443,7 +417,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           });
           if (signUpErr) {
-            console.error('On-the-fly signUp failed:', signUpErr.message);
+            console.warn('On-the-fly signUp notice (handled):', signUpErr.message);
           } else {
             console.log('On-the-fly signUp succeeded. Attempting clean sign-in...');
             const { error: retrySignInErr } = await supabaseClient.auth.signInWithPassword({
@@ -451,7 +425,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
               password: password
             });
             if (retrySignInErr) {
-              console.error('Retry sign-in after signUp failed:', retrySignInErr.message);
+              console.warn('Retry sign-in after signUp result:', retrySignInErr.message);
             }
           }
         } else {
@@ -507,18 +481,49 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Helper to add activity logs
-  const logActivity = (action: string, module: string, recordId: string) => {
+  const logActivity = (
+    action: string, 
+    module: string, 
+    recordId: string, 
+    prevStage?: string, 
+    newStage?: string
+  ) => {
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const timeStr = now.toTimeString().split(' ')[0];
+
+    let detailedAction = action;
+    if (prevStage || newStage) {
+      detailedAction += ` | Previous Stage: ${prevStage || 'N/A'} | New Stage: ${newStage || 'N/A'}`;
+    }
+    detailedAction += ` | Date: ${dateStr} | Time: ${timeStr}`;
+
     const newLog: ActivityLog = {
       log_id: `LOG-${Math.floor(100 + Math.random() * 900)}`,
       user_name: currentUserName,
       role: currentRole,
-      action,
+      action: detailedAction,
       module,
       record_id: recordId,
-      timestamp: new Date().toISOString(),
+      timestamp: now.toISOString(),
+      previous_stage: prevStage,
+      new_stage: newStage,
+      date: dateStr,
+      time: timeStr,
     };
     setLogs((prev) => [newLog, ...prev]);
-    pushInsert('activity_logs', newLog);
+
+    // Strip out non-database columns before sending to Supabase
+    const dbRecord = {
+      log_id: newLog.log_id,
+      user_name: newLog.user_name,
+      role: newLog.role,
+      action: newLog.action,
+      module: newLog.module,
+      record_id: newLog.record_id,
+      timestamp: newLog.timestamp,
+    };
+    pushInsert('activity_logs', dbRecord);
   };
 
   const resetAllData = () => {
@@ -567,7 +572,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setLeads((prev) => [newLead, ...prev]);
     pushInsert('leads', newLead);
-    logActivity(`Created Lead: ${newLead.customer_name}`, 'Sales', leadId);
+    logActivity(`Created Lead: ${newLead.customer_name}`, 'Sales', leadId, 'N/A', 'New Lead');
     return leadId;
   };
 
@@ -580,6 +585,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     quotationAmount?: number, 
     negotiationNotes?: string
   ) => {
+    const targetLead = leads.find((ld) => ld.lead_id === leadId);
+    const previousStage = targetLead ? targetLead.status : 'New Lead';
+
     setLeads((prev) =>
       prev.map((ld) => {
         if (ld.lead_id === leadId) {
@@ -588,18 +596,22 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             status,
             budget: quotationAmount !== undefined ? quotationAmount : ld.budget,
             remarks: `${ld.remarks || ''}\n[Update ${new Date().toISOString().split('T')[0]}]: ${callNotes}. ${negotiationNotes ? 'Neg Notes: ' + negotiationNotes : ''}. Next follow-up: ${nextFollowUpDate}`,
+            updated_by: currentUserName,
+            updated_at: new Date().toISOString()
           };
           pushUpdate('leads', 'lead_id', leadId, {
             status: updated.status,
             budget: updated.budget,
-            remarks: updated.remarks
+            remarks: updated.remarks,
+            updated_by: updated.updated_by,
+            updated_at: updated.updated_at
           });
           return updated;
         }
         return ld;
       })
     );
-    logActivity(`Updated Lead Follow-up, stage: ${status}`, 'Sales', leadId);
+    logActivity(`Updated Lead Follow-up, stage: ${status}`, 'Sales', leadId, previousStage, status);
   };
 
   // 3. Confirm Order (Action button)
@@ -614,9 +626,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Update lead stage
     setLeads((prev) =>
-      prev.map((ld) => (ld.lead_id === leadId ? { ...ld, status: 'Order Confirmed' } : ld))
+      prev.map((ld) => (ld.lead_id === leadId ? { ...ld, status: 'Order Confirmed', updated_by: currentUserName, updated_at: new Date().toISOString() } : ld))
     );
-    pushUpdate('leads', 'lead_id', leadId, { status: 'Order Confirmed' });
+    pushUpdate('leads', 'lead_id', leadId, { 
+      status: 'Order Confirmed',
+      updated_by: currentUserName,
+      updated_at: new Date().toISOString()
+    });
 
     const orderId = `ORD-${Math.floor(1012 + Math.random() * 800)}`;
     const newOrder: Order = {
@@ -636,6 +652,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       current_stage: 'Order Confirmed',
       sales_person: currentUserName,
       created_at: new Date().toISOString(),
+      updated_by: currentUserName,
+      updated_at: new Date().toISOString()
     };
 
     const paymentId = `PAY-${Math.floor(3012 + Math.random() * 800)}`;
@@ -655,7 +673,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     pushInsert('orders', newOrder);
     pushInsert('payments', newPayment);
 
-    logActivity(`Confirmed Order for ${targetLead.customer_name}. Package: ${packageName}`, 'Sales', orderId);
+    logActivity(`Confirmed Order for ${targetLead.customer_name}. Package: ${packageName}`, 'Sales', orderId, targetLead.status, 'Order Confirmed');
     return orderId;
   };
 
@@ -670,29 +688,43 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       equipment_kit: string;
       reporting_time: string;
       remarks?: string;
+      current_stage?: CurrentStage;
     }
   ) => {
     const opId = `OP-${Math.floor(5012 + Math.random() * 800)}`;
+    const { current_stage, ...restOpData } = opData;
     const newOp: Operation = {
       operation_id: opId,
       order_id: orderId,
-      ...opData,
+      ...restOpData,
       event_status: 'Assigned',
       updated_by: currentUserName,
     };
 
+    const targetOrder = orders.find((o) => o.order_id === orderId);
+    const previousStage = targetOrder ? targetOrder.current_stage : 'Order Confirmed';
+    const targetStage: CurrentStage = current_stage || 
+      ((opData.photographer_assigned && opData.videographer_assigned) ? 'Event Scheduled' : 'Operations Assigned');
+
     // Update order & lead stage
     setOrders((prev) =>
-      prev.map((ord) => (ord.order_id === orderId ? { ...ord, current_stage: 'Operations Assigned' } : ord))
+      prev.map((ord) => (ord.order_id === orderId ? { ...ord, current_stage: targetStage, updated_by: currentUserName, updated_at: new Date().toISOString() } : ord))
     );
-    pushUpdate('orders', 'order_id', orderId, { current_stage: 'Operations Assigned' });
+    pushUpdate('orders', 'order_id', orderId, { 
+      current_stage: targetStage,
+      updated_by: currentUserName,
+      updated_at: new Date().toISOString()
+    });
 
-    const targetOrder = orders.find((o) => o.order_id === orderId);
     if (targetOrder) {
       setLeads((prev) =>
-        prev.map((ld) => (ld.lead_id === targetOrder.lead_id ? { ...ld, status: 'Operations Assigned' } : ld))
+        prev.map((ld) => (ld.lead_id === targetOrder.lead_id ? { ...ld, status: targetStage, updated_by: currentUserName, updated_at: new Date().toISOString() } : ld))
       );
-      pushUpdate('leads', 'lead_id', targetOrder.lead_id, { status: 'Operations Assigned' });
+      pushUpdate('leads', 'lead_id', targetOrder.lead_id, { 
+        status: targetStage,
+        updated_by: currentUserName,
+        updated_at: new Date().toISOString()
+      });
     }
 
     setOperations((prev) => {
@@ -701,7 +733,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     pushUpsert('operations', newOp);
 
-    logActivity(`Assigned Crew for Order: ${orderId}`, 'Operations', opId);
+    logActivity(`Assigned Crew for Order: ${orderId}`, 'Operations', opId, previousStage, targetStage);
   };
 
   // 5. Mark Event Completed (Action button in Operations)
@@ -713,11 +745,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tracking_id: trackingId,
       order_id: orderId,
       event_completed_date: new Date().toISOString().split('T')[0],
-      raw_received: true,
+      raw_received: false,
       server_path: serverPath || `s3://photocrew-vault-production/2026/${orderId}-shoot/raw/`,
       uploaded_by: currentUserName,
       uploaded_date: new Date().toISOString(),
-      status: 'Received',
+      status: 'Pending',
     };
 
     const newProd: Production = {
@@ -729,6 +761,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       remarks: 'Raw footage uploaded. Awaiting editor assignment.',
     };
 
+    const targetOrder = orders.find((o) => o.order_id === orderId);
+    const previousStage = targetOrder ? targetOrder.current_stage : 'Event Scheduled';
+
     // Update Operations status to completed
     setOperations((prev) =>
       prev.map((op) => (op.order_id === orderId ? { ...op, event_status: 'Completed' } : op))
@@ -737,16 +772,23 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Update order & lead stage to 'Event Completed'
     setOrders((prev) =>
-      prev.map((ord) => (ord.order_id === orderId ? { ...ord, current_stage: 'Event Completed' } : ord))
+      prev.map((ord) => (ord.order_id === orderId ? { ...ord, current_stage: 'Event Completed', updated_by: currentUserName, updated_at: new Date().toISOString() } : ord))
     );
-    pushUpdate('orders', 'order_id', orderId, { current_stage: 'Event Completed' });
+    pushUpdate('orders', 'order_id', orderId, { 
+      current_stage: 'Event Completed',
+      updated_by: currentUserName,
+      updated_at: new Date().toISOString()
+    });
 
-    const targetOrder = orders.find((o) => o.order_id === orderId);
     if (targetOrder) {
       setLeads((prev) =>
-        prev.map((ld) => (ld.lead_id === targetOrder.lead_id ? { ...ld, status: 'Event Completed' } : ld))
+        prev.map((ld) => (ld.lead_id === targetOrder.lead_id ? { ...ld, status: 'Event Completed', updated_by: currentUserName, updated_at: new Date().toISOString() } : ld))
       );
-      pushUpdate('leads', 'lead_id', targetOrder.lead_id, { status: 'Event Completed' });
+      pushUpdate('leads', 'lead_id', targetOrder.lead_id, { 
+        status: 'Event Completed',
+        updated_by: currentUserName,
+        updated_at: new Date().toISOString()
+      });
     }
 
     setRawFootage((prev) => [newRawFootage, ...prev]);
@@ -755,7 +797,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     pushInsert('raw_footage', newRawFootage);
     pushInsert('production', newProd);
 
-    logActivity(`Marked Event Completed for Order ${orderId}. Raw Footage recorded: ${trackingId}`, 'Operations', orderId);
+    logActivity(`Marked Event Completed for Order ${orderId}. Raw Footage recorded: ${trackingId}`, 'Operations', orderId, previousStage, 'Event Completed');
   };
 
   // 6. Production updates (Editing progress, review, approval)
@@ -764,6 +806,16 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updates: Partial<Omit<Production, 'production_id' | 'tracking_id'>>
   ) => {
     let trackingIdToUpdate = '';
+    const targetProd = production.find((p) => p.production_id === productionId);
+    let previousStage: CurrentStage = 'Raw Footage Received';
+    if (targetProd) {
+      const rf = rawFootage.find((f) => f.tracking_id === targetProd.tracking_id);
+      const linkedOrder = rf ? orders.find((o) => o.order_id === rf.order_id) : undefined;
+      if (linkedOrder) {
+        previousStage = linkedOrder.current_stage;
+      }
+    }
+
     setProduction((prev) =>
       prev.map((prod) => {
         if (prod.production_id === productionId) {
@@ -780,8 +832,19 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let nextStage: CurrentStage | null = null;
     if (updates.editing_status === 'Editing') nextStage = 'Editing Started';
     else if (updates.editing_status === 'Customer Review') nextStage = 'Customer Review';
+    else if (updates.editing_status === 'Revision Required') nextStage = 'Revision Required';
     else if (updates.editing_status === 'Approved') nextStage = 'Approved';
-    else if (updates.editing_status === 'Delivered') nextStage = 'Delivered';
+    else if (updates.editing_status === 'Delivered') {
+      if (targetProd) {
+        const rf = rawFootage.find((f) => f.tracking_id === targetProd.tracking_id);
+        const payment = rf ? payments.find((p) => p.order_id === rf.order_id) : undefined;
+        nextStage = (payment && payment.balance_due === 0) ? 'Closed' : 'Payment Pending';
+      } else {
+        nextStage = 'Payment Pending';
+      }
+    } else if (updates.editor_assigned && updates.editor_assigned !== 'Unassigned') {
+      nextStage = 'Editor Assigned';
+    }
 
     if (nextStage && trackingIdToUpdate) {
       const rf = rawFootage.find((f) => f.tracking_id === trackingIdToUpdate);
@@ -789,8 +852,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setOrders((prev) =>
           prev.map((ord) => {
             if (ord.order_id === rf.order_id) {
-              pushUpdate('orders', 'order_id', rf.order_id, { current_stage: nextStage! });
-              return { ...ord, current_stage: nextStage! };
+              pushUpdate('orders', 'order_id', rf.order_id, { 
+                current_stage: nextStage!,
+                updated_by: currentUserName,
+                updated_at: new Date().toISOString()
+              });
+              return { ...ord, current_stage: nextStage!, updated_by: currentUserName, updated_at: new Date().toISOString() };
             }
             return ord;
           })
@@ -800,8 +867,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setLeads((prev) =>
             prev.map((ld) => {
               if (ld.lead_id === tgtOrder.lead_id) {
-                pushUpdate('leads', 'lead_id', tgtOrder.lead_id, { status: nextStage! });
-                return { ...ld, status: nextStage! };
+                pushUpdate('leads', 'lead_id', tgtOrder.lead_id, { 
+                  status: nextStage!,
+                  updated_by: currentUserName,
+                  updated_at: new Date().toISOString()
+                });
+                return { ...ld, status: nextStage!, updated_by: currentUserName, updated_at: new Date().toISOString() };
               }
               return ld;
             })
@@ -813,7 +884,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logActivity(
       `Updated Production ${productionId}: status=${updates.editing_status || 'unchanged'}`, 
       'Production', 
-      productionId
+      productionId,
+      previousStage,
+      nextStage || previousStage
     );
   };
 
@@ -823,6 +896,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!rf) return;
 
     const orderId = rf.order_id;
+    const previousStage = orders.find((o) => o.order_id === orderId)?.current_stage || 'Event Completed';
 
     // Update raw footage state status
     setRawFootage((prev) =>
@@ -839,8 +913,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setOrders((prev) =>
       prev.map((ord) => {
         if (ord.order_id === orderId) {
-          pushUpdate('orders', 'order_id', orderId, { current_stage: 'Raw Footage Received' });
-          return { ...ord, current_stage: 'Raw Footage Received' };
+          pushUpdate('orders', 'order_id', orderId, { 
+            current_stage: 'Raw Footage Received',
+            updated_by: currentUserName,
+            updated_at: new Date().toISOString()
+          });
+          return { ...ord, current_stage: 'Raw Footage Received', updated_by: currentUserName, updated_at: new Date().toISOString() };
         }
         return ord;
       })
@@ -851,15 +929,56 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLeads((prev) =>
         prev.map((ld) => {
           if (ld.lead_id === targetOrder.lead_id) {
-            pushUpdate('leads', 'lead_id', targetOrder.lead_id, { status: 'Raw Footage Received' });
-            return { ...ld, status: 'Raw Footage Received' };
+            pushUpdate('leads', 'lead_id', targetOrder.lead_id, { 
+              status: 'Raw Footage Received',
+              updated_by: currentUserName,
+              updated_at: new Date().toISOString()
+            });
+            return { ...ld, status: 'Raw Footage Received', updated_by: currentUserName, updated_at: new Date().toISOString() };
           }
           return ld;
         })
       );
     }
 
-    logActivity(`Audited & accepted Raw Footage for Order: ${orderId}. Assigned to editing pipelines.`, 'Production', orderId);
+    logActivity(`Audited & accepted Raw Footage for Order: ${orderId}. Assigned to editing pipelines.`, 'Production', orderId, previousStage, 'Raw Footage Received');
+  };
+
+  const confirmRawFootageReceived = (orderId: string) => {
+    const targetOrder = orders.find((o) => o.order_id === orderId);
+    if (!targetOrder) return;
+    const previousStage = targetOrder.current_stage;
+    const targetStage: CurrentStage = 'Raw Footage Received';
+
+    setOrders((prev) =>
+      prev.map((ord) => (ord.order_id === orderId ? { ...ord, current_stage: targetStage, updated_by: currentUserName, updated_at: new Date().toISOString() } : ord))
+    );
+    pushUpdate('orders', 'order_id', orderId, { 
+      current_stage: targetStage,
+      updated_by: currentUserName,
+      updated_at: new Date().toISOString()
+    });
+
+    setLeads((prev) =>
+      prev.map((ld) => (ld.lead_id === targetOrder.lead_id ? { ...ld, status: targetStage, updated_by: currentUserName, updated_at: new Date().toISOString() } : ld))
+    );
+    pushUpdate('leads', 'lead_id', targetOrder.lead_id, { 
+      status: targetStage,
+      updated_by: currentUserName,
+      updated_at: new Date().toISOString()
+    });
+
+    setRawFootage((prev) =>
+      prev.map((rf) => {
+        if (rf.order_id === orderId) {
+          pushUpdate('raw_footage', 'tracking_id', rf.tracking_id, { status: 'Received', raw_received: true });
+          return { ...rf, status: 'Received', raw_received: true };
+        }
+        return rf;
+      })
+    );
+
+    logActivity(`Raw Footage Received and Confirmed in system for Order: ${orderId}`, 'Operations', orderId, previousStage, targetStage);
   };
 
   // 7. Mark Delivered (Action button)
@@ -868,6 +987,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!targetFootage) return;
 
     const orderId = targetFootage.order_id;
+    const previousStage = orders.find((o) => o.order_id === orderId)?.current_stage || 'Approved';
+
+    const payment = payments.find((p) => p.order_id === orderId);
+    const balanceDue = payment ? payment.balance_due : 1;
+    const targetStage: CurrentStage = balanceDue === 0 ? 'Closed' : 'Payment Pending';
 
     // Update production status
     setProduction((prev) =>
@@ -896,8 +1020,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setOrders((prev) =>
       prev.map((ord) => {
         if (ord.order_id === orderId) {
-          pushUpdate('orders', 'order_id', orderId, { current_stage: 'Delivered', order_status: 'Delivered' });
-          return { ...ord, current_stage: 'Delivered', order_status: 'Delivered' };
+          pushUpdate('orders', 'order_id', orderId, { 
+            current_stage: targetStage, 
+            order_status: 'Delivered',
+            updated_by: currentUserName,
+            updated_at: new Date().toISOString()
+          });
+          return { ...ord, current_stage: targetStage, order_status: 'Delivered', updated_by: currentUserName, updated_at: new Date().toISOString() };
         }
         return ord;
       })
@@ -907,8 +1036,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLeads((prev) =>
         prev.map((ld) => {
           if (ld.lead_id === tgtOrder.lead_id) {
-            pushUpdate('leads', 'lead_id', tgtOrder.lead_id, { status: 'Delivered' });
-            return { ...ld, status: 'Delivered' };
+            pushUpdate('leads', 'lead_id', tgtOrder.lead_id, { 
+              status: targetStage,
+              updated_by: currentUserName,
+              updated_at: new Date().toISOString()
+            });
+            return { ...ld, status: targetStage, updated_by: currentUserName, updated_at: new Date().toISOString() };
           }
           return ld;
         })
@@ -927,8 +1060,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
 
-    // If payment balance is fully cleared: Closed, else keep delivered. Let's let user collect final payment
-    logActivity(`Marked Project Delivered to client for Order: ${orderId}`, 'Production', trackingId);
+    logActivity(`Marked Project Delivered to client for Order: ${orderId}`, 'Production', trackingId, previousStage, targetStage);
   };
 
   // 8. Payments update
@@ -970,6 +1102,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // If fully paid AND previous stage was delivered, we can transition stage to Closed!
     let nextStage: CurrentStage = 'Payment Pending';
     const currentOrder = orders.find((o) => o.order_id === orderId);
+    const previousStage = currentOrder ? currentOrder.current_stage : 'Payment Pending';
     if (currentOrder) {
       if (isFullyPaid) {
         nextStage = 'Closed';
@@ -984,13 +1117,17 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             pushUpdate('orders', 'order_id', orderId, {
               current_stage: nextStage,
               order_status: nextStage === 'Closed' ? 'Closed' : ord.order_status,
-              balance_amount: nextOutstanding
+              balance_amount: nextOutstanding,
+              updated_by: currentUserName,
+              updated_at: new Date().toISOString()
             });
             return {
               ...ord,
               current_stage: nextStage,
               order_status: nextStage === 'Closed' ? ('Closed' as const) : ord.order_status,
               balance_amount: nextOutstanding,
+              updated_by: currentUserName,
+              updated_at: new Date().toISOString()
             };
           }
           return ord;
@@ -1000,15 +1137,19 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLeads((prev) =>
         prev.map((ld) => {
           if (ld.lead_id === currentOrder.lead_id) {
-            pushUpdate('leads', 'lead_id', currentOrder.lead_id, { status: nextStage });
-            return { ...ld, status: nextStage };
+            pushUpdate('leads', 'lead_id', currentOrder.lead_id, { 
+              status: nextStage,
+              updated_by: currentUserName,
+              updated_at: new Date().toISOString()
+            });
+            return { ...ld, status: nextStage, updated_by: currentUserName, updated_at: new Date().toISOString() };
           }
           return ld;
         })
       );
     }
 
-    logActivity(`Recorded payment of $${amountReceived} for Order ${orderId}. Fully paid: ${isFullyPaid}`, 'Finance', orderId);
+    logActivity(`Recorded payment of ₹${amountReceived} for Order ${orderId}. Fully paid: ${isFullyPaid}`, 'Finance', orderId, previousStage, nextStage);
   };
 
   // User Management Admin features
@@ -1034,7 +1175,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         if (error) {
-          console.error('Supabase auth.signUp error in addUser:', error.message);
+          console.warn('Supabase auth.signUp handled in addUser:', error.message);
           // If auth fails (e.g. user already exists or trigger bypass needed), try to insert directly into users table as a fallback
           const newUser: User = {
             id,
@@ -1259,6 +1400,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         confirmOrder,
         assignOperations,
         markEventCompleted,
+        confirmRawFootageReceived,
         acceptRawFootage,
         updateProduction,
         markDelivered,

@@ -32,7 +32,8 @@ CREATE TABLE public.users (
     role VARCHAR(50) NOT NULL CHECK (role IN ('Business Owner', 'Sales Team', 'Operations Team', 'Production Team')),
     active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    password TEXT -- Included for backward compatibility/graceful legacy auth
+    password TEXT, -- Included for backward compatibility/graceful legacy auth
+    username VARCHAR(255)
 );
 
 -- LEADS TABLE
@@ -57,7 +58,9 @@ CREATE TABLE public.leads (
         'Payment Pending', 'Closed'
     )),
     remarks TEXT,
-    created_by VARCHAR(255) NOT NULL
+    created_by VARCHAR(255) NOT NULL,
+    updated_by VARCHAR(255),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ORDERS TABLE
@@ -82,7 +85,9 @@ CREATE TABLE public.orders (
         'Payment Pending', 'Closed'
     )),
     sales_person VARCHAR(255) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_by VARCHAR(255),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- OPERATIONS TABLE
@@ -162,9 +167,12 @@ CREATE INDEX idx_raw_footage_order_id ON public.raw_footage(order_id);
 CREATE INDEX idx_production_tracking_id ON public.production(tracking_id);
 CREATE INDEX idx_payments_order_id ON public.payments(order_id);
 CREATE INDEX idx_activity_logs_timestamp ON public.activity_logs(timestamp DESC);
+CREATE INDEX idx_users_username ON public.users(username);
+CREATE INDEX idx_users_role ON public.users(role);
 
 
 -- 4. UTILITY FUNCTION FOR ROLE DETERMINATION
+DROP FUNCTION IF EXISTS public.get_user_role() CASCADE;
 CREATE OR REPLACE FUNCTION public.get_user_role()
 RETURNS text AS $$
   SELECT role::text FROM public.users WHERE id = auth.uid();
@@ -187,16 +195,18 @@ ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
 
 -- A. USERS POLICIES
 DROP POLICY IF EXISTS owner_users_policy ON public.users;
-DROP POLICY IF EXISTS select_users_policy ON public.users;
-DROP POLICY IF EXISTS self_update_users_policy ON public.users;
-DROP POLICY IF EXISTS anon_insert_users_policy ON public.users;
-
 CREATE POLICY owner_users_policy ON public.users 
     FOR ALL USING (auth.uid() IS NULL OR get_user_role() = 'Business Owner');
+
+DROP POLICY IF EXISTS select_users_policy ON public.users;
 CREATE POLICY select_users_policy ON public.users 
     FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS self_update_users_policy ON public.users;
 CREATE POLICY self_update_users_policy ON public.users 
     FOR UPDATE USING (auth.uid() IS NULL OR id = auth.uid());
+
+DROP POLICY IF EXISTS anon_insert_users_policy ON public.users;
 CREATE POLICY anon_insert_users_policy ON public.users
     FOR INSERT WITH CHECK (true);
 

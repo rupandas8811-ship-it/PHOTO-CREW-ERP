@@ -6,7 +6,7 @@ import {
 import { formatINR, formatIndianPhoneNumber, formatTime12Hour } from '../utils';
 
 export const OrderSearch: React.FC = () => {
-  const { leads, orders, operations, production, payments } = useRole();
+  const { leads, orders, operations, production, payments, rawFootage } = useRole();
   const [searchQuery, setSearchQuery] = useState('');
 
   // Search logic covering Lead ID, Order ID, Customer Name, Mobile Number
@@ -36,17 +36,13 @@ export const OrderSearch: React.FC = () => {
   const getProdDetails = (orderId?: string) => {
     if (!orderId) return undefined;
     // Find raw footage tracking id linked to this order
-    const rf = srcRawFootageByOrder(orderId);
+    const rf = rawFootage.find((f) => f.order_id === orderId);
     if (!rf) return undefined;
     return production.find((p) => p.tracking_id === rf.tracking_id);
   };
   
   const srcRawFootageByOrder = (orderId: string) => {
-    // We can resolve via order_id
-    const saved = localStorage.getItem('erp_raw_footage');
-    if (!saved) return undefined;
-    const array = JSON.parse(saved) as any[];
-    return array.find((f) => f.order_id === orderId);
+    return rawFootage.find((f) => f.order_id === orderId);
   };
 
   const getPaymentDetails = (orderId?: string) => orderId ? payments.find((p) => p.order_id === orderId) : undefined;

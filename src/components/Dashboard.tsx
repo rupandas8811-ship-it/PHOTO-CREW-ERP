@@ -48,8 +48,8 @@ export const Dashboard: React.FC = () => {
     { label: 'Follow Up', stages: ['Follow Up'], color: 'bg-emerald-500', ringColor: 'border-emerald-500/30', bgBadge: 'bg-emerald-500/10 text-emerald-400' },
     { label: 'Quotation', stages: ['Quotation Sent', 'Negotiation'], color: 'bg-amber-500', ringColor: 'border-amber-500/30', bgBadge: 'bg-amber-500/10 text-amber-400' },
     { label: 'Confirmed', stages: ['Order Confirmed'], color: 'bg-orange-500', ringColor: 'border-orange-500/30', bgBadge: 'bg-orange-500/10 text-orange-450' },
-    { label: 'Operations', stages: ['Operations Assigned'], color: 'bg-sky-500', ringColor: 'border-sky-500/30', bgBadge: 'bg-sky-500/10 text-sky-400' },
-    { label: 'Production', stages: ['Event Completed', 'Raw Footage Received', 'Editing Started', 'Customer Review', 'Approved'], color: 'bg-pink-500', ringColor: 'border-pink-500/30', bgBadge: 'bg-pink-500/10 text-pink-400' },
+    { label: 'Operations', stages: ['Operations Assigned', 'Event Scheduled'], color: 'bg-sky-500', ringColor: 'border-sky-500/30', bgBadge: 'bg-sky-500/10 text-sky-400' },
+    { label: 'Production', stages: ['Event Completed', 'Raw Footage Received', 'Editor Assigned', 'Editing Started', 'Customer Review', 'Revision Required', 'Approved'], color: 'bg-pink-500', ringColor: 'border-pink-500/30', bgBadge: 'bg-pink-500/10 text-pink-400' },
     { label: 'Delivered', stages: ['Delivered'], color: 'bg-teal-500', ringColor: 'border-teal-500/30', bgBadge: 'bg-teal-500/10 text-teal-400' },
     { label: 'Closed', stages: ['Closed', 'Payment Pending'], color: 'bg-zinc-500', ringColor: 'border-zinc-500/30', bgBadge: 'bg-zinc-500/10 text-zinc-400' },
   ];

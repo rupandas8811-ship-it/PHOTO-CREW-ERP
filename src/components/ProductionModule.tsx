@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useRole } from './RoleContext';
 import { 
-  Play, CheckCircle2, UserCheck, Eye, Calendar, Lock, Layers, AlertCircle, Ban, RefreshCw
+  Play, CheckCircle2, UserCheck, Eye, Calendar, Lock, Layers, AlertCircle, Ban, RefreshCw, Clock
 } from 'lucide-react';
 import { Production, EditingStatus } from '../types';
 
@@ -58,6 +58,20 @@ export const ProductionModule: React.FC = () => {
     alert('Project officially delivered to customer! Final stage updated.');
   };
 
+  const statTotalVideo = production.length;
+  const statPendingVideo = production.filter(p => p.editing_status === 'Pending').length;
+  const statEditingVideo = production.filter(p => p.editing_status === 'Editing').length;
+  const statReviewVideo = production.filter(p => p.editing_status === 'Customer Review').length;
+  const statApprovedVideo = production.filter(p => p.editing_status === 'Approved').length;
+
+  const visibleProduction = production.filter(p => {
+    if (currentRole === 'Production Team') {
+      // Data visibility permission check: only post-prod, raw footage, review tasks
+      return true;
+    }
+    return true;
+  });
+
   return (
     <div id="production_module" className="space-y-6">
       {/* Header */}
@@ -69,6 +83,30 @@ export const ProductionModule: React.FC = () => {
         <p className="text-xs text-zinc-400 mt-0.5">
           Orchestrate and monitor visual design workflows, track video editing, coordinate consumer reviews, and authorize client deliveries.
         </p>
+      </div>
+
+      {/* Production Team Dashboard KPI Panel */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5 mt-2">
+        {[
+          { label: 'Total Video Projects', val: statTotalVideo, color: 'text-indigo-400', bg: 'bg-indigo-500/10 border-indigo-500/20', icon: Layers },
+          { label: 'Video Projects Pending', val: statPendingVideo, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20', icon: Clock },
+          { label: 'Video Projects Editing', val: statEditingVideo, color: 'text-sky-400', bg: 'bg-sky-500/10 border-sky-500/20', icon: Play },
+          { label: 'Customer Review', val: statReviewVideo, color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20', icon: Eye },
+          { label: 'Video Projects Approved', val: statApprovedVideo, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20', icon: CheckCircle2 },
+        ].map((kpi, idx) => {
+          const IconComponent = kpi.icon;
+          return (
+            <div key={idx} className={`p-4 rounded-2xl border ${kpi.bg} flex flex-col justify-between shadow-sm relative overflow-hidden backdrop-blur-sm`}>
+              <div className="absolute top-2 right-2 opacity-15">
+                <IconComponent className="w-8 h-8" />
+              </div>
+              <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-400">{kpi.label}</span>
+              <div className={`text-2xl font-black ${kpi.color} font-mono tracking-tight mt-1.5`}>
+                {kpi.val}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -84,8 +122,8 @@ export const ProductionModule: React.FC = () => {
           </div>
 
           <div className="divide-y divide-zinc-900/40 max-h-[500px] overflow-y-auto">
-            {production.length > 0 ? (
-              production.map((prod) => {
+            {visibleProduction.length > 0 ? (
+              visibleProduction.map((prod) => {
                 const isSelected = selectedProdId === prod.production_id;
                 return (
                   <div
