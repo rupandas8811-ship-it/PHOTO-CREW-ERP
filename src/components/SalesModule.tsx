@@ -182,9 +182,15 @@ const generateQuotationPDF = (
     const inclusionsList = (editableInclusions && editableInclusions[pkgKey]) || defaultInclusions;
     const deliverablesList = (editableDeliverables && editableDeliverables[pkgKey]) || defaultDeliverables;
 
-    // Calculate title wrap length (110mm max width leaves robust margin for price column on right)
+    // Set font and style explicitly for title wrapping to avoid inheritance mismatch
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
     const titleLines = doc.splitTextToSize((pkg.package_name || '').toUpperCase(), 110);
     const titleHeight = Math.max(8, 4 + titleLines.length * 4.2);
+
+    // Set font and style explicitly for inclusions & deliverables wrapping to avoid inheritance mismatch
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
 
     // Compute fully wrapped inclusions and deliverables to prevent any overflow or boundary breaking
     const wrappedInclusions: string[] = [];
@@ -254,6 +260,7 @@ const generateQuotationPDF = (
       const yItem = detailsY + 5 + (lineIdx * 4.2);
       
       doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
       doc.setTextColor(71, 85, 105);
       
       if (isHeader) {
@@ -277,6 +284,7 @@ const generateQuotationPDF = (
       const yItem = detailsY + 5 + (lineIdx * 4.2);
       
       doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
       doc.setTextColor(71, 85, 105);
       
       if (isHeader) {
@@ -372,8 +380,11 @@ const generateQuotationPDF = (
     doc.setFont('helvetica', style);
     doc.setFontSize(size);
     
+    // Replace Rupee sign with standard safe metric chars for exact printable measurement width calculations
+    const cleanValueStr = valueStr.replace('₹', 'Rs.');
+    
     const labelWidth = doc.getTextWidth(label);
-    const valueWidth = doc.getTextWidth(valueStr);
+    const valueWidth = doc.getTextWidth(cleanValueStr);
     
     // Left-aligned label
     doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
@@ -392,9 +403,9 @@ const generateQuotationPDF = (
     doc.setFontSize(7.5);
     doc.setTextColor(148, 163, 184); // slate-400
     
-    // Since dots are normal size, let's re-measure labelWidth and valueWidth with normal 7.5 for dot offset calculation
+    // Re-measure with normal 7.5 for dot offset calculation
     const normalLabelW = doc.getTextWidth(label);
-    const normalValueW = doc.getTextWidth(valueStr);
+    const normalValueW = doc.getTextWidth(cleanValueStr);
     
     const dotStart = 115 + normalLabelW + 2;
     const dotEnd = 192 - normalValueW - 2;
@@ -989,9 +1000,18 @@ export const SalesModule: React.FC = () => {
   // Handle lead creation
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createForm.customer_name || !createForm.mobile || !createForm.email) {
-      alert('Required fields must be completed.');
+    if (!createForm.customer_name || !createForm.mobile) {
+      alert('Required fields (Customer Name and Mobile Number) must be completed.');
       return;
+    }
+
+    // Validate email if entered
+    if (createForm.email && createForm.email.trim() !== '') {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(createForm.email.trim())) {
+        alert('Please enter a valid email address.');
+        return;
+      }
     }
 
     // Validate Indian mobile numbers
@@ -2423,11 +2443,10 @@ export const SalesModule: React.FC = () => {
                   {/* Email */}
                   <div>
                     <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                      Primary Email *
+                      Primary Email (Optional)
                     </label>
                     <input
                       type="email"
-                      required
                       placeholder="sophia@example.com"
                       value={createForm.email}
                       onChange={(e) => {
