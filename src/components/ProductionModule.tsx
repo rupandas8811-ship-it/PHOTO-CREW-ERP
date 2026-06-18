@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRole } from './RoleContext';
 import { 
   Play, CheckCircle2, UserCheck, Eye, Calendar, Lock, Layers, AlertCircle, Ban, RefreshCw, Clock,
@@ -238,11 +238,56 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     editorAssignments = [],
     assignEditorToProject,
     updateEditorAssignmentStatus,
-    deleteEditorAssignment
+    deleteEditorAssignment,
+    leads: leadsData
   } = useRole();
 
   // Role permissions gate
   const canEdit = currentRole === 'Production Team' || currentRole === 'Business Owner';
+
+  // Dynamically compile active production projects/leads from leadsData / Supabase leads table
+  const leads = useMemo(() => {
+    const postProdStages = [
+      'Raw Footage Received', 
+      'Editor Assigned', 
+      'Editing Started', 
+      'Editing In Progress', 
+      'Internal QC Review', 
+      'Client Review Sent', 
+      'Revision Required', 
+      'Revision In Progress', 
+      'Final Approval', 
+      'Delivered', 
+      'Closed',
+      'Customer Review',
+      'Approved',
+      'Payment Pending'
+    ];
+
+    return (leadsData || []).filter(l => {
+      const order = orders.find(o => o.lead_id === l.lead_id);
+      const stage = order?.current_stage || l.status;
+      return postProdStages.includes(stage);
+    }).map(l => {
+      const order = orders.find(o => o.lead_id === l.lead_id);
+      const rf = order ? rawFootage.find(f => f.order_id === order.order_id) : null;
+      const prod = rf ? production.find(p => p.tracking_id === rf.tracking_id) : production.find(p => p.tracking_id === l.lead_id);
+      
+      const defaultTargetDate = l.event_date ? new Date(new Date(l.event_date).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : '';
+      
+      return prod || {
+        production_id: `PRD-${l.lead_id}`,
+        tracking_id: rf?.tracking_id || order?.order_id || l.lead_id,
+        editor_assigned: 'Unassigned',
+        raw_footage_location: rf?.server_path || '',
+        editing_status: (order?.current_stage || l.status) as any,
+        remarks: l.remarks || '',
+        project_priority: 'Medium',
+        target_delivery_date: defaultTargetDate,
+        expected_delivery_date: defaultTargetDate
+      };
+    });
+  }, [leadsData, orders, rawFootage, production]);
 
   // Staff Performance Filter State
   const [staffRoleFilter, setStaffRoleFilter] = useState<'All' | 'Editor' | 'Album Designer' | 'Retoucher' | 'Motion Graphics Designer'>('All');
@@ -262,7 +307,7 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
 
   // Step-by-step action popup modal states
   const [activeWorkflowProd, setActiveWorkflowProd] = useState<Production | null>(null);
-  const [workflowActionType, setWorkflowActionType] = useState<'assign_editor' | 'send_review' | 'request_revision' | 'deliver_project' | 'manage_payment_close' | null>(null);
+  const [workflowActionType, setWorkflowActionType] = useState<'assign_editor' | 'send_review' | 'request_revision' | 'deliver_project' | 'manage_payment_close' | 'manage_status' | null>(null);
 
   // Form states for each step popup
   // Step 1: Assign Editor Form
@@ -285,6 +330,19 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
   const [wfGoogleDriveLink, setWfGoogleDriveLink] = useState('');
   const [wfDownloadLink, setWfDownloadLink] = useState('');
   const [wfDeliveryNotes, setWfDeliveryNotes] = useState('');
+
+  // CRM Status Management Popup States
+  const [selectedStage, setSelectedStage] = useState<EditingStatus>('Editing In Progress');
+  const [qcNotes, setQcNotes] = useState('');
+  const [reviewLink, setReviewLink] = useState('');
+  const [reviewNotes, setReviewNotes] = useState('');
+  const [revisionNotes, setRevisionNotes] = useState('');
+  const [revisionDeadline, setRevisionDeadline] = useState('');
+  const [revisionComments, setRevisionComments] = useState('');
+  const [approvalNotes, setApprovalNotes] = useState('');
+  const [deliveryLink, setDeliveryLink] = useState('');
+  const [deliveryDate, setDeliveryDate] = useState('');
+  const [closingNotes, setClosingNotes] = useState('');
 
   // Workloads selector edit fields
   const [leadEditor, setLeadEditor] = useState('');
@@ -527,20 +585,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           
           {/* Dashboard Widgets specific to Production Leads */}
           {(() => {
-            const postProdStages = [
-              'Raw Footage Received', 'Editor Assigned', 'Editing Started', 
-              'Customer Review', 'Revision Required', 'Approved', 'Delivered', 
-              'Payment Pending', 'Closed'
-            ];
-
-            const leads = production.filter(prod => {
-              const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id);
-              if (!rf) return false;
-              const order = orders.find(o => o.order_id === rf.order_id);
-              if (!order) return false;
-              return postProdStages.includes(order.current_stage);
-            });
-
             const totalCount = leads.length;
             const newCount = leads.filter(p => !p.editor_assigned || p.editor_assigned === 'Unassigned' || getProductionStatus(p) === 'New Project').length;
             const inEditingCount = leads.filter(p => p.editing_status === 'Editing' || getProductionStatus(p) === 'Editing Started' || getProductionStatus(p) === 'In Progress').length;
@@ -686,10 +730,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
           {/* Newly Arrived - Raw Footage Received Queue */}
           {(() => {
-            const rawFootageLeads = production.filter(prod => {
-              const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id || (f.order_id && prod.tracking_id && f.order_id === prod.tracking_id));
-              if (!rf) return false;
-              const order = orders.find(o => o.order_id === rf.order_id);
+            const rawFootageLeads = leads.filter(prod => {
+              const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
+              const order = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === prod.production_id.replace('PRD-', ''));
               if (!order) return false;
               return order.current_stage === 'Raw Footage Received';
             });
@@ -726,7 +769,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     <tbody className="divide-y divide-zinc-900">
                       {rawFootageLeads.map(prod => {
                         const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
-                        const order = rf ? orders.find(o => o.order_id === rf.order_id) : null;
+                        const order = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === prod.production_id.replace('PRD-', ''));
                         if (!order) return null;
 
                         const op = operations?.find(o => o.order_id === order.order_id);
@@ -788,10 +831,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     <th className="p-4 font-black">Order ID</th>
                     <th className="p-4 font-black">Customer Name</th>
                     <th className="p-4 font-black">Event Type</th>
-                    <th className="p-4 font-black">Editor Assigned</th>
+                    <th className="p-4 font-black">Event Date</th>
+                    <th className="p-4 font-black">Raw Footage Link</th>
+                    <th className="p-4 font-black">Assigned Editor(s)</th>
                     <th className="p-4 font-black">Current Status</th>
                     <th className="p-4 font-black">Target Delivery Date</th>
-                    <th className="p-4 font-black">Remaining Days</th>
+                    <th className="p-4 font-black">Delivery Status</th>
                     {currentRole !== 'Production Team' && (
                       <>
                         <th className="p-4 font-black">Payment Status</th>
@@ -804,20 +849,27 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 <tbody className="divide-y divide-zinc-900 font-sans">
                   {(() => {
                     const postProdStages = [
-                      'Raw Footage Received', 'Editor Assigned', 'Editing Started', 
-                      'Customer Review', 'Revision Required', 'Approved', 'Delivered', 
-                      'Payment Pending', 'Closed'
+                      'Raw Footage Received', 
+                      'Editor Assigned', 
+                      'Editing Started', 
+                      'Editing In Progress', 
+                      'Internal QC Review', 
+                      'Client Review Sent', 
+                      'Revision Required', 
+                      'Revision In Progress', 
+                      'Final Approval', 
+                      'Delivered', 
+                      'Closed',
+                      'Customer Review',
+                      'Approved',
+                      'Payment Pending'
                     ];
 
-                    const filteredLeads = production.filter(prod => {
-                      const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id);
-                      if (!rf) return false;
-                      const order = orders.find(o => o.order_id === rf.order_id);
+                    const filteredLeads = leads.filter(prod => {
+                      const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
+                      const order = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === prod.production_id.replace('PRD-', ''));
                       if (!order) return false;
                       
-                      const stageMatch = postProdStages.includes(order.current_stage);
-                      if (!stageMatch) return false;
-
                       const searchLower = leadSearch.toLowerCase();
                       const clientMatch = order.customer_name?.toLowerCase().includes(searchLower) || order.order_id.toLowerCase().includes(searchLower);
                       if (leadSearch && !clientMatch) return false;
@@ -828,7 +880,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const sVal = getProductionStatus(prod);
                       if (statusFilter === 'Overdue') {
                         const days = calculateDaysRemaining(prod.target_delivery_date || prod.expected_delivery_date);
-                        if (!(days !== null && days < 0 && prod.editing_status !== 'Delivered')) return false;
+                        if (!(days !== null && days < 0 && prod.editing_status !== 'Delivered' && prod.editing_status !== 'Closed' && prod.editing_status as any !== 'Project Closed' && prod.editing_status as any !== 'Project Delivered')) return false;
                       } else if (statusFilter !== 'All' && sVal !== statusFilter) {
                         return false;
                       }
@@ -847,8 +899,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     }
 
                     return filteredLeads.map((prod) => {
-                      const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id);
-                      const order = rf ? orders.find(o => o.order_id === rf.order_id) : null;
+                      const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
+                      const order = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === prod.production_id.replace('PRD-', ''));
                       if (!order) return null;
 
                       const priority = getProductionPriority(prod);
@@ -930,6 +982,28 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           {/* Event Type */}
                           <td className="p-4 text-left font-sans text-zinc-300">
                             {order.event_type}
+                          </td>
+
+                          {/* Event Date */}
+                          <td className="p-4 text-left font-sans text-zinc-350">
+                            {order.event_date || 'N/A'}
+                          </td>
+
+                          {/* Raw Footage Link */}
+                          <td className="p-4 text-left font-sans">
+                            {rf?.server_path ? (
+                              <a
+                                href={rf.server_path}
+                                target="_blank"
+                                referrerPolicy="no-referrer"
+                                className="text-purple-400 hover:text-purple-300 underline font-semibold flex items-center gap-1.5 cursor-pointer max-w-[150px] truncate"
+                                title={rf.server_path}
+                              >
+                                <span>🔗</span> Open Drive
+                              </a>
+                            ) : (
+                              <span className="text-zinc-650 italic">No link</span>
+                            )}
                           </td>
 
                           {/* Editor Assigned */}
@@ -1026,6 +1100,31 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     updateProduction(prod.production_id, { editing_status: 'Editing In Progress' });
                                   }}
                                   className="w-full max-w-[160px] px-3 py-1.5 bg-blue-600 border border-blue-500 text-white hover:bg-blue-500 hover:border-blue-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1"
+                                >
+                                  <span>▶</span> In Progress
+                                </button>
+                              )}
+
+                              {/* CRM Status Management trigger button */}
+                              {status === 'Editing In Progress' && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveWorkflowProd(prod);
+                                    setSelectedStage('Editing In Progress');
+                                    setQcNotes(prod.remarks || '');
+                                    setReviewLink(prod.raw_footage_location || '');
+                                    setReviewNotes(prod.remarks || '');
+                                    setRevisionNotes(prod.remarks || '');
+                                    setRevisionDeadline(prod.expected_delivery_date || '');
+                                    setRevisionComments(prod.remarks || '');
+                                    setApprovalNotes(prod.remarks || '');
+                                    setDeliveryLink(prod.raw_footage_location || '');
+                                    setDeliveryDate(prod.delivery_date || '');
+                                    setClosingNotes(prod.remarks || '');
+                                    setWorkflowActionType('manage_status');
+                                  }}
+                                  className="w-full max-w-[160px] px-3 py-1.5 bg-sky-600 border border-sky-500 text-white hover:bg-sky-500 hover:border-sky-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1"
                                 >
                                   <span>▶</span> In Progress
                                 </button>
@@ -3642,6 +3741,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     {workflowActionType === 'request_revision' && 'Step 5: Request Revision'}
                     {workflowActionType === 'deliver_project' && 'Step 8: Deliver Project'}
                     {workflowActionType === 'manage_payment_close' && 'Release & Close Options'}
+                    {workflowActionType === 'manage_status' && 'CRM Status Management'}
                   </h3>
                 </div>
                 <button 
@@ -4121,6 +4221,275 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       </div>
                     )}
                   </div>
+                )}
+
+                {/* FORM: CRM Status Management Popup */}
+                {workflowActionType === 'manage_status' && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const updates: any = {
+                        editing_status: selectedStage,
+                      };
+
+                      // Map dynamic fields to remarks or specific fields
+                      if (selectedStage === 'Internal QC Review') {
+                        updates.remarks = qcNotes;
+                      } else if (selectedStage === 'Client Review Sent') {
+                        updates.remarks = reviewNotes;
+                        updates.raw_footage_location = reviewLink || activeWorkflowProd.raw_footage_location;
+                      } else if (selectedStage === 'Revision Required') {
+                        updates.remarks = revisionNotes;
+                        updates.expected_delivery_date = revisionDeadline || activeWorkflowProd.expected_delivery_date;
+                        updates.target_delivery_date = revisionDeadline || activeWorkflowProd.target_delivery_date;
+                      } else if (selectedStage === 'Revision In Progress') {
+                        updates.remarks = revisionComments;
+                      } else if (selectedStage === 'Final Approval') {
+                        updates.remarks = approvalNotes;
+                      } else if (selectedStage === 'Project Delivered') {
+                        updates.remarks = `Delivered via ${deliveryLink}`;
+                        updates.delivery_date = deliveryDate || new Date().toISOString().split('T')[0];
+                        updates.actual_delivery_date = deliveryDate || new Date().toISOString().split('T')[0];
+                        updates.raw_footage_location = deliveryLink || activeWorkflowProd.raw_footage_location;
+                      } else if (selectedStage === 'Project Closed') {
+                        updates.remarks = closingNotes;
+                      }
+
+                      // Execute update
+                      updateProduction(activeWorkflowProd.production_id, updates);
+
+                      // Close the modal
+                      setActiveWorkflowProd(null);
+                      setWorkflowActionType(null);
+                    }}
+                    className="space-y-4"
+                  >
+                    {/* CRM Information Cards */}
+                    <div className="bg-zinc-900/50 border border-zinc-900 p-4 rounded-xl space-y-2 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500 font-mono">Order ID:</span>
+                        <span className="text-zinc-300 font-bold font-mono">{orderId}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500 font-mono">Customer Name:</span>
+                        <span className="text-zinc-300 font-bold">{customerName}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500 font-mono">Event Type:</span>
+                        <span className="text-zinc-350 font-semibold">{order?.event_type || '—'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500 font-mono">Assigned Editor(s):</span>
+                        <span className="text-violet-400 font-bold">{activeWorkflowProd.editor_assigned || 'Unassigned'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500 font-mono">Current Status:</span>
+                        <span className="text-amber-400 font-mono font-black">{activeWorkflowProd.editing_status}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500 font-mono">Target Delivery Date:</span>
+                        <span className="text-purple-400 font-mono font-bold">{activeWorkflowProd.target_delivery_date || '—'}</span>
+                      </div>
+                    </div>
+
+                    {/* Dropdown status changer */}
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                        Select New Status
+                      </label>
+                      <select
+                        value={selectedStage}
+                        onChange={(e) => setSelectedStage(e.target.value as EditingStatus)}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2.5 px-3 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono"
+                      >
+                        <option value="Raw Footage Received">Raw Footage Received</option>
+                        <option value="Editor Assigned">Editor Assigned</option>
+                        <option value="Editing Started">Editing Started</option>
+                        <option value="Editing In Progress">Editing In Progress</option>
+                        <option value="Internal QC Review">Internal QC Review</option>
+                        <option value="Client Review Sent">Client Review Sent</option>
+                        <option value="Revision Required">Revision Required</option>
+                        <option value="Revision In Progress">Revision In Progress</option>
+                        <option value="Final Approval">Final Approval</option>
+                        <option value="Project Delivered">Project Delivered</option>
+                        <option value="Project Closed">Project Closed</option>
+                      </select>
+                    </div>
+
+                    {/* Dynamic CRM Fields based on Status Choice */}
+                    {selectedStage === 'Internal QC Review' && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                            QC Notes
+                          </label>
+                          <textarea
+                            value={qcNotes}
+                            onChange={(e) => setQcNotes(e.target.value)}
+                            rows={3}
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                            placeholder="Describe internal QC findings or checks remaining..."
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedStage === 'Client Review Sent' && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                            Review Link
+                          </label>
+                          <input
+                            type="text"
+                            value={reviewLink}
+                            onChange={(e) => setReviewLink(e.target.value)}
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                            placeholder="https://clientreview.com/album..."
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                            Review Notes
+                          </label>
+                          <textarea
+                            value={reviewNotes}
+                            onChange={(e) => setReviewNotes(e.target.value)}
+                            rows={2}
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                            placeholder="E.g., Sent layout via portal..."
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedStage === 'Revision Required' && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                            Revision Notes
+                          </label>
+                          <textarea
+                            value={revisionNotes}
+                            onChange={(e) => setRevisionNotes(e.target.value)}
+                            rows={3}
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                            placeholder="Detail what client has requested to change..."
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                            Revision Deadline
+                          </label>
+                          <input
+                            type="date"
+                            value={revisionDeadline}
+                            onChange={(e) => setRevisionDeadline(e.target.value)}
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedStage === 'Revision In Progress' && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                            Revision Comments
+                          </label>
+                          <textarea
+                            value={revisionComments}
+                            onChange={(e) => setRevisionComments(e.target.value)}
+                            rows={3}
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                            placeholder="Detail revision workflows or specific editor remarks..."
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedStage === 'Final Approval' && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                            Approval Notes
+                          </label>
+                          <textarea
+                            value={approvalNotes}
+                            onChange={(e) => setApprovalNotes(e.target.value)}
+                            rows={3}
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                            placeholder="Notes from customer approval loop..."
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedStage === 'Project Delivered' && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                            Delivery Link
+                          </label>
+                          <input
+                            type="text"
+                            value={deliveryLink}
+                            onChange={(e) => setDeliveryLink(e.target.value)}
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                            placeholder="Google Drive, WeTransfer, or Album delivery link..."
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                            Delivery Date
+                          </label>
+                          <input
+                            type="date"
+                            value={deliveryDate}
+                            onChange={(e) => setDeliveryDate(e.target.value)}
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedStage === 'Project Closed' && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                            Closing Notes
+                          </label>
+                          <textarea
+                            value={closingNotes}
+                            onChange={(e) => setClosingNotes(e.target.value)}
+                            rows={3}
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                            placeholder="Closing summaries, archive drives, or delivery receipts..."
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Footer Actions */}
+                    <div className="flex gap-2 justify-end pt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveWorkflowProd(null);
+                          setWorkflowActionType(null);
+                        }}
+                        className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white font-mono uppercase text-[10px] tracking-wider rounded-lg transition-all"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-gradient-to-r from-violet-650 to-indigo-650 hover:from-violet-550 hover:to-indigo-550 text-white font-mono uppercase text-[10px] tracking-wider rounded-lg transition-all font-black shadow-lg"
+                      >
+                        Save Status
+                      </button>
+                    </div>
+                  </form>
                 )}
 
               </div>

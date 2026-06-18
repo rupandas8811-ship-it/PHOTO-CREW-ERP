@@ -92,11 +92,7 @@ export const OperationsLeads: React.FC = () => {
   // Filter orders to show confirmed ones for Operations
   const allowedStages = ['Order Confirmed', 'New Order Received', 'Operations Assigned', 'Event Scheduled', 'Staff Assigned', 'Event Completed', 'Raw Footage Received'];
   const operationsOrders = orders.filter(o => {
-    // If we're Operations role, we filter strictly to current ops lifecycles
-    if (currentRole === 'Operations Team') {
-      return allowedStages.includes(o.current_stage);
-    }
-    return o.current_stage !== 'Closed';
+    return allowedStages.includes(o.current_stage);
   });
 
   // Unique staff lists for individual filters

@@ -110,30 +110,30 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
 
       case 'production': {
         return production.map(p => {
-          const order = orders.find(o => o.order_id === p.tracking_id || o.order_id === p.production_id);
+          const order = orders.find(o => o.order_id === p.tracking_id || o.order_id === p.production_id || o.lead_id === p.original_lead_id);
           return {
-            "Project ID": p.production_id || '—',
-            "Customer Name": order?.customer_name || 'CRM Client',
-            "Editor Name": p.editor_assigned || 'Unassigned',
-            "Client Approval Status": p.customer_review_status || 'Pending Review',
-            "Editing Status": p.editing_status || '—',
-            "Delivery Date": p.expected_delivery_date || p.actual_delivery_date || '—',
-            "Priority": p.project_priority || 'Medium',
-            "Event Date": order?.event_date || '—'
+            "Order ID": order?.order_id || p.tracking_id || '—',
+            "Customer Name": order?.customer_name || p.customer_name || 'CRM Client',
+            "Event Date": order?.event_date || p.event_date || '—',
+            "Assigned Editors": p.editor_assigned || 'Unassigned',
+            "Current Status": p.editing_status || '—',
+            "Target Delivery Date": p.target_delivery_date || p.expected_delivery_date || '—'
           };
         }).filter(row => {
           if (row["Event Date"] !== '—' && !isDateInRange(row["Event Date"], currentRange)) return false;
 
-          if (cardName === 'Raw Footage Queue') return row["Editing Status"] === 'Raw Footage Received';
-          if (cardName === 'Editor Assigned') return row["Editing Status"] === 'Editor Assigned';
-          if (cardName === 'Editing Started') return row["Editing Status"] === 'Editing Started';
-          if (cardName === 'In Progress') return row["Editing Status"] === 'Editing In Progress' || row["Editing Status"] === 'Revision In Progress';
-          if (cardName === 'QC Review') return row["Editing Status"] === 'Internal QC Review';
-          if (cardName === 'Client Review') return row["Editing Status"] === 'Client Review Sent';
-          if (cardName === 'Revision Required') return row["Editing Status"] === 'Revision Required';
-          if (cardName === 'Final Approval') return row["Editing Status"] === 'Final Approval';
-          if (cardName === 'Delivered Projects') return row["Editing Status"] === 'Project Delivered' || row["Editing Status"] === 'Delivered';
-          if (cardName === 'Closed Projects') return row["Editing Status"] === 'Project Closed';
+          if (cardName === 'Total Production Projects' || cardName === 'Total Production') return true;
+          if (cardName === 'Raw Footage Queue' || cardName === 'Raw Footage Received') return row["Current Status"] === 'Raw Footage Received';
+          if (cardName === 'Editor Assigned') return row["Current Status"] === 'Editor Assigned';
+          if (cardName === 'Editing Started') return row["Current Status"] === 'Editing Started';
+          if (cardName === 'Editing In Progress' || cardName === 'In Progress') return row["Current Status"] === 'Editing In Progress';
+          if (cardName === 'Internal QC Review' || cardName === 'QC Review') return row["Current Status"] === 'Internal QC Review';
+          if (cardName === 'Client Review Sent' || cardName === 'Client Review') return row["Current Status"] === 'Client Review Sent';
+          if (cardName === 'Revision Required') return row["Current Status"] === 'Revision Required';
+          if (cardName === 'Revision In Progress') return row["Current Status"] === 'Revision In Progress';
+          if (cardName === 'Final Approval') return row["Current Status"] === 'Final Approval';
+          if (cardName === 'Project Delivered' || cardName === 'Delivered Projects' || cardName === 'Delivered') return row["Current Status"] === 'Project Delivered';
+          if (cardName === 'Project Closed' || cardName === 'Closed Projects' || cardName === 'Closed') return row["Current Status"] === 'Project Closed';
           return true;
         });
       }

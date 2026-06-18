@@ -66,6 +66,7 @@ export interface Lead {
   event_type: string;
   event_date: string;
   event_time: string;
+  reporting_time?: string;
   event_location: string;
   budget: number;
   sales_person: string;
@@ -98,6 +99,7 @@ export interface Order {
   event_type: string;
   event_date: string;
   event_time: string;
+  reporting_time?: string;
   event_location: string;
   package_name: string;
   quotation_amount: number;
@@ -292,6 +294,9 @@ export interface Package {
   team_members?: string;
   seasonal_offer?: string;
   terms_conditions?: string;
+  event_type?: string;
+  duration?: string;
+  package_includes?: string;
   created_at?: string;
   updated_at?: string;
 }

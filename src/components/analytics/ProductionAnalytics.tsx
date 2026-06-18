@@ -16,7 +16,7 @@ import { jsPDF } from 'jspdf';
 import { CameraLensStatsCard } from '../CameraLensStatsCard';
 
 export const ProductionAnalytics: React.FC = () => {
-  const { leads, orders, production, payments, operations, staff, globalDateRange, editorAssignments } = useRole();
+  const { leads, orders, production, payments, operations, staff, globalDateRange, editorAssignments, rawFootage } = useRole();
 
   // Selected Card for Report Popup
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
@@ -32,24 +32,77 @@ export const ProductionAnalytics: React.FC = () => {
 
   // Filtered dataset variables
   const filteredProduction = useMemo(() => {
-    return production.filter(p => {
-      // Find associated order to match date filters
-      const order = orders.find(o => o.order_id === p.tracking_id);
-      const productionDate = order?.event_date || TODAY_REF;
-      return isDateInRange(productionDate, activeRange);
+    const productionStages = [
+      'Raw Footage Received', 
+      'Editor Assigned', 
+      'Editing Started', 
+      'Editing In Progress', 
+      'Internal QC Review', 
+      'Client Review Sent', 
+      'Revision Required', 
+      'Revision In Progress', 
+      'Final Approval', 
+      'Project Delivered', 
+      'Project Closed',
+      'Customer Review',
+      'Approved',
+      'Delivered',
+      'Closed'
+    ];
+
+    return (leads || []).filter(l => {
+      const order = orders.find(o => o.lead_id === l.lead_id);
+      const stage = order?.current_stage || l.status;
+      return productionStages.includes(stage) && isDateInRange(l.event_date, activeRange);
+    }).map(l => {
+      const order = orders.find(o => o.lead_id === l.lead_id);
+      const rf = order ? (rawFootage || []).find(f => f.order_id === order.order_id) : null;
+      const p = rf ? (production || []).find(prod => prod.tracking_id === rf.tracking_id) : null;
+
+      // Determine accurate editing status
+      let detailedStatus = p?.editing_status || order?.current_stage || l.status;
+
+      // Normalize
+      if (detailedStatus === 'Pending' || detailedStatus === 'Raw Footage Received') detailedStatus = 'Raw Footage Received';
+      else if (detailedStatus === 'Editor Assigned') detailedStatus = 'Editor Assigned';
+      else if (detailedStatus === 'Editing Started') detailedStatus = 'Editing Started';
+      else if (detailedStatus === 'Editing' || detailedStatus === 'Editing In Progress') detailedStatus = 'Editing In Progress';
+      else if (detailedStatus === 'Internal QC Review') detailedStatus = 'Internal QC Review';
+      else if (detailedStatus === 'Ready For Review' || detailedStatus === 'Client Review Sent' || detailedStatus === 'Customer Review') detailedStatus = 'Client Review Sent';
+      else if (detailedStatus === 'Revision Required') detailedStatus = 'Revision Required';
+      else if (detailedStatus === 'Revision In Progress') detailedStatus = 'Revision In Progress';
+      else if (detailedStatus === 'Approved' || detailedStatus === 'Final Approval') detailedStatus = 'Final Approval';
+      else if (detailedStatus === 'Delivered' || detailedStatus === 'Project Delivered' || detailedStatus === 'Payment Pending') detailedStatus = 'Project Delivered';
+      else if (detailedStatus === 'Closed' || detailedStatus === 'Project Closed') detailedStatus = 'Project Closed';
+
+      return {
+        ...p,
+        production_id: p?.production_id || `PRD-${l.lead_id}`,
+        tracking_id: order?.order_id || l.lead_id,
+        customer_name: order?.customer_name || l.customer_name,
+        editor_assigned: p?.editor_assigned || 'Unassigned',
+        editing_status: detailedStatus as any,
+        project_priority: p?.project_priority || 'Medium',
+        raw_footage_location: p?.raw_footage_location || rf?.server_path || '',
+        expected_delivery_date: p?.expected_delivery_date || l.event_date,
+        target_delivery_date: p?.target_delivery_date || l.event_date,
+        original_lead_id: l.lead_id
+      };
     });
-  }, [production, orders, activeRange]);
+  }, [leads, orders, production, rawFootage, activeRange]);
 
   // Compute Card Metrics
+  const totalProductionCount = filteredProduction.length;
   const rawFootageQueueCount = filteredProduction.filter(p => p.editing_status === 'Raw Footage Received').length;
   const editorAssignedCount = filteredProduction.filter(p => p.editing_status === 'Editor Assigned').length;
   const editingStartedCount = filteredProduction.filter(p => p.editing_status === 'Editing Started').length;
-  const inProgressCount = filteredProduction.filter(p => p.editing_status === 'Editing In Progress' || p.editing_status === 'Revision In Progress').length;
+  const editingInProgressCount = filteredProduction.filter(p => p.editing_status === 'Editing In Progress').length;
   const qcReviewCount = filteredProduction.filter(p => p.editing_status === 'Internal QC Review').length;
   const clientReviewCount = filteredProduction.filter(p => p.editing_status === 'Client Review Sent').length;
   const revisionRequiredCount = filteredProduction.filter(p => p.editing_status === 'Revision Required').length;
+  const revisionInProgressCount = filteredProduction.filter(p => p.editing_status === 'Revision In Progress').length;
   const finalApprovalCount = filteredProduction.filter(p => p.editing_status === 'Final Approval').length;
-  const deliveredProjectsCount = filteredProduction.filter(p => p.editing_status === 'Project Delivered' || p.editing_status === 'Delivered').length;
+  const deliveredProjectsCount = filteredProduction.filter(p => p.editing_status === 'Project Delivered').length;
   const closedProjectsCount = filteredProduction.filter(p => p.editing_status === 'Project Closed').length;
 
   // Compute priority stats for chart
@@ -101,97 +154,115 @@ export const ProductionAnalytics: React.FC = () => {
         </div>
       </div>
 
-      {/* Production 10 Analytics Cards Grid (Custom grid for clean 2x5 on deskt / wide) */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* Production 12 Analytics Cards Grid (Responsive, fluid layout with no hidden or clipped content) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-6 gap-4">
         
         <CameraLensStatsCard
-          label="Raw Queue"
-          val={rawFootageQueueCount}
-          theme="orange"
-          trendText="Asset Ingestion"
-          onClick={() => setSelectedCard('Raw Footage Queue')}
+          label="Total Production Projects"
+          val={totalProductionCount}
+          theme="purple"
+          trendText="Aggregate Workload"
+          onClick={() => setSelectedCard('Total Production Projects')}
           lensLabel="CINE 14mm"
         />
 
         <CameraLensStatsCard
-          label="Allocated"
-          val={editorAssignedCount}
-          theme="blue"
-          trendText="Editor Assigned"
-          onClick={() => setSelectedCard('Editor Assigned')}
+          label="Raw Footage Received"
+          val={rawFootageQueueCount}
+          theme="orange"
+          trendText="Asset Ingestion"
+          onClick={() => setSelectedCard('Raw Footage Received')}
           lensLabel="CINE 24mm"
         />
 
         <CameraLensStatsCard
-          label="Started"
-          val={editingStartedCount}
-          theme="purple"
-          trendText="First Cut Initiated"
-          onClick={() => setSelectedCard('Editing Started')}
+          label="Editor Assigned"
+          val={editorAssignedCount}
+          theme="gold"
+          trendText="Personnel Assigned"
+          onClick={() => setSelectedCard('Editor Assigned')}
           lensLabel="CINE 28mm"
         />
 
         <CameraLensStatsCard
-          label="In Progress"
-          val={inProgressCount}
-          theme="cyan"
-          trendText="Timeline Splices"
-          onClick={() => setSelectedCard('In Progress')}
+          label="Editing Started"
+          val={editingStartedCount}
+          theme="blue"
+          trendText="Timeline Kicked Off"
+          onClick={() => setSelectedCard('Editing Started')}
           lensLabel="CINE 35mm"
         />
 
         <CameraLensStatsCard
-          label="QC Review"
-          val={qcReviewCount}
-          theme="indigo"
-          trendText="Internal Compliance"
-          onClick={() => setSelectedCard('QC Review')}
+          label="Editing In Progress"
+          val={editingInProgressCount}
+          theme="cyan"
+          trendText="Active Rendering"
+          onClick={() => setSelectedCard('Editing In Progress')}
           lensLabel="CINE 50mm"
         />
 
         <CameraLensStatsCard
-          label="Client Review"
-          val={clientReviewCount}
-          theme="green"
-          trendText="Awaiting Feedback"
-          onClick={() => setSelectedCard('Client Review')}
+          label="Internal QC Review"
+          val={qcReviewCount}
+          theme="purple"
+          trendText="Compliance Checks"
+          onClick={() => setSelectedCard('Internal QC Review')}
           lensLabel="CINE 85mm"
         />
 
         <CameraLensStatsCard
-          label="Revisions"
-          val={revisionRequiredCount}
-          theme="red"
-          trendText="Changes Mandated"
-          onClick={() => setSelectedCard('Revision Required')}
+          label="Client Review Sent"
+          val={clientReviewCount}
+          theme="green"
+          trendText="Feedback Loop"
+          onClick={() => setSelectedCard('Client Review Sent')}
           lensLabel="CINE 105mm"
         />
 
         <CameraLensStatsCard
-          label="Approved"
-          val={finalApprovalCount}
-          theme="green"
-          trendText="Project Cleared"
-          onClick={() => setSelectedCard('Final Approval')}
+          label="Revision Required"
+          val={revisionRequiredCount}
+          theme="red"
+          trendText="Timeline Modifiers"
+          onClick={() => setSelectedCard('Revision Required')}
           lensLabel="CINE 135mm"
         />
 
         <CameraLensStatsCard
-          label="Delivered"
-          val={deliveredProjectsCount}
-          theme="cyan"
-          trendText="Assets Handed Over"
-          onClick={() => setSelectedCard('Delivered Projects')}
+          label="Revision In Progress"
+          val={revisionInProgressCount}
+          theme="orange"
+          trendText="Fixes Ongoing"
+          onClick={() => setSelectedCard('Revision In Progress')}
+          lensLabel="CINE 180mm"
+        />
+
+        <CameraLensStatsCard
+          label="Final Approval"
+          val={finalApprovalCount}
+          theme="green"
+          trendText="Cleared To Release"
+          onClick={() => setSelectedCard('Final Approval')}
           lensLabel="CINE ZOOM"
         />
 
         <CameraLensStatsCard
-          label="Archived"
+          label="Project Delivered"
+          val={deliveredProjectsCount}
+          theme="cyan"
+          trendText="Asset Handovers"
+          onClick={() => setSelectedCard('Project Delivered')}
+          lensLabel="TELE ZOOM"
+        />
+
+        <CameraLensStatsCard
+          label="Project Closed"
           val={closedProjectsCount}
           theme="purple"
-          trendText="Workspace Closed"
-          onClick={() => setSelectedCard('Closed Projects')}
-          lensLabel="TELE ZOOM"
+          trendText="Archive Locks"
+          onClick={() => setSelectedCard('Project Closed')}
+          lensLabel="MACRO 90mm"
         />
 
       </div>
@@ -976,7 +1047,7 @@ export const ProductionAnalytics: React.FC = () => {
           orders={orders}
           payments={payments}
           operations={operations}
-          production={production}
+          production={filteredProduction as any}
           staff={staff}
         />
       )}

@@ -585,6 +585,136 @@ export const SalesModule: React.FC = () => {
   // Toggle modes
   const [activeTab, setActiveTab] = useState<'list' | 'create' | 'profiles' | 'packages'>('list');
 
+  // Leads export report handlers
+  const handleDownloadCSV = () => {
+    const headers = ["Lead ID", "Order ID", "Customer Name", "Mobile Number", "Event Type", "Event Date", "Current Stage", "Current Status", "Payment Status", "Created Date"];
+    const rows = filteredLeads.map(l => {
+      const ord = orders.find(o => o.lead_id === l.lead_id);
+      const pay = ord ? payments?.find(p => p.order_id === ord.order_id) : null;
+      return [
+        l.lead_id,
+        ord?.order_id || 'N/A',
+        l.customer_name,
+        l.mobile,
+        l.event_type,
+        l.event_date || 'N/A',
+        l.status,
+        l.remarks.slice(0, 50).replace(/["\n\r]/g, ' '),
+        pay ? pay.payment_status : 'Pending',
+        l.created_date
+      ];
+    });
+    
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(","), ...rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
+      
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Leads_Report_${appliedStartDate || 'all'}_to_${appliedEndDate || 'all'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDownloadExcel = () => {
+    const headers = ["Lead ID", "Order ID", "Customer Name", "Mobile Number", "Event Type", "Event Date", "Current Stage", "Current Status", "Payment Status", "Created Date"];
+    const rows = filteredLeads.map(l => {
+      const ord = orders.find(o => o.lead_id === l.lead_id);
+      const pay = ord ? payments?.find(p => p.order_id === ord.order_id) : null;
+      return [
+        l.lead_id,
+        ord?.order_id || 'N/A',
+        l.customer_name,
+        l.mobile,
+        l.event_type,
+        l.event_date || 'N/A',
+        l.status,
+        l.remarks.slice(0, 50).replace(/["\t\n\r]/g, ' '),
+        pay ? pay.payment_status : 'Pending',
+        l.created_date
+      ];
+    });
+    
+    // Generate standard TSV structure compatible with native Excel import
+    const content = [headers.join("\t"), ...rows.map(e => e.join("\t"))].join("\n");
+    const blob = new Blob([content], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `Leads_Report_${appliedStartDate || 'all'}_to_${appliedEndDate || 'all'}.xls`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handlePrintReport = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    
+    const rowsHtml = filteredLeads.map(l => {
+      const ord = orders.find(o => o.lead_id === l.lead_id);
+      const pay = ord ? payments?.find(p => p.order_id === ord.order_id) : null;
+      return `
+        <tr>
+          <td>${l.lead_id}</td>
+          <td>${ord?.order_id || 'N/A'}</td>
+          <td>${l.customer_name}</td>
+          <td>${l.mobile}</td>
+          <td>${l.event_type}</td>
+          <td>${l.event_date || 'N/A'}</td>
+          <td>${l.status}</td>
+          <td>${l.created_date}</td>
+          <td>${pay ? pay.payment_status : 'Pending'}</td>
+        </tr>
+      `;
+    }).join('');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Leads Directory Report</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; color: #333; }
+            h1 { font-size: 20px; margin-bottom: 5px; color: #111; text-transform: uppercase; letter-spacing: 1px; }
+            p { font-size: 11px; color: #666; margin-bottom: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 11px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f5f5f5; font-weight: bold; }
+            tr:nth-child(even) { background-color: #fafafa; }
+            .footer { margin-top: 30px; font-size: 10px; color: #999; text-align: right; border-top: 1px solid #eee; padding-top: 10px; }
+          </style>
+        </head>
+        <body>
+          <h1>LEADS DIRECTORY REPORT</h1>
+          <p>Generated on ${new Date().toLocaleString('en-IN')} | Date Range: ${appliedStartDate || 'All'} to ${appliedEndDate || 'All'} | Records Count: ${filteredLeads.length}</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Lead ID</th>
+                <th>Order ID</th>
+                <th>Customer Name</th>
+                <th>Mobile Number</th>
+                <th>Event Type</th>
+                <th>Event Date</th>
+                <th>Current Status</th>
+                <th>Created Date</th>
+                <th>Payment Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <div class="footer">Confidential Systems Report | ERP Sales Desk</div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
   // Package Management States
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
   const [editingPackage, setEditingPackage] = useState<any | null>(null);
@@ -600,7 +730,10 @@ export const SalesModule: React.FC = () => {
     deliverables: '',
     team_members: '',
     seasonal_offer: '',
-    terms_conditions: ''
+    terms_conditions: '',
+    event_type: '',
+    duration: '',
+    package_includes: ''
   });
   const [customCategory, setCustomCategory] = useState('');
   const [isComparingPkgs, setIsComparingPkgs] = useState(false);
@@ -682,6 +815,10 @@ export const SalesModule: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterSalesPerson, setFilterSalesPerson] = useState('');
   const [filterDate, setFilterDate] = useState('');
+  const [dateRangeStart, setDateRangeStart] = useState('');
+  const [dateRangeEnd, setDateRangeEnd] = useState('');
+  const [appliedStartDate, setAppliedStartDate] = useState('');
+  const [appliedEndDate, setAppliedEndDate] = useState('');
 
   // Extra state for "Other" lead source name input
   const [otherSource, setOtherSource] = useState('');
@@ -740,6 +877,11 @@ export const SalesModule: React.FC = () => {
     status: 'Follow Up' as CurrentStage,
     quotation_amount: 3500,
     negotiation_notes: '',
+    event_date: '',
+    event_time: '',
+    reporting_time: '08:00',
+    advance_received: 0,
+    payment_mode: 'UPI',
   });
 
   // Confirm Order Form State
@@ -914,6 +1056,11 @@ export const SalesModule: React.FC = () => {
       status: lead.status,
       quotation_amount: lead.budget,
       negotiation_notes: '',
+      event_date: lead.event_date || '',
+      event_time: lead.event_time || '',
+      reporting_time: lead.reporting_time || '08:00',
+      advance_received: Math.round(lead.budget / 3),
+      payment_mode: 'UPI',
     });
     setConfirmForm({
       package_name: lead.event_type + ' Premium Package',
@@ -1080,22 +1227,32 @@ export const SalesModule: React.FC = () => {
   const handleFollowUpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedLead) return;
-    if (!followUpForm.call_notes) {
-      alert('Please fill in some Call Notes to update lead follow-up.');
+
+    if (followUpForm.status === 'Order Confirmed') {
+      if (!followUpForm.event_date || !followUpForm.event_time || !followUpForm.reporting_time) {
+        alert('Do not allow Order Confirmed without Event Date, Event Time, and Reporting Time.');
+        return;
+      }
+
+      const orderId = confirmOrder(
+        selectedLead.lead_id,
+        selectedLead.event_type + ' Premium Package',
+        Number(followUpForm.quotation_amount),
+        Number(followUpForm.advance_received),
+        followUpForm.event_date,
+        followUpForm.event_time,
+        followUpForm.payment_mode,
+        followUpForm.call_notes || 'Confirmed from CRM activity logger',
+        followUpForm.reporting_time
+      );
+
+      setSelectedLead(null);
+      alert(`Lead Successfully Converted! Order Contract Generated: ${orderId}`);
       return;
     }
 
-    if (followUpForm.status === 'Order Confirmed') {
-      setConfirmForm({
-        package_name: selectedLead.event_type + ' Premium Package',
-        quotation_amount: Number(followUpForm.quotation_amount) || selectedLead.budget || 0,
-        advance_received: Math.round((Number(followUpForm.quotation_amount) || selectedLead.budget || 0) / 3),
-        event_date: selectedLead.event_date || '',
-        event_time: selectedLead.event_time || '',
-        payment_mode: 'UPI',
-        notes: followUpForm.call_notes || '',
-      });
-      setShowConfirmModal(true);
+    if (!followUpForm.call_notes) {
+      alert('Please fill in some Call Notes to update lead follow-up.');
       return;
     }
 
@@ -1198,13 +1355,6 @@ export const SalesModule: React.FC = () => {
 
   // Filter Leads List
   const filteredLeads = leads.filter((lead) => {
-    if (currentRole === 'Sales Team') {
-      const allowedStatuses = ['New Lead', 'Follow Up', 'Quotation Sent', 'Negotiation'];
-      if (!allowedStatuses.includes(lead.status)) {
-        return false;
-      }
-    }
-
     const matchesSearch = 
       lead.customer_name.toLowerCase().includes(filterQuery.toLowerCase()) || 
       lead.lead_id.toLowerCase().includes(filterQuery.toLowerCase()) ||
@@ -1223,7 +1373,15 @@ export const SalesModule: React.FC = () => {
     const matchesSales = filterSalesPerson === '' || lead.sales_person === filterSalesPerson;
     const matchesDate = filterDate === '' || lead.event_date === filterDate;
 
-    return matchesSearch && matchesSource && matchesStatus && matchesSales && matchesDate;
+    let matchesDateRange = true;
+    if (appliedStartDate) {
+      matchesDateRange = matchesDateRange && (lead.created_date >= appliedStartDate);
+    }
+    if (appliedEndDate) {
+      matchesDateRange = matchesDateRange && (lead.created_date <= appliedEndDate);
+    }
+
+    return matchesSearch && matchesSource && matchesStatus && matchesSales && matchesDate && matchesDateRange;
   });
 
   return (
@@ -1407,7 +1565,7 @@ export const SalesModule: React.FC = () => {
 
             {canEdit ? (
               <form onSubmit={handleFollowUpSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-1 gap-4">
                   {/* Status Options */}
                   <div>
                     <label className="block text-xs font-medium text-slate-400 mb-1">
@@ -1424,64 +1582,154 @@ export const SalesModule: React.FC = () => {
                       <option value="Order Confirmed">Order Confirmed</option>
                     </select>
                   </div>
+                </div>
 
-                  {/* Next Date */}
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">
-                      Next Follow-up Action Date *
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={followUpForm.next_follow_up_date}
-                      onChange={(e) => setFollowUpForm({ ...followUpForm, next_follow_up_date: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
-                    />
+                {followUpForm.status === 'Order Confirmed' ? (
+                  <div className="space-y-4 pt-2 border-t border-slate-800">
+                    <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Configure Confirmed Order Settings</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">
+                          Event Date * (Required)
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={followUpForm.event_date}
+                          onChange={(e) => setFollowUpForm({ ...followUpForm, event_date: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">
+                          Event Time * (Required)
+                        </label>
+                        <input
+                          type="time"
+                          required
+                          value={followUpForm.event_time}
+                          onChange={(e) => setFollowUpForm({ ...followUpForm, event_time: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">
+                          Reporting Time * (Required)
+                        </label>
+                        <input
+                          type="time"
+                          required
+                          value={followUpForm.reporting_time}
+                          onChange={(e) => setFollowUpForm({ ...followUpForm, reporting_time: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">
+                          Final Amount (₹) *
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          value={followUpForm.quotation_amount}
+                          onChange={(e) => setFollowUpForm({ ...followUpForm, quotation_amount: Number(e.target.value) })}
+                          className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">
+                          Advance Amount Received (₹)
+                        </label>
+                        <input
+                          type="number"
+                          value={followUpForm.advance_received}
+                          onChange={(e) => setFollowUpForm({ ...followUpForm, advance_received: Number(e.target.value) })}
+                          className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">
+                          Payment Mode
+                        </label>
+                        <select
+                          value={followUpForm.payment_mode}
+                          onChange={(e) => setFollowUpForm({ ...followUpForm, payment_mode: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        >
+                          <option value="UPI">UPI (GPay/PhonePe)</option>
+                          <option value="Cash">Cash Handover</option>
+                          <option value="Bank Transfer">Bank NFT/RTGS/IMPS</option>
+                          <option value="Card">Credit/Debit Card</option>
+                          <option value="Cheque">Cheque Deposit</option>
+                        </select>
+                      </div>
+                    </div>
                   </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Next Date */}
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">
+                          Next Follow-up Action Date *
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={followUpForm.next_follow_up_date}
+                          onChange={(e) => setFollowUpForm({ ...followUpForm, next_follow_up_date: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                        />
+                      </div>
 
-                  {/* Proposed budget */}
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">
-                      Negotiated Quotation Amount (₹) *
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      value={followUpForm.quotation_amount}
-                      onChange={(e) => setFollowUpForm({ ...followUpForm, quotation_amount: Number(e.target.value) })}
-                      className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
-                    />
-                  </div>
-                </div>
+                      {/* Proposed budget */}
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">
+                          Negotiated Quotation Amount (₹) *
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          value={followUpForm.quotation_amount}
+                          onChange={(e) => setFollowUpForm({ ...followUpForm, quotation_amount: Number(e.target.value) })}
+                          className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                        />
+                      </div>
+                    </div>
 
-                {/* Call reports */}
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Call / Conversation Notes *
-                  </label>
-                  <textarea
-                    rows={4}
-                    required
-                    placeholder="Log exact customer concerns, desired outputs, specific package selections, or callbacks."
-                    value={followUpForm.call_notes}
-                    onChange={(e) => setFollowUpForm({ ...followUpForm, call_notes: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  ></textarea>
-                </div>
+                    {/* Call reports */}
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">
+                        Call / Conversation Notes *
+                      </label>
+                      <textarea
+                        rows={4}
+                        required
+                        placeholder="Log exact customer concerns, desired outputs, specific package selections, or callbacks."
+                        value={followUpForm.call_notes}
+                        onChange={(e) => setFollowUpForm({ ...followUpForm, call_notes: e.target.value })}
+                        className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      ></textarea>
+                    </div>
 
-                {/* Negotiation notes */}
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Negotiation Notes (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Specific price offsets, discount justifications, extra features offered..."
-                    value={followUpForm.negotiation_notes}
-                    onChange={(e) => setFollowUpForm({ ...followUpForm, negotiation_notes: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
-                </div>
+                    {/* Negotiation notes */}
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">
+                        Negotiation Notes (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Specific price offsets, discount justifications, extra features offered..."
+                        value={followUpForm.negotiation_notes}
+                        onChange={(e) => setFollowUpForm({ ...followUpForm, negotiation_notes: e.target.value })}
+                        className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </>
+                )}
 
                 {/* Buttons */}
                 <div className="flex justify-end gap-2.5 pt-2">
@@ -1496,7 +1744,7 @@ export const SalesModule: React.FC = () => {
                     type="submit"
                     className="px-4 py-1.5 text-xs font-semibold bg-indigo-650 hover:bg-indigo-550 text-white rounded-lg shadow-sm transition-all cursor-pointer"
                   >
-                    Save Follow-up Notes
+                    {followUpForm.status === 'Order Confirmed' ? '💍 Confirm Order booking' : 'Save Follow-up Notes'}
                   </button>
                 </div>
               </form>
@@ -2008,7 +2256,10 @@ export const SalesModule: React.FC = () => {
                       deliverables: '', 
                       team_members: '', 
                       seasonal_offer: '',
-                      terms_conditions: ''
+                      terms_conditions: '',
+                      event_type: '',
+                      duration: '',
+                      package_includes: ''
                     });
                     setCustomCategory('');
                     setIsAddFormOpen(true);
@@ -2023,15 +2274,16 @@ export const SalesModule: React.FC = () => {
 
             {/* In-place Add / Edit Package Modal */}
             {(isAddFormOpen || editingPackage) && (
-              <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto animate-fade-in text-left text-xs bg-black/60">
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative text-slate-350">
-                  <h4 className="text-sm font-bold text-slate-100 font-mono">
+              <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 md:p-6 overflow-y-auto animate-fade-in text-left text-xs bg-black/70">
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-5xl md:w-[90%] p-4 md:p-6 space-y-3.5 shadow-2xl relative text-slate-350">
+                  <h4 className="text-sm font-bold text-slate-100 font-mono tracking-wide border-b border-slate-800 pb-2 flex items-center gap-2">
                     {editingPackage ? '✏️ Edit Service Package' : '✨ Define New Service Package'}
                   </h4>
                   
-                  <div className="space-y-3.5 text-xs text-slate-300">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-3.5 text-xs text-slate-300">
+                    {/* Row 1: Package Name | Package Category */}
                     <div>
-                      <label className="block text-slate-400 font-medium mb-1">Package Name</label>
+                      <label className="block text-slate-400 font-semibold mb-1">Package Name</label>
                       <input
                         type="text"
                         placeholder="e.g. Traditional Wedding Photography"
@@ -2042,7 +2294,7 @@ export const SalesModule: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-slate-400 font-medium mb-1">Category</label>
+                      <label className="block text-slate-400 font-semibold mb-1">Package Category</label>
                       <select
                         value={pkgForm.category}
                         onChange={(e) => setPkgForm({ ...pkgForm, category: e.target.value })}
@@ -2053,23 +2305,23 @@ export const SalesModule: React.FC = () => {
                         ))}
                         <option value="CUSTOM_CATEGORY">➕ Create Custom Category...</option>
                       </select>
+                      {pkgForm.category === 'CUSTOM_CATEGORY' && (
+                        <div className="animate-slide-down mt-1.5">
+                          <label className="block text-amber-450 font-semibold mb-1">New Custom Category Name</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Newborn Baby shoot"
+                            value={customCategory}
+                            onChange={(e) => setCustomCategory(e.target.value)}
+                            className="w-full bg-slate-950 border border-amber-500/40 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-amber-500 font-sans"
+                          />
+                        </div>
+                      )}
                     </div>
 
-                    {pkgForm.category === 'CUSTOM_CATEGORY' && (
-                      <div className="animate-slide-down">
-                        <label className="block text-amber-450 font-semibold mb-1">New Custom Category Name</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Newborn Baby shoot"
-                          value={customCategory}
-                          onChange={(e) => setCustomCategory(e.target.value)}
-                          className="w-full bg-slate-950 border border-amber-500/40 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-amber-500 font-sans"
-                        />
-                      </div>
-                    )}
-
+                    {/* Row 2: Package Price | Status */}
                     <div>
-                      <label className="block text-slate-400 font-medium mb-1">Price (INR)</label>
+                      <label className="block text-slate-400 font-semibold mb-1">Package Price (INR)</label>
                       <input
                         type="number"
                         placeholder="e.g. 25000"
@@ -2080,7 +2332,7 @@ export const SalesModule: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-slate-400 font-medium mb-1">Status</label>
+                      <label className="block text-slate-400 font-semibold mb-1">Status</label>
                       <select
                         value={pkgForm.status}
                         onChange={(e) => setPkgForm({ ...pkgForm, status: e.target.value as 'Active' | 'Inactive' })}
@@ -2091,19 +2343,55 @@ export const SalesModule: React.FC = () => {
                       </select>
                     </div>
 
+                    {/* Row 3: Event Type | Package Duration */}
                     <div>
-                      <label className="block text-slate-400 font-medium mb-1">Deliverables</label>
-                      <textarea
-                        placeholder="e.g. 2 Candid Photographers, 1 Cinematic Videographer, Standard Album..."
-                        value={pkgForm.deliverables}
-                        onChange={(e) => setPkgForm({ ...pkgForm, deliverables: e.target.value })}
-                        rows={3}
+                      <label className="block text-slate-400 font-semibold mb-1">Event Type</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Wedding, Reception, Pre-wedding shoot"
+                        value={pkgForm.event_type}
+                        onChange={(e) => setPkgForm({ ...pkgForm, event_type: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-855 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">Package Duration</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 1 Day, 2 Days, 8 Hours"
+                        value={pkgForm.duration}
+                        onChange={(e) => setPkgForm({ ...pkgForm, duration: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-855 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
+                      />
+                    </div>
+
+                    {/* Row 4: Package Includes | Deliverables */}
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">Package Includes</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Photobook, Drone coverage, Raw shots drive copy"
+                        value={pkgForm.package_includes}
+                        onChange={(e) => setPkgForm({ ...pkgForm, package_includes: e.target.value })}
                         className="w-full bg-slate-955 border border-slate-800 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-slate-400 font-medium mb-1">Team Members Included</label>
+                      <label className="block text-slate-400 font-semibold mb-1">Deliverables</label>
+                      <textarea
+                        placeholder="e.g. 2 Candid Photographers, 1 Cinematic Videographer, Standard Album..."
+                        value={pkgForm.deliverables}
+                        onChange={(e) => setPkgForm({ ...pkgForm, deliverables: e.target.value })}
+                        rows={1}
+                        className="w-full bg-slate-955 border border-slate-800 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans resize-y"
+                      />
+                    </div>
+
+                    {/* Extra Fields: Team Members Included | Seasonal Offer */}
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">Team Members Included</label>
                       <input
                         type="text"
                         placeholder="e.g. 3 Crew Members + Drone"
@@ -2114,7 +2402,7 @@ export const SalesModule: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-slate-400 font-medium mb-1">Seasonal Offer</label>
+                      <label className="block text-slate-400 font-semibold mb-1">Seasonal Offer</label>
                       <input
                         type="text"
                         placeholder="e.g. Free 1-min pre-wedding teaser"
@@ -2124,14 +2412,15 @@ export const SalesModule: React.FC = () => {
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-slate-400 font-medium mb-1">Terms & Conditions</label>
+                    {/* Terms & Conditions (Spanning both cols) */}
+                    <div className="md:col-span-2">
+                      <label className="block text-slate-400 font-semibold mb-1">Terms & Conditions</label>
                       <textarea
-                        placeholder="e.g. 50% advance for booking confirmation. Prices exclude travel outside city limits..."
+                        placeholder="e.g. 55% advance for booking confirmation. Prices exclude travel outside city limits..."
                         value={pkgForm.terms_conditions}
                         onChange={(e) => setPkgForm({ ...pkgForm, terms_conditions: e.target.value })}
-                        rows={3}
-                        className="w-full bg-slate-955 border border-slate-800 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
+                        rows={2}
+                        className="w-full bg-slate-955 border border-slate-800 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans resize-y"
                       />
                     </div>
                   </div>
@@ -2150,7 +2439,10 @@ export const SalesModule: React.FC = () => {
                           deliverables: '', 
                           team_members: '', 
                           seasonal_offer: '',
-                          terms_conditions: ''
+                          terms_conditions: '',
+                          event_type: '',
+                          duration: '',
+                          package_includes: ''
                         });
                         setCustomCategory('');
                       }}
@@ -2200,7 +2492,10 @@ export const SalesModule: React.FC = () => {
                           deliverables: '', 
                           team_members: '', 
                           seasonal_offer: '',
-                          terms_conditions: ''
+                          terms_conditions: '',
+                          event_type: '',
+                          duration: '',
+                          package_includes: ''
                         });
                         setCustomCategory('');
                       }}
@@ -2338,7 +2633,10 @@ export const SalesModule: React.FC = () => {
                                       deliverables: pkg.deliverables || '',
                                       team_members: pkg.team_members || '',
                                       seasonal_offer: pkg.seasonal_offer || '',
-                                      terms_conditions: pkg.terms_conditions || ''
+                                      terms_conditions: pkg.terms_conditions || '',
+                                      event_type: pkg.event_type || '',
+                                      duration: pkg.duration || '',
+                                      package_includes: pkg.package_includes || ''
                                     });
                                     setCustomCategory('');
                                     setIsAddFormOpen(false);
@@ -3014,8 +3312,53 @@ export const SalesModule: React.FC = () => {
             ))}
           </div>
           
+          {/* Leads Directory Title & Export Utility Panel */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-900/60 p-4 rounded-2xl border border-zinc-850 shadow-xl">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">📁</span>
+              <div>
+                <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">Leads Directory</h3>
+                <p className="text-[10px] text-zinc-400">Export active pipeline registers using start and end filters</p>
+              </div>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handlePrintReport}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                title="Print lead report to paper"
+              >
+                <span>🖨️</span> Print Report
+              </button>
+              
+              <button
+                onClick={handlePrintReport}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-rose-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                title="Download report as PDF format"
+              >
+                <span>📄</span> Download PDF
+              </button>
+              
+              <button
+                onClick={handleDownloadExcel}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-emerald-450 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                title="Download report as Excel spreadsheet"
+              >
+                <span>📊</span> Excel (.xlsx)
+              </button>
+
+              <button
+                onClick={handleDownloadCSV}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-indigo-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                title="Download report as CSV file"
+              >
+                <span>📝</span> CSV
+              </button>
+            </div>
+          </div>
+
           {/* Quick Filters Panel */}
-          <div className="bg-zinc-900/40 p-4 rounded-2xl border border-zinc-850 shadow-xl grid grid-cols-1 sm:grid-cols-5 gap-3 items-end relative overflow-hidden">
+          <div className="bg-zinc-900/40 p-4 rounded-2xl border border-zinc-850 shadow-xl grid grid-cols-1 md:grid-cols-12 gap-3 items-end relative overflow-hidden">
             {/* Corner calibration tick marks */}
             <div className="absolute top-2 left-2 w-1.5 h-1.5 border-t border-l border-emerald-500/40" />
             <div className="absolute top-2 right-2 w-1.5 h-1.5 border-t border-r border-emerald-500/40" />
@@ -3023,7 +3366,7 @@ export const SalesModule: React.FC = () => {
             <div className="absolute bottom-2 right-2 w-1.5 h-1.5 border-b border-r border-emerald-500/40" />
 
             {/* Search query */}
-            <div className="col-span-1 sm:col-span-1.5">
+            <div className="md:col-span-3">
               <label className="block text-[10px] uppercase font-mono font-bold text-zinc-400 mb-1">
                 Search Lead / Customer Name
               </label>
@@ -3040,14 +3383,14 @@ export const SalesModule: React.FC = () => {
             </div>
 
             {/* Source */}
-            <div>
+            <div className="md:col-span-2">
               <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
                 Lead Source
               </label>
               <select
                 value={filterSource}
                 onChange={(e) => setFilterSource(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100"
+                className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100/90"
               >
                 <option value="">All Sources</option>
                 <option value="Website Form">Website Form</option>
@@ -3059,24 +3402,28 @@ export const SalesModule: React.FC = () => {
             </div>
 
             {/* Status (Stage) */}
-            <div>
+            <div className="md:col-span-2">
               <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
                 Active Stage
               </label>
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100"
+                className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100/90"
               >
                 <option value="">All Stages</option>
                 <option value="Overdue">⚠️ Overdue Follow-ups</option>
                 <option value="New Lead">New Lead</option>
+                <option value="Contacted">Contacted</option>
                 <option value="Follow Up">Follow Up</option>
+                <option value="Quotation Generated">Quotation Generated</option>
                 <option value="Quotation Sent">Quotation Sent</option>
                 <option value="Negotiation">Negotiation</option>
                 <option value="Order Confirmed">Order Confirmed</option>
+                <option value="Operations Stage">Operations Stage</option>
                 <option value="Operations Assigned">Operations Assigned</option>
                 <option value="Event Completed">Event Completed</option>
+                <option value="Production Stage">Production Stage</option>
                 <option value="Editing Started">Editing Started</option>
                 <option value="Customer Review">Customer Review</option>
                 <option value="Delivered">Delivered</option>
@@ -3084,8 +3431,44 @@ export const SalesModule: React.FC = () => {
               </select>
             </div>
 
-            {/* Clear filters trigger */}
-            <div className="flex items-center gap-1.5">
+            {/* Start Date */}
+            <div className="md:col-span-2">
+              <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
+                Start Date (Created)
+              </label>
+              <input
+                type="date"
+                value={dateRangeStart}
+                onChange={(e) => setDateRangeStart(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono focus:outline-none"
+              />
+            </div>
+
+            {/* End Date */}
+            <div className="md:col-span-2">
+              <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
+                End Date (Created)
+              </label>
+              <input
+                type="date"
+                value={dateRangeEnd}
+                onChange={(e) => setDateRangeEnd(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono focus:outline-none"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="md:col-span-1 flex flex-col gap-1.5">
+              <button
+                onClick={() => {
+                  setAppliedStartDate(dateRangeStart);
+                  setAppliedEndDate(dateRangeEnd);
+                }}
+                className="w-full flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-500 py-1 py-1.5 text-[10px] font-bold text-white rounded transition-all cursor-pointer"
+                title="Apply Date Filter"
+              >
+                Apply
+              </button>
               <button
                 onClick={() => {
                   setFilterQuery('');
@@ -3093,12 +3476,15 @@ export const SalesModule: React.FC = () => {
                   setFilterStatus('');
                   setFilterSalesPerson('');
                   setFilterDate('');
+                  setDateRangeStart('');
+                  setDateRangeEnd('');
+                  setAppliedStartDate('');
+                  setAppliedEndDate('');
                 }}
-                className="w-full flex items-center justify-center gap-1 bg-slate-800 hover:bg-slate-750 border border-slate-700 py-1.5 px-3 text-xs text-slate-300 rounded-lg transition-all cursor-pointer"
-                title="Reset queries"
+                className="w-full flex items-center justify-center gap-0.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 py-1 px-1.5 text-[10px] text-zinc-300 rounded transition-all cursor-pointer animate-none"
+                title="Reset all filters"
               >
-                <X className="w-3.5 h-3.5" />
-                <span>Reset</span>
+                Reset
               </button>
             </div>
           </div>
@@ -3110,12 +3496,15 @@ export const SalesModule: React.FC = () => {
                 <thead>
                   <tr className="bg-zinc-950/70 text-zinc-405 font-bold border-b border-zinc-850 text-[10px] uppercase font-mono tracking-wider">
                     <th className="p-3.5 pl-5">Lead ID</th>
+                    <th className="p-3.5">Order ID</th>
                     <th className="p-3.5">Customer Name</th>
-                    <th className="p-3.5">Mobile Contact</th>
-                    <th className="p-3.5">Inbound Source</th>
+                    <th className="p-3.5">Mobile Number</th>
+                    <th className="p-3.5">Event Type</th>
                     <th className="p-3.5">Event Date</th>
-                    <th className="p-3.5">Allocated Rep</th>
                     <th className="p-3.5">Current Stage</th>
+                    <th className="p-3.5">Current Status</th>
+                    <th className="p-3.5">Payment Status</th>
+                    <th className="p-3.5">Created Date</th>
                     <th className="p-3.5 text-right pr-5">Action</th>
                   </tr>
                 </thead>
@@ -3123,6 +3512,20 @@ export const SalesModule: React.FC = () => {
                   {filteredLeads.length > 0 ? (
                     filteredLeads.map((lead) => {
                       const isActiveInSales = ['New Lead', 'Follow Up', 'Quotation Sent', 'Negotiation'].includes(lead.status);
+                      const linkedOrder = orders.find((o) => o.lead_id === lead.lead_id);
+                      const paymentRecord = linkedOrder ? payments.find((p) => p.order_id === linkedOrder.order_id) : null;
+                      const paymentLabel = paymentRecord ? paymentRecord.payment_status : 'N/A';
+
+                      // Determine high-level stage
+                      let stageLabel = 'Sales';
+                      if (['Order Confirmed', 'New Order Received', 'Operations Assigned', 'Event Scheduled', 'Staff Assigned', 'Event Completed', 'Operations Stage'].includes(lead.status)) {
+                        stageLabel = 'Operations';
+                      } else if (['Raw Footage Received', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress', 'Final Approval', 'Production Stage', 'Approved'].includes(lead.status)) {
+                        stageLabel = 'Production';
+                      } else if (['Delivered', 'Closed'].includes(lead.status)) {
+                        stageLabel = 'Closed / Delivered';
+                      }
+
                       return (
                         <tr 
                           key={lead.lead_id} 
@@ -3131,34 +3534,55 @@ export const SalesModule: React.FC = () => {
                           <td className="p-3.5 pl-5 font-mono text-[11px] font-bold text-indigo-400">
                             {lead.lead_id}
                           </td>
+                          <td className="p-3.5 font-mono text-[11px] text-violet-400 font-bold">
+                            {linkedOrder ? linkedOrder.order_id : 'N/A'}
+                          </td>
                           <td className="p-3.5 font-bold text-white">
                             {lead.customer_name}
                           </td>
                           <td className="p-3.5 font-mono text-zinc-400">
                             {formatIndianPhoneNumber(lead.mobile)}
                           </td>
-                          <td className="p-3.5">
-                            <span className="bg-zinc-950 text-amber-400 border border-zinc-850 px-2 py-0.5 rounded text-[10px] font-bold font-mono">
-                              {lead.lead_source.toUpperCase()}
-                            </span>
+                          <td className="p-3.5 text-zinc-300 font-sans">
+                            {lead.event_type}
                           </td>
                           <td className="p-3.5 font-mono text-zinc-350">
                             {lead.event_date}
                           </td>
-                          <td className="p-3.5 text-zinc-400 font-bold">
-                            {lead.sales_person}
+                          <td className="p-3.5">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
+                              stageLabel === 'Sales' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
+                              stageLabel === 'Operations' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' :
+                              stageLabel === 'Production' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
+                              'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                            }`}>
+                              {stageLabel}
+                            </span>
                           </td>
                           <td className="p-3.5">
                             <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold tracking-tight uppercase border ${
                               lead.status === 'New Lead' ? 'bg-indigo-555/15 text-indigo-400 border-indigo-505/20' :
                               lead.status === 'Follow Up' ? 'bg-emerald-555/15 text-emerald-400 border-emerald-505/20' :
                               lead.status === 'Quotation Sent' ? 'bg-amber-555/15 text-amber-400 border-amber-505/20' :
-                              lead.status === 'Negotiation' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30 font-extrabold animate-pulse' :
+                              lead.status === 'Negotiation' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
                               lead.status === 'Order Confirmed' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-450/40 font-black' :
                               'bg-zinc-900 text-zinc-400 border-zinc-800'
                             }`}>
                               {lead.status}
                             </span>
+                          </td>
+                          <td className="p-3.5">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              paymentLabel === 'Fully Paid' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' :
+                              paymentLabel === 'Partially Paid' ? 'bg-amber-555/15 text-amber-400 border-amber-505/20' :
+                              paymentLabel === 'Pending' ? 'bg-rose-500/10 text-rose-455 border border-rose-500/20' :
+                              'bg-zinc-900 text-zinc-400 border-zinc-800'
+                            }`}>
+                              {paymentLabel}
+                            </span>
+                          </td>
+                          <td className="p-3.5 font-mono text-zinc-400">
+                            {lead.created_date ? lead.created_date.split('T')[0] : 'N/A'}
                           </td>
                           <td className="p-3.5 text-right pr-5">
                             <button
@@ -3175,7 +3599,7 @@ export const SalesModule: React.FC = () => {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={8} className="p-12 text-center text-slate-500">
+                      <td colSpan={11} className="p-12 text-center text-slate-500">
                         <Filter className="w-8 h-8 text-neutral-500 mx-auto mb-2" />
                         <span className="text-xs font-mono text-zinc-500">No matching records in the directory grid. Try resetting filters.</span>
                       </td>
@@ -3952,64 +4376,152 @@ export const SalesModule: React.FC = () => {
                               <option value="Order Confirmed">Order Confirmed</option>
                             </select>
                           </div>
+                        </div>
 
-                          {/* Date picker */}
-                          <div>
-                            <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">
-                              Next Follow-up Action Date *
-                            </label>
-                            <input
-                              type="date"
-                              required
-                              value={followUpForm.next_follow_up_date}
-                              onChange={(e) => setFollowUpForm({ ...followUpForm, next_follow_up_date: e.target.value })}
-                              className="w-full bg-slate-900 border border-slate-800 rounded-lg py-2.5 px-3 text-xs text-slate-100 font-mono focus:outline-none focus:border-slate-700"
-                            />
+                        {followUpForm.status === 'Order Confirmed' ? (
+                          <div className="space-y-4 pt-2 border-t border-slate-800 text-left">
+                            <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Configure Confirmed Order Settings</h4>
+                            
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-xs font-medium text-slate-400 mb-1">
+                                  Event Date * (Required)
+                                </label>
+                                <input
+                                  type="date"
+                                  required
+                                  value={followUpForm.event_date}
+                                  onChange={(e) => setFollowUpForm({ ...followUpForm, event_date: e.target.value })}
+                                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-slate-400 mb-1">
+                                  Event Time * (Required)
+                                </label>
+                                <input
+                                  type="time"
+                                  required
+                                  value={followUpForm.event_time}
+                                  onChange={(e) => setFollowUpForm({ ...followUpForm, event_time: e.target.value })}
+                                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-slate-400 mb-1">
+                                  Reporting Time * (Required)
+                                </label>
+                                <input
+                                  type="time"
+                                  required
+                                  value={followUpForm.reporting_time}
+                                  onChange={(e) => setFollowUpForm({ ...followUpForm, reporting_time: e.target.value })}
+                                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-slate-400 mb-1">
+                                  Final Amount (₹) *
+                                </label>
+                                <input
+                                  type="number"
+                                  required
+                                  value={followUpForm.quotation_amount}
+                                  onChange={(e) => setFollowUpForm({ ...followUpForm, quotation_amount: Number(e.target.value) })}
+                                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-slate-400 mb-1">
+                                  Advance Amount Received (₹)
+                                </label>
+                                <input
+                                  type="number"
+                                  value={followUpForm.advance_received}
+                                  onChange={(e) => setFollowUpForm({ ...followUpForm, advance_received: Number(e.target.value) })}
+                                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-slate-400 mb-1">
+                                  Payment Mode
+                                </label>
+                                <select
+                                  value={followUpForm.payment_mode}
+                                  onChange={(e) => setFollowUpForm({ ...followUpForm, payment_mode: e.target.value })}
+                                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                >
+                                  <option value="UPI">UPI (GPay/PhonePe)</option>
+                                  <option value="Cash">Cash Handover</option>
+                                  <option value="Bank Transfer">Bank NFT/RTGS/IMPS</option>
+                                  <option value="Card">Credit/Debit Card</option>
+                                  <option value="Cheque">Cheque Deposit</option>
+                                </select>
+                              </div>
+                            </div>
                           </div>
+                        ) : (
+                          <>
+                            <div className="space-y-4 text-left">
+                              {/* Date picker */}
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">
+                                  Next Follow-up Action Date *
+                                </label>
+                                <input
+                                  type="date"
+                                  required
+                                  value={followUpForm.next_follow_up_date}
+                                  onChange={(e) => setFollowUpForm({ ...followUpForm, next_follow_up_date: e.target.value })}
+                                  className="w-full bg-slate-900 border border-slate-800 rounded-lg py-2.5 px-3 text-xs text-slate-100 font-mono focus:outline-none focus:border-slate-700"
+                                />
+                              </div>
 
-                          {/* Quotation amount */}
-                          <div>
-                            <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">
-                              Negotiated Quotation Amount (₹) *
-                            </label>
-                            <input
-                              type="number"
-                              required
-                              value={followUpForm.quotation_amount}
-                              onChange={(e) => setFollowUpForm({ ...followUpForm, quotation_amount: Number(e.target.value) })}
-                              className="w-full bg-slate-900 border border-slate-800 rounded-lg py-2.5 px-3 text-xs text-slate-100 font-mono focus:outline-none focus:border-slate-700"
-                            />
-                          </div>
-                        </div>
+                              {/* Quotation amount */}
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">
+                                  Negotiated Quotation Amount (₹) *
+                                </label>
+                                <input
+                                  type="number"
+                                  required
+                                  value={followUpForm.quotation_amount}
+                                  onChange={(e) => setFollowUpForm({ ...followUpForm, quotation_amount: Number(e.target.value) })}
+                                  className="w-full bg-slate-900 border border-slate-800 rounded-lg py-2.5 px-3 text-xs text-slate-100 font-mono focus:outline-none focus:border-slate-700"
+                                />
+                              </div>
+                            </div>
 
-                        {/* Conversation/Notes */}
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">
-                            Call / Conversation Notes *
-                          </label>
-                          <textarea
-                            rows={3}
-                            required
-                            placeholder="Log customer concerns, callbacks or package details."
-                            value={followUpForm.call_notes}
-                            onChange={(e) => setFollowUpForm({ ...followUpForm, call_notes: e.target.value })}
-                            className="w-full bg-slate-900 border border-slate-800 rounded-lg py-2.5 px-3 text-xs text-zinc-100 font-sans focus:outline-none focus:border-slate-700"
-                          ></textarea>
-                        </div>
+                            {/* Conversation/Notes */}
+                            <div className="text-left">
+                              <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">
+                                Call / Conversation Notes *
+                              </label>
+                              <textarea
+                                rows={3}
+                                required
+                                placeholder="Log customer concerns, callbacks or package details."
+                                value={followUpForm.call_notes}
+                                onChange={(e) => setFollowUpForm({ ...followUpForm, call_notes: e.target.value })}
+                                className="w-full bg-slate-900 border border-slate-800 rounded-lg py-2.5 px-3 text-xs text-zinc-100 font-sans focus:outline-none focus:border-slate-700"
+                              ></textarea>
+                            </div>
 
-                        {/* Negotiation notes */}
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">
-                            Negotiation Notes (Optional)
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="Price offsets, justifications..."
-                            value={followUpForm.negotiation_notes}
-                            onChange={(e) => setFollowUpForm({ ...followUpForm, negotiation_notes: e.target.value })}
-                            className="w-full bg-slate-900 border border-slate-800 rounded-lg py-2.5 px-3 text-xs text-zinc-100 focus:outline-none focus:border-slate-700"
-                          />
-                        </div>
+                            {/* Negotiation notes */}
+                            <div className="text-left">
+                              <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">
+                                Negotiation Notes (Optional)
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="Price offsets, justifications..."
+                                value={followUpForm.negotiation_notes}
+                                onChange={(e) => setFollowUpForm({ ...followUpForm, negotiation_notes: e.target.value })}
+                                className="w-full bg-slate-900 border border-slate-800 rounded-lg py-2.5 px-3 text-xs text-zinc-100 focus:outline-none focus:border-slate-700"
+                              />
+                            </div>
+                          </>
+                        )}
 
                         <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-800 font-bold">
                           <button
@@ -4023,7 +4535,7 @@ export const SalesModule: React.FC = () => {
                             type="submit"
                             className="px-4 py-2 text-xs bg-indigo-650 hover:bg-indigo-500 text-white rounded-lg shadow-sm cursor-pointer font-bold"
                           >
-                            Save Follow-up Notes
+                            {followUpForm.status === 'Order Confirmed' ? '💍 Confirm Order booking' : 'Save Follow-up Notes'}
                           </button>
                         </div>
                       </form>
@@ -4620,6 +5132,30 @@ export const SalesModule: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Dynamic Custom Info Banner */}
+                  {(viewingPkgDetails.event_type || viewingPkgDetails.duration || viewingPkgDetails.package_includes) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-950/40 p-3 rounded-xl border border-slate-850 text-xs">
+                      {viewingPkgDetails.event_type && (
+                        <div>
+                          <span className="text-slate-500 block text-[9px] uppercase font-mono font-semibold mb-0.5">Event Type</span>
+                          <span className="text-slate-200 font-medium">{viewingPkgDetails.event_type}</span>
+                        </div>
+                      )}
+                      {viewingPkgDetails.duration && (
+                        <div>
+                          <span className="text-slate-500 block text-[9px] uppercase font-mono font-semibold mb-0.5">Duration</span>
+                          <span className="text-slate-200 font-medium">{viewingPkgDetails.duration}</span>
+                        </div>
+                      )}
+                      {viewingPkgDetails.package_includes && (
+                        <div>
+                          <span className="text-slate-500 block text-[9px] uppercase font-mono font-semibold mb-0.5">Key Focus</span>
+                          <span className="text-slate-200 font-medium">{viewingPkgDetails.package_includes}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4.5 max-h-[50vh] overflow-y-auto pr-1">
                     {/* Deliverables Panel */}
                     <div className="bg-slate-950/20 border border-slate-850 p-3.5 rounded-xl space-y-2.5">
@@ -4747,7 +5283,10 @@ export const SalesModule: React.FC = () => {
                             deliverables: pkg.deliverables || '',
                             team_members: pkg.team_members || '',
                             seasonal_offer: pkg.seasonal_offer || '',
-                            terms_conditions: pkg.terms_conditions || ''
+                            terms_conditions: pkg.terms_conditions || '',
+                            event_type: pkg.event_type || '',
+                            duration: pkg.duration || '',
+                            package_includes: pkg.package_includes || ''
                           });
                           setIsAddFormOpen(false);
                           setViewingPkgDetails(null);

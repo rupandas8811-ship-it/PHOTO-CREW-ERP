@@ -64,7 +64,8 @@ interface RoleContextType {
     eventDate?: string,
     eventTime?: string,
     paymentMode?: string,
-    notes?: string
+    notes?: string,
+    reportingTime?: string
   ) => string;
   assignOperations: (
     orderId: string, 
@@ -1860,7 +1861,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     eventDate?: string,
     eventTime?: string,
     paymentMode?: string,
-    notes?: string
+    notes?: string,
+    reportingTime?: string
   ) => {
     const targetLead = leads.find((ld) => ld.lead_id === leadId);
     if (!targetLead) return '';
@@ -1874,6 +1876,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: 'Order Confirmed', 
         event_date: eventDate || ld.event_date,
         event_time: eventTime || ld.event_time,
+        reporting_time: reportingTime || ld.reporting_time,
         remarks: resolvedRemarks,
         updated_by: currentUserName, 
         updated_at: new Date().toISOString() 
@@ -1883,6 +1886,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status: 'Order Confirmed',
       event_date: eventDate || targetLead.event_date,
       event_time: eventTime || targetLead.event_time,
+      reporting_time: reportingTime || targetLead.reporting_time,
       remarks: resolvedRemarks,
       updated_by: currentUserName,
       updated_at: new Date().toISOString()
@@ -1897,6 +1901,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       event_type: targetLead.event_type,
       event_date: eventDate || targetLead.event_date,
       event_time: eventTime || targetLead.event_time,
+      reporting_time: reportingTime || '',
       event_location: targetLead.event_location,
       package_name: packageName,
       quotation_amount: quotationAmount,
@@ -1921,11 +1926,28 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       payment_status: advanceReceived >= quotationAmount ? 'Fully Paid' : (advanceReceived > 0 ? 'Partially Paid' : 'Pending'),
     };
 
+    const opId = `OP-${Math.floor(5012 + Math.random() * 800)}`;
+    const newOp: Operation = {
+      operation_id: opId,
+      order_id: orderId,
+      photographer_assigned: 'Unassigned',
+      videographer_assigned: 'Unassigned',
+      drone_operator_assigned: 'Unassigned',
+      assistant_assigned: 'Unassigned',
+      equipment_kit: '',
+      reporting_time: reportingTime || '08:00',
+      event_status: 'New Order Received',
+      remarks: notes || '',
+      updated_by: currentUserName,
+    };
+
     setOrders((prev) => [newOrder, ...prev]);
     setPayments((prev) => [newPayment, ...prev]);
+    setOperations((prev) => [newOp, ...prev]);
 
     pushInsert('orders', newOrder);
     pushInsert('payments', newPayment);
+    pushInsert('operations', newOp);
 
     addNotification({
       user_id: 'All',
