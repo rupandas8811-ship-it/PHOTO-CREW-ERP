@@ -1145,23 +1145,23 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
   const today = new Date();
 
   // Filter/Derived definitions
-  const newProjects = production.filter(p => !p.editor_assigned || p.editor_assigned === 'Unassigned');
-  const assignedProjects = production.filter(p => p.editor_assigned && p.editor_assigned !== 'Unassigned' && p.editing_status !== 'Project Delivered' && p.editing_status !== 'Delivered');
-  const pendingProjects = production.filter(p => !['Final Approval', 'Approved', 'Project Delivered', 'Delivered', 'Project Closed', 'Closed'].includes(p.editing_status));
-  const delayedProjects = production.filter(p => {
+  const newProjects = leads.filter(p => !p.editor_assigned || p.editor_assigned === 'Unassigned');
+  const assignedProjects = leads.filter(p => p.editor_assigned && p.editor_assigned !== 'Unassigned' && p.editing_status !== 'Project Delivered' && p.editing_status !== 'Delivered');
+  const pendingProjects = leads.filter(p => !['Final Approval', 'Approved', 'Project Delivered', 'Delivered', 'Project Closed', 'Closed'].includes(p.editing_status));
+  const delayedProjects = leads.filter(p => {
     if (['Final Approval', 'Approved', 'Project Delivered', 'Delivered', 'Project Closed', 'Closed'].includes(p.editing_status)) return false;
     if (!p.expected_delivery_date) return false;
     return new Date(p.expected_delivery_date) < today;
   });
 
   // Calculate stats for pipeline counters
-  const statTotalVideo = production.length;
-  const statPendingVideo = production.filter(p => ['Pending', 'New Raw Footage Arrived', 'Raw Footage Received', 'Editor Assigned'].includes(p.editing_status)).length;
-  const statEditingVideo = production.filter(p => ['Editing Started', 'Editing In Progress', 'Editing'].includes(p.editing_status)).length;
-  const statReviewVideo = production.filter(p => ['Internal QC Review', 'Client Review Sent', 'Customer Review', 'Ready For Review', 'Revision Required', 'Revision In Progress'].includes(p.editing_status)).length;
-  const statApprovedVideo = production.filter(p => ['Approved', 'Final Approval'].includes(p.editing_status)).length;
+  const statTotalVideo = leads.length;
+  const statPendingVideo = leads.filter(p => ['Pending', 'New Raw Footage Arrived', 'Raw Footage Received', 'Editor Assigned'].includes(p.editing_status)).length;
+  const statEditingVideo = leads.filter(p => ['Editing Started', 'Editing In Progress', 'Editing'].includes(p.editing_status)).length;
+  const statReviewVideo = leads.filter(p => ['Internal QC Review', 'Client Review Sent', 'Customer Review', 'Ready For Review', 'Revision Required', 'Revision In Progress'].includes(p.editing_status)).length;
+  const statApprovedVideo = leads.filter(p => ['Approved', 'Final Approval'].includes(p.editing_status)).length;
 
-  const visibleProduction = production;
+  const visibleProduction = leads;
 
   // Active workload stats for staff (from useRole().staff + active jobs)
   const getStaffWorkload = (staffName: string) => {

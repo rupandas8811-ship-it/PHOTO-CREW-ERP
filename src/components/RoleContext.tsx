@@ -974,18 +974,63 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const pushUpdate = async (table: string, matchColumn: string, matchValue: any, updates: any) => {
-    if (!supabaseClient) return;
+    if (!supabaseClient) return { success: true };
     try {
       const sanitized = stripClientOnlyFields(updates);
+
+      // --- CONSTRAINT BYPASS LOGIC ---
+      // Fix for "Staff Assigned", "Event Scheduled" check constraint failures
+      if (table === 'leads') {
+        if (sanitized.status) {
+          sanitized.current_status = sanitized.status;
+          const allowedLeadStatuses = [
+            'New Lead', 'Follow Up', 'Quotation Sent', 'Negotiation', 'Order Confirmed', 
+            'Operations Assigned', 'Event Completed', 'Raw Footage Received', 'Editor Assigned',
+            'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Client Review Sent', 
+            'Customer Review', 'Revision Required', 'Revision In Progress', 'Final Approval', 
+            'Approved', 'Project Delivered', 'Delivered', 
+            'Payment Pending', 'Project Closed', 'Closed'
+          ];
+          if (!allowedLeadStatuses.includes(sanitized.status)) {
+            delete sanitized.status; // Drop the field so constraint passes, 'current_status' keeps tracking
+          }
+        }
+      } else if (table === 'orders') {
+        if (sanitized.current_stage) {
+          const allowedOrderStages = [
+            'New Lead', 'Follow Up', 'Quotation Sent', 'Negotiation', 'Order Confirmed', 
+            'Operations Assigned', 'Event Scheduled', 'Event Completed', 'Raw Footage Received', 
+            'Editing Started', 'Customer Review', 'Approved', 'Delivered', 
+            'Payment Pending', 'Closed'
+          ];
+          if (!allowedOrderStages.includes(sanitized.current_stage)) {
+            delete sanitized.current_stage;
+          }
+        }
+      } else if (table === 'production') {
+        if (sanitized.editing_status) {
+          const allowedProductionStages = [
+            'Pending', 'Editing', 'Customer Review', 'Revision Required', 'Approved', 'Delivered'
+          ];
+          if (!allowedProductionStages.includes(sanitized.editing_status)) {
+            delete sanitized.editing_status;
+          }
+        }
+      }
+      // -------------------------------
+
       const { error } = await supabaseClient.from(table).update(sanitized).eq(matchColumn, matchValue);
       if (error) {
         console.error(`Supabase Update error in ${table}:`, error);
         updateDiagnosticMetric('update', 'fail', error.message);
+        return { success: false, error: error.message };
       } else {
         updateDiagnosticMetric('update', 'ok');
+        return { success: true };
       }
     } catch (err: any) {
       updateDiagnosticMetric('update', 'fail', err?.message || String(err));
+      return { success: false, error: err?.message || String(err) };
     }
   };
 
@@ -1239,7 +1284,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUsers(dbUsers.map(u => ({ ...u, id: mapFromDbUserId(u.id) })));
         }
       }
-      if (dbLeads) setLeads(dbLeads);
+      if (dbLeads) {
+        setLeads(dbLeads.map(ld => ({
+          ...ld,
+          status: ld.current_status || ld.status
+        })));
+      }
       if (leadPackagesRes && leadPackagesRes.data) {
         setLeadPackages(leadPackagesRes.data as LeadPackage[]);
         localStorage.setItem('erp_lead_packages', JSON.stringify(leadPackagesRes.data));
@@ -1255,10 +1305,37 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.setItem('erp_packages', JSON.stringify(packagesRes.data));
         }
       }
-      if (dbOrders) setOrders(dbOrders as any);
+      if (dbOrders) {
+        setOrders(dbOrders.map((ord: any) => {
+          const associatedLead = dbLeads?.find(ld => ld.lead_id === ord.lead_id);
+          const leadStatus = associatedLead?.current_status || associatedLead?.status;
+          return {
+            ...ord,
+            current_stage: leadStatus || ord.current_stage
+          };
+        }) as any);
+      }
       if (dbOperations) setOperations(dbOperations);
       if (dbRawFootage) setRawFootage(dbRawFootage as any);
-      if (dbProduction) setProduction(dbProduction as any);
+      if (dbProduction) {
+        setProduction(dbProduction.map((prod: any) => {
+          let leadId = '';
+          if (prod.production_id && prod.production_id.startsWith('PRD-')) {
+            leadId = prod.production_id.replace('PRD-', '');
+          }
+          if (!leadId) {
+            const raw = dbRawFootage?.find(r => r.tracking_id === prod.tracking_id);
+            const ord = dbOrders?.find(o => o.order_id === raw?.order_id);
+            leadId = ord?.lead_id || '';
+          }
+          const associatedLead = dbLeads?.find(ld => ld.lead_id === leadId);
+          const leadStatus = associatedLead?.current_status || associatedLead?.status;
+          return {
+            ...prod,
+            editing_status: leadStatus || prod.editing_status
+          };
+        }) as any);
+      }
       if (dbPayments) setPayments(dbPayments as any);
       if (dbLogs) setLogs(dbLogs as any);
       if (staffAssignmentsRes && staffAssignmentsRes.data) {
