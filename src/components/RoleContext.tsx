@@ -977,6 +977,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!supabaseClient) return { success: true };
     try {
       const sanitized = stripClientOnlyFields(updates);
+      console.log(`[pushUpdate START] table: ${table}, match: ${matchColumn}=${matchValue}`, sanitized);
 
       // --- CONSTRAINT BYPASS LOGIC ---
       // Fix for "Staff Assigned", "Event Scheduled" check constraint failures
@@ -1018,17 +1019,20 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
       // -------------------------------
-
-      const { error } = await supabaseClient.from(table).update(sanitized).eq(matchColumn, matchValue);
+      
+      console.log(`[pushUpdate EXECUTING] on ${table}:`, sanitized);
+      const { error, data } = await supabaseClient.from(table).update(sanitized).eq(matchColumn, matchValue).select();
       if (error) {
-        console.error(`Supabase Update error in ${table}:`, error);
+        console.error(`[pushUpdate ERROR] in ${table}:`, error);
         updateDiagnosticMetric('update', 'fail', error.message);
         return { success: false, error: error.message };
       } else {
+        console.log(`[pushUpdate SUCCESS] returned data:`, data);
         updateDiagnosticMetric('update', 'ok');
         return { success: true };
       }
     } catch (err: any) {
+      console.error(`[pushUpdate EXCEPTION] in ${table}:`, err);
       updateDiagnosticMetric('update', 'fail', err?.message || String(err));
       return { success: false, error: err?.message || String(err) };
     }

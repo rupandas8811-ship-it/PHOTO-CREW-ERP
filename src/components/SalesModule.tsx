@@ -523,7 +523,12 @@ const highlightText = (text: string, search: string) => {
 
 
 
-export const SalesModule: React.FC = () => {
+interface SalesModuleProps {
+  activeSubTab?: 'list' | 'create' | 'profiles' | 'packages' | 'calendar';
+  setActiveSubTab?: (tab: 'list' | 'create' | 'profiles' | 'packages' | 'calendar') => void;
+}
+
+export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: externalActiveTab, setActiveSubTab: externalSetActiveTab }) => {
   const { 
     currentRole, 
     leads, 
@@ -589,7 +594,9 @@ export const SalesModule: React.FC = () => {
   const canEdit = currentRole === 'Sales Team' || currentRole === 'Business Owner';
 
   // Toggle modes
-  const [activeTab, setActiveTab] = useState<'list' | 'create' | 'profiles' | 'packages'>('list');
+  const [internalTab, setInternalTab] = useState<'list' | 'create' | 'profiles' | 'packages' | 'calendar'>('list');
+  const activeTab = externalActiveTab || internalTab;
+  const setActiveTab = externalSetActiveTab || setInternalTab;
 
   // Leads export report handlers
   const handleDownloadCSV = () => {
@@ -1407,18 +1414,6 @@ export const SalesModule: React.FC = () => {
         {/* Create and Tabs Controls */}
         <div className="flex items-center gap-2">
           <button
-            id="btn_lead_tab_list"
-            onClick={() => { setActiveTab('list'); setSelectedLead(null); setSelectedCustomerProfileId(null); }}
-            className={`px-4 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
-              activeTab === 'list' && !selectedLead
-                ? 'bg-zinc-900 border-zinc-750 text-white font-black hover:border-zinc-700'
-                : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            Leads Directory
-          </button>
-
-          <button
             id="btn_lead_tab_profiles"
             onClick={() => { setActiveTab('profiles'); setSelectedLead(null); setSelectedCustomerProfileId(null); }}
             className={`px-4 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
@@ -1428,19 +1423,6 @@ export const SalesModule: React.FC = () => {
             }`}
           >
             👥 Customer Profiles
-          </button>
-
-          <button
-            id="btn_lead_tab_packages"
-            onClick={() => { setActiveTab('packages'); setSelectedLead(null); setSelectedCustomerProfileId(null); }}
-            className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
-              activeTab === 'packages'
-                ? 'bg-zinc-900 border-zinc-750 text-white font-black hover:border-zinc-700'
-                : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            <Package className="w-3.5 h-3.5 text-zinc-405 group-hover:text-zinc-200" />
-            <span>Package Catalog</span>
           </button>
 
           <button

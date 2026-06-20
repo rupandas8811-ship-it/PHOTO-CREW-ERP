@@ -118,6 +118,9 @@ const MainAppContent: React.FC = () => {
     sessionStorage.setItem('erp_sidebar_state', sidebarOpen ? 'true' : 'false');
   }, [sidebarOpen]);
 
+  // Sub-tab selection state for sales suite
+  const [activeSalesSubTab, setActiveSalesSubTab] = useState<'list' | 'profiles' | 'packages' | 'calendar' | 'create'>('list');
+
   // Sub-tab selection state for production suite
   const [activeSubTab, setActiveSubTab] = useState<'pipeline' | 'production_leads' | 'production_calendar' | 'project_queue' | 'assignments' | 'tracker' | 'delivery' | 'resources' | 'analytics' | 'staff_performance' | 'overall_performance' | 'deliveries_desk' | 'staff_management' | 'notifications' | 'crew_roster' | 'production_staff_directory' | 'production_role_specialities'>('production_leads');
 
@@ -404,7 +407,7 @@ const MainAppContent: React.FC = () => {
             })}
           </nav>
         </div>
-      ) : currentRole === 'Sales Team' ? (
+      ) : activeTab === 'sales' || currentRole === 'Sales Team' ? (
         <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 rounded-2xl border border-zinc-850 p-4 space-y-4 shadow-xl relative animate-in fade-in duration-300">
           <div className="flex items-center justify-between pb-1 border-b border-zinc-850">
             <h3 className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-emerald-400 font-mono flex items-center gap-1.5">
@@ -413,54 +416,62 @@ const MainAppContent: React.FC = () => {
             </h3>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
           </div>
+
+          {/* Return button for Business Owner */}
+          {currentRole === 'Business Owner' && (
+            <button
+              onClick={() => {
+                handleTabSelect('dashboard');
+              }}
+              className="w-full flex items-center gap-2 px-3.5 py-2.5 text-[10px] font-mono uppercase tracking-wider font-extrabold rounded-xl transition-all duration-200 border cursor-pointer border-zinc-800 text-zinc-400 hover:bg-zinc-900/50 hover:text-white"
+            >
+              <span>←</span>
+              <span>Back to Studio Desks</span>
+            </button>
+          )}
+
           <nav className="space-y-1.5">
-            <button
-              id="tab_sales_analytics"
-              onClick={() => handleTabSelect('sales_analytics')}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-bold rounded-xl transition-all duration-200 text-left border cursor-pointer ${
-                activeTab === 'sales_analytics'
-                  ? 'bg-gradient-to-r from-indigo-500/10 to-purple-500/10 text-indigo-405 border-indigo-500/30 font-bold shadow-[0_0_12px_rgba(99,102,241,0.06)]'
-                  : 'text-zinc-400 bg-transparent border-transparent hover:bg-zinc-900/50 hover:text-white hover:border-zinc-800'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Briefcase className="w-4 h-4 flex-shrink-0 text-indigo-400" />
-                <span className="tracking-wide">Sales Analytics</span>
-              </div>
-              <ChevronRightIcon active={activeTab === 'sales_analytics'} />
-            </button>
+            {[
+              { id: 'sales_analytics', label: 'Sales Analytics', icon: Briefcase, color: 'text-indigo-400' },
+              { id: 'sales_list', label: 'Leads Directory', icon: Sparkles, color: 'text-emerald-400' },
+              { id: 'sales_packages', label: 'Package Catalog', icon: Layers, color: 'text-teal-400' },
+              { id: 'pending_payments', label: 'Pending Payment Report', icon: DollarSign, color: 'text-amber-500' }
+            ].map(tab => {
+              const IconComponent = tab.icon;
+              let isSelected = false;
+              if (tab.id === 'sales_list') isSelected = activeTab === 'sales' && activeSalesSubTab === 'list';
+              else if (tab.id === 'sales_packages') isSelected = activeTab === 'sales' && activeSalesSubTab === 'packages';
+              else isSelected = activeTab === tab.id;
 
-            <button
-              id="tab_sales"
-              onClick={() => handleTabSelect('sales')}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-bold rounded-xl transition-all duration-200 text-left border cursor-pointer ${
-                activeTab === 'sales'
-                  ? 'bg-gradient-to-r from-emerald-500/10 to-teal-500/10 text-emerald-455 border-emerald-500/30 font-bold shadow-[0_0_12px_rgba(16,185,129,0.06)]'
-                  : 'text-zinc-400 bg-transparent border-transparent hover:bg-zinc-900/50 hover:text-white hover:border-zinc-800'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Sparkles className="w-4 h-4 flex-shrink-0 text-emerald-400" />
-                <span className="tracking-wide">Leads Directory</span>
-              </div>
-              <ChevronRightIcon active={activeTab === 'sales'} />
-            </button>
-
-            <button
-              id="tab_pending_payments"
-              onClick={() => handleTabSelect('pending_payments')}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-bold rounded-xl transition-all duration-200 text-left border cursor-pointer ${
-                activeTab === 'pending_payments'
-                  ? 'bg-gradient-to-r from-rose-500/10 to-pink-500/10 text-rose-455 border-rose-500/30 font-bold shadow-[0_0_12px_rgba(244,63,94,0.06)]'
-                  : 'text-zinc-400 bg-transparent border-transparent hover:bg-zinc-900/50 hover:text-white hover:border-zinc-800'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <DollarSign className="w-4 h-4 flex-shrink-0 text-amber-500" />
-                <span className="tracking-wide">Pending Payment Report</span>
-              </div>
-              <ChevronRightIcon active={activeTab === 'pending_payments'} />
-            </button>
+              return (
+                <button
+                  key={tab.id}
+                  id={`tab_${tab.id}`}
+                  onClick={() => {
+                    if (tab.id === 'sales_list') {
+                      handleTabSelect('sales');
+                      setActiveSalesSubTab('list');
+                    } else if (tab.id === 'sales_packages') {
+                      handleTabSelect('sales');
+                      setActiveSalesSubTab('packages');
+                    } else {
+                      handleTabSelect(tab.id);
+                    }
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-bold rounded-xl transition-all duration-200 text-left border cursor-pointer ${
+                    isSelected
+                      ? 'bg-gradient-to-r from-zinc-800 to-zinc-900 text-white border-zinc-700 font-bold shadow-md'
+                      : 'text-zinc-400 bg-transparent border-transparent hover:bg-zinc-900/50 hover:text-white hover:border-zinc-800'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <IconComponent className={`w-4 h-4 flex-shrink-0 ${tab.color}`} />
+                    <span className="tracking-wide">{tab.label}</span>
+                  </div>
+                  <ChevronRightIcon active={isSelected} />
+                </button>
+              );
+            })}
           </nav>
         </div>
       ) : (
@@ -662,7 +673,7 @@ const MainAppContent: React.FC = () => {
                     {activeTab === 'revenue_analytics' && <BusinessOverviewAnalytics />}
                     {activeTab === 'staff_performance_analytics' && <ProductionModule activeSubTab="staff_performance" />}
                     {activeTab === 'dashboard' && currentRole === 'Business Owner' && <Dashboard />}
-                    {activeTab === 'sales' && (currentRole === 'Business Owner' || currentRole === 'Sales Team') && <SalesModule />}
+                    {activeTab === 'sales' && (currentRole === 'Business Owner' || currentRole === 'Sales Team') && <SalesModule activeSubTab={activeSalesSubTab} setActiveSubTab={setActiveSalesSubTab} />}
                     {activeTab === 'operations' && (currentRole === 'Business Owner' || currentRole === 'Operations Team') && (
                       <OperationsModule activeSubTab={activeOpSubTab} setActiveSubTab={setActiveOpSubTab} />
                     )}
