@@ -96,6 +96,15 @@ export const OperationsLeads: React.FC = () => {
   const [closingOrderId, setClosingOrderId] = useState<string | null>(null);
   const [serverPath, setServerPath] = useState('');
 
+  // Event Scheduling Modal State (Step 2)
+  const [schedulingOrderId, setSchedulingOrderId] = useState<string | null>(null);
+  const [scheduleEventForm, setScheduleEventForm] = useState({
+    event_date: '',
+    event_time: '',
+    reporting_time: '',
+    remarks: ''
+  });
+
   // Raw Footage Modal State
   const [receivingFootageOrderId, setReceivingFootageOrderId] = useState<string | null>(null);
   const [footageForm, setFootageForm] = useState({
@@ -103,6 +112,15 @@ export const OperationsLeads: React.FC = () => {
     storage_type: 'Google Drive',
     upload_notes: ''
   });
+  const [hardDiskReceived, setHardDiskReceived] = useState(false);
+  const [memoryCardReceived, setMemoryCardReceived] = useState(false);
+  const [footageHandoverStates, setFootageHandoverStates] = useState<Record<string, {
+    return_status: 'Returned' | 'Not Returned' | 'Damaged' | 'Missing';
+    returned_by: string;
+    return_date: string;
+    notes: string;
+  }>>({});
+
   const [paymentCollectionStatus, setPaymentCollectionStatus] = useState<'Full Payment Received' | 'Partial Payment Received' | 'Payment Pending'>('Payment Pending');
   const [additionalReceived, setAdditionalReceived] = useState<number>(0);
 
@@ -346,8 +364,12 @@ export const OperationsLeads: React.FC = () => {
     const droneOp = activeAssignments.find(a => a.staff_role.toLowerCase().includes('drone') || a.staff_role.toLowerCase().includes('aerial'))?.staff_name || '';
     const assistant = activeAssignments.find(a => a.staff_role.toLowerCase().includes('assistant'))?.staff_name || '';
     
+    const matchedOrder = orders.find(o => o.order_id === assigningOrderId);
+    const targetStage: CurrentStage = (matchedOrder?.current_stage === 'Order Confirmed' || matchedOrder?.current_stage === 'New Order Received' || matchedOrder?.current_stage === 'Operations Assigned' || !matchedOrder?.current_stage) 
+      ? 'Staff Assigned' 
+      : matchedOrder.current_stage;
+
     // Assign operations includes event_status and raw footage link if updated
-    // Note: requirements state that upon saving assignment, status becomes Event Scheduled and Stage becomes Event Scheduled
     assignOperations(assigningOrderId, {
       photographer_assigned: photographer || assignForm.photographer_assigned || 'Ramesh Kumar',
       videographer_assigned: videographer || assignForm.videographer_assigned || 'Rahul Verma',
@@ -356,18 +378,17 @@ export const OperationsLeads: React.FC = () => {
       equipment_kit: assignForm.equipment_kit,
       reporting_time: assignForm.reporting_time,
       remarks: assignForm.remarks,
-      event_status: 'Event Scheduled',
-      current_stage: 'Event Scheduled',
+      event_status: targetStage,
+      current_stage: targetStage,
       event_date: assignForm.event_date,
       event_time: assignForm.event_time
     });
 
-    const matchedOrder = orders.find(o => o.order_id === assigningOrderId);
     if (matchedOrder) {
       setSuccessModalData({
         orderId: assigningOrderId,
         customerName: matchedOrder.customer_name,
-        order: matchedOrder,
+        order: { ...matchedOrder, current_stage: targetStage },
         assignments: [...activeAssignments]
       });
     }
@@ -450,23 +471,9 @@ export const OperationsLeads: React.FC = () => {
   const handleConfirmCompletion = () => {
     if (!closingOrderId) return;
 
-    // Save handovers if any
-    const handoversToSave = (Object.entries(handoverStates) as [string, any][]).map(([equipName, details]) => ({
-      order_id: closingOrderId,
-      equipment_name: equipName,
-      return_status: details.return_status,
-      return_date: details.return_date,
-      returned_by: details.returned_by,
-      notes: details.notes
-    }));
-    
-    if (handoversToSave.length > 0) {
-      addEquipmentHandovers(handoversToSave);
-    }
-
     markEventCompleted(closingOrderId, serverPath);
     setClosingOrderId(null);
-    alert(`Shoot marked completed for [${closingOrderId}]! Equipment handover saved successfully.`);
+    alert(`Shoot marked completed for [${closingOrderId}]!`);
   };
 
   const stats = useMemo(() => {
@@ -883,9 +890,8 @@ export const OperationsLeads: React.FC = () => {
                             WhatsApp Staff
                           </button>
                         )}
-
-                        {/* Before Event Actions */}
-                        {canEdit && (currentStage === 'Order Confirmed') && (
+                        {/* Before Event Actions: Assign Staff */}
+                        {canEdit && (currentStage === 'Order Confirmed' || currentStage === 'New Order Received' || currentStage === 'Operations Assigned') && (
                           <button
                             onClick={() => startAssigning(ord)}
                             className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 font-mono font-bold text-[10px] border border-amber-500/30 rounded cursor-pointer transition-all uppercase"
@@ -894,32 +900,27 @@ export const OperationsLeads: React.FC = () => {
                           </button>
                         )}
 
-                        {/* Edit Assignment: stage Event Scheduled */}
-                        {canEdit && (currentStage === 'Event Scheduled') && (
+                        {/* Edit Assignment: visible in post-assignment stages if canEdit */}
+                        {canEdit && (currentStage === 'Staff Assigned' || currentStage === 'Event Scheduled') && (
                           <button
                             onClick={() => startAssigning(ord)}
-                            className="px-2 py-1 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 hover:text-sky-300 font-mono font-bold text-[10px] border border-sky-500/30 rounded cursor-pointer transition-all uppercase"
+                            className="px-2 py-1 bg-sky-505/10 hover:bg-sky-505/20 text-zinc-400 hover:text-zinc-300 font-mono text-[9px] border border-zinc-750 rounded cursor-pointer transition-all uppercase"
                           >
-                            Edit Assignment
+                             Roster
                           </button>
                         )}
 
-                        {/* Mark Event Scheduled Option: manual toggle if needed */}
-                        {canEdit && (currentStage === 'Order Confirmed') && (
+                        {/* Step 2 - Staff Assigned: Schedule Event */}
+                        {canEdit && (currentStage === 'Staff Assigned') && (
                           <button
                             onClick={() => {
-                              assignOperations(ord.order_id, {
-                                photographer_assigned: 'Ramesh Kumar',
-                                videographer_assigned: 'Rahul Verma',
-                                drone_operator_assigned: '',
-                                assistant_assigned: '',
-                                equipment_kit: '',
-                                reporting_time: '08:00',
-                                remarks: 'Auto scheduled via manual trigger',
-                                event_status: 'Event Scheduled',
-                                current_stage: 'Event Scheduled',
-                                event_date: ord.event_date || '2026-06-20',
-                                event_time: ord.event_time || '10:00 AM'
+                              setSchedulingOrderId(ord.order_id);
+                              const op = getOpDetails(ord.order_id);
+                              setScheduleEventForm({
+                                event_date: ord.event_date || '',
+                                event_time: ord.event_time || '',
+                                reporting_time: op?.reporting_time || '08:00',
+                                remarks: op?.remarks || ''
                               });
                             }}
                             className="px-2 py-1 bg-lime-500/10 hover:bg-lime-500/20 text-lime-400 border border-lime-500/20 rounded text-[10px] font-mono font-bold cursor-pointer transition-all uppercase"
@@ -928,17 +929,17 @@ export const OperationsLeads: React.FC = () => {
                           </button>
                         )}
 
-                        {/* After Event Action: Mark Event Completed */}
-                        {canEdit && (currentStage === 'Event Scheduled' || currentStage === 'Operations Assigned') && (
+                        {/* Step 3 - Event Scheduled: Mark Event Complete */}
+                        {canEdit && (currentStage === 'Event Scheduled') && (
                           <button
                             onClick={() => triggerCompletionModal(ord.order_id)}
                             className="px-2 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 font-mono font-bold text-[10px] rounded cursor-pointer transition-all uppercase"
                           >
-                            Mark Event Completed
+                            Mark Event Complete
                           </button>
                         )}
 
-                        {/* After Event Completed Action: Mark Raw Footage Received */}
+                        {/* Step 4 - Event Completed: Receive Raw Footage */}
                         {canEdit && (currentStage === 'Event Completed') && (
                           <button
                             onClick={() => {
@@ -949,6 +950,28 @@ export const OperationsLeads: React.FC = () => {
                                 storage_type: 'Google Drive',
                                 upload_notes: ''
                               });
+
+                              // Initialize footageHandoverStates for each assigned equipment item
+                              const op = getOpDetails(ord.order_id);
+                              const kits = op?.equipment_kit ? op.equipment_kit.split(',').map((sName: string) => sName.trim()).filter(Boolean) : [];
+                              const initialHandovers: Record<string, {
+                                return_status: 'Returned' | 'Not Returned' | 'Damaged' | 'Missing';
+                                returned_by: string;
+                                return_date: string;
+                                notes: string;
+                              }> = {};
+                              kits.forEach((k: string) => {
+                                initialHandovers[k] = {
+                                  return_status: 'Returned',
+                                  returned_by: currentUserName || 'Operations Team',
+                                  return_date: new Date().toISOString().split('T')[0],
+                                  notes: ''
+                                };
+                              });
+                              setFootageHandoverStates(initialHandovers);
+                              
+                              setHardDiskReceived(false);
+                              setMemoryCardReceived(false);
                               
                               const existingPay = payments?.find(p => p.order_id === ord.order_id);
                               if (existingPay) {
@@ -971,7 +994,7 @@ export const OperationsLeads: React.FC = () => {
                             }}
                             className="px-2 py-1 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-400 font-mono font-bold text-[10px] rounded cursor-pointer transition-all uppercase animate-pulse"
                           >
-                            Mark Raw Received
+                            Receive Raw Footage
                           </button>
                         )}
 
@@ -1416,92 +1439,6 @@ export const OperationsLeads: React.FC = () => {
               />
             </div>
 
-            {/* Equipment return handover tracking */}
-            {Object.keys(handoverStates).length > 0 && (
-              <div className="space-y-3 border-t border-zinc-800 pt-3 max-h-[250px] overflow-y-auto pr-1">
-                <h4 className="text-[11px] font-mono font-black uppercase text-amber-500 tracking-wider flex items-center gap-1.5">
-                  🤖 Equipment Handover Checklist
-                </h4>
-                <p className="text-[10px] text-zinc-500">
-                  Update the return logs and status for each kit assigned to this shoot.
-                </p>
-                <div className="space-y-3">
-                  {(Object.entries(handoverStates) as [string, any][]).map(([kitName, details]) => (
-                    <div key={kitName} className="bg-zinc-955 p-3 rounded-xl border border-zinc-850 space-y-2 text-xs">
-                      <div className="font-sans font-bold text-zinc-200 truncate flex items-center justify-between">
-                        <span>🛠️ {kitName}</span>
-                        <span className={`text-[10px] font-mono px-1.5 rounded ${
-                          details.return_status === 'Returned' ? 'bg-emerald-500/10 text-emerald-400' :
-                          details.return_status === 'Damaged' ? 'bg-rose-500/10 text-rose-450 border border-rose-500/20' :
-                          details.return_status === 'Missing' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/25' :
-                          'bg-zinc-800 text-zinc-400'
-                        }`}>
-                          {details.return_status}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div>
-                          <label className="block text-[9px] text-zinc-500 font-bold uppercase mb-1">Return Status</label>
-                          <select
-                            value={details.return_status}
-                            onChange={(e: any) => setHandoverStates(prev => ({
-                              ...prev,
-                              [kitName]: { ...prev[kitName], return_status: e.target.value }
-                            }))}
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-100 focus:border-amber-400 focus:outline-none"
-                          >
-                            <option value="Returned">Returned</option>
-                            <option value="Not Returned">Not Returned</option>
-                            <option value="Damaged">Damaged</option>
-                            <option value="Missing">Missing</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[9px] text-zinc-500 font-bold uppercase mb-1">Returned By</label>
-                          <input
-                            type="text"
-                            value={details.returned_by}
-                            onChange={(e: any) => setHandoverStates(prev => ({
-                              ...prev,
-                              [kitName]: { ...prev[kitName], returned_by: e.target.value }
-                            }))}
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-100 focus:border-amber-400 focus:outline-none"
-                          />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div>
-                          <label className="block text-[9px] text-zinc-500 font-bold uppercase mb-1">Return Date</label>
-                          <input
-                            type="date"
-                            value={details.return_date}
-                            onChange={(e: any) => setHandoverStates(prev => ({
-                              ...prev,
-                              [kitName]: { ...prev[kitName], return_date: e.target.value }
-                            }))}
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-100 font-mono"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[9px] text-zinc-500 font-bold uppercase mb-1">Notes / Remarks</label>
-                          <input
-                            type="text"
-                            placeholder="Lens cleaned, sensor checked..."
-                            value={details.notes}
-                            onChange={(e: any) => setHandoverStates(prev => ({
-                              ...prev,
-                              [kitName]: { ...prev[kitName], notes: e.target.value }
-                            }))}
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-100 placeholder-zinc-650"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
               <button
                 onClick={() => setClosingOrderId(null)}
@@ -1513,9 +1450,113 @@ export const OperationsLeads: React.FC = () => {
                 onClick={handleConfirmCompletion}
                 className="px-4 py-2 bg-gradient-to-r from-sky-600 to-blue-600 text-white font-semibold text-xs rounded-xl cursor-pointer"
               >
-                Ingest & Mark Shoot Completed
+                Mark Shoot Completed
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Event Scheduling Modal (Step 2) */}
+      {schedulingOrderId && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-805 rounded-2xl w-full max-w-sm shadow-2xl relative p-5 space-y-4">
+            <h3 className="text-sm font-bold text-sky-400 font-mono uppercase flex items-center gap-1.5 border-b border-zinc-800 pb-2">
+              <span>📅</span> Schedule Event ~ {schedulingOrderId}
+            </h3>
+            
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              try {
+                const op = getOpDetails(schedulingOrderId);
+                await assignOperations(schedulingOrderId, {
+                  photographer_assigned: op?.photographer_assigned || '',
+                  videographer_assigned: op?.videographer_assigned || '',
+                  drone_operator_assigned: op?.drone_operator_assigned || '',
+                  assistant_assigned: op?.assistant_assigned || '',
+                  equipment_kit: op?.equipment_kit || '',
+                  reporting_time: scheduleEventForm.reporting_time,
+                  remarks: scheduleEventForm.remarks || op?.remarks || '',
+                  event_date: scheduleEventForm.event_date,
+                  event_time: scheduleEventForm.event_time,
+                  event_status: 'Event Scheduled',
+                  current_stage: 'Event Scheduled'
+                });
+                setSchedulingOrderId(null);
+                alert(`Event successfully scheduled and locked!`);
+              } catch (err: any) {
+                alert(`Error scheduling event: ${err.message}`);
+              }
+            }} className="space-y-4 text-left">
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
+                  Event Date *
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={scheduleEventForm.event_date}
+                  onChange={(e) => setScheduleEventForm({ ...scheduleEventForm, event_date: e.target.value })}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
+                  Event Time *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 10:00 AM - 6:00 PM"
+                  value={scheduleEventForm.event_time}
+                  onChange={(e) => setScheduleEventForm({ ...scheduleEventForm, event_time: e.target.value })}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
+                  Reporting Time *
+                </label>
+                <input
+                  type="time"
+                  required
+                  value={scheduleEventForm.reporting_time}
+                  onChange={(e) => setScheduleEventForm({ ...scheduleEventForm, reporting_time: e.target.value })}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
+                  Notes / Site Instructions
+                </label>
+                <textarea
+                  value={scheduleEventForm.remarks}
+                  onChange={(e) => setScheduleEventForm({ ...scheduleEventForm, remarks: e.target.value })}
+                  placeholder="e.g. Traditional wedding wear, early arrival..."
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-100 font-sans"
+                  rows={2}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setSchedulingOrderId(null)}
+                  className="px-4 py-2 bg-zinc-800 text-zinc-300 text-xs rounded-xl cursor-pointer hover:bg-zinc-700 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs rounded-xl cursor-pointer"
+                >
+                  Save Schedule
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -1663,39 +1704,94 @@ Please report on time and update status through the portal.`;
       {/* Raw Footage Received Modal */}
       {receivingFootageOrderId && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-805 rounded-2xl w-full max-w-md shadow-2xl relative p-5 space-y-4">
+          <div className="bg-zinc-900 border border-zinc-805 rounded-2xl w-full max-w-lg shadow-2xl relative p-5 max-h-[90vh] overflow-y-auto space-y-4 scrollbar-thin">
             <h3 className="text-sm font-bold text-purple-400 font-mono uppercase flex items-center gap-1.5 border-b border-zinc-800 pb-2">
-              <span>💿</span> Mark Raw Footage Received
+              <span>💿</span> Receive Raw Footage
             </h3>
             <div className="text-[11px] text-zinc-400 leading-relaxed">
               Upon confirmation, this order transitions to **Raw Footage Received** and escalates automatically to the Production Dashboard.
             </div>
 
-            <form onSubmit={(e) => {
+            <form onSubmit={async (e) => {
               e.preventDefault();
+              
+              // Save equipment handovers/verifications to Supabase & state
+              const handoversToSave = (Object.entries(footageHandoverStates) as [string, any][]).map(([equipName, details]) => ({
+                order_id: receivingFootageOrderId,
+                equipment_name: equipName,
+                return_status: details.return_status,
+                return_date: details.return_date,
+                returned_by: details.returned_by,
+                notes: details.notes
+              }));
+              
+              if (handoversToSave.length > 0) {
+                await addEquipmentHandovers(handoversToSave);
+              }
+
+              // Combine physical storage states into the upload notes column
+              const hardDiskStr = hardDiskReceived ? 'YES' : 'NO';
+              const memoryCardStr = memoryCardReceived ? 'YES' : 'NO';
+              const compositeNotes = [
+                `Hard Disk Received: ${hardDiskStr}`,
+                `Memory Card Received: ${memoryCardStr}`,
+                footageForm.upload_notes ? `Notes: ${footageForm.upload_notes}` : null
+              ].filter(Boolean).join(' | ');
+
               confirmRawFootageReceived(
                 receivingFootageOrderId,
                 footageForm.footage_link,
                 footageForm.storage_type,
-                footageForm.upload_notes,
+                compositeNotes,
                 paymentCollectionStatus,
                 additionalReceived
               );
+              
               setReceivingFootageOrderId(null);
               setFootageForm({ footage_link: '', storage_type: 'Google Drive', upload_notes: '' });
-            }} className="space-y-3.5 text-left">
+              setHardDiskReceived(false);
+              setMemoryCardReceived(false);
+            }} className="space-y-4 text-left">
               <div>
                 <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
-                  Raw Footage Drive Link *
+                  Raw Footage Drive Link (Google Drive / cloud)
                 </label>
                 <input
                   type="url"
-                  required
                   value={footageForm.footage_link}
                   onChange={(e) => setFootageForm({ ...footageForm, footage_link: e.target.value })}
                   placeholder="e.g. https://drive.google.com/drive/folders/..."
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono placeholder:text-zinc-600"
                 />
+              </div>
+
+              {/* Physical Storage media checkboxes requested by user */}
+              <div className="grid grid-cols-2 gap-3 bg-zinc-950 p-3 rounded-xl border border-zinc-850">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={hardDiskReceived}
+                    onChange={(e) => setHardDiskReceived(e.target.checked)}
+                    className="w-4 h-4 rounded border-zinc-800 text-purple-600 focus:ring-purple-500 bg-zinc-900"
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-[11px] font-bold text-zinc-300">Hard Disk Received</span>
+                    <span className="text-[9px] text-zinc-500">Physical storage turned in</span>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={memoryCardReceived}
+                    onChange={(e) => setMemoryCardReceived(e.target.checked)}
+                    className="w-4 h-4 rounded border-zinc-800 text-purple-600 focus:ring-purple-500 bg-zinc-900"
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-[11px] font-bold text-zinc-300">Memory Card Received</span>
+                    <span className="text-[9px] text-zinc-500">Camera SD/CFexpress card returned</span>
+                  </div>
+                </label>
               </div>
 
               <div>
@@ -1728,6 +1824,59 @@ Please report on time and update status through the portal.`;
                   rows={2}
                 />
               </div>
+
+              {/* Equipment Handover/Verification section matching exact user request */}
+              {Object.keys(footageHandoverStates).length > 0 && (
+                <div className="space-y-3 border-t border-zinc-800 pt-3">
+                  <h4 className="text-[10px] font-mono font-bold uppercase text-purple-400 tracking-wider flex items-center gap-1.5">
+                    ⚙️ Equipment Verification
+                  </h4>
+                  <p className="text-[10px] text-zinc-500">
+                    Verify and select condition for all assigned equipment before saving raw footage.
+                  </p>
+                  <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
+                    {(Object.entries(footageHandoverStates) as [string, any][]).map(([kitName, details]) => (
+                      <div key={kitName} className="bg-zinc-955 p-2.5 rounded-xl border border-zinc-900 space-y-2">
+                        <div className="font-sans font-bold text-zinc-300 text-[11px] truncate flex items-center justify-between">
+                          <span>🛠️ {kitName}</span>
+                          <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
+                            details.return_status === 'Returned' ? 'bg-emerald-500/10 text-emerald-400' :
+                            details.return_status === 'Damaged' ? 'bg-rose-500/10 text-rose-450 border border-rose-500/20' :
+                            details.return_status === 'Missing' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/25' :
+                            'bg-zinc-800 text-zinc-200'
+                          }`}>
+                            {details.return_status}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {(['Returned', 'Missing', 'Damaged', 'Not Returned'] as const).map(statusOpt => (
+                            <button
+                              key={statusOpt}
+                              type="button"
+                              onClick={() => {
+                                setFootageHandoverStates(prev => ({
+                                  ...prev,
+                                  [kitName]: { ...prev[kitName], return_status: statusOpt }
+                                }));
+                              }}
+                              className={`py-1 text-[9px] rounded font-mono font-bold text-center border transition-all ${
+                                details.return_status === statusOpt
+                                  ? statusOpt === 'Returned' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 font-black'
+                                    : statusOpt === 'Damaged' ? 'bg-rose-500/10 border-rose-500/30 text-rose-450 font-black'
+                                    : statusOpt === 'Missing' ? 'bg-amber-500/10 border-amber-500/35 text-amber-400 font-black'
+                                    : 'bg-zinc-800 border-zinc-700 text-zinc-200 font-black'
+                                  : 'bg-zinc-905 border-zinc-850 text-zinc-500 hover:text-zinc-350'
+                              }`}
+                            >
+                              {statusOpt}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Popup Section: Payment Collection Status */}
               {(() => {
