@@ -275,31 +275,22 @@ const MainAppContent: React.FC = () => {
 
           <nav className="space-y-1.5">
             {[
-              { id: 'core_hub', label: 'Core Operations Hub', icon: Briefcase },
-              { id: 'package_catalogue', label: 'Package Catalogue', icon: Layers },
-              { id: 'equipment_management', label: 'Equipment Kits & Assemblies', icon: Camera },
+              { id: 'operations_leads', label: 'Operations Leads', icon: Briefcase },
+              { id: 'operations_calendar', label: 'Operations Calendar', icon: Calendar },
+              { id: 'equipment_management', label: 'Equipment Kits', icon: Camera },
               { id: 'operations_staff', label: 'Staff Directory', icon: Users },
               { id: 'event_scheduling', label: 'Event Reports', icon: Clock },
               { id: 'operations_notifications', label: 'Settings', icon: Bell }
             ].map((tab) => {
               const IconComponent = tab.icon;
-              const isCoreHub = tab.id === 'core_hub';
-              const isSelected = isCoreHub 
-                ? ['operations_leads', 'operations_calendar', 'operations_analytics', 'team_assignments'].includes(activeOpSubTab)
-                : activeOpSubTab === tab.id;
+              const isSelected = activeOpSubTab === tab.id;
               
               return (
                 <button
                   key={tab.id}
                   onClick={() => {
                     handleTabSelect('operations');
-                    if (isCoreHub) {
-                      if (!['operations_leads', 'operations_calendar', 'operations_analytics', 'team_assignments'].includes(activeOpSubTab)) {
-                        setActiveOpSubTab('operations_leads');
-                      }
-                    } else {
-                      setActiveOpSubTab(tab.id as any);
-                    }
+                    setActiveOpSubTab(tab.id as any);
                     if (window.innerWidth < 1024) {
                       setSidebarOpen(false);
                     }
@@ -371,7 +362,7 @@ const MainAppContent: React.FC = () => {
               { id: 'analytics', label: 'Studio Analytics', icon: BarChart3 }
             ].filter(tab => {
               if (currentRole === 'Production Team') {
-                return ['production_leads', 'crew_roster', 'staff_performance', 'analytics'].includes(tab.id);
+                return ['production_leads', 'production_calendar', 'crew_roster', 'staff_performance', 'analytics'].includes(tab.id);
               }
               return true;
             }).map((tab) => {
@@ -551,18 +542,18 @@ const MainAppContent: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-[#030303] text-zinc-100 flex flex-col font-sans antialiased pb-12">
+    <div className="min-h-screen bg-[#030303] text-zinc-100 flex flex-col font-sans antialiased">
       
       {/* Platform Header with collapsible controller */}
       <RoleSwitcher sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
       {/* Main Container */}
-      <div className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-5 md:p-6 lg:p-8 flex flex-col lg:flex-row gap-6 relative">
+      <div className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-3 md:p-4 lg:p-4 flex flex-col lg:flex-row gap-4 relative">
         
         {/* DESKTOP SIDEBAR PANEL */}
         {sidebarOpen && (
           <div className="hidden lg:block w-64 flex-shrink-0 transition-all duration-300">
-            <div className="sticky top-24">
+            <div className="sticky top-20">
               {renderSidebarContent()}
             </div>
           </div>
@@ -570,7 +561,7 @@ const MainAppContent: React.FC = () => {
 
         {/* MOBILE & TABLET SLIDE-OUT DRAWER */}
         <div 
-          className={`fixed inset-y-0 left-0 h-full z-50 bg-[#060608]/95 border-r border-zinc-900 shadow-2xl flex flex-col p-5 overflow-y-auto duration-300 ease-in-out transition-all lg:hidden ${
+          className={`fixed inset-y-0 left-0 h-full z-50 bg-[#060608]/95 border-r border-zinc-900 shadow-2xl flex flex-col p-4 overflow-y-auto duration-300 ease-in-out transition-all lg:hidden ${
             sidebarOpen 
               ? 'translate-x-0 w-full sm:w-[320px]' 
               : '-translate-x-full w-full sm:w-[320px]'
@@ -588,7 +579,7 @@ const MainAppContent: React.FC = () => {
         )}
 
         {/* Right Side: Active Workspace panel */}
-        <main className="flex-1 min-w-0 flex flex-col gap-5">
+        <main className="flex-1 min-w-0 flex flex-col gap-4">
 
           {/* Dashboard Header - Global Filter Section */}
           {['sales_analytics', 'operations_analytics', 'production_analytics', 'business_overview_analytics'].includes(activeTab) && (

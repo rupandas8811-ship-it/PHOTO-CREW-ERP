@@ -116,7 +116,7 @@ export const Dashboard: React.FC = () => {
     <div id="ceo_dashboard" className="space-y-6">
       
       {/* Cinematic Studio Header */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-6 sm:p-8 rounded-2xl border border-zinc-800/80 shadow-2xl">
+      <div className="relative overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-4 sm:p-5 rounded-2xl border border-zinc-800/80 shadow-2xl">
         <div className="absolute top-0 right-0 w-[400px] h-[400px] rounded-full bg-amber-500/[0.04] blur-[80px] pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[300px] h-[300px] rounded-full bg-violet-600/[0.03] blur-[100px] pointer-events-none" />
         
@@ -697,7 +697,7 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      <div className="mt-8">
+      <div className="mt-6">
         <BusinessOwnerCalendar />
       </div>
 

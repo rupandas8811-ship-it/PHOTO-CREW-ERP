@@ -5038,13 +5038,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         Team Assignment Rosters *
                       </span>
                       {assignmentRows.map((row, index) => {
-                        const matchingStaff = staff.filter(s => {
-                          const isActive = s.status === 'Active';
-                          const specLower = (s.production_role_speciality || '').toLowerCase();
-                          const roleLower = (s.role || '').toLowerCase();
-                          const rSpecLower = (row.speciality || '').toLowerCase();
-                          return isActive && rSpecLower && (specLower === rSpecLower || roleLower === rSpecLower);
-                        });
+                        const activeStaff = staff.filter(s => s.status === 'Active');
 
                         return (
                           <div 
@@ -5098,13 +5092,17 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 className="w-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 rounded-xl px-2.5 h-9 cursor-pointer font-mono disabled:opacity-30 disabled:cursor-not-allowed focus:outline-[#7c3aed]"
                               >
                                 <option value="">
-                                  {row.speciality ? '-- Select Matching Staff --' : 'Choose speciality first'}
+                                  {row.speciality ? '-- Select Staff --' : 'Choose speciality first'}
                                 </option>
-                                {matchingStaff.map(s => {
+                                {activeStaff.map(s => {
+                                  const specLower = (s.production_role_speciality || '').toLowerCase();
+                                  const roleLower = (s.role || '').toLowerCase();
+                                  const rSpecLower = (row.speciality || '').toLowerCase();
+                                  const isMatch = rSpecLower && (specLower === rSpecLower || roleLower === rSpecLower);
                                   const wl = getStaffWorkload(s.name);
                                   return (
                                     <option key={s.staff_id} value={`${s.staff_id}|${s.name}`}>
-                                      {s.name} ({wl.activeCount} Active Jobs)
+                                      {isMatch ? '★ ' : ''}{s.name} ({wl.activeCount} Active Jobs)
                                     </option>
                                   );
                                 })}

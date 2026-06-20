@@ -980,33 +980,14 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log(`[pushUpdate START] table: ${table}, match: ${matchColumn}=${matchValue}`, sanitized);
 
       // --- CONSTRAINT BYPASS LOGIC ---
-      // Fix for "Staff Assigned", "Event Scheduled" check constraint failures
       if (table === 'leads') {
         if (sanitized.status) {
           sanitized.current_status = sanitized.status;
-          const allowedLeadStatuses = [
-            'New Lead', 'Follow Up', 'Quotation Sent', 'Negotiation', 'Order Confirmed', 
-            'Operations Assigned', 'Event Completed', 'Raw Footage Received', 'Editor Assigned',
-            'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Client Review Sent', 
-            'Customer Review', 'Revision Required', 'Revision In Progress', 'Final Approval', 
-            'Approved', 'Project Delivered', 'Delivered', 
-            'Payment Pending', 'Project Closed', 'Closed'
-          ];
-          if (!allowedLeadStatuses.includes(sanitized.status)) {
-            delete sanitized.status; // Drop the field so constraint passes, 'current_status' keeps tracking
-          }
+          // We will attempt to update both. If it fails with constraint error, we will retry with only current_status.
         }
       } else if (table === 'orders') {
         if (sanitized.current_stage) {
-          const allowedOrderStages = [
-            'New Lead', 'Follow Up', 'Quotation Sent', 'Negotiation', 'Order Confirmed', 
-            'Operations Assigned', 'Event Scheduled', 'Event Completed', 'Raw Footage Received', 
-            'Editing Started', 'Customer Review', 'Approved', 'Delivered', 
-            'Payment Pending', 'Closed'
-          ];
-          if (!allowedOrderStages.includes(sanitized.current_stage)) {
-            delete sanitized.current_stage;
-          }
+          sanitized.order_status = ['Closed', 'Delivered', 'Paid'].includes(sanitized.current_stage) ? sanitized.current_stage : 'Confirmed';
         }
       } else if (table === 'production') {
         if (sanitized.editing_status) {
@@ -1021,7 +1002,16 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // -------------------------------
       
       console.log(`[pushUpdate EXECUTING] on ${table}:`, sanitized);
-      const { error, data } = await supabaseClient.from(table).update(sanitized).eq(matchColumn, matchValue).select();
+      let { error, data } = await supabaseClient.from(table).update(sanitized).eq(matchColumn, matchValue).select();
+      
+      // Automatic fallback for leads check constraint
+      if (error && table === 'leads' && error.message.includes('leads_status_check') && sanitized.status) {
+         console.warn(`[pushUpdate FALLBACK] leads_status_check violated for status: ${sanitized.status}. Stripping status and retrying with current_status only...`);
+         delete sanitized.status;
+         const fallback = await supabaseClient.from(table).update(sanitized).eq(matchColumn, matchValue).select();
+         error = fallback.error;
+         data = fallback.data;
+      }
       if (error) {
         console.error(`[pushUpdate ERROR] in ${table}:`, error);
         updateDiagnosticMetric('update', 'fail', error.message);

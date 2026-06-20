@@ -30,7 +30,16 @@ export const OperationsLeads: React.FC = () => {
   const canEdit = currentRole === 'Operations Team' || currentRole === 'Business Owner';
 
   // Anchor date June 15, 2026
-  const todayStr = "2026-06-15";
+  const systemToday = new Date();
+  
+  const getLocalDateStr = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
+  const todayStr = getLocalDateStr(systemToday);
 
   // Search/Filter states
   const [searchTerm, setSearchTerm] = useState('');
@@ -140,7 +149,7 @@ export const OperationsLeads: React.FC = () => {
     const itemDate = new Date(normStr);
     itemDate.setHours(0, 0, 0, 0);
 
-    const today = new Date(todayStr); // anchor at 2026-06-15
+    const today = systemToday;
     today.setHours(0, 0, 0, 0);
 
     const tomorrow = new Date(today);

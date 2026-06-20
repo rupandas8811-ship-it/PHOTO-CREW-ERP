@@ -235,34 +235,7 @@ export const OperationsModule: React.FC<OperationsModuleProps> = ({
           </div>
         </div>
 
-        {/* 4 Main Tabs rendered horizontally on top of viewport */}
-        {isCoreTab && setActiveSubTab && (
-          <div className="bg-zinc-950/40 p-1.5 rounded-xl border border-zinc-900 flex flex-wrap gap-1.5">
-            {[
-              { id: 'operations_leads', label: '1. Operations Leads', icon: Sparkles },
-              { id: 'operations_calendar', label: '2. Operations Calendar', icon: Calendar },
-              { id: 'operations_analytics', label: '3. Operations Analytics', icon: BarChart3 },
-              { id: 'team_assignments', label: '4. Staff Assignment', icon: Shield }
-            ].map((tab) => {
-              const isSelected = activeSubTab === tab.id;
-              const TabIcon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveSubTab(tab.id as any)}
-                  className={`flex items-center gap-2 px-4 py-2 text-xs font-mono uppercase tracking-wider font-extrabold rounded-lg transition-all cursor-pointer border ${
-                    isSelected
-                      ? 'bg-gradient-to-r from-amber-500/10 to-orange-500/10 text-amber-400 border-amber-500/30 font-bold shadow-[0_0_12px_rgba(245,158,11,0.05)]'
-                      : 'text-zinc-500 bg-transparent border-transparent hover:bg-zinc-900/40 hover:text-white hover:border-zinc-800'
-                  }`}
-                >
-                  <TabIcon className={`w-3.5 h-3.5 ${isSelected ? 'text-amber-405' : 'text-zinc-500'}`} />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+        {/* Top level sub-tabs removed as functionality exists elsewhere */}
       </div>
 
       {/* Render sub-modules based on selection state */}

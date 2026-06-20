@@ -25,7 +25,7 @@ import {
 import { formatINR, formatTime12Hour } from '../utils';
 
 interface UnifiedCalendarProps {
-  role: 'sales' | 'operations' | 'production' | 'owner';
+  role: 'sales' | 'operations' | 'production' | 'owner' | 'worker';
 }
 
 export interface CalendarEvent {
@@ -94,9 +94,20 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
     staffAssignments
   } = useRole();
 
+  const systemToday = new Date();
+  
+  const getLocalDateStr = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
+  const systemTodayStr = getLocalDateStr(systemToday);
+
   // Anchor and navigate state
-  const [currentDate, setCurrentDate] = useState<Date>(new Date("2026-06-15"));
-  const [selectedDate, setSelectedDate] = useState<string | null>("2026-06-15");
+  const [currentDate, setCurrentDate] = useState<Date>(systemToday);
+  const [selectedDate, setSelectedDate] = useState<string | null>(systemTodayStr);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   
   // Tab states
@@ -112,7 +123,11 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   const [newMemoTitle, setNewMemoTitle] = useState('');
   const [newMemoMessage, setNewMemoMessage] = useState('');
   
-  const todayStr = "2026-06-15"; // Anchor date for relative analysis
+  const todayStr = systemTodayStr; // Anchor date for relative analysis
+
+  const tomorrowDate = new Date(systemToday);
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  const tomorrowStr = getLocalDateStr(tomorrowDate);
 
   // Highlight Mapper to map status/class to custom color themes
   const getEventHighlights = (ev: CalendarEvent) => {
@@ -145,7 +160,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
     }
 
     // Event Tomorrow = Orange
-    if (dateStr === "2026-06-16") {
+    if (dateStr === tomorrowStr) {
       return {
         name: 'Event Tomorrow',
         bg: 'bg-orange-500/10 border-orange-500/30 text-orange-400',
@@ -224,7 +239,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
       const dateStr = o.event_date;
 
       // 1. Tomorrow's Events: Notification of "1 Day Before Event"
-      if (dateStr === "2026-06-16" && !isCompleted) {
+      if (dateStr === tomorrowStr && !isCompleted) {
         const key = `${orderId}_1_day_before`;
         if (!existingNotifKeys.has(key)) {
           addNotification({
@@ -475,8 +490,9 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   const roleFilteredEvents = useMemo(() => {
     return allEvents.filter(ev => {
       if (role === 'sales') {
-        // Sales focuses on Lead phases, booking phases, and general memos
-        return ev.sourceType === 'lead' || ev.sourceType === 'order' || ev.sourceType === 'memo';
+        // Sales focuses on Scheduled events
+        if (ev.sourceType === 'order' && ev.currentStage === 'Event Scheduled') return true;
+        return false;
       }
       if (role === 'operations') {
         // Operations calendar strictly shows ONLY events with 'Event Scheduled' status
@@ -484,9 +500,16 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
       }
       if (role === 'production') {
         // Production focuses on post processing, start phases, targets, editing statuses
-        return ev.sourceType === 'production' || ev.sourceType === 'memo';
+        return ev.sourceType === 'production';
       }
-      // Owner gets EVERYTHING
+      if (role === 'worker') {
+        // Worker only sees order and operations
+        return ev.sourceType === 'order' && ev.currentStage === 'Event Scheduled';
+      }
+      if (role === 'owner') {
+        // Owner only sees Scheduled Events
+        return ev.sourceType === 'order' && ev.currentStage === 'Event Scheduled';
+      }
       return true;
     });
   }, [allEvents, role]);
@@ -556,9 +579,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   };
 
   const handleSetToday = () => {
-    const d = new Date("2026-06-15");
-    setCurrentDate(d);
-    setSelectedDate("2026-06-15");
+    setCurrentDate(systemToday);
+    setSelectedDate(systemTodayStr);
   };
 
   // Month Grid Days
@@ -722,11 +744,12 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
     const todayEvents = roleFilteredEvents.filter(e => e.date === todayStr);
 
     // 2. Tomorrow's Events
-    const tomorrowStr = "2026-06-16";
     const tomorrowEvents = roleFilteredEvents.filter(e => e.date === tomorrowStr);
 
-    // 3. Upcoming Events (within 2026-06-15 to 2026-06-22)
-    const sevenDaysLater = "2026-06-22";
+    // 3. Upcoming Events (7 days window)
+    const sevenDaysDate = new Date(systemToday);
+    sevenDaysDate.setDate(sevenDaysDate.getDate() + 7);
+    const sevenDaysLater = getLocalDateStr(sevenDaysDate);
     const upcomingEvents = roleFilteredEvents.filter(e => e.date >= todayStr && e.date <= sevenDaysLater);
 
     // 4. Overdue Tasks
@@ -924,7 +947,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
             })}
             <button
               onClick={() => {
-                setSelectedDate("2026-06-15");
+                setSelectedDate(todayStr);
                 setCalendarView('day');
               }}
               className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-black text-[11px] rounded-lg transition-all shadow-md active:scale-95 cursor-pointer"
@@ -963,7 +986,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
         {/* Events Tomorrow */}
         <div 
           onClick={() => {
-            setSelectedDate("2026-06-16");
+            setSelectedDate(tomorrowStr);
             setCalendarView('day');
           }}
           className="bg-zinc-950/30 border border-zinc-900 p-3.5 rounded-xl flex flex-col justify-between hover:border-orange-500/30 hover:bg-orange-950/5 transition-all group cursor-pointer"
@@ -1140,7 +1163,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                   const evs = filteredEvents.filter(ev => ev.date === cell.dateString);
                   const isSelected = selectedDate === cell.dateString;
                   const isTodayStr = cell.dateString === todayStr;
-                  const isTomorrowStr = cell.dateString === "2026-06-16";
+                  const isTomorrowStr = cell.dateString === tomorrowStr;
 
                   // Check if there are events on this date
                   const hasEvents = evs.length > 0;
@@ -1763,6 +1786,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
               </div>
 
               {/* Right Details Block - Operations & Production allocation parameters */}
+              {role !== 'sales' && (
               <div className="space-y-3.5 bg-zinc-950/20 border border-zinc-850 p-4 rounded-xl">
                 <h4 className="text-[10px] font-mono uppercase text-zinc-450 tracking-wider border-b border-zinc-850 pb-1.5 flex items-center gap-1">
                   <Briefcase className="w-3.5 h-3.5 text-zinc-500" />
@@ -1813,7 +1837,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                   )}
 
                   {/* Editors Assignments (Post Production Track) */}
-                  {selectedEvent.editor && (
+                  {role !== 'worker' && selectedEvent.editor && (
                     <>
                       <span className="text-zinc-500 flex items-center gap-1">
                         <Video className="w-3 h-3 text-zinc-650" />
@@ -1823,7 +1847,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                     </>
                   )}
 
-                  {selectedEvent.editingStatus && (
+                  {role !== 'worker' && selectedEvent.editingStatus && (
                     <>
                       <span className="text-zinc-500">VFX Status</span>
                       <span className="col-span-2 px-2 py-0.5 bg-zinc-950 rounded border border-zinc-800 text-zinc-300 self-start">
@@ -1832,7 +1856,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                     </>
                   )}
 
-                  {selectedEvent.expectedDeliveryDate && (
+                  {role !== 'worker' && selectedEvent.expectedDeliveryDate && (
                     <>
                       <span className="text-zinc-500">Target ETA</span>
                       <span className="col-span-2 text-pink-400 font-bold">{selectedEvent.expectedDeliveryDate}</span>
@@ -1840,13 +1864,14 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                   )}
 
                   {/* Default fallback if nothing allocated */}
-                  {!selectedEvent.photographer && !selectedEvent.editor && (
+                  {!selectedEvent.photographer && (!selectedEvent.editor || role === 'worker') && (
                     <div className="col-span-3 text-center py-6 text-zinc-650 italic">
                       Awaiting squad dispatch roster values
                     </div>
                   )}
                 </div>
               </div>
+              )}
 
             </div>
 

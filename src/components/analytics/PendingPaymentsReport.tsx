@@ -20,13 +20,19 @@ import { jsPDF } from 'jspdf';
 import { motion, AnimatePresence } from 'motion/react';
 
 export const PendingPaymentsReport: React.FC = () => {
-  const { leads, orders, payments, currentUserName } = useRole();
+  const { leads, orders, payments, currentUserName, recordPayment } = useRole();
 
   // Search and Filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [searchOrderId, setSearchOrderId] = useState('');
   const [eventTypeFilter, setEventTypeFilter] = useState('All');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('All');
+
+  // Modal State for Payment Update
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentModalRecord, setPaymentModalRecord] = useState<any>(null);
+  const [paymentAmount, setPaymentAmount] = useState<number | ''>('');
+  const [paymentNotes, setPaymentNotes] = useState('');
   
   // Start date default: 3 months ago to 1 year ahead
   const defaultStartDate = useMemo(() => {
@@ -688,12 +694,13 @@ export const PendingPaymentsReport: React.FC = () => {
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Payment Status</th>
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Project Status</th>
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Last Updated</th>
+                <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-12 text-zinc-500 font-medium">
+                  <td colSpan={11} className="text-center py-12 text-zinc-500 font-medium">
                     <AlertTriangle className="w-8 h-8 text-zinc-750 mx-auto mb-2" />
                     <span>No pending payments fit the selected parameters.</span>
                   </td>
@@ -769,6 +776,21 @@ export const PendingPaymentsReport: React.FC = () => {
                     <td className="px-4 py-4 text-xs text-zinc-500 text-center font-mono">
                       {new Date(rec.lastUpdatedDate).toLocaleDateString('en-IN')}
                     </td>
+                    
+                    {/* Actions */}
+                    <td className="px-4 py-4 text-xs text-right">
+                      <button 
+                        onClick={() => {
+                          setPaymentModalRecord(rec);
+                          setPaymentAmount(rec.remainingAmount);
+                          setPaymentNotes('');
+                          setShowPaymentModal(true);
+                        }}
+                        className="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/20 text-emerald-400 rounded transition font-bold text-[10px] uppercase tracking-wider whitespace-nowrap"
+                      >
+                        Update
+                      </button>
+                    </td>
 
                   </tr>
                 ))
@@ -777,6 +799,87 @@ export const PendingPaymentsReport: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {showPaymentModal && paymentModalRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden"
+          >
+            <div className="flex justify-between items-center p-4 border-b border-zinc-850">
+              <div>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-emerald-500" />
+                  Update Payment
+                </h3>
+                <p className="text-[10px] text-zinc-400 mt-1 uppercase font-mono tracking-widest">
+                  Order: {paymentModalRecord.orderId}
+                </p>
+              </div>
+              <button 
+                onClick={() => setShowPaymentModal(false)}
+                className="p-1 px-2 hover:bg-zinc-900 rounded text-zinc-400 uppercase font-mono text-[10px]"
+              >
+                Cancel
+              </button>
+            </div>
+            
+            <div className="p-5 space-y-4">
+              <div className="p-3 bg-zinc-900 rounded-lg flex justify-between items-center border border-zinc-850">
+                <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Remaining Balance</span>
+                <span className="text-sm font-black text-rose-450 font-mono">
+                  {formatPercentageOrINR(paymentModalRecord.remainingAmount)}
+                </span>
+              </div>
+              
+              <div className="space-y-1">
+                <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Amount Received (₹)</label>
+                <input
+                  type="number"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 font-mono font-bold"
+                  placeholder="0.00"
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">Leave as remaining balance to mark Fully Paid</p>
+              </div>
+              
+              <div className="space-y-1">
+                <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Payment Notes (Optional)</label>
+                <textarea
+                  value={paymentNotes}
+                  onChange={(e) => setPaymentNotes(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 min-h-[60px]"
+                  placeholder="e.g. Bank transfer reference number..."
+                />
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-zinc-850 bg-zinc-900/50 flex gap-3">
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="flex-1 py-2 rounded-xl text-xs font-bold text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-750 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const amt = Number(paymentAmount);
+                  if (amt > 0) {
+                    recordPayment(paymentModalRecord.orderId, amt, new Date().toISOString().split('T')[0], paymentNotes);
+                    setShowPaymentModal(false);
+                  }
+                }}
+                disabled={!paymentAmount || Number(paymentAmount) <= 0}
+                className="flex-1 py-2 rounded-xl text-xs font-bold text-zinc-950 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition uppercase tracking-wider"
+              >
+                Save Payment
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
     </div>
   );
