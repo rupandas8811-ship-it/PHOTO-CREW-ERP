@@ -947,7 +947,174 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     localStorage.setItem('erp_role', currentRole);
     localStorage.setItem('erp_user_name', currentUserName);
+    console.log("[CACHE SYNC EVENT] Stored current role and username");
   }, [currentRole, currentUserName]);
+
+  const augmentedOrders = useMemo(() => {
+    // Post-sales stages that should produce active orders
+    const postSalesStages = [
+      'New Order Received', 'Order Confirmed', 'Operations Assigned', 'Event Scheduled', 'Staff Assigned', 'Event Completed', 'Raw Footage Received',
+      'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress', 'Final Approval', 'Project Delivered', 'Project Closed',
+      'Customer Review', 'Approved', 'Delivered', 'Payment Pending', 'Closed'
+    ];
+    
+    // Start with existing booked/restored orders from DB
+    const list = [...orders];
+    
+    // For every lead, ensure a mapped order exists if the lead is confirmed
+    leads.forEach(ld => {
+      if (postSalesStages.includes(ld.status)) {
+        const orderExists = list.some(o => o.lead_id === ld.lead_id || o.order_id === ld.lead_id);
+        if (!orderExists) {
+          const ordId = `ORD-${ld.lead_id.replace(/\D/g, '') || ld.lead_id}`;
+          list.push({
+            order_id: ordId,
+            lead_id: ld.lead_id,
+            customer_name: ld.customer_name,
+            mobile: ld.mobile,
+            event_type: ld.event_type,
+            event_date: ld.event_date,
+            event_time: ld.event_time,
+            reporting_time: ld.reporting_time || '08:00',
+            event_location: ld.event_location,
+            package_name: 'Custom Shoot Package',
+            quotation_amount: ld.budget || 0,
+            advance_received: 0,
+            balance_amount: ld.budget || 0,
+            order_status: 'Confirmed',
+            current_stage: ld.status,
+            sales_person: ld.sales_person || ld.created_by || 'Sales Team',
+            created_at: ld.updated_at || new Date().toISOString()
+          });
+        }
+      }
+    });
+
+    // Make sure we override fields so that the leads table remains the single source of truth for status, dates, etc.
+    return list.map(o => {
+      const parentLead = leads.find(l => l.lead_id === o.lead_id);
+      if (parentLead) {
+        return {
+          ...o,
+          current_stage: parentLead.status,
+          customer_name: parentLead.customer_name,
+          mobile: parentLead.mobile,
+          event_type: parentLead.event_type,
+          event_date: parentLead.event_date,
+          event_time: parentLead.event_time,
+          reporting_time: parentLead.reporting_time || o.reporting_time,
+          event_location: parentLead.event_location,
+          quotation_amount: o.quotation_amount || parentLead.budget || 0
+        };
+      }
+      return o;
+    });
+  }, [orders, leads]);
+
+  const augmentedOperations = useMemo(() => {
+    const list = [...operations];
+    augmentedOrders.forEach(o => {
+      const opExists = list.some(op => op.order_id === o.order_id);
+      if (!opExists) {
+        list.push({
+          operation_id: `OP-${o.order_id}`,
+          order_id: o.order_id,
+          photographer_assigned: 'Unassigned',
+          videographer_assigned: 'Unassigned',
+          drone_operator_assigned: 'Unassigned',
+          assistant_assigned: 'Unassigned',
+          equipment_kit: '',
+          reporting_time: o.reporting_time || '08:00',
+          event_status: o.current_stage,
+          updated_by: 'System'
+        });
+      }
+    });
+    return list.map(op => {
+      const ord = augmentedOrders.find(o => o.order_id === op.order_id);
+      if (ord) {
+        return {
+          ...op,
+          event_status: ord.current_stage,
+          reporting_time: ord.reporting_time || op.reporting_time
+        };
+      }
+      return op;
+    });
+  }, [operations, augmentedOrders]);
+
+  const augmentedProduction = useMemo(() => {
+    const list = [...production];
+    augmentedOrders.forEach(o => {
+      const prodExists = list.some(p => p.tracking_id === o.order_id || p.tracking_id === o.lead_id);
+      if (!prodExists) {
+        const defaultTargetDate = o.event_date ? new Date(new Date(o.event_date).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : '';
+        list.push({
+          production_id: `PRD-${o.lead_id}`,
+          tracking_id: o.order_id,
+          editor_assigned: 'Unassigned',
+          raw_footage_location: '',
+          editing_status: o.current_stage as any,
+          remarks: '',
+          project_priority: 'Medium',
+          target_delivery_date: defaultTargetDate,
+          expected_delivery_date: defaultTargetDate
+        });
+      }
+    });
+    return list.map(p => {
+      const ord = augmentedOrders.find(o => o.order_id === p.tracking_id || o.lead_id === p.tracking_id);
+      const parentLead = leads.find(l => l.lead_id === p.tracking_id || (ord && l.lead_id === ord.lead_id));
+      const leadStatus = parentLead?.current_status || parentLead?.status;
+      if (leadStatus) {
+        return {
+          ...p,
+          editing_status: leadStatus as any
+        };
+      }
+      if (ord) {
+        return {
+          ...p,
+          editing_status: ord.current_stage as any
+        };
+      }
+      return p;
+    });
+  }, [production, augmentedOrders, leads]);
+
+  const augmentedPayments = useMemo(() => {
+    const list = [...payments];
+    augmentedOrders.forEach(o => {
+      const payExists = list.some(p => p.order_id === o.order_id);
+      if (!payExists) {
+        list.push({
+          payment_id: `PAY-${o.order_id}`,
+          order_id: o.order_id,
+          quotation_amount: o.quotation_amount,
+          advance_received: o.advance_received || 0,
+          final_payment_received: 0,
+          balance_due: o.balance_amount || o.quotation_amount,
+          payment_status: 'Pending'
+        });
+      }
+    });
+    return list.map(p => {
+      const ord = augmentedOrders.find(o => o.order_id === p.order_id);
+      if (ord) {
+        const adv = ord.advance_received || 0;
+        const totalPaid = adv + (p.final_payment_received || 0);
+        const bal = ord.quotation_amount - totalPaid;
+        return {
+          ...p,
+          quotation_amount: ord.quotation_amount,
+          advance_received: adv,
+          balance_due: bal >= 0 ? bal : 0,
+          payment_status: totalPaid >= ord.quotation_amount ? 'Fully Paid' : (totalPaid > 0 ? 'Partially Paid' : 'Pending') as any
+        };
+      }
+      return p;
+    });
+  }, [payments, augmentedOrders]);
 
   // Helper to strip non-database properties like customer_id before saving to Supabase
   const stripClientOnlyFields = (record: any) => {
@@ -1668,7 +1835,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (prod.editing_status === 'Delivered') continue;
 
       const rf = rawFootage.find((f) => f.tracking_id === prod.tracking_id);
-      const linkedOrder = rf ? orders.find((o) => o.order_id === rf.order_id) : undefined;
+      const linkedOrder = rf ? augmentedOrders.find((o) => o.order_id === rf.order_id) : undefined;
       const orderName = linkedOrder?.package_name || 'Project';
       const oId = linkedOrder?.order_id || '';
 
@@ -2186,7 +2353,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updated_by: currentUserName,
     };
 
-    const targetOrder = orders.find((o) => o.order_id === orderId);
+    const targetOrder = augmentedOrders.find((o) => o.order_id === orderId);
     const previousStage = targetOrder ? targetOrder.current_stage : 'Order Confirmed';
 
     // Update order & lead stage, and event_date / event_time
@@ -2299,8 +2466,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Create notifications for assigned staff
     newAssignments.forEach((a) => {
-      const ord = orders.find((o) => o.order_id === orderId);
-      const op = operations.find((o) => o.order_id === orderId);
+      const ord = augmentedOrders.find((o) => o.order_id === orderId);
+      const op = augmentedOperations.find((o) => o.order_id === orderId);
       const customerName = ord?.customer_name || 'Valued Client';
       const eventType = ord?.event_type || 'Event';
       const eventDate = ord?.event_date || 'N/A';
@@ -2399,7 +2566,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       remarks: 'Raw footage uploaded. Awaiting editor assignment.',
     };
 
-    const targetOrder = orders.find((o) => o.order_id === orderId);
+    const targetOrder = augmentedOrders.find((o) => o.order_id === orderId);
     const previousStage = targetOrder ? targetOrder.current_stage : 'Event Scheduled';
 
     // Update Operations status to completed
@@ -2447,12 +2614,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     // De-mock production ID if it is PRD-lead_id
     const inferredTrackingId = productionId.startsWith('PRD-') ? productionId.replace('PRD-', '') : productionId;
-    let targetProd = production.find((p) => p.production_id === productionId || p.tracking_id === inferredTrackingId);
+    let targetProd = augmentedProduction.find((p) => p.production_id === productionId || p.tracking_id === inferredTrackingId);
     
     let previousStage: CurrentStage = 'Raw Footage Received';
     if (targetProd) {
       const rf = rawFootage.find((f) => f.tracking_id === targetProd.tracking_id);
-      const linkedOrder = rf ? orders.find((o) => o.order_id === rf.order_id) : undefined;
+      const linkedOrder = rf ? augmentedOrders.find((o) => o.order_id === rf.order_id) : undefined;
       if (linkedOrder) {
         previousStage = linkedOrder.current_stage;
       }
@@ -2562,11 +2729,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     // Find linked order using all possible connections
-    let tgtOrder = orders.find(o => o.order_id === inferredTrackingId || o.lead_id === inferredTrackingId);
+    let tgtOrder = augmentedOrders.find(o => o.order_id === inferredTrackingId || o.lead_id === inferredTrackingId);
     if (!tgtOrder) {
       const rf = rawFootage.find(f => f.tracking_id === inferredTrackingId || f.order_id === inferredTrackingId);
       if (rf) {
-        tgtOrder = orders.find(o => o.order_id === rf.order_id);
+        tgtOrder = augmentedOrders.find(o => o.order_id === rf.order_id);
       }
     }
 
@@ -2643,7 +2810,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!rf) return;
 
     const orderId = rf.order_id;
-    const previousStage = orders.find((o) => o.order_id === orderId)?.current_stage || 'Event Completed';
+    const previousStage = augmentedOrders.find((o) => o.order_id === orderId)?.current_stage || 'Event Completed';
 
     // Update raw footage state status
     setRawFootage((prev) =>
@@ -2671,7 +2838,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
 
-    const targetOrder = orders.find((o) => o.order_id === orderId);
+    const targetOrder = augmentedOrders.find((o) => o.order_id === orderId);
     if (targetOrder) {
       setLeads((prev) =>
         prev.map((ld) => {
@@ -2699,7 +2866,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     paymentCollectionStatus?: string,
     additionalReceived?: number
   ) => {
-    const targetOrder = orders.find((o) => o.order_id === orderId);
+    const targetOrder = augmentedOrders.find((o) => o.order_id === orderId);
     if (!targetOrder) return;
     const previousStage = targetOrder.current_stage;
     const targetStage: CurrentStage = 'Raw Footage Received';
@@ -2717,7 +2884,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Handle Payment Capture if provided
     if (paymentCollectionStatus) {
-      const existingPayment = payments.find(p => p.order_id === orderId);
+      const existingPayment = augmentedPayments.find(p => p.order_id === orderId);
       const totalAmount = targetOrder.quotation_amount || 0;
       const advanceAmount = targetOrder.advance_received || 0;
       const finalReceived = additionalReceived || 0;
@@ -2803,7 +2970,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // Ensure production entry exists or update it
-    let existingProd = production.find(p => p.tracking_id === trackingId);
+    let existingProd = augmentedProduction.find(p => p.tracking_id === trackingId);
     if (existingProd) {
       setProduction((prev) =>
         prev.map((prod) => (prod.tracking_id === trackingId ? {
@@ -2844,7 +3011,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateOrderStage = (orderId: string, stage: CurrentStage) => {
-    const targetOrder = orders.find((o) => o.order_id === orderId);
+    const targetOrder = augmentedOrders.find((o) => o.order_id === orderId);
     const previousStage = targetOrder ? targetOrder.current_stage : 'Order Confirmed';
 
     setOrders((prev) =>
@@ -2876,15 +3043,15 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!targetFootage) return;
 
     const orderId = targetFootage.order_id;
-    const previousStage = orders.find((o) => o.order_id === orderId)?.current_stage || 'Approved';
+    const previousStage = augmentedOrders.find((o) => o.order_id === orderId)?.current_stage || 'Approved';
 
-    const payment = payments.find((p) => p.order_id === orderId);
+    const payment = augmentedPayments.find((p) => p.order_id === orderId);
     const balanceDue = payment ? payment.balance_due : 1;
     const targetStage: CurrentStage = balanceDue === 0 ? 'Closed' : 'Payment Pending';
 
-    const targetProd = production.find((p) => p.tracking_id === trackingId);
+    const targetProd = augmentedProduction.find((p) => p.tracking_id === trackingId);
     if (targetProd) {
-      const linkedOrder = orders.find((o) => o.order_id === orderId);
+      const linkedOrder = augmentedOrders.find((o) => o.order_id === orderId);
       const orderName = linkedOrder?.package_name || 'Project';
       addNotification({
         user_id: targetProd.editor_assigned,
@@ -2944,7 +3111,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return ord;
       })
     );
-    const tgtOrder = orders.find((o) => o.order_id === orderId);
+    const tgtOrder = augmentedOrders.find((o) => o.order_id === orderId);
     if (tgtOrder) {
       setLeads((prev) =>
         prev.map((ld) => {
@@ -3014,7 +3181,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // If fully paid, move order status to next transition or check if delivered first.
     // If fully paid AND previous stage was delivered, we can transition stage to Closed!
     let nextStage: CurrentStage = 'Payment Pending';
-    const currentOrder = orders.find((o) => o.order_id === orderId);
+    const currentOrder = augmentedOrders.find((o) => o.order_id === orderId);
     const previousStage = currentOrder ? currentOrder.current_stage : 'Payment Pending';
     if (currentOrder) {
       if (isFullyPaid) {
@@ -3473,7 +3640,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await pushInsert('editor_assignments', newAssign);
     logActivity(`Assigned Editor: ${assignment.staff_name} as ${assignment.speciality}`, 'Production', id);
     
-    const prodProj = production.find(p => p.production_id === assignment.production_id);
+    const prodProj = augmentedProduction.find(p => p.production_id === assignment.production_id);
     if (prodProj) {
       const currentAssigned = prodProj.assigned_staff ? prodProj.assigned_staff.split(', ') : [];
       if (!currentAssigned.includes(assignment.staff_name)) {
@@ -3690,164 +3857,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
   };
-
-  const augmentedOrders = useMemo(() => {
-    // Post-sales stages that should produce active orders
-    const postSalesStages = [
-      'New Order Received', 'Order Confirmed', 'Operations Assigned', 'Event Scheduled', 'Staff Assigned', 'Event Completed', 'Raw Footage Received',
-      'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress', 'Final Approval', 'Project Delivered', 'Project Closed',
-      'Customer Review', 'Approved', 'Delivered', 'Payment Pending', 'Closed'
-    ];
-    
-    // Start with existing booked/restored orders from DB
-    const list = [...orders];
-    
-    // For every lead, ensure a mapped order exists if the lead is confirmed
-    leads.forEach(ld => {
-      if (postSalesStages.includes(ld.status)) {
-        const orderExists = list.some(o => o.lead_id === ld.lead_id || o.order_id === ld.lead_id);
-        if (!orderExists) {
-          const ordId = `ORD-${ld.lead_id.replace(/\D/g, '') || ld.lead_id}`;
-          list.push({
-            order_id: ordId,
-            lead_id: ld.lead_id,
-            customer_name: ld.customer_name,
-            mobile: ld.mobile,
-            event_type: ld.event_type,
-            event_date: ld.event_date,
-            event_time: ld.event_time,
-            reporting_time: ld.reporting_time || '08:00',
-            event_location: ld.event_location,
-            package_name: 'Custom Shoot Package',
-            quotation_amount: ld.budget || 0,
-            advance_received: 0,
-            balance_amount: ld.budget || 0,
-            order_status: 'Confirmed',
-            current_stage: ld.status,
-            sales_person: ld.sales_person || ld.created_by || 'Sales Team',
-            created_at: ld.updated_at || new Date().toISOString()
-          });
-        }
-      }
-    });
-
-    // Make sure we override fields so that the leads table remains the single source of truth for status, dates, etc.
-    return list.map(o => {
-      const parentLead = leads.find(l => l.lead_id === o.lead_id);
-      if (parentLead) {
-        return {
-          ...o,
-          current_stage: parentLead.status,
-          customer_name: parentLead.customer_name,
-          mobile: parentLead.mobile,
-          event_type: parentLead.event_type,
-          event_date: parentLead.event_date,
-          event_time: parentLead.event_time,
-          reporting_time: parentLead.reporting_time || o.reporting_time,
-          event_location: parentLead.event_location,
-          quotation_amount: o.quotation_amount || parentLead.budget || 0
-        };
-      }
-      return o;
-    });
-  }, [orders, leads]);
-
-  const augmentedOperations = useMemo(() => {
-    const list = [...operations];
-    augmentedOrders.forEach(o => {
-      const opExists = list.some(op => op.order_id === o.order_id);
-      if (!opExists) {
-        list.push({
-          operation_id: `OP-${o.order_id}`,
-          order_id: o.order_id,
-          photographer_assigned: 'Unassigned',
-          videographer_assigned: 'Unassigned',
-          drone_operator_assigned: 'Unassigned',
-          assistant_assigned: 'Unassigned',
-          equipment_kit: '',
-          reporting_time: o.reporting_time || '08:00',
-          event_status: o.current_stage,
-          updated_by: 'System'
-        });
-      }
-    });
-    return list.map(op => {
-      const ord = augmentedOrders.find(o => o.order_id === op.order_id);
-      if (ord) {
-        return {
-          ...op,
-          event_status: ord.current_stage,
-          reporting_time: ord.reporting_time || op.reporting_time
-        };
-      }
-      return op;
-    });
-  }, [operations, augmentedOrders]);
-
-  const augmentedProduction = useMemo(() => {
-    const list = [...production];
-    augmentedOrders.forEach(o => {
-      const prodExists = list.some(p => p.tracking_id === o.order_id || p.tracking_id === o.lead_id);
-      if (!prodExists) {
-        const defaultTargetDate = o.event_date ? new Date(new Date(o.event_date).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : '';
-        list.push({
-          production_id: `PRD-${o.lead_id}`,
-          tracking_id: o.order_id,
-          editor_assigned: 'Unassigned',
-          raw_footage_location: '',
-          editing_status: o.current_stage as any,
-          remarks: '',
-          project_priority: 'Medium',
-          target_delivery_date: defaultTargetDate,
-          expected_delivery_date: defaultTargetDate
-        });
-      }
-    });
-    return list.map(p => {
-      const ord = augmentedOrders.find(o => o.order_id === p.tracking_id || o.lead_id === p.tracking_id);
-      if (ord) {
-        return {
-          ...p,
-          editing_status: ord.current_stage as any
-        };
-      }
-      return p;
-    });
-  }, [production, augmentedOrders]);
-
-  const augmentedPayments = useMemo(() => {
-    const list = [...payments];
-    augmentedOrders.forEach(o => {
-      const payExists = list.some(p => p.order_id === o.order_id);
-      if (!payExists) {
-        list.push({
-          payment_id: `PAY-${o.order_id}`,
-          order_id: o.order_id,
-          quotation_amount: o.quotation_amount,
-          advance_received: o.advance_received || 0,
-          final_payment_received: 0,
-          balance_due: o.balance_amount || o.quotation_amount,
-          payment_status: 'Pending'
-        });
-      }
-    });
-    return list.map(p => {
-      const ord = augmentedOrders.find(o => o.order_id === p.order_id);
-      if (ord) {
-        const adv = ord.advance_received || 0;
-        const totalPaid = adv + (p.final_payment_received || 0);
-        const bal = ord.quotation_amount - totalPaid;
-        return {
-          ...p,
-          quotation_amount: ord.quotation_amount,
-          advance_received: adv,
-          balance_due: bal >= 0 ? bal : 0,
-          payment_status: totalPaid >= ord.quotation_amount ? 'Fully Paid' : (totalPaid > 0 ? 'Partially Paid' : 'Pending') as any
-        };
-      }
-      return p;
-    });
-  }, [payments, augmentedOrders]);
 
   return (
     <RoleContext.Provider
