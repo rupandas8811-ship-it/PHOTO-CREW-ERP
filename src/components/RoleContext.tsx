@@ -3677,12 +3677,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLeads((prev) =>
       prev.map((ld) => {
         if (ld.lead_id === leadId) {
+          const timestamp = new Date().toISOString();
           const updated = {
             ...ld,
             ...updates,
-            updated_at: new Date().toISOString()
+            updated_at: timestamp
           };
-          pushUpdate('leads', 'lead_id', leadId, updates);
+          pushUpdate('leads', 'lead_id', leadId, { ...updates, updated_at: timestamp });
           return updated;
         }
         return ld;

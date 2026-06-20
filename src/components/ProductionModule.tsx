@@ -4293,10 +4293,18 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               onChange={(e) => setStatus(e.target.value as EditingStatus)}
                               className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-4 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono font-black border-l-2 border-violet-500"
                             >
-                              <option value="Pending">Pending</option>
-                              <option value="Editing">Editing</option>
-                              <option value="Customer Review">Customer Review</option>
+                              <option value="Raw Footage Received">Raw Footage Received</option>
+                              <option value="Editor Assigned">Editor Assigned</option>
+                              <option value="Editing Started">Editing Started</option>
+                              <option value="Editing In Progress">Editing In Progress</option>
+                              <option value="Internal QC Review">Internal QC Review</option>
+                              <option value="Client Review Sent">Client Review Sent</option>
                               <option value="Revision Required">Revision Required</option>
+                              <option value="Revision In Progress">Revision In Progress</option>
+                              <option value="Final Approval">Final Approval</option>
+                              <option value="Project Delivered">Project Delivered</option>
+                              <option value="Project Closed">Project Closed</option>
+                              <option value="Customer Review">Customer Review</option>
                               <option value="Approved">Approved</option>
                               <option value="Delivered">Delivered</option>
                             </select>
@@ -4834,14 +4842,23 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2 px-3 text-xs font-black text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono"
                           >
                             <option value="New Project">New Project</option>
-                            <option value="Footage Received">Footage Received</option>
+                            <option value="Event Scheduled">Event Scheduled</option>
+                            <option value="Staff Assigned">Staff Assigned</option>
+                            <option value="Event Completed">Event Completed</option>
+                            <option value="Raw Footage Received">Raw Footage Received</option>
                             <option value="Editor Assigned">Editor Assigned</option>
                             <option value="Editing Started">Editing Started</option>
-                            <option value="In Progress">In Progress</option>
+                            <option value="Editing In Progress">Editing In Progress</option>
+                            <option value="Internal QC Review">Internal QC Review</option>
+                            <option value="Client Review Sent">Client Review Sent</option>
                             <option value="Customer Review">Customer Review</option>
                             <option value="Revision Required">Revision Required</option>
+                            <option value="Revision In Progress">Revision In Progress</option>
+                            <option value="Final Approval">Final Approval</option>
                             <option value="Approved">Approved</option>
+                            <option value="Project Delivered">Project Delivered</option>
                             <option value="Delivered">Delivered</option>
+                            <option value="Project Closed">Project Closed</option>
                             <option value="Closed">Closed</option>
                           </select>
                         </div>

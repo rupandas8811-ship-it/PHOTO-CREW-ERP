@@ -4358,10 +4358,33 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               onChange={(e) => setFollowUpForm({ ...followUpForm, status: e.target.value as CurrentStage })}
                               className="w-full bg-slate-900 border border-slate-800 rounded-lg py-2.5 px-3 text-xs text-slate-100 focus:outline-none focus:border-slate-700"
                             >
+                              <option value="New Lead">New Lead</option>
                               <option value="Follow Up">Follow Up</option>
                               <option value="Quotation Sent">Quotation Sent</option>
                               <option value="Negotiation">Negotiation</option>
                               <option value="Order Confirmed">Order Confirmed</option>
+                              <option disabled>── Production/Operations Stages ──</option>
+                              <option value="New Order Received">New Order Received</option>
+                              <option value="Operations Assigned">Operations Assigned</option>
+                              <option value="Event Scheduled">Event Scheduled</option>
+                              <option value="Staff Assigned">Staff Assigned</option>
+                              <option value="Event Completed">Event Completed</option>
+                              <option value="Raw Footage Received">Raw Footage Received</option>
+                              <option value="Editor Assigned">Editor Assigned</option>
+                              <option value="Editing Started">Editing Started</option>
+                              <option value="Editing In Progress">Editing In Progress</option>
+                              <option value="Internal QC Review">Internal QC Review</option>
+                              <option value="Client Review Sent">Client Review Sent</option>
+                              <option value="Revision Required">Revision Required</option>
+                              <option value="Revision In Progress">Revision In Progress</option>
+                              <option value="Final Approval">Final Approval</option>
+                              <option value="Project Delivered">Project Delivered</option>
+                              <option value="Project Closed">Project Closed</option>
+                              <option value="Customer Review">Customer Review</option>
+                              <option value="Approved">Approved</option>
+                              <option value="Delivered">Delivered</option>
+                              <option value="Payment Pending">Payment Pending</option>
+                              <option value="Closed">Closed</option>
                             </select>
                           </div>
                         </div>

@@ -75,7 +75,7 @@ const MainAppContent: React.FC = () => {
 
     if (currentRole === 'Operations Team') {
       // Operations users can only access Operations (which hosts its leads, calendar, staff, and analytics)
-      return ['operations'].includes(tab);
+      return ['operations', 'notifications'].includes(tab);
     }
 
     if (currentRole === 'Production Team') {
@@ -188,21 +188,21 @@ const MainAppContent: React.FC = () => {
   useEffect(() => {
     if (currentUser) {
       if (currentRole === 'Sales Team') {
-        if (!['sales', 'sales_analytics', 'pending_payments'].includes(activeTab)) {
+        if (!['sales', 'sales_analytics', 'pending_payments', 'notifications'].includes(activeTab)) {
           setActiveTab('sales');
         }
       } else if (currentRole === 'Operations Team') {
-        if (activeTab !== 'operations') {
+        if (!['operations', 'notifications'].includes(activeTab)) {
           setActiveTab('operations');
         }
         if (!['operations_leads', 'operations_calendar', 'operations_staff', 'operations_analytics', 'team_assignments', 'package_catalogue', 'equipment_management', 'event_scheduling', 'operations_notifications'].includes(activeOpSubTab)) {
           setActiveOpSubTab('operations_leads');
         }
       } else if (currentRole === 'Production Team') {
-        if (activeTab !== 'production') {
+        if (!['production', 'notifications', 'staff_management'].includes(activeTab)) {
           setActiveTab('production');
         }
-        if (!['production_leads', 'crew_roster', 'staff_performance', 'analytics'].includes(activeSubTab)) {
+        if (!['production_leads', 'production_calendar', 'crew_roster', 'staff_performance', 'analytics', 'notifications'].includes(activeSubTab)) {
           setActiveSubTab('production_leads');
         }
       }
