@@ -70,7 +70,7 @@ const MainAppContent: React.FC = () => {
 
     if (currentRole === 'Sales Team') {
       // Sales users can access Leads Directory, Sales Analytics, and Pending Payment Report
-      return ['sales', 'sales_analytics', 'pending_payments'].includes(tab);
+      return ['sales', 'sales_analytics', 'pending_payments', 'notifications'].includes(tab);
     }
 
     if (currentRole === 'Operations Team') {
@@ -99,6 +99,8 @@ const MainAppContent: React.FC = () => {
     setStartInput(globalDateRange.start);
     setEndInput(globalDateRange.end);
   }, [globalDateRange]);
+
+  const unreadNotificationsCount = notifications.filter(n => !n.read_status && (currentRole === 'Business Owner' || n.recipient_role === currentRole || n.recipient_role === 'All')).length;
 
   const handleRefresh = () => {
     setIsRefreshing(true);
@@ -280,7 +282,7 @@ const MainAppContent: React.FC = () => {
               { id: 'equipment_management', label: 'Equipment Kits', icon: Camera },
               { id: 'operations_staff', label: 'Staff Directory', icon: Users },
               { id: 'event_scheduling', label: 'Event Reports', icon: Clock },
-              { id: 'operations_notifications', label: 'Settings', icon: Bell }
+              { id: 'operations_notifications', label: 'Notifications', icon: Bell }
             ].map((tab) => {
               const IconComponent = tab.icon;
               const isSelected = activeOpSubTab === tab.id;
@@ -303,7 +305,14 @@ const MainAppContent: React.FC = () => {
                 >
                   <div className="flex items-center gap-2.5">
                     <IconComponent className={`w-4 h-4 flex-shrink-0 ${isSelected ? 'text-amber-400' : 'text-zinc-500'}`} />
-                    <span className="tracking-wide">{tab.label}</span>
+                    <span className="tracking-wide">
+                      {tab.label}
+                      {tab.id === 'operations_notifications' && unreadNotificationsCount > 0 && (
+                        <span className="ml-2 px-1.5 py-0.5 rounded-full bg-rose-500/20 text-[9px] text-rose-400 font-bold border border-rose-500/30">
+                          {unreadNotificationsCount}
+                        </span>
+                      )}
+                    </span>
                   </div>
                   {isSelected && (
                     <span className="text-[10px] text-amber-500">●</span>
@@ -362,7 +371,7 @@ const MainAppContent: React.FC = () => {
               { id: 'analytics', label: 'Studio Analytics', icon: BarChart3 }
             ].filter(tab => {
               if (currentRole === 'Production Team') {
-                return ['production_leads', 'production_calendar', 'crew_roster', 'staff_performance', 'analytics'].includes(tab.id);
+                return ['production_leads', 'production_calendar', 'crew_roster', 'staff_performance', 'analytics', 'notifications'].includes(tab.id);
               }
               return true;
             }).map((tab) => {
@@ -388,7 +397,14 @@ const MainAppContent: React.FC = () => {
                 >
                   <div className="flex items-center gap-2.5">
                     <IconComponent className={`w-4 h-4 flex-shrink-0 ${isSelected ? 'text-purple-450' : 'text-zinc-500'}`} />
-                    <span className="tracking-wide">{label}</span>
+                    <span className="tracking-wide">
+                      {label}
+                      {tab.id === 'notifications' && unreadNotificationsCount > 0 && (
+                        <span className="ml-2 px-1.5 py-0.5 rounded-full bg-rose-500/20 text-[9px] text-rose-400 font-bold border border-rose-500/30">
+                          {unreadNotificationsCount}
+                        </span>
+                      )}
+                    </span>
                   </div>
                   {isSelected && (
                     <span className="text-[10px] text-purple-400">●</span>
@@ -426,7 +442,8 @@ const MainAppContent: React.FC = () => {
               { id: 'sales_analytics', label: 'Sales Analytics', icon: Briefcase, color: 'text-indigo-400' },
               { id: 'sales_list', label: 'Leads Directory', icon: Sparkles, color: 'text-emerald-400' },
               { id: 'sales_packages', label: 'Package Catalog', icon: Layers, color: 'text-teal-400' },
-              { id: 'pending_payments', label: 'Pending Payment Report', icon: DollarSign, color: 'text-amber-500' }
+              { id: 'pending_payments', label: 'Pending Payment Report', icon: DollarSign, color: 'text-amber-500' },
+              { id: 'notifications', label: 'Notifications', icon: Bell, color: 'text-rose-400' }
             ].map(tab => {
               const IconComponent = tab.icon;
               let isSelected = false;
@@ -457,7 +474,14 @@ const MainAppContent: React.FC = () => {
                 >
                   <div className="flex items-center gap-2.5">
                     <IconComponent className={`w-4 h-4 flex-shrink-0 ${tab.color}`} />
-                    <span className="tracking-wide">{tab.label}</span>
+                    <span className="tracking-wide">
+                      {tab.label}
+                      {tab.id === 'notifications' && unreadNotificationsCount > 0 && (
+                        <span className="ml-2 px-1.5 py-0.5 rounded-full bg-rose-500/20 text-[9px] text-rose-400 font-bold border border-rose-500/30">
+                          {unreadNotificationsCount}
+                        </span>
+                      )}
+                    </span>
                   </div>
                   <ChevronRightIcon active={isSelected} />
                 </button>
@@ -486,7 +510,8 @@ const MainAppContent: React.FC = () => {
               { id: 'operations_analytics', label: '2. Operations Analytics', icon: Camera, color: 'text-emerald-400' },
               { id: 'production_analytics', label: '3. Production Analytics', icon: Video, color: 'text-purple-400' },
               { id: 'business_overview_analytics', label: '4. Business Overview Analytics', icon: Landmark, color: 'text-amber-500' },
-              { id: 'staff_performance_analytics', label: '5. Staff Performance Analytics', icon: Users, color: 'text-sky-450' }
+              { id: 'staff_performance_analytics', label: '5. Staff Performance Analytics', icon: Users, color: 'text-sky-450' },
+              { id: 'notifications', label: '6. Notification Center', icon: Bell, color: 'text-rose-400' }
             ].map((tab) => {
               const IconComponent = tab.icon;
               const isSelected = activeTab === tab.id;
@@ -503,7 +528,14 @@ const MainAppContent: React.FC = () => {
                 >
                   <div className="flex items-center gap-2.5">
                     <IconComponent className={`w-4 h-4 flex-shrink-0 ${tab.color}`} />
-                    <span className="tracking-wide">{tab.label}</span>
+                    <span className="tracking-wide">
+                      {tab.label}
+                      {tab.id === 'notifications' && unreadNotificationsCount > 0 && (
+                        <span className="ml-2 px-1.5 py-0.5 rounded-full bg-rose-500/20 text-[9px] text-rose-400 font-bold border border-rose-500/30">
+                          {unreadNotificationsCount}
+                        </span>
+                      )}
+                    </span>
                   </div>
                   <ChevronRightIcon active={isSelected} />
                 </button>
@@ -672,7 +704,7 @@ const MainAppContent: React.FC = () => {
                       <ProductionModule activeSubTab={activeSubTab} setActiveSubTab={setActiveSubTab} />
                     )}
                     {activeTab === 'staff_management' && (currentRole === 'Business Owner' || currentRole === 'Production Team') && <StaffManagementModule />}
-                    {activeTab === 'notifications' && (currentRole === 'Business Owner' || currentRole === 'Production Team') && <NotificationsModule />}
+                    {activeTab === 'notifications' && <NotificationsModule />}
                     {activeTab === 'payments' && (currentRole === 'Business Owner' || currentRole === 'Sales Team') && <PaymentsModule />}
                     {activeTab === 'search' && currentRole === 'Business Owner' && <OrderSearch />}
                     {activeTab === 'users' && currentRole === 'Business Owner' && <UserManagementModule />}

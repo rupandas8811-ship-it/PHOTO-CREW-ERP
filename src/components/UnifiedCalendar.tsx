@@ -1620,7 +1620,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
       {showAddMemo && selectedDate && (
         <div 
           id="dialog_add_memo"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-fade-in"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-fade-in"
         >
           <div className="bg-zinc-900 border border-zinc-800 w-full max-w-lg p-6 rounded-2xl space-y-4 shadow-2xl relative">
             <button
@@ -1695,7 +1695,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
       {selectedEvent && (
         <div 
           id="dialog_event_detail"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-fade-in overflow-y-auto"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-fade-in overflow-y-auto"
         >
           <div className="bg-zinc-900 border border-zinc-805 w-full max-w-2xl p-6 rounded-2xl shadow-2xl relative space-y-6 my-8">
             <button

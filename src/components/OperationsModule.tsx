@@ -4,7 +4,7 @@ import { EquipmentManagement } from './operations/EquipmentManagement';
 import { OperationsStaffManagement } from './operations/OperationsStaffManagement';
 import { EventScheduling } from './operations/EventScheduling';
 import { TeamAssignments } from './operations/TeamAssignments';
-import { OperationsNotifications } from './operations/OperationsNotifications';
+import { NotificationsModule } from './NotificationsModule';
 import { OperationsAnalytics } from './operations/OperationsAnalytics';
 import { OperationsCalendar } from './OperationsCalendar';
 import { useRole } from './RoleContext';
@@ -246,7 +246,7 @@ export const OperationsModule: React.FC<OperationsModuleProps> = ({
         {activeSubTab === 'operations_staff' && <OperationsStaffManagement />}
         {activeSubTab === 'event_scheduling' && <EventScheduling />}
         {activeSubTab === 'team_assignments' && <TeamAssignments />}
-        {activeSubTab === 'operations_notifications' && <OperationsNotifications />}
+        {activeSubTab === 'operations_notifications' && <NotificationsModule />}
         {activeSubTab === 'operations_analytics' && <OperationsAnalytics />}
         {activeSubTab === 'package_catalogue' && <PackageCatalogueView />}
       </div>

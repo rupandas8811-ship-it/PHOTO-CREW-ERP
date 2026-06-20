@@ -32,13 +32,23 @@ export const NotificationsModule: React.FC = () => {
     markNotificationRead(id);
   };
 
+  // Role-based visibility base list
+  const visibleNotifications = notifications.filter(notif => {
+    if (currentRole !== 'Business Owner') {
+      if (notif.recipient_role !== currentRole && notif.recipient_role !== 'All') {
+        return false;
+      }
+    }
+    return true;
+  });
+
   // Helper selectors
-  const totalNotifications = notifications.length;
-  const unreadCount = notifications.filter(n => !n.read_status).length;
+  const totalNotifications = visibleNotifications.length;
+  const unreadCount = visibleNotifications.filter(n => !n.read_status).length;
   const readCount = totalNotifications - unreadCount;
 
   // Filtered list
-  const filteredNotifications = notifications.filter(notif => {
+  const filteredNotifications = visibleNotifications.filter(notif => {
     const matchesType = activeFilter === 'All' || notif.notification_type === activeFilter;
     if (!matchesType) return false;
 
@@ -105,8 +115,8 @@ export const NotificationsModule: React.FC = () => {
         {/* Sub-tabs */}
         <div className="flex flex-wrap items-center gap-1.5 bg-zinc-900/40 p-1 rounded-xl border border-zinc-900">
           {(['All', 'Task Assigned', 'Task Completed', 'Due Date Alert', 'System Notification'] as const).map((tab) => {
-            const count = notifications.filter(n => tab === 'All' || n.notification_type === tab).length;
-            const hasUnread = notifications.some(n => (!tab || n.notification_type === tab) && !n.read_status);
+            const count = visibleNotifications.filter(n => tab === 'All' || n.notification_type === tab).length;
+            const hasUnread = visibleNotifications.some(n => (!tab || n.notification_type === tab) && !n.read_status);
             
             return (
               <button
@@ -159,9 +169,25 @@ export const NotificationsModule: React.FC = () => {
 
       {/* Main Alerts Grid/List */}
       <div className="bg-zinc-950 border border-zinc-900 rounded-2xl overflow-hidden shadow-xl">
-        <h3 className="text-[10px] font-black text-zinc-450 uppercase tracking-[0.20em] border-b border-zinc-900 p-5 pb-3.5 font-mono flex items-center justify-between">
+        <h3 className="text-[10px] font-black text-zinc-450 uppercase tracking-[0.2em] border-b border-zinc-900 p-5 pb-3.5 font-mono flex flex-wrap items-center justify-between gap-3">
           <span>ALERTS & BROADCAST PIPELINE FLOW</span>
-          <span className="text-[9px] text-zinc-650">CLICK ALERT CARD FOR DEEP DETAILS & FLOW CONTEXT</span>
+          <div className="flex items-center gap-4">
+            <span className="text-[9px] text-zinc-500 hidden sm:inline">CLICK ALERT CARD FOR DEEP DETAILS & FLOW CONTEXT</span>
+            {unreadCount > 0 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  visibleNotifications.forEach(n => {
+                    if (!n.read_status) markNotificationRead(n.notification_id);
+                  });
+                }}
+                className="text-[9px] text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-850 px-2 py-1 rounded transition-colors"
+                title="Mark all notifications as read"
+              >
+                MARK ALL AS READ
+              </button>
+            )}
+          </div>
         </h3>
 
         <div className="divide-y divide-zinc-900">

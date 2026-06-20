@@ -1590,7 +1590,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       { table: 'notifications', key: 'notification_id', setter: setNotifications },
       { table: 'equipment', key: 'equipment_id', setter: setEquipment },
       { table: 'production_specialties', key: 'speciality_id', setter: setSpecialities },
-      { table: 'editor_assignments', key: 'assignment_id', setter: setEditorAssignments }
+      { table: 'editor_assignments', key: 'assignment_id', setter: setEditorAssignments },
+      { table: 'staff_assignments', key: 'assignment_id', setter: setStaffAssignments }
     ].map(({ table, key, setter }) => {
       return supabaseClient
         .channel(`rt-${table}`)
@@ -1606,6 +1607,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (table === 'notifications') {
                   mappedItem = mapNotificationFromDb(item);
                 }
+                if (table === 'leads') {
+                  mappedItem = { ...mappedItem, status: mappedItem.current_status || mappedItem.status };
+                }
+                if (table === 'orders') {
+                  mappedItem = { ...mappedItem, current_stage: mappedItem.current_stage || mappedItem.order_status };
+                }
                 const exists = prev.some(x => x[key] === mappedItem[key]);
                 if (exists) return prev;
                 return [mappedItem, ...prev];
@@ -1616,6 +1623,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 let mappedItem = table === 'users' ? { ...item, id: mapFromDbUserId(item.id) } : item;
                 if (table === 'notifications') {
                   mappedItem = mapNotificationFromDb(item);
+                }
+                if (table === 'leads') {
+                  mappedItem = { ...mappedItem, status: mappedItem.current_status || mappedItem.status };
+                }
+                if (table === 'orders') {
+                  mappedItem = { ...mappedItem, current_stage: mappedItem.current_stage || mappedItem.order_status };
                 }
                 return prev.map(x => (x[key] === mappedItem[key] ? mappedItem : x));
               });
