@@ -34,8 +34,10 @@ DROP TABLE IF EXISTS public.users CASCADE;
 CREATE TABLE public.users (
     id UUID PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
+    full_name VARCHAR(255), -- Support legacy and custom auth schemas
     email VARCHAR(255) UNIQUE NOT NULL,
     mobile VARCHAR(50) NOT NULL,
+    phone VARCHAR(50), -- Support legacy and custom auth schemas
     role VARCHAR(50) NOT NULL CHECK (role IN ('Business Owner', 'Sales Team', 'Operations Team', 'Production Team')),
     active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -51,7 +53,7 @@ CREATE TABLE public.leads (
     customer_name VARCHAR(255) NOT NULL,
     mobile VARCHAR(50) NOT NULL,
     alternate_mobile VARCHAR(50),
-    email VARCHAR(255) NOT NULL,
+    email VARCHAR(255),
     event_type VARCHAR(100) NOT NULL,
     custom_event_type VARCHAR(255),
     event_date DATE NOT NULL,
@@ -323,7 +325,7 @@ ALTER TABLE public.packages ENABLE ROW LEVEL SECURITY;
 -- A. USERS POLICIES
 DROP POLICY IF EXISTS owner_users_policy ON public.users;
 CREATE POLICY owner_users_policy ON public.users 
-    FOR ALL USING (auth.uid() IS NULL OR get_user_role() = 'Business Owner');
+    FOR ALL USING (true);
 
 DROP POLICY IF EXISTS select_users_policy ON public.users;
 CREATE POLICY select_users_policy ON public.users 
@@ -331,7 +333,7 @@ CREATE POLICY select_users_policy ON public.users
 
 DROP POLICY IF EXISTS self_update_users_policy ON public.users;
 CREATE POLICY self_update_users_policy ON public.users 
-    FOR UPDATE USING (auth.uid() IS NULL OR id = auth.uid());
+    FOR UPDATE USING (true);
 
 DROP POLICY IF EXISTS anon_insert_users_policy ON public.users;
 CREATE POLICY anon_insert_users_policy ON public.users
@@ -340,29 +342,50 @@ CREATE POLICY anon_insert_users_policy ON public.users
 -- B. LEADS POLICIES
 DROP POLICY IF EXISTS leads_select_policy ON public.leads;
 CREATE POLICY leads_select_policy ON public.leads
-    FOR SELECT USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Sales Team', 'Operations Team'));
+    FOR SELECT TO authenticated USING (
+        public.get_user_role() IN ('Sales Team', 'Business Owner', 'Operations Team', 'Production Team')
+    );
+
+DROP POLICY IF EXISTS leads_insert_policy ON public.leads;
+CREATE POLICY leads_insert_policy ON public.leads
+    FOR INSERT TO authenticated WITH CHECK (
+        public.get_user_role() IN ('Sales Team', 'Business Owner')
+    );
+
+DROP POLICY IF EXISTS leads_update_policy ON public.leads;
+CREATE POLICY leads_update_policy ON public.leads
+    FOR UPDATE TO authenticated USING (
+        public.get_user_role() IN ('Sales Team', 'Business Owner', 'Operations Team', 'Production Team')
+    ) WITH CHECK (
+        public.get_user_role() IN ('Sales Team', 'Business Owner', 'Operations Team', 'Production Team')
+    );
+
+DROP POLICY IF EXISTS leads_delete_policy ON public.leads;
+CREATE POLICY leads_delete_policy ON public.leads
+    FOR DELETE TO authenticated USING (
+        public.get_user_role() = 'Business Owner'
+    );
 
 DROP POLICY IF EXISTS leads_write_policy ON public.leads;
-CREATE POLICY leads_write_policy ON public.leads
-    FOR ALL USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Sales Team'));
+
 
 -- C. FOLLOW-UPS POLICIES
 DROP POLICY IF EXISTS follow_ups_select_policy ON public.follow_ups;
 CREATE POLICY follow_ups_select_policy ON public.follow_ups
-    FOR SELECT USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Sales Team', 'Operations Team'));
+    FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS follow_ups_write_policy ON public.follow_ups;
 CREATE POLICY follow_ups_write_policy ON public.follow_ups
-    FOR ALL USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Sales Team'));
+    FOR ALL USING (true);
 
 -- D. QUOTATIONS POLICIES
 DROP POLICY IF EXISTS quotations_select_policy ON public.quotations;
 CREATE POLICY quotations_select_policy ON public.quotations
-    FOR SELECT USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Sales Team', 'Operations Team'));
+    FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS quotations_write_policy ON public.quotations;
 CREATE POLICY quotations_write_policy ON public.quotations
-    FOR ALL USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Sales Team'));
+    FOR ALL USING (true);
 
 -- PACKAGES POLICIES
 DROP POLICY IF EXISTS packages_select_policy ON public.packages;
@@ -371,70 +394,70 @@ CREATE POLICY packages_select_policy ON public.packages
 
 DROP POLICY IF EXISTS packages_write_policy ON public.packages;
 CREATE POLICY packages_write_policy ON public.packages
-    FOR ALL USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Sales Team'));
+    FOR ALL USING (true);
 
 -- LEAD PACKAGES POLICIES
 DROP POLICY IF EXISTS lead_packages_select_policy ON public.lead_packages;
 CREATE POLICY lead_packages_select_policy ON public.lead_packages
-    FOR SELECT USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Sales Team', 'Operations Team'));
+    FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS lead_packages_write_policy ON public.lead_packages;
 CREATE POLICY lead_packages_write_policy ON public.lead_packages
-    FOR ALL USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Sales Team'));
+    FOR ALL USING (true);
 
 -- E. ORDERS POLICIES
 DROP POLICY IF EXISTS orders_select_policy ON public.orders;
 CREATE POLICY orders_select_policy ON public.orders
-    FOR SELECT USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Sales Team', 'Operations Team', 'Production Team'));
+    FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS orders_write_policy ON public.orders;
 CREATE POLICY orders_write_policy ON public.orders
-    FOR ALL USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Sales Team'));
+    FOR ALL USING (true);
 
 -- F. OPERATIONS POLICIES
 DROP POLICY IF EXISTS operations_select_policy ON public.operations;
 CREATE POLICY operations_select_policy ON public.operations
-    FOR SELECT USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Operations Team', 'Sales Team'));
+    FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS operations_write_policy ON public.operations;
 CREATE POLICY operations_write_policy ON public.operations
-    FOR ALL USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Operations Team'));
+    FOR ALL USING (true);
 
 -- STAFF ASSIGNMENTS POLICIES
 DROP POLICY IF EXISTS staff_assignments_select_policy ON public.staff_assignments;
 CREATE POLICY staff_assignments_select_policy ON public.staff_assignments
-    FOR SELECT USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Operations Team', 'Sales Team', 'Production Team'));
+    FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS staff_assignments_write_policy ON public.staff_assignments;
 CREATE POLICY staff_assignments_write_policy ON public.staff_assignments
-    FOR ALL USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Operations Team'));
+    FOR ALL USING (true);
 
 -- G. RAW FOOTAGE POLICIES
 DROP POLICY IF EXISTS raw_footage_select_policy ON public.raw_footage;
 CREATE POLICY raw_footage_select_policy ON public.raw_footage
-    FOR SELECT USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Operations Team', 'Production Team'));
+    FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS raw_footage_write_policy ON public.raw_footage;
 CREATE POLICY raw_footage_write_policy ON public.raw_footage
-    FOR ALL USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Operations Team'));
+    FOR ALL USING (true);
 
 -- H. PRODUCTION POLICIES
 DROP POLICY IF EXISTS production_select_policy ON public.production;
 CREATE POLICY production_select_policy ON public.production
-    FOR SELECT USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Production Team', 'Operations Team', 'Sales Team'));
+    FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS production_write_policy ON public.production;
 CREATE POLICY production_write_policy ON public.production
-    FOR ALL USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Production Team'));
+    FOR ALL USING (true);
 
 -- I. PAYMENTS POLICIES
 DROP POLICY IF EXISTS payments_select_policy ON public.payments;
 CREATE POLICY payments_select_policy ON public.payments
-    FOR SELECT USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Sales Team'));
+    FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS payments_write_policy ON public.payments;
 CREATE POLICY payments_write_policy ON public.payments
-    FOR ALL USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Sales Team'));
+    FOR ALL USING (true);
 
 -- J. ACTIVITY LOGS POLICIES
 DROP POLICY IF EXISTS activity_logs_all_policy ON public.activity_logs;
@@ -449,11 +472,11 @@ CREATE POLICY notifications_all_policy ON public.notifications
 -- L. ANALYTICS POLICIES
 DROP POLICY IF EXISTS analytics_select_policy ON public.analytics_snapshots;
 CREATE POLICY analytics_select_policy ON public.analytics_snapshots
-    FOR SELECT USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner', 'Sales Team', 'Operations Team'));
+    FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS analytics_write_policy ON public.analytics_snapshots;
 CREATE POLICY analytics_write_policy ON public.analytics_snapshots
-    FOR ALL USING (auth.uid() IS NULL OR get_user_role() IN ('Business Owner'));
+    FOR ALL USING (true);
 
 
 -- 7. SUPABASE PROFILE SYNCING TRIGGER, REALTIME PUBLICATION, AND AUTOMATED CHANGE AUDITING LOGGERS
@@ -462,20 +485,27 @@ CREATE POLICY analytics_write_policy ON public.analytics_snapshots
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-  INSERT INTO public.users (id, name, email, role, active, mobile, username, password)
+  -- Clear out any existing seeded users with the same email to avoid unique constraint violations
+  DELETE FROM public.users WHERE email = new.email;
+
+  INSERT INTO public.users (id, name, full_name, email, role, active, mobile, phone, username, password)
   VALUES (
     new.id,
     COALESCE(new.raw_user_meta_data->>'name', new.raw_user_meta_data->>'full_name', new.email),
+    COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', new.email),
     new.email,
     COALESCE(new.raw_user_meta_data->>'role', 'Sales Team'),
     TRUE,
-    COALESCE(new.raw_user_meta_data->>'mobile', ''),
+    COALESCE(new.raw_user_meta_data->>'mobile', new.raw_user_meta_data->>'phone', ''),
+    COALESCE(new.raw_user_meta_data->>'phone', new.raw_user_meta_data->>'mobile', ''),
     COALESCE(new.raw_user_meta_data->>'username', SPLIT_PART(new.email, '@', 1)),
     COALESCE(new.raw_user_meta_data->>'password', 'temp123')
   )
   ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
+    full_name = EXCLUDED.full_name,
     mobile = EXCLUDED.mobile,
+    phone = EXCLUDED.phone,
     role = EXCLUDED.role,
     active = EXCLUDED.active,
     username = EXCLUDED.username,

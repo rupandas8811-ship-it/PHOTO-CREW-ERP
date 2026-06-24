@@ -174,6 +174,18 @@ const mapFromDbUserId = (uuid: string): string => {
   return uuid;
 };
 
+const mapUserFieldsFromDb = (u: any): any => {
+  if (!u) return u;
+  return {
+    ...u,
+    id: mapFromDbUserId(u.id),
+    name: u.name || u.full_name || '',
+    full_name: u.full_name || u.name || '',
+    mobile: u.mobile || u.phone || '',
+    phone: u.phone || u.mobile || ''
+  };
+};
+
 const mapNotificationFromDb = (notif: any): Notification => {
   let user_id = notif.user_id;
   let project_id = notif.project_id;
@@ -1220,6 +1232,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let cloned = { ...record };
     delete cloned.customer_id;
 
+    if (table === 'users') {
+      cloned.full_name = cloned.full_name || cloned.name;
+      cloned.name = cloned.name || cloned.full_name;
+      cloned.phone = cloned.phone || cloned.mobile;
+      cloned.mobile = cloned.mobile || cloned.phone;
+    }
+
     if (table === 'production_staff') {
       const existing = staff.find(s => s.staff_id === record.staff_id);
       const merged = existing ? { ...existing, ...cloned } : cloned;
@@ -1248,7 +1267,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const allowedColumns: Record<string, string[]> = {
-      users: ['id', 'email', 'role', 'full_name', 'phone', 'active', 'created_at', 'password', 'username'],
+      users: ['id', 'email', 'role', 'name', 'full_name', 'mobile', 'phone', 'active', 'created_at', 'password', 'username'],
       leads: [
         'lead_id', 'created_date', 'lead_source', 'customer_name', 'mobile', 'alternate_mobile', 
         'email', 'event_type', 'custom_event_type', 'custom_event_name', 'event_date', 'event_time', 'event_location', 'budget', 
@@ -1619,31 +1638,40 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ]);
 
       if (uErr || ldErr || ordErr || opErr || rfErr || prodErr || payErr || logErr) {
-        console.warn('Could not read all tables from Supabase, syncing with cached state');
-        updateDiagnosticMetric('read', 'fail', (uErr || ldErr || ordErr || opErr || rfErr || prodErr || payErr || logErr)?.message);
-        return;
+        console.warn('Some tables could not be read from Supabase (this is expected if you are not fully logged in). Attempting to load available tables and fallback to cached states...');
+        updateDiagnosticMetric('read', 'warn', (uErr || ldErr || ordErr || opErr || rfErr || prodErr || payErr || logErr)?.message);
       }
 
-      if (dbUsers && dbUsers.length === 0) {
+      // 1. Resolve users table with local fallback if select failed
+      let finalUsers = dbUsers;
+      if (uErr || !dbUsers) {
+        console.warn('Using INITIAL_USERS fallback because users table select failed or returned null:', uErr?.message);
+        finalUsers = INITIAL_USERS.map(u => ({
+          ...u,
+          id: mapToDbUserId(u.id)
+        }));
+      }
+
+      if (finalUsers && finalUsers.length === 0) {
         await seedDatabase();
         // retry fetch once
         await fetchFromDb();
         return;
       }
 
-      if (dbUsers) {
+      if (finalUsers) {
         // Ensure standard demo accounts always exist in Supabase for convenient tests
         const demoEmails = [
           'owner@demo.com', 'sales@demo.com', 'ops@demo.com', 'prod@demo.com',
-          'owner@photocrewdemo.com', 'sales@photocrewdemo.com', 'operations@photocrewdemo.com', 'production@photocrewdemo.com'
+          'owner@photocrewdemo.com', 'sales@photocrewdemo.com', 'operations@photocrewdemo.com', 'production@photocrewdemo.com',
+          'owner@photocrew.com', 'sales@photocrew.com', 'operations@photocrew.com', 'production@photocrew.com'
         ];
-        const existingEmails = dbUsers.map(u => u.email.toLowerCase());
+        const existingEmails = finalUsers.map(u => u.email.toLowerCase());
         const missingDemos = INITIAL_USERS.filter(u => demoEmails.includes(u.email) && !existingEmails.includes(u.email));
         
-        if (missingDemos.length > 0) {
+        if (missingDemos.length > 0 && !uErr && dbUsers) {
           console.log('Detected missing demo accounts, seeding them into Supabase...');
           for (const u of missingDemos) {
-            // Also attempt to register in Supabase Auth so they are active and ready immediately
             try {
               const { error: signUpError } = await supabaseClient.auth.signUp({
                 email: u.email,
@@ -1676,26 +1704,73 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Fetch users again to keep state synced cleanly
           const { data: refreshedUsers } = await supabaseClient.from('users').select('*');
           if (refreshedUsers) {
-            setUsers(refreshedUsers.map(u => ({ ...u, id: mapFromDbUserId(u.id) })));
+            setUsers(refreshedUsers.map(mapUserFieldsFromDb));
           } else {
-            setUsers(dbUsers.map(u => ({ ...u, id: mapFromDbUserId(u.id) })));
+            setUsers(finalUsers.map(mapUserFieldsFromDb));
           }
         } else {
-          setUsers(dbUsers.map(u => ({ ...u, id: mapFromDbUserId(u.id) })));
+          setUsers(finalUsers.map(mapUserFieldsFromDb));
         }
       }
-      if (dbLeads) {
-        const mappedLeads = dbLeads.map(ld => ({
+
+      // 2. Resolve other database tables with robust cached fallbacks
+      let resolvedLeads = dbLeads;
+      if (ldErr || !dbLeads) {
+        const cached = localStorage.getItem('erp_leads');
+        resolvedLeads = cached ? JSON.parse(cached) : INITIAL_LEADS;
+      }
+
+      let resolvedOrders = dbOrders;
+      if (ordErr || !dbOrders) {
+        const cached = localStorage.getItem('erp_orders');
+        resolvedOrders = cached ? JSON.parse(cached) : INITIAL_ORDERS;
+      }
+
+      let resolvedRawFootage = dbRawFootage;
+      if (rfErr || !dbRawFootage) {
+        const cached = localStorage.getItem('erp_raw_footage');
+        resolvedRawFootage = cached ? JSON.parse(cached) : INITIAL_RAW_FOOTAGE;
+      }
+
+      let resolvedProduction = dbProduction;
+      if (prodErr || !dbProduction) {
+        const cached = localStorage.getItem('erp_production');
+        resolvedProduction = cached ? JSON.parse(cached) : INITIAL_PRODUCTION;
+      }
+
+      let resolvedOperations = dbOperations;
+      if (opErr || !dbOperations) {
+        const cached = localStorage.getItem('erp_operations');
+        resolvedOperations = cached ? JSON.parse(cached) : INITIAL_OPERATIONS;
+      }
+
+      let resolvedPayments = dbPayments;
+      if (payErr || !dbPayments) {
+        const cached = localStorage.getItem('erp_payments');
+        resolvedPayments = cached ? JSON.parse(cached) : INITIAL_PAYMENTS;
+      }
+
+      let resolvedLogs = dbLogs;
+      if (logErr || !dbLogs) {
+        const cached = localStorage.getItem('erp_activity_logs');
+        resolvedLogs = cached ? JSON.parse(cached) : INITIAL_LOGS;
+      }
+
+      // 3. Populate React state with mapped variables
+      if (resolvedLeads) {
+        const mappedLeads = resolvedLeads.map(ld => ({
           ...ld,
           status: ld.current_status || ld.status
         }));
         setLeads(mappedLeads);
         localStorage.setItem('erp_leads', JSON.stringify(mappedLeads));
       }
+
       if (leadPackagesRes && leadPackagesRes.data) {
         setLeadPackages(leadPackagesRes.data as LeadPackage[]);
         localStorage.setItem('erp_lead_packages', JSON.stringify(leadPackagesRes.data));
       }
+
       if (packagesRes && packagesRes.data) {
         if (packagesRes.data.length === 0 && !packagesRes.error) {
           console.log('Detected empty packages table, seeding INITIAL_PACKAGES into Supabase...');
@@ -1707,9 +1782,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.setItem('erp_packages', JSON.stringify(packagesRes.data));
         }
       }
-      if (dbOrders) {
-        const mappedOrders = dbOrders.map((ord: any) => {
-          const associatedLead = dbLeads?.find(ld => ld.lead_id === ord.lead_id);
+
+      if (resolvedOrders) {
+        const mappedOrders = resolvedOrders.map((ord: any) => {
+          const associatedLead = resolvedLeads?.find(ld => ld.lead_id === ord.lead_id);
           const leadStatus = associatedLead?.current_status || associatedLead?.status;
           return {
             ...ord,
@@ -1719,26 +1795,29 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setOrders(mappedOrders);
         localStorage.setItem('erp_orders', JSON.stringify(mappedOrders));
       }
-      if (dbOperations) {
-        setOperations(dbOperations);
-        localStorage.setItem('erp_operations', JSON.stringify(dbOperations));
+
+      if (resolvedOperations) {
+        setOperations(resolvedOperations);
+        localStorage.setItem('erp_operations', JSON.stringify(resolvedOperations));
       }
-      if (dbRawFootage) {
-        setRawFootage(dbRawFootage as any);
-        localStorage.setItem('erp_raw_footage', JSON.stringify(dbRawFootage));
+
+      if (resolvedRawFootage) {
+        setRawFootage(resolvedRawFootage as any);
+        localStorage.setItem('erp_raw_footage', JSON.stringify(resolvedRawFootage));
       }
-      if (dbProduction) {
-        const mappedProduction = dbProduction.map((prod: any) => {
+
+      if (resolvedProduction) {
+        const mappedProduction = resolvedProduction.map((prod: any) => {
           let leadId = '';
           if (prod.production_id && prod.production_id.startsWith('PRD-')) {
             leadId = prod.production_id.replace('PRD-', '');
           }
           if (!leadId) {
-            const raw = dbRawFootage?.find(r => r.tracking_id === prod.tracking_id);
-            const ord = dbOrders?.find(o => o.order_id === raw?.order_id);
+            const raw = resolvedRawFootage?.find(r => r.tracking_id === prod.tracking_id);
+            const ord = resolvedOrders?.find(o => o.order_id === raw?.order_id);
             leadId = ord?.lead_id || '';
           }
-          const associatedLead = dbLeads?.find(ld => ld.lead_id === leadId);
+          const associatedLead = resolvedLeads?.find(ld => ld.lead_id === leadId);
           const leadStatus = associatedLead?.current_status || associatedLead?.status;
           return {
             ...prod,
@@ -1748,13 +1827,15 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setProduction(mappedProduction);
         localStorage.setItem('erp_production', JSON.stringify(mappedProduction));
       }
-      if (dbPayments) {
-        setPayments(dbPayments as any);
-        localStorage.setItem('erp_payments', JSON.stringify(dbPayments));
+
+      if (resolvedPayments) {
+        setPayments(resolvedPayments as any);
+        localStorage.setItem('erp_payments', JSON.stringify(resolvedPayments));
       }
-      if (dbLogs) {
-        setLogs(dbLogs as any);
-        localStorage.setItem('erp_activity_logs', JSON.stringify(dbLogs));
+
+      if (resolvedLogs) {
+        setLogs(resolvedLogs as any);
+        localStorage.setItem('erp_activity_logs', JSON.stringify(resolvedLogs));
       }
       if (staffAssignmentsRes && staffAssignmentsRes.data) {
         setStaffAssignments(staffAssignmentsRes.data as StaffAssignment[]);
@@ -2010,6 +2091,166 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Listen to Supabase Auth state changes to synchronize session and handle on-the-fly profiles
+  useEffect(() => {
+    if (!supabaseClient) return;
+
+    const syncProfileAndSession = async (session: any) => {
+      if (!session || !session.user) {
+        return;
+      }
+      const authUser = session.user;
+      const email = authUser.email?.toLowerCase().trim();
+      
+      console.log(`[SYNC SESSION] Syncing profile for ${email} / Auth ID: ${authUser.id}`);
+      
+      // Look up profile in public.users table
+      // Let's search by ID first, then by email.
+      let dbUser: any = null;
+      try {
+        const { data: userById } = await supabaseClient
+          .from('users')
+          .select('*')
+          .eq('id', authUser.id)
+          .maybeSingle();
+        
+        dbUser = userById;
+
+        if (!dbUser && email) {
+          const { data: userByEmail } = await supabaseClient
+            .from('users')
+            .select('*')
+            .eq('email', email)
+            .maybeSingle();
+          
+          if (userByEmail) {
+            console.log(`[SYNC SESSION] Found user profile by email ${email} with different ID ${userByEmail.id}. Aligning ID to auth ID ${authUser.id}`);
+            // Let's update the ID of the user row to match the auth ID
+            const { error: updateIdErr } = await supabaseClient
+              .from('users')
+              .update({ id: authUser.id })
+              .eq('email', email);
+            
+            if (!updateIdErr) {
+              dbUser = { ...userByEmail, id: authUser.id };
+            } else {
+              console.warn(`[SYNC SESSION] Failed to update user ID to auth ID:`, updateIdErr.message);
+              dbUser = userByEmail; // fallback to the existing row
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[SYNC SESSION] Error searching for user profile:", err);
+      }
+
+      let finalProfileUser: User;
+
+      if (dbUser) {
+        // Profile exists! Use it.
+        finalProfileUser = mapUserFieldsFromDb(dbUser);
+        console.log(`[SYNC SESSION] Loaded profile successfully. Role: ${finalProfileUser.role}`);
+      } else {
+        // Profile record is missing! Auto-create it.
+        console.log(`Profile missing for auth user ${email}. Auto-creating profile...`);
+        
+        // Role mapping based on email or metadata
+        let role: UserRole = 'Sales Team'; // default
+        if (email === 'owner@photocrew.com') {
+          role = 'Business Owner';
+        } else if (email === 'sales@photocrew.com') {
+          role = 'Sales Team';
+        } else if (email === 'operations@photocrew.com') {
+          role = 'Operations Team';
+        } else if (email === 'production@photocrew.com') {
+          role = 'Production Team';
+        } else {
+          // Look up from metadata
+          const metaRole = authUser.user_metadata?.role;
+          if (metaRole === 'Business Owner' || metaRole === 'Sales Team' || metaRole === 'Operations Team' || metaRole === 'Production Team') {
+            role = metaRole as UserRole;
+          } else if (metaRole === 'Sales') {
+            role = 'Sales Team';
+          } else if (metaRole === 'Operations') {
+            role = 'Operations Team';
+          } else if (metaRole === 'Production') {
+            role = 'Production Team';
+          }
+        }
+
+        const name = authUser.user_metadata?.name || authUser.user_metadata?.full_name || email?.split('@')[0] || 'Unknown User';
+        const mobile = authUser.user_metadata?.mobile || '';
+        const username = authUser.user_metadata?.username || email?.split('@')[0] || 'user';
+        const password = authUser.user_metadata?.password || 'temp123';
+
+        const newProfile = {
+          id: authUser.id,
+          name,
+          email: email || '',
+          mobile,
+          role,
+          active: true,
+          created_at: new Date().toISOString(),
+          password,
+          username
+        };
+
+        const { error: insertErr } = await supabaseClient
+          .from('users')
+          .upsert(stripClientOnlyFields('users', newProfile));
+
+        if (insertErr) {
+          console.error("Failed to auto-create profile in users table:", insertErr.message);
+        }
+
+        finalProfileUser = mapUserFieldsFromDb(newProfile);
+      }
+
+      // Check if user is active
+      if (!finalProfileUser.active) {
+        console.warn(`[SYNC SESSION] User is deactivated. Logging out.`);
+        logout();
+        return;
+      }
+
+      // Update states
+      setCurrentUser(finalProfileUser);
+      setCurrentRoleState(finalProfileUser.role);
+      setCurrentUserNameState(finalProfileUser.name);
+      
+      // Update local storage
+      localStorage.setItem('erp_current_user', JSON.stringify(finalProfileUser));
+      localStorage.setItem('erp_role', finalProfileUser.role);
+      localStorage.setItem('erp_user_name', finalProfileUser.name);
+    };
+
+    // Check initial session
+    supabaseClient.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        syncProfileAndSession(session);
+      }
+    });
+
+    // Subscribe to auth state changes
+    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(async (event, session) => {
+      console.log(`[SUPABASE AUTH EVENT]: ${event}`);
+      if (session) {
+        await syncProfileAndSession(session);
+      } else {
+        // If they signed out, clear current user
+        if (event === 'SIGNED_OUT') {
+          setCurrentUser(null);
+          localStorage.removeItem('erp_current_user');
+          localStorage.removeItem('erp_role');
+          localStorage.removeItem('erp_user_name');
+        }
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   // Synchronous database fetching and real-time subscription channels
   useEffect(() => {
     fetchFromDb();
@@ -2249,74 +2490,124 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Login action
   const login = async (emailOrUsername: string, password: string) => {
     const cleanInput = emailOrUsername.trim().toLowerCase();
-    const foundUser = users.find(u => 
-      u.email.toLowerCase() === cleanInput || 
-      u.name.toLowerCase() === cleanInput || 
-      (u.username && u.username.toLowerCase() === cleanInput) ||
-      u.email.split('@')[0].toLowerCase() === cleanInput
-    );
-    
-    if (!foundUser) {
+    let dbUser: any = null;
+
+    if (supabaseClient) {
+      try {
+        // Direct query of public.users table (allows email or username login)
+        const { data: qData } = await supabaseClient
+          .from('users')
+          .select('*')
+          .or(`email.ilike.${cleanInput},username.ilike.${cleanInput}`);
+
+        if (qData && qData.length > 0) {
+          dbUser = qData[0];
+        }
+      } catch (err) {
+        console.warn("Direct users table fetch failed, falling back to local users state:", err);
+      }
+    }
+
+    // Fallback to local users state
+    if (!dbUser) {
+      dbUser = users.find(u => 
+        u.email.toLowerCase() === cleanInput || 
+        (u.username && u.username.toLowerCase() === cleanInput)
+      );
+    }
+
+    if (!dbUser) {
       return { success: false, error: 'User account not found.' };
     }
-    
-    if (!foundUser.active) {
+
+    // Validate active status
+    if (!dbUser.active) {
       return { success: false, error: 'Your account has been deactivated. Please contact your system administrator.' };
     }
-    
-    if (foundUser.password !== password) {
+
+    // Validate password
+    if (dbUser.password !== password) {
       return { success: false, error: 'Incorrect email/username or password.' };
     }
 
-    // Authenticate with Supabase Auth so auth.uid() becomes set and RLS triggers successfully
+    // Load credentials & fields
+    let foundUser = mapUserFieldsFromDb(dbUser);
+
+    // Try authenticating with Supabase Auth in background to set cookie/session
     if (supabaseClient) {
       try {
-        const { error: signInErr } = await supabaseClient.auth.signInWithPassword({
-          email: foundUser.email,
+        console.log(`[LOGIN] Attempting background Supabase Auth sign-in for: ${dbUser.email}`);
+        const { data: authData, error: authErr } = await supabaseClient.auth.signInWithPassword({
+          email: dbUser.email,
           password: password
         });
 
-        if (signInErr) {
-          console.warn('Supabase Auth signIn failed, attempting on-the-fly signUp:', signInErr.message);
+        if (!authErr && authData.user) {
+          console.log(`[LOGIN] Supabase Auth sign-in succeeded for ${dbUser.email}`);
+          
+          // Check if database row ID needs to be updated to match the auth user's UUID
+          if (dbUser.id !== authData.user.id) {
+            console.log(`[LOGIN] Aligning database ID ${dbUser.id} to Auth UUID ${authData.user.id}`);
+            const { error: updateIdErr } = await supabaseClient
+              .from('users')
+              .update({ id: authData.user.id })
+              .eq('email', dbUser.email);
+
+            if (!updateIdErr) {
+              foundUser = { ...foundUser, id: mapFromDbUserId(authData.user.id) };
+            } else {
+              console.warn(`[LOGIN] Failed to update db user ID to match Auth UUID:`, updateIdErr.message);
+            }
+          }
+        } else {
+          console.log(`[LOGIN] Supabase Auth sign-in failed (${authErr?.message}). Checking if on-the-fly signup is needed...`);
           // Try to sign up the user on the fly so they exist in Auth next time
-          const { error: signUpErr } = await supabaseClient.auth.signUp({
-            email: foundUser.email,
+          const { data: signUpData, error: signUpErr } = await supabaseClient.auth.signUp({
+            email: dbUser.email,
             password: password,
             options: {
               data: {
-                name: foundUser.name,
-                username: foundUser.username || foundUser.email.split('@')[0],
-                mobile: foundUser.mobile,
-                role: foundUser.role,
+                name: dbUser.name,
+                username: dbUser.username || dbUser.email.split('@')[0],
+                mobile: dbUser.mobile || '',
+                role: dbUser.role,
                 password: password
               }
             }
           });
-          if (signUpErr) {
-            console.warn('On-the-fly signUp notice (handled):', signUpErr.message);
-          } else {
-            console.log('On-the-fly signUp succeeded. Attempting clean sign-in...');
-            const { error: retrySignInErr } = await supabaseClient.auth.signInWithPassword({
-              email: foundUser.email,
+
+          if (!signUpErr && signUpData?.user) {
+            console.log(`[LOGIN] On-the-fly signUp succeeded for ${dbUser.email}. Signing in...`);
+            const { data: retryData, error: retrySignInErr } = await supabaseClient.auth.signInWithPassword({
+              email: dbUser.email,
               password: password
             });
-            if (retrySignInErr) {
-              console.warn('Retry sign-in after signUp result:', retrySignInErr.message);
+
+            if (!retrySignInErr && retryData.user) {
+              if (dbUser.id !== retryData.user.id) {
+                await supabaseClient.from('users').update({ id: retryData.user.id }).eq('email', dbUser.email);
+                foundUser = { ...foundUser, id: mapFromDbUserId(retryData.user.id) };
+              }
             }
+          } else {
+            console.warn('[LOGIN] On-the-fly signUp failed or not possible:', signUpErr?.message);
           }
-        } else {
-          console.log('Logged into Supabase Auth successfully as:', foundUser.email);
         }
-      } catch (authErr) {
-        console.error('Unhandled auth error during login:', authErr);
+      } catch (authErr: any) {
+        console.error('[LOGIN] Resilient Auth Exception:', authErr);
       }
     }
-    
+
     // Successful login
     setCurrentUser(foundUser);
     setCurrentRoleState(foundUser.role);
     setCurrentUserNameState(foundUser.name);
-    
+
+    // Save to local storage
+    localStorage.setItem('erp_current_user', JSON.stringify(foundUser));
+    localStorage.setItem('erp_role', foundUser.role);
+    localStorage.setItem('erp_user_name', foundUser.name);
+
     // Log login
     const userName = foundUser.name;
     const userRole = foundUser.role;
@@ -2331,7 +2622,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setLogs((prev) => [newLog, ...prev]);
     pushInsert('activity_logs', newLog);
-    
+
     return { success: true };
   };
 
@@ -2354,6 +2645,15 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentRoleState('Business Owner');
     setCurrentUserNameState('Rupand Das');
     localStorage.removeItem('erp_current_user');
+    localStorage.removeItem('erp_role');
+    localStorage.removeItem('erp_user_name');
+    if (supabaseClient) {
+      supabaseClient.auth.signOut()
+        .then(() => {
+          console.log("[LOGOUT] Supabase Auth signOut complete.");
+        })
+        .catch(err => console.warn('Supabase Auth signOut failed:', err));
+    }
   };
 
   // Helper to add activity logs
@@ -2440,9 +2740,27 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     leadDetails: Omit<Lead, 'lead_id' | 'status' | 'created_by' | 'sales_person' | 'created_date'>,
     packages?: Omit<LeadPackage, 'lead_package_id' | 'lead_id'>[]
   ) => {
+    // Verify logged-in user is authenticated
+    if (supabaseClient) {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session || !currentUser) {
+        throw new Error("Please login again.");
+      }
+    } else {
+      if (!currentUser) {
+        throw new Error("Please login again.");
+      }
+    }
+
+    // Verify user has permission to create leads
+    if (currentUser && currentUser.role !== 'Sales Team' && currentUser.role !== 'Business Owner') {
+      throw new Error("User does not have permission to create leads.");
+    }
+
     const leadId = `LD-${Math.floor(9012 + Math.random() * 988)}`;
     const newLead: Lead = {
       ...leadDetails,
+      email: leadDetails.email || '',
       lead_id: leadId,
       created_date: new Date().toISOString().split('T')[0],
       sales_person: currentUserName,

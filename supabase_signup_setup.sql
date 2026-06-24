@@ -19,8 +19,12 @@ CREATE TABLE IF NOT EXISTS public.users (
     username VARCHAR(255)
 );
 
--- 2. Add username column and metrics to public.users if not exists
+-- 2. Add custom and legacy sync columns to public.users if not exists
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS username VARCHAR(255);
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS name VARCHAR(255);
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255);
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS mobile VARCHAR(50);
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
 
 -- 3. Create index on username to facilitate high speed credential lookup
 CREATE INDEX IF NOT EXISTS idx_users_username ON public.users(username);
@@ -53,20 +57,27 @@ CREATE POLICY anon_insert_users_policy ON public.users
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-  INSERT INTO public.users (id, name, email, role, active, mobile, username, password)
+  -- Clear out any existing seeded users with the same email to avoid unique constraint violations
+  DELETE FROM public.users WHERE email = new.email;
+
+  INSERT INTO public.users (id, name, full_name, email, role, active, mobile, phone, username, password)
   VALUES (
     new.id,
     COALESCE(new.raw_user_meta_data->>'name', new.raw_user_meta_data->>'full_name', new.email),
+    COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', new.email),
     new.email,
     COALESCE(new.raw_user_meta_data->>'role', 'Sales Team'),
     TRUE,
-    COALESCE(new.raw_user_meta_data->>'mobile', ''),
+    COALESCE(new.raw_user_meta_data->>'mobile', new.raw_user_meta_data->>'phone', ''),
+    COALESCE(new.raw_user_meta_data->>'phone', new.raw_user_meta_data->>'mobile', ''),
     COALESCE(new.raw_user_meta_data->>'username', SPLIT_PART(new.email, '@', 1)),
     COALESCE(new.raw_user_meta_data->>'password', 'temp123')
   )
   ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
+    full_name = EXCLUDED.full_name,
     mobile = EXCLUDED.mobile,
+    phone = EXCLUDED.phone,
     role = EXCLUDED.role,
     active = EXCLUDED.active,
     username = EXCLUDED.username,

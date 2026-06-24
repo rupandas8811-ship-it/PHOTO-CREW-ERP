@@ -20,6 +20,7 @@ async function checkCols(table: string) {
 }
 
 async function run() {
+  await checkCols('users');
   await checkCols('leads');
   await checkCols('orders');
   await checkCols('production');

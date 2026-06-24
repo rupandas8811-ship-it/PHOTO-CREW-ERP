@@ -7,13 +7,12 @@ const anonKey = process.env.SUPABASE_ANON_KEY || '';
 const supabase = createClient(url, anonKey);
 
 async function run() {
-  const { data, error } = await supabase.from('leads').select('*').limit(1);
+  const { data, error } = await supabase.from('users').select('*');
   if (error) {
-    console.error("Error fetching leads:", error);
-  } else if (data && data.length > 0) {
-    console.log("Columns:", Object.keys(data[0]));
+    console.error('Error fetching users:', error);
   } else {
-    console.log("No rows in leads table, but select succeeded!");
+    console.log('Users in database (anon key):', data);
   }
 }
+
 run();

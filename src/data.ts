@@ -128,6 +128,50 @@ export const INITIAL_USERS: User[] = [
     active: true,
     created_at: '2026-06-14T00:00:00Z',
     password: 'Prod@123'
+  },
+  {
+    id: 'U-013',
+    name: 'PhotoCrew Owner',
+    mobile: '+919999999913',
+    email: 'owner@photocrew.com',
+    username: 'owner_photocrew',
+    role: 'Business Owner',
+    active: true,
+    created_at: '2026-06-24T00:00:00Z',
+    password: 'Admin@123'
+  },
+  {
+    id: 'U-014',
+    name: 'PhotoCrew Sales',
+    mobile: '+919999999914',
+    email: 'sales@photocrew.com',
+    username: 'sales_photocrew',
+    role: 'Sales Team',
+    active: true,
+    created_at: '2026-06-24T00:00:00Z',
+    password: 'Sales@123'
+  },
+  {
+    id: 'U-015',
+    name: 'PhotoCrew Operations',
+    mobile: '+919999999915',
+    email: 'operations@photocrew.com',
+    username: 'operations_photocrew',
+    role: 'Operations Team',
+    active: true,
+    created_at: '2026-06-24T00:00:00Z',
+    password: 'Ops@123'
+  },
+  {
+    id: 'U-016',
+    name: 'PhotoCrew Production',
+    mobile: '+919999999916',
+    email: 'production@photocrew.com',
+    username: 'production_photocrew',
+    role: 'Production Team',
+    active: true,
+    created_at: '2026-06-24T00:00:00Z',
+    password: 'Prod@123'
   }
 ];
 

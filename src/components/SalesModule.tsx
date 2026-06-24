@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRole } from './RoleContext';
+import { supabaseClient } from '../supabaseClient';
 import { 
   Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, Check, Package
 } from 'lucide-react';
@@ -535,6 +536,7 @@ interface SalesModuleProps {
 
 export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: externalActiveTab, setActiveSubTab: externalSetActiveTab }) => {
   const { 
+    currentUser,
     currentRole, 
     leads, 
     leadPackages, 
@@ -1710,6 +1712,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               Proposed Client Budget (₹) *
             </label>
             <input
+              id={isEdit ? "wizard_edit_step4_first_field" : "wizard_create_step4_first_field"}
               type="number"
               required
               value={budgetValue || ''}
@@ -2567,21 +2570,47 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     if (wizardStep === 1) {
       if (!createForm.mobile) {
-        alert('Phone Number is required.');
+        showToastMsg("Phone Number is required.", "error");
         return;
       }
       if (!createForm.lead_source || createForm.lead_source === '') {
-        alert('Lead Source is required.');
+        showToastMsg("Lead Source is required.", "error");
         return;
       }
+
+      // Check Supabase Authentication and Session before creating lead
+      if (supabaseClient) {
+        try {
+          const { data: { session } } = await supabaseClient.auth.getSession();
+          if (!session || !currentUser) {
+            showToastMsg("Please login again.", "error");
+            return;
+          }
+        } catch (authErr) {
+          showToastMsg("Please login again.", "error");
+          return;
+        }
+      } else {
+        if (!currentUser) {
+          showToastMsg("Please login again.", "error");
+          return;
+        }
+      }
+
+      // Check if user has Sales Team / Business Owner role permission
+      if (currentUser && currentUser.role !== 'Sales Team' && currentUser.role !== 'Business Owner') {
+        showToastMsg("User does not have permission to create leads.", "error");
+        return;
+      }
+
       if (!validateIndianMobile(createForm.mobile)) {
-        alert('Please enter a valid Indian mobile number starting with 6, 7, 8, or 9 (10 digits).');
+        showToastMsg("Please enter a valid Indian mobile number starting with 6, 7, 8, or 9 (10 digits).", "error");
         return;
       }
       if (createForm.email && createForm.email.trim() !== '') {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(createForm.email.trim())) {
-          alert('Please enter a valid email address.');
+          showToastMsg("Please enter a valid email address.", "error");
           return;
         }
       }
@@ -2616,17 +2645,29 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           });
         }
         setWizardStep(2);
-        setTimeout(autoScrollToFormHeader, 80);
+        showToastMsg("Customer details saved successfully.", "success");
+        setTimeout(() => {
+          autoScrollToFormHeader();
+          document.getElementById('wizard_step2_first_field')?.focus();
+        }, 100);
       } catch (err: any) {
         console.error("Step 1 saving failed:", err);
         const errMsg = err.message || String(err);
         let displayedMsg = errMsg;
-        if (errMsg.toLowerCase().includes("database") || errMsg.toLowerCase().includes("connection") || errMsg.toLowerCase().includes("failed to fetch") || errMsg.toLowerCase().includes("supabase")) {
-          displayedMsg = "Database connection failed.";
+        
+        if (errMsg.includes("row-level security policy") || errMsg.toLowerCase().includes("rls") || errMsg.toLowerCase().includes("security policy")) {
+          displayedMsg = "Supabase RLS policy blocked INSERT.";
+        } else if (errMsg.includes("permission") || errMsg.toLowerCase().includes("permission denied")) {
+          displayedMsg = "User does not have permission to create leads.";
+        } else if (errMsg.includes("login") || errMsg.toLowerCase().includes("unauthenticated") || errMsg.toLowerCase().includes("jwt")) {
+          displayedMsg = "Please login again.";
+        } else if (errMsg.toLowerCase().includes("database") || errMsg.toLowerCase().includes("connection") || errMsg.toLowerCase().includes("failed to fetch") || errMsg.toLowerCase().includes("supabase")) {
+          displayedMsg = "Database save failed: connection error.";
         } else {
-          displayedMsg = "Status update failed.";
+          displayedMsg = `Unable to create lead: ${errMsg}`;
         }
-        alert(displayedMsg);
+        
+        showToastMsg(displayedMsg, "error");
       } finally {
         setIsSaving(false);
       }
@@ -2634,15 +2675,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     else if (wizardStep === 2) {
       if (!createForm.event_type || createForm.event_type === '') {
-        alert('Please select Event Type.');
+        showToastMsg("Please select Event Type.", "error");
         return;
       }
       if (createForm.event_type === 'Other' && (!createForm.custom_event_name || createForm.custom_event_name.trim() === '')) {
-        alert('Please enter a Custom Event Name.');
+        showToastMsg("Please enter a Custom Event Name.", "error");
         return;
       }
       if (!createForm.shoot_type || createForm.shoot_type === '') {
-        alert('Please select a Desired Event Shoot Type.');
+        showToastMsg("Please select a Desired Event Shoot Type.", "error");
         return;
       }
 
@@ -2666,17 +2707,21 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city)
         });
         setWizardStep(3);
-        setTimeout(autoScrollToFormHeader, 80);
+        showToastMsg("Event details saved successfully.", "success");
+        setTimeout(() => {
+          autoScrollToFormHeader();
+          document.getElementById('wizard_step3_first_field')?.focus();
+        }, 100);
       } catch (err: any) {
         console.error("Step 2 saving failed:", err);
         const errMsg = err.message || String(err);
         let displayedMsg = errMsg;
         if (errMsg.toLowerCase().includes("database") || errMsg.toLowerCase().includes("connection") || errMsg.toLowerCase().includes("failed to fetch") || errMsg.toLowerCase().includes("supabase")) {
-          displayedMsg = "Database connection failed.";
+          displayedMsg = "Database save failed: connection error.";
         } else {
-          displayedMsg = "Status update failed.";
+          displayedMsg = `Unable to save event details: ${errMsg}`;
         }
-        alert(displayedMsg);
+        showToastMsg(displayedMsg, "error");
       } finally {
         setIsSaving(false);
       }
@@ -2684,7 +2729,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     else if (wizardStep === 3) {
       if (!selectedPkgIds || selectedPkgIds.length === 0) {
-        alert('Please select a package before continuing.');
+        showToastMsg("Please select a package before continuing.", "error");
         return;
       }
       try {
@@ -2711,17 +2756,21 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         setFinalPackageAmount(finalTotal);
 
         setWizardStep(4);
-        setTimeout(autoScrollToFormHeader, 80);
+        showToastMsg("Package selection saved successfully.", "success");
+        setTimeout(() => {
+          autoScrollToFormHeader();
+          document.getElementById('wizard_create_step4_first_field')?.focus();
+        }, 100);
       } catch (err: any) {
         console.error("Step 3 saving failed:", err);
         const errMsg = err.message || String(err);
         let displayedMsg = errMsg;
         if (errMsg.toLowerCase().includes("database") || errMsg.toLowerCase().includes("connection") || errMsg.toLowerCase().includes("failed to fetch") || errMsg.toLowerCase().includes("supabase")) {
-          displayedMsg = "Database connection failed.";
+          displayedMsg = "Database save failed: connection error.";
         } else {
-          displayedMsg = "Status update failed.";
+          displayedMsg = `Unable to save packages: ${errMsg}`;
         }
-        alert(displayedMsg);
+        showToastMsg(displayedMsg, "error");
       } finally {
         setIsSaving(false);
       }
@@ -2735,17 +2784,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city)
         });
         setWizardStep(5);
-        setTimeout(autoScrollToFormHeader, 80);
+        showToastMsg("Proposed budget and remarks saved successfully.", "success");
+        setTimeout(() => {
+          autoScrollToFormHeader();
+        }, 100);
       } catch (err: any) {
         console.error("Step 4 saving failed:", err);
         const errMsg = err.message || String(err);
         let displayedMsg = errMsg;
         if (errMsg.toLowerCase().includes("database") || errMsg.toLowerCase().includes("connection") || errMsg.toLowerCase().includes("failed to fetch") || errMsg.toLowerCase().includes("supabase")) {
-          displayedMsg = "Database connection failed.";
+          displayedMsg = "Database save failed: connection error.";
         } else {
-          displayedMsg = "Status update failed.";
+          displayedMsg = `Unable to save budget: ${errMsg}`;
         }
-        alert(displayedMsg);
+        showToastMsg(displayedMsg, "error");
       } finally {
         setIsSaving(false);
       }
@@ -4423,6 +4475,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </button>
             </div>
 
+            {crmToast && (
+              <div className={`mx-4 mt-4 p-3 rounded-xl shadow-lg flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2 duration-200 shrink-0 ${
+                crmToast.type === 'success' 
+                  ? 'bg-emerald-950/90 border border-emerald-500/20 text-emerald-400' 
+                  : 'bg-red-950/90 border border-red-500/20 text-red-400'
+              }`}>
+                <span>{crmToast.type === 'success' ? '⚡' : '⚠️'}</span>
+                <span className="text-[11px] font-mono font-bold">{crmToast.message}</span>
+              </div>
+            )}
+
             {/* Wizard Progress Bar */}
             <div className="bg-slate-955/30 px-4 sm:px-6 py-3.5 border-b border-slate-800/50 shrink-0">
               <div className="grid grid-cols-5 gap-1.5 sm:gap-3">
@@ -4647,6 +4710,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           Event Type *
                         </label>
                         <select
+                          id="wizard_step2_first_field"
                           value={createForm.event_type}
                           onChange={(e) => setCreateForm({ ...createForm, event_type: e.target.value })}
                           className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all cursor-pointer font-bold"
@@ -4801,6 +4865,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     )}
 
                     <button
+                      id="wizard_step3_first_field"
                       type="button"
                       onClick={() => setIsPkgDropdownOpen(!isPkgDropdownOpen)}
                       className={`w-full bg-[#0F172A] border rounded-lg py-2.5 px-3.5 text-xs flex items-center justify-between focus:outline-none transition-all cursor-pointer ${
