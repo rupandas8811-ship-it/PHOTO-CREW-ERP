@@ -59,12 +59,7 @@ CREATE TABLE public.leads (
     event_location TEXT NOT NULL,
     budget NUMERIC NOT NULL CHECK (budget >= 0),
     sales_person VARCHAR(255) NOT NULL,
-    status VARCHAR(50) NOT NULL CHECK (status IN (
-        'New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Order Confirmed', 'Lost Lead',
-        'New Order Received', 'Operations Assigned', 'Staff Assigned', 'Event Scheduled', 'Event Completed', 'Event Cancelled', 'Raw Footage Received', 'Operations Stage',
-        'New Project Received', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Customer Review', 'Client Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress', 'Final Approval', 'Approved', 'Client Approved', 'Project Delivered', 'Delivered', 
-        'Payment Pending', 'Project Closed', 'Closed', 'Project On Hold', 'Project Cancelled'
-    )),
+    status VARCHAR(50) NOT NULL,
     remarks TEXT,
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255),
@@ -74,38 +69,14 @@ CREATE TABLE public.leads (
     production_role VARCHAR(255),
     delivery_target_date DATE,
     current_status VARCHAR(50),
-    CONSTRAINT leads_event_type_check CHECK (
-      event_type IN (
-        'Weddings',
-        'Hamarlok Weddings',
-        'Hamarlok weddings',
-        'Hindu/Malayali Weddings',
-        'Engagement',
-        'Pre Weddings',
-        'Maternity',
-        'Baby Shower',
-        'New Born',
-        'Baby Shoot',
-        'Birthday',
-        'Naming Ceremony',
-        'House Warming',
-        'Upanayana',
-        'Half Saree',
-        'Portfolio',
-        'Product Shoot',
-        'Corporate Events',
-        'Car Shoot',
-        'Bike Shoot',
-        'Other'
-      )
-    )
+    custom_event_name VARCHAR(255)
 );
 
 -- FOLLOW-UPS TABLE (Granular Follow-Up Interactions Tracking list)
 CREATE TABLE public.follow_ups (
     follow_up_id VARCHAR(50) PRIMARY KEY,
     lead_id VARCHAR(50) NOT NULL REFERENCES public.leads(lead_id) ON DELETE CASCADE,
-    follow_up_status VARCHAR(50) NOT NULL CHECK (follow_up_status IN ('Pending', 'Completed', 'Scheduled')),
+    follow_up_status VARCHAR(50) NOT NULL,
     follow_up_date DATE NOT NULL DEFAULT CURRENT_DATE,
     next_follow_up_date DATE,
     call_notes TEXT,
@@ -123,7 +94,7 @@ CREATE TABLE public.quotations (
     discount_amount NUMERIC NOT NULL DEFAULT 0 CHECK (discount_amount >= 0),
     tax_amount NUMERIC NOT NULL DEFAULT 0 CHECK (tax_amount >= 0),
     final_amount NUMERIC NOT NULL CHECK (final_amount >= 0),
-    quotation_status VARCHAR(50) NOT NULL CHECK (quotation_status IN ('Draft', 'Sent', 'Approved', 'Rejected', 'Expired')),
+    quotation_status VARCHAR(50) NOT NULL,
     valid_until DATE,
     terms_conditions TEXT,
     created_by VARCHAR(255) NOT NULL,
@@ -167,6 +138,8 @@ CREATE TABLE public.orders (
     customer_name VARCHAR(255) NOT NULL,
     mobile VARCHAR(50) NOT NULL,
     event_type VARCHAR(100) NOT NULL,
+    custom_event_type VARCHAR(255),
+    custom_event_name VARCHAR(255),
     event_date DATE NOT NULL,
     event_time TIME NOT NULL,
     event_location TEXT NOT NULL,
@@ -174,13 +147,8 @@ CREATE TABLE public.orders (
     quotation_amount NUMERIC NOT NULL CHECK (quotation_amount >= 0),
     advance_received NUMERIC NOT NULL DEFAULT 0 CHECK (advance_received >= 0),
     balance_amount NUMERIC NOT NULL CHECK (balance_amount >= 0),
-    order_status VARCHAR(50) NOT NULL CHECK (order_status IN ('Confirmed', 'Completed', 'Delivered', 'Paid', 'Closed')),
-    current_stage VARCHAR(50) NOT NULL CHECK (current_stage IN (
-        'New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Order Confirmed', 'Lost Lead',
-        'New Order Received', 'Operations Assigned', 'Staff Assigned', 'Event Scheduled', 'Event Completed', 'Event Cancelled', 'Raw Footage Received', 'Operations Stage',
-        'New Project Received', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Customer Review', 'Client Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress', 'Final Approval', 'Approved', 'Client Approved', 'Project Delivered', 'Delivered', 
-        'Payment Pending', 'Project Closed', 'Closed', 'Project On Hold', 'Project Cancelled'
-    )),
+    order_status VARCHAR(50) NOT NULL,
+    current_stage VARCHAR(50) NOT NULL,
     sales_person VARCHAR(255) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_by VARCHAR(255),
@@ -197,7 +165,7 @@ CREATE TABLE public.operations (
     assistant_assigned VARCHAR(255) NOT NULL,
     equipment_kit TEXT NOT NULL,
     reporting_time TIME NOT NULL,
-    event_status VARCHAR(50) NOT NULL CHECK (event_status IN ('Assigned', 'Completed')),
+    event_status VARCHAR(50) NOT NULL,
     remarks TEXT,
     updated_by VARCHAR(255) NOT NULL
 );
@@ -233,12 +201,20 @@ CREATE TABLE public.production (
     raw_footage_location TEXT,
     editing_start_date DATE,
     expected_delivery_date DATE,
-    editing_status VARCHAR(50) NOT NULL CHECK (editing_status IN (
-        'Pending', 'Editing', 'Customer Review', 'Client Review', 'Revision Required', 'Approved', 'Client Approved', 'Final Approval', 'Delivered', 'Project Delivered', 'Closed', 'Project Closed', 'Project On Hold', 'Project Cancelled', 'New Project Received', 'Editor Assigned', 'Editing Started', 'Editing In Progress'
-    )),
-    customer_review_status VARCHAR(50) CHECK (customer_review_status IN ('Pending Review', 'Feedback Given', 'Approved')),
+    editing_status VARCHAR(50) NOT NULL,
+    customer_review_status VARCHAR(50),
     delivery_date DATE,
-    remarks TEXT
+    remarks TEXT,
+    project_priority VARCHAR(50) DEFAULT 'Medium',
+    target_delivery_date DATE,
+    actual_delivery_date DATE,
+    assigned_staff TEXT,
+    project_notes TEXT,
+    internal_comments TEXT,
+    raw_footage_status VARCHAR(100),
+    production_status VARCHAR(100),
+    approval_status VARCHAR(100),
+    editing_progress VARCHAR(50)
 );
 
 -- PAYMENTS TABLE
@@ -251,7 +227,7 @@ CREATE TABLE public.payments (
     final_payment_received NUMERIC NOT NULL DEFAULT 0 CHECK (final_payment_received >= 0),
     payment_date DATE,
     payment_proof_url TEXT,
-    payment_status VARCHAR(50) NOT NULL CHECK (payment_status IN ('Pending', 'Partially Paid', 'Fully Paid'))
+    payment_status VARCHAR(50) NOT NULL
 );
 
 -- ACTIVITY LOGS TABLE

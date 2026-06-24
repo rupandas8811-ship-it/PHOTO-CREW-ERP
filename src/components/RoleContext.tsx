@@ -1273,7 +1273,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       production: [
         'production_id', 'tracking_id', 'editor_assigned', 'raw_footage_location', 
         'editing_start_date', 'expected_delivery_date', 'editing_status', 
-        'customer_review_status', 'delivery_date', 'remarks'
+        'customer_review_status', 'delivery_date', 'remarks', 'project_priority',
+        'target_delivery_date', 'actual_delivery_date', 'assigned_staff', 'project_notes',
+        'internal_comments', 'raw_footage_status', 'production_status', 'approval_status',
+        'editing_progress'
       ],
       payments: [
         'payment_id', 'order_id', 'quotation_amount', 'advance_received', 'balance_due', 
