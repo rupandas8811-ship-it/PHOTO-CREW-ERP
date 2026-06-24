@@ -710,7 +710,7 @@ export const OperationsLeads: React.FC = () => {
                     <tr key={ord.order_id} className="hover:bg-zinc-900/40 transition-all font-mono">
                       <td className="p-3 text-amber-400 font-bold">{ord.order_id}</td>
                       <td className="p-3 font-sans font-bold text-white">{ord.customer_name}</td>
-                      <td className="p-3 text-zinc-300 font-sans">{ord.event_type}</td>
+                      <td className="p-3 text-zinc-300 font-sans">{ord.event_type === 'Other' ? (ord.custom_event_name || ord.custom_event_type || 'Other') : ord.event_type}</td>
                       <td className="p-3 text-zinc-405">{ord.event_date || '—'}</td>
                       <td className="p-3 text-zinc-405">{ord.event_time || '—'}</td>
                       <td className="p-3 text-zinc-405">{op?.reporting_time || '—'}</td>
@@ -1264,7 +1264,13 @@ export const OperationsLeads: React.FC = () => {
                         <div>
                           <span className="text-[10px] text-zinc-505 block uppercase font-mono">Event Type</span>
                           <span className="font-semibold text-white uppercase text-[11px] block">
-                            {activeOrderInstance?.event_type || parentLeadInstance?.event_type || 'N/A'}
+                            {(() => {
+                              const et = activeOrderInstance?.event_type || parentLeadInstance?.event_type;
+                              if (et === 'Other') {
+                                return activeOrderInstance?.custom_event_name || activeOrderInstance?.custom_event_type || parentLeadInstance?.custom_event_name || parentLeadInstance?.custom_event_type || 'Other';
+                              }
+                              return et || 'N/A';
+                            })()}
                           </span>
                         </div>
                         <div>
@@ -1912,7 +1918,7 @@ Please report on time and update status through the portal.`;
               <div className="bg-zinc-950/60 rounded-xl p-3.5 border border-zinc-850 mb-5 text-xs space-y-2">
                 <div className="grid grid-cols-2 gap-2 text-zinc-400">
                   <div><span className="text-zinc-550 font-mono">CUSTOMER:</span> <strong className="text-zinc-250 font-sans">{successModalData.customerName}</strong></div>
-                  <div><span className="text-zinc-550 font-mono">EVENT:</span> <strong className="text-zinc-250 font-sans">{successModalData.order.event_type}</strong></div>
+                  <div><span className="text-zinc-550 font-mono">EVENT:</span> <strong className="text-zinc-250 font-sans">{successModalData.order.event_type === 'Other' ? (successModalData.order.custom_event_name || successModalData.order.custom_event_type || 'Other') : successModalData.order.event_type}</strong></div>
                   <div><span className="text-zinc-550 font-mono">DATE:</span> <strong className="text-emerald-400 font-mono">{successModalData.order.event_date}</strong></div>
                   <div><span className="text-zinc-550 font-mono">TIME:</span> <strong className="text-zinc-300 font-mono">{successModalData.order.event_time}</strong></div>
                   <div className="col-span-2"><span className="text-zinc-550 font-mono">LOCATION:</span> <strong className="text-zinc-350">{successModalData.order.event_location}</strong></div>

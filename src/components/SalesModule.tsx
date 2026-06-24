@@ -4,7 +4,7 @@ import { useRole } from './RoleContext';
 import { 
   Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, Check, Package
 } from 'lucide-react';
-import { Lead, CurrentStage, LeadPackage } from '../types';
+import { Lead, CurrentStage, LeadPackage, EVENT_TYPES } from '../types';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
 import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus } from '../utils';
 import { SalesCalendar } from './SalesCalendar';
@@ -161,7 +161,8 @@ const generateQuotationPDF = (
   doc.setFontSize(7.5);
   doc.setTextColor(71, 85, 105);
   
-  const wrapEventType = doc.splitTextToSize(lead.event_type || '', 60);
+  const displayEventType = lead.event_type === 'Other' ? (lead.custom_event_name || lead.custom_event_type || 'Other') : (lead.event_type || 'N/A');
+  const wrapEventType = doc.splitTextToSize(displayEventType, 60);
   doc.text(`Event Type      :  ${wrapEventType[0] || 'N/A'}`, 110, clientY + 11.5);
   
   let formattedEvDate = 'N/A';
@@ -868,11 +869,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   
   // Custom states for configuring quick reorder
   const [reorderForm, setReorderForm] = useState({
-    event_type: 'Pre-Wedding Shoot',
+    event_type: 'Pre Weddings',
+    custom_event_name: '',
+    custom_event_type: '',
     event_date: '',
     event_time: '12:00',
     event_location: '',
-    package_name: 'Premium Pre-Wedding Special Pack',
+    package_name: 'Premium Pre Weddings Special Pack',
     quotation_amount: 45000,
     advance_received: 15000,
   });
@@ -2333,6 +2336,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         await updateLead(selectedLead.lead_id, {
           event_type: wizardLeadData.event_type,
           custom_event_name: wizardLeadData.custom_event_name,
+          custom_event_type: wizardLeadData.event_type === 'Other' ? wizardLeadData.custom_event_name : undefined,
           event_date: wizardLeadData.event_date,
           event_time: wizardLeadData.event_time,
           reporting_time: wizardLeadData.reporting_time,
@@ -2485,6 +2489,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       email: cust.email,
       lead_source: 'Repeat Customer Desk',
       event_type: reorderForm.event_type,
+      custom_event_name: reorderForm.event_type === 'Other' ? reorderForm.custom_event_name : undefined,
+      custom_event_type: reorderForm.event_type === 'Other' ? reorderForm.custom_event_name : undefined,
       event_date: reorderForm.event_date,
       event_time: reorderForm.event_time,
       event_location: reorderForm.event_location,
@@ -2506,11 +2512,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setIsQuickReorderView(false);
     setDetectedCustomer(null);
     setReorderForm({
-      event_type: 'Pre-Wedding Shoot',
+      event_type: 'Pre Weddings',
+      custom_event_name: '',
+      custom_event_type: '',
       event_date: '',
       event_time: '12:00',
       event_location: '',
-      package_name: 'Premium Pre-Wedding Special Pack',
+      package_name: 'Premium Pre Weddings Special Pack',
       quotation_amount: 45000,
       advance_received: 15000,
     });
@@ -2643,10 +2651,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         const finalSource = createForm.lead_source === 'Other' ? (otherSource ? `Other: ${otherSource}` : 'Other') : createForm.lead_source;
         const finalEventType = createForm.event_type === 'Other' ? 'Other' : createForm.event_type;
         const finalCustomEventName = createForm.event_type === 'Other' ? createForm.custom_event_name : undefined;
+        const finalCustomEventType = createForm.event_type === 'Other' ? createForm.custom_event_name : undefined;
 
         await updateLead(createdLeadId!, {
           event_type: finalEventType,
           custom_event_name: finalCustomEventName,
+          custom_event_type: finalCustomEventType,
           event_date: createForm.event_date || new Date().toISOString().split('T')[0],
           event_time: createForm.event_time || '12:00',
           reporting_time: reportingTime,
@@ -3009,7 +3019,29 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             const fDate = getFollowUpDate(lead.remarks);
             return fDate ? fDate < todayStr : false;
           })()
-        : lead.status === filterStatus;
+        : (() => {
+            const statusLower = (lead.status || '').toLowerCase().trim();
+            const filterLower = filterStatus.toLowerCase().trim();
+            if (filterLower === 'customer review') {
+              return statusLower === 'customer review' || statusLower === 'client review' || statusLower === 'client review sent';
+            }
+            if (filterLower === 'approved') {
+              return statusLower === 'approved' || statusLower === 'client approved';
+            }
+            if (filterLower === 'project delivered') {
+              return statusLower === 'project delivered' || statusLower === 'delivered';
+            }
+            if (filterLower === 'project closed') {
+              return statusLower === 'project closed' || statusLower === 'closed';
+            }
+            if (filterLower === 'new project received') {
+              return statusLower === 'new project received' || statusLower === 'new order received';
+            }
+            if (filterLower === 'follow up') {
+              return statusLower === 'follow up' || statusLower === 'follow-up';
+            }
+            return statusLower === filterLower;
+          })();
     const matchesSales = filterSalesPerson === '' || lead.sales_person === filterSalesPerson;
     const matchesDate = filterDate === '' || lead.event_date === filterDate;
 
@@ -3592,22 +3624,33 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
+                          <div className={reorderForm.event_type === 'Other' ? "sm:col-span-2 space-y-2" : ""}>
                             <label className="block text-[11px] font-medium text-slate-400 mb-1">Event Shoot Type</label>
                             <select
                               value={reorderForm.event_type}
                               onChange={(e) => setReorderForm({ ...reorderForm, event_type: e.target.value })}
                               className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100"
                             >
-                              <option value="Wedding Shoot">Wedding Shoot</option>
-                              <option value="Destination Wedding">Destination Wedding</option>
-                              <option value="Pre-Wedding Shoot">Pre-Wedding Shoot</option>
-                              <option value="Corporate Event">Corporate Event</option>
-                              <option value="Real Estate Reel">Real Estate Reel</option>
-                              <option value="Fashion Portfolio">Fashion Portfolio</option>
-                              <option value="Music Video Launch">Music Video Launch</option>
-                              <option value="Birthday Banquet">Birthday Banquet</option>
+                              {EVENT_TYPES.map(type => (
+                                <option key={type} value={type}>{type}</option>
+                              ))}
                             </select>
+
+                            {reorderForm.event_type === 'Other' && (
+                              <div className="animate-fade-in-down mt-2">
+                                <label className="block text-[11px] font-mono font-bold text-amber-500 mb-1.5">
+                                  Custom Event Type *
+                                </label>
+                                <input
+                                  type="text"
+                                  required
+                                  placeholder="Specify custom event type"
+                                  value={reorderForm.custom_event_name}
+                                  onChange={(e) => setReorderForm({ ...reorderForm, custom_event_name: e.target.value })}
+                                  className="w-full bg-slate-950 border border-amber-500/50 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all text-white"
+                                />
+                              </div>
+                            )}
                           </div>
 
                           <div>
@@ -3991,15 +4034,36 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     </div>
 
                     {/* Row 3: Event Type | Package Duration */}
-                    <div>
+                    <div className={(!EVENT_TYPES.includes(pkgForm.event_type) && pkgForm.event_type !== '') || pkgForm.event_type === 'Other' ? "space-y-2" : ""}>
                       <label className="block text-slate-400 font-semibold mb-1">Event Type</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Wedding, Reception, Pre-wedding shoot"
-                        value={pkgForm.event_type}
-                        onChange={(e) => setPkgForm({ ...pkgForm, event_type: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-855 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
-                      />
+                      <select
+                        value={EVENT_TYPES.includes(pkgForm.event_type) ? pkgForm.event_type : (pkgForm.event_type ? 'Other' : '')}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setPkgForm({ ...pkgForm, event_type: val });
+                        }}
+                        className="w-full bg-slate-950 border border-slate-855 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans cursor-pointer font-bold"
+                      >
+                        <option value="">Select Event Type</option>
+                        {EVENT_TYPES.map(type => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
+                      </select>
+                      {(!EVENT_TYPES.includes(pkgForm.event_type) || pkgForm.event_type === 'Other') && pkgForm.event_type !== '' && (
+                        <div className="animate-fade-in-down mt-1.5">
+                          <label className="block text-[10px] font-mono font-bold text-amber-500 mb-1">
+                            Custom Event Type *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Specify custom event type"
+                            value={pkgForm.event_type === 'Other' ? '' : pkgForm.event_type}
+                            onChange={(e) => setPkgForm({ ...pkgForm, event_type: e.target.value })}
+                            className="w-full bg-slate-950 border border-amber-500/50 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-amber-500 font-sans text-white"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <div>
@@ -4588,15 +4652,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all cursor-pointer font-bold"
                         >
                           <option value="">Select Event Type</option>
-                          <option value="Wedding Shoot">Wedding Shoot</option>
-                          <option value="Destination Wedding">Destination Wedding</option>
-                          <option value="Pre-Wedding Shoot">Pre-Wedding Shoot</option>
-                          <option value="Corporate Event">Corporate Event</option>
-                          <option value="Real Estate Reel">Real Estate Reel</option>
-                          <option value="Fashion Portfolio">Fashion Portfolio</option>
-                          <option value="Music Video Launch">Music Video Launch</option>
-                          <option value="Birthday Banquet">Birthday Banquet</option>
-                          <option value="Other">Other / Custom Event</option>
+                          {EVENT_TYPES.map(type => (
+                            <option key={type} value={type}>{type}</option>
+                          ))}
                         </select>
                       </div>
                       {createForm.event_type === 'Other' && (
@@ -5382,25 +5440,42 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100/90"
+                className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100/90 font-sans cursor-pointer focus:outline-none focus:border-emerald-500"
               >
                 <option value="">All Stages</option>
                 <option value="Overdue">⚠️ Overdue Follow-ups</option>
-                <option value="New Lead">New Lead</option>
-                <option value="Contacted">Contacted</option>
-                <option value="Follow Up">Follow Up</option>
-                <option value="Quotation Generated">Quotation Generated</option>
-                <option value="Quotation Sent">Quotation Sent</option>
-                <option value="Negotiation">Negotiation</option>
-                <option value="Order Confirmed">Order Confirmed</option>
-                <option value="Operations Stage">Operations Stage</option>
-                <option value="Operations Assigned">Operations Assigned</option>
-                <option value="Event Completed">Event Completed</option>
-                <option value="Production Stage">Production Stage</option>
-                <option value="Editing Started">Editing Started</option>
-                <option value="Customer Review">Customer Review</option>
-                <option value="Delivered">Delivered</option>
-                <option value="Closed">Closed</option>
+                
+                <optgroup label="Sales Statuses" className="bg-slate-950 text-emerald-400 font-bold">
+                  <option value="New Lead" className="text-white font-normal">New Lead</option>
+                  <option value="Contacted" className="text-white font-normal">Contacted</option>
+                  <option value="Follow Up" className="text-white font-normal">Follow-up</option>
+                  <option value="Quotation Sent" className="text-white font-normal">Quotation Sent</option>
+                  <option value="Negotiation" className="text-white font-normal">Negotiation</option>
+                  <option value="Order Confirmed" className="text-white font-normal">Order Confirmed</option>
+                  <option value="Lost Lead" className="text-white font-normal">Lost Lead</option>
+                </optgroup>
+
+                <optgroup label="Operations Statuses" className="bg-slate-950 text-amber-400 font-bold">
+                  <option value="Event Scheduled" className="text-white font-normal">Event Scheduled</option>
+                  <option value="Event Completed" className="text-white font-normal">Event Completed</option>
+                  <option value="Event Cancelled" className="text-white font-normal">Event Cancelled</option>
+                  <option value="Raw Footage Received" className="text-white font-normal">Raw Footage Received</option>
+                </optgroup>
+
+                <optgroup label="Production Statuses" className="bg-slate-950 text-indigo-400 font-bold">
+                  <option value="New Project Received" className="text-white font-normal">New Project Received</option>
+                  <option value="Editor Assigned" className="text-white font-normal">Editor Assigned</option>
+                  <option value="Editing Started" className="text-white font-normal">Editing Started</option>
+                  <option value="Editing In Progress" className="text-white font-normal">Editing In Progress</option>
+                  <option value="Customer Review" className="text-white font-normal">Client Review</option>
+                  <option value="Revision Required" className="text-white font-normal">Revision Required</option>
+                  <option value="Approved" className="text-white font-normal">Client Approved</option>
+                  <option value="Final Approval" className="text-white font-normal">Final Approval</option>
+                  <option value="Project Delivered" className="text-white font-normal">Project Delivered</option>
+                  <option value="Project Closed" className="text-white font-normal">Project Closed</option>
+                  <option value="Project On Hold" className="text-white font-normal">Project On Hold</option>
+                  <option value="Project Cancelled" className="text-white font-normal">Project Cancelled</option>
+                </optgroup>
               </select>
             </div>
 
@@ -5517,7 +5592,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             {formatIndianPhoneNumber(lead.mobile)}
                           </td>
                           <td className="p-3.5 text-zinc-300 font-sans">
-                            {lead.event_type}
+                            {lead.event_type === 'Other' ? (lead.custom_event_name || lead.custom_event_type || 'Other') : lead.event_type}
                           </td>
                           <td className="p-3.5 font-mono text-zinc-350">
                             {lead.event_date}
@@ -5937,16 +6012,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white cursor-pointer font-bold"
                           >
                             <option value="">Select Event Type</option>
-                            <option value="Birthday">Birthday</option>
-                            <option value="Corporate Event">Corporate Event</option>
-                            <option value="Baby Shower">Baby Shower</option>
-                            <option value="House Warming">House Warming</option>
-                            <option value="Custom Event">Custom Event</option>
-                            <option value="Pre-Wedding Shoot">Pre-Wedding Shoot</option>
-                            <option value="Wedding cinematic videography">Wedding Cinematic Videography</option>
-                            <option value="Maternity Shoot">Maternity Shoot</option>
-                            <option value="Commercial Filmmaking">Commercial Filmmaking</option>
-                            <option value="Other">Other</option>
+                            {EVENT_TYPES.map(type => (
+                              <option key={type} value={type}>{type}</option>
+                            ))}
                           </select>
                         </div>
                         {wizardLeadData.event_type === 'Other' && (
@@ -6351,19 +6419,33 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   <span className="text-[9px] font-black text-indigo-400 tracking-widest font-mono block">CONFIGURE QUICK REORDER PACKAGE</span>
                   
                   <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div>
+                    <div className={reorderForm.event_type === 'Other' ? "col-span-2 space-y-1.5" : ""}>
                       <label className="text-[10px] text-slate-400 block mb-1">Shoot Category</label>
                       <select
                         value={reorderForm.event_type}
                         onChange={(e) => setReorderForm({ ...reorderForm, event_type: e.target.value })}
                         className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200"
                       >
-                        <option value="Wedding Shoot">Wedding Shoot</option>
-                        <option value="Pre-Wedding Shoot">Pre-Wedding Shoot</option>
-                        <option value="Corporate Event">Corporate Event</option>
-                        <option value="Birthday Banquet">Birthday Banquet</option>
-                        <option value="Fashion Portfolio">Fashion Portfolio</option>
+                        {EVENT_TYPES.map(type => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
                       </select>
+
+                      {reorderForm.event_type === 'Other' && (
+                        <div className="animate-fade-in-down mt-1.5">
+                          <label className="text-[9px] font-mono font-bold text-amber-500 block mb-1">
+                            Custom Event Type *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Specify custom event type"
+                            value={reorderForm.custom_event_name}
+                            onChange={(e) => setReorderForm({ ...reorderForm, custom_event_name: e.target.value })}
+                            className="w-full bg-slate-950 border border-amber-500/50 rounded px-2 py-1 text-slate-100 text-xs focus:outline-none text-white"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <div>

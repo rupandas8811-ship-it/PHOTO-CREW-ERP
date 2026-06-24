@@ -53,6 +53,7 @@ CREATE TABLE public.leads (
     alternate_mobile VARCHAR(50),
     email VARCHAR(255) NOT NULL,
     event_type VARCHAR(100) NOT NULL,
+    custom_event_type VARCHAR(255),
     event_date DATE NOT NULL,
     event_time TIME NOT NULL,
     event_location TEXT NOT NULL,
@@ -72,7 +73,31 @@ CREATE TABLE public.leads (
     assigned_editors TEXT,
     production_role VARCHAR(255),
     delivery_target_date DATE,
-    current_status VARCHAR(50)
+    current_status VARCHAR(50),
+    CONSTRAINT leads_event_type_check CHECK (
+      event_type IN (
+        'Weddings',
+        'Hindu/Malayali Weddings',
+        'Hamarlok weddings',
+        'Engagement',
+        'Pre Weddings',
+        'Maternity',
+        'Baby Shower',
+        'New Born',
+        'Baby Shoot',
+        'Birthday',
+        'Naming Ceremony',
+        'House Warming',
+        'Upanayana',
+        'Half Saree',
+        'Portfolio',
+        'Product Shoot',
+        'Corporate Events',
+        'Car Shoot',
+        'Bike Shoot',
+        'Other'
+      )
+    )
 );
 
 -- FOLLOW-UPS TABLE (Granular Follow-Up Interactions Tracking list)
@@ -626,22 +651,22 @@ CREATE TRIGGER audit_lead_packages AFTER INSERT OR UPDATE OR DELETE ON public.le
 -- Note: User UUID mappings would normally link to authenticating auth.users accounts.
 
 INSERT INTO public.leads (lead_id, created_date, lead_source, customer_name, mobile, email, event_type, event_date, event_time, event_location, budget, sales_person, status, remarks, created_by) VALUES
-('LD-9001', '2026-06-10', 'Instagram', 'Sophia Loren', '+1 (555) 123-4567', 'sophia@example.com', 'Wedding Shoot', '2026-08-15', '14:00:00', 'Grand Hyatt Beach Lawn', 5500, 'Sarah Jenkins', 'New Lead', 'Inquired via Instagram DM. Wants premium cinematic style with 2 videographers.', 'Sarah Jenkins'),
-('LD-9002', '2026-06-09', 'Website Form', 'Arthur Pendragon', '+1 (555) 987-6543', 'arthur@royal.co', 'Corporate Event', '2026-07-22', '09:00:00', 'Camelot Conference Hall', 3500, 'Sarah Jenkins', 'Follow Up', 'Followed up on email. Client checking options. Scheduled next call for next week.', 'Sarah Jenkins'),
-('LD-9003', '2026-06-05', 'Referral', 'Liam Neeson', '+1 (555) 443-8822', 'liam@taken.net', 'Birthday Banquet', '2026-06-28', '18:00:00', 'Starlight Ballroom Resort', 2200, 'Sarah Jenkins', 'Quotation Sent', 'Sent quotation of $2,100 including drone photography. Waiting for approval.', 'Sarah Jenkins'),
-('LD-9004', '2026-06-02', 'Facebook Ad', 'Helena Carter', '+1 (555) 777-1122', 'helena@star.com', 'Fashion Portfolio', '2026-07-05', '11:00:00', 'Industrial Warehouse Studio B', 1800, 'Sarah Jenkins', 'Negotiation', 'Negotiating discount. They requested $1,500 budget. Might close at $1,650.', 'Sarah Jenkins'),
-('LD-9005', '2026-05-18', 'Instagram', 'Victoria & Albert', '+1 (555) 434-2211', 'royal@wedding.org', 'Destination Wedding', '2026-09-01', '16:00:00', 'Udaipur Palace Resort', 12500, 'Sarah Jenkins', 'Order Confirmed', 'Order confirmed with 50% advance. Moving to operations stage.', 'Sarah Jenkins'),
-('LD-9006', '2026-05-15', 'Website Form', 'Marcus Aurelius', '+1 (555) 880-9988', 'marcus@philosophy.edu', 'Pre-Wedding Shoot', '2026-06-20', '06:00:00', 'Sunrise Mountain Peak', 3200, 'Sarah Jenkins', 'Operations Assigned', 'Drone pre-flight authorized. Crew allocated and equipment kit prepped.', 'Sarah Jenkins'),
-('LD-9007', '2026-05-10', 'Referral', 'Billie Eilish', '+1 (555) 111-2222', 'billie@interscope.com', 'Music Video Launch', '2026-06-08', '20:00:00', 'Underground Concrete Tunnel', 8000, 'Sarah Jenkins', 'Event Completed', 'Shoot completed successfully. Incredible slow-mo shots captured. Raw footage pending transfer.', 'Sarah Jenkins'),
-('LD-9008', '2026-05-08', 'Google Search', 'Elizabeth Bennet', '+1 (555) 666-4444', 'elizabeth@pemberley.com', 'Graduation Gala', '2026-06-03', '17:00:00', 'Longbourn Gardens', 4500, 'Sarah Jenkins', 'Editing Started', 'Footage received. Emily allocated as chief editor. Editing has started recursively.', 'Sarah Jenkins'),
-('LD-9009', '2026-05-02', 'Instagram', 'Elon Musk', '+1 (555) 420-6969', 'elon@spacex.com', 'Product Commercial', '2026-05-25', '12:00:00', 'Starbase Launch Pad A', 15000, 'Sarah Jenkins', 'Customer Review', 'First cut sent. Waiting for review. Client loved the rocket booster framing.', 'Sarah Jenkins'),
-('LD-9010', '2026-04-28', 'Referral', 'Bruce Wayne', '+1 (555) 911-3948', 'bruce@waynecorp.com', 'Charity Elite Gala', '2026-05-18', '19:00:00', 'Wayne Manor Ball Room', 20000, 'Sarah Jenkins', 'Delivered', 'Delivered final albums and prints. Payment pending confirmation.', 'Sarah Jenkins'),
-('LD-9011', '2026-04-10', 'Website Form', 'Gerd Muller', '+1 (555) 711-2092', 'gerd@munich.de', 'Real Estate Reel', '2026-05-02', '15:00:00', 'Beverly Hills Mansion 304', 2500, 'Sarah Jenkins', 'Closed', 'Project successfully completed, fully paid, closed and archived in system.', 'Sarah Jenkins')
+('LD-9001', '2026-06-10', 'Instagram', 'Sophia Loren', '+1 (555) 123-4567', 'sophia@example.com', 'Weddings', '2026-08-15', '14:00:00', 'Grand Hyatt Beach Lawn', 5500, 'Sarah Jenkins', 'New Lead', 'Inquired via Instagram DM. Wants premium cinematic style with 2 videographers.', 'Sarah Jenkins'),
+('LD-9002', '2026-06-09', 'Website Form', 'Arthur Pendragon', '+1 (555) 987-6543', 'arthur@royal.co', 'Corporate Events', '2026-07-22', '09:00:00', 'Camelot Conference Hall', 3500, 'Sarah Jenkins', 'Follow Up', 'Followed up on email. Client checking options. Scheduled next call for next week.', 'Sarah Jenkins'),
+('LD-9003', '2026-06-05', 'Referral', 'Liam Neeson', '+1 (555) 443-8822', 'liam@taken.net', 'Birthday', '2026-06-28', '18:00:00', 'Starlight Ballroom Resort', 2200, 'Sarah Jenkins', 'Quotation Sent', 'Sent quotation of $2,100 including drone photography. Waiting for approval.', 'Sarah Jenkins'),
+('LD-9004', '2026-06-02', 'Facebook Ad', 'Helena Carter', '+1 (555) 777-1122', 'helena@star.com', 'Portfolio', '2026-07-05', '11:00:00', 'Industrial Warehouse Studio B', 1800, 'Sarah Jenkins', 'Negotiation', 'Negotiating discount. They requested $1,500 budget. Might close at $1,650.', 'Sarah Jenkins'),
+('LD-9005', '2026-05-18', 'Instagram', 'Victoria & Albert', '+1 (555) 434-2211', 'royal@wedding.org', 'Weddings', '2026-09-01', '16:00:00', 'Udaipur Palace Resort', 12500, 'Sarah Jenkins', 'Order Confirmed', 'Order confirmed with 50% advance. Moving to operations stage.', 'Sarah Jenkins'),
+('LD-9006', '2026-05-15', 'Website Form', 'Marcus Aurelius', '+1 (555) 880-9988', 'marcus@philosophy.edu', 'Pre Weddings', '2026-06-20', '06:00:00', 'Sunrise Mountain Peak', 3200, 'Sarah Jenkins', 'Operations Assigned', 'Drone pre-flight authorized. Crew allocated and equipment kit prepped.', 'Sarah Jenkins'),
+('LD-9007', '2026-05-10', 'Referral', 'Billie Eilish', '+1 (555) 111-2222', 'billie@interscope.com', 'Other', '2026-06-08', '20:00:00', 'Underground Concrete Tunnel', 8000, 'Sarah Jenkins', 'Event Completed', 'Shoot completed successfully. Incredible slow-mo shots captured. Raw footage pending transfer.', 'Sarah Jenkins'),
+('LD-9008', '2026-05-08', 'Google Search', 'Elizabeth Bennet', '+1 (555) 666-4444', 'elizabeth@pemberley.com', 'Other', '2026-06-03', '17:00:00', 'Longbourn Gardens', 4500, 'Sarah Jenkins', 'Editing Started', 'Footage received. Emily allocated as chief editor. Editing has started recursively.', 'Sarah Jenkins'),
+('LD-9009', '2026-05-02', 'Instagram', 'Elon Musk', '+1 (555) 420-6969', 'elon@spacex.com', 'Product Shoot', '2026-05-25', '12:00:00', 'Starbase Launch Pad A', 15000, 'Sarah Jenkins', 'Customer Review', 'First cut sent. Waiting for review. Client loved the rocket booster framing.', 'Sarah Jenkins'),
+('LD-9010', '2026-04-28', 'Referral', 'Bruce Wayne', '+1 (555) 911-3948', 'bruce@waynecorp.com', 'Other', '2026-05-18', '19:00:00', 'Wayne Manor Ball Room', 20000, 'Sarah Jenkins', 'Delivered', 'Delivered final albums and prints. Payment pending confirmation.', 'Sarah Jenkins'),
+('LD-9011', '2026-04-10', 'Website Form', 'Gerd Muller', '+1 (555) 711-2092', 'gerd@munich.de', 'Other', '2026-05-02', '15:00:00', 'Beverly Hills Mansion 304', 2500, 'Sarah Jenkins', 'Closed', 'Project successfully completed, fully paid, closed and archived in system.', 'Sarah Jenkins')
 ON CONFLICT (lead_id) DO NOTHING;
 
 INSERT INTO public.follow_ups (follow_up_id, lead_id, follow_up_status, follow_up_date, next_follow_up_date, call_notes, negotiation_notes, conducted_by) VALUES
 ('FLW-7001', 'LD-9002', 'Completed', '2026-06-09', '2026-06-16', 'Discussed premium pricing for corporate package. Client is reviewing other agencies.', 'Offering up to 10% volume discount for repeating bookings.', 'Sarah Jenkins'),
-('FLW-7002', 'LD-9003', 'Completed', '2026-06-05', '2026-06-12', 'Sent quote of $2100 with drone photography. Client asked for photo book sample.', 'Sample physical book being dispatched.', 'Sarah Jenkins'),
+('FLW-7002', 'LD-9003', 'Completed', '2026-05-05', '2026-06-12', 'Sent quote of $2100 with drone photography. Client asked for photo book sample.', 'Sample physical book being dispatched.', 'Sarah Jenkins'),
 ('FLW-7003', 'LD-9004', 'Scheduled', '2026-06-11', '2026-06-15', 'Will call again to finalize budget. Negotiating between $1500 and $1800.', 'Targeting final handshake at $1650.', 'Sarah Jenkins')
 ON CONFLICT (follow_up_id) DO NOTHING;
 
@@ -652,13 +677,13 @@ INSERT INTO public.quotations (quotation_id, lead_id, quotation_number, quotatio
 ON CONFLICT (quotation_id) DO NOTHING;
 
 INSERT INTO public.orders (order_id, lead_id, customer_name, mobile, event_type, event_date, event_time, event_location, package_name, quotation_amount, advance_received, balance_amount, order_status, current_stage, sales_person, created_at) VALUES
-('ORD-1005', 'LD-9005', 'Victoria & Albert', '+1 (555) 434-2211', 'Destination Wedding', '2026-09-01', '16:00:00', 'Udaipur Palace Resort', 'Royal Destination Platinum', 12500, 6250, 6250, 'Confirmed', 'Order Confirmed', 'Sarah Jenkins', '2026-06-01 10:00:00+00'),
-('ORD-1006', 'LD-9006', 'Marcus Aurelius', '+1 (555) 880-9988', 'Pre-Wedding Shoot', '2026-06-20', '06:00:00', 'Sunrise Mountain Peak', 'Scenic Pre-Wedding Gold', 3200, 1600, 1600, 'Confirmed', 'Operations Assigned', 'Sarah Jenkins', '2026-06-02 11:30:00+00'),
-('ORD-1007', 'LD-9007', 'Billie Eilish', '+1 (555) 111-2222', 'Music Video Launch', '2026-06-08', '20:00:00', 'Underground Concrete Tunnel', 'Aesthetic Music Video Premium', 8000, 4000, 4000, 'Completed', 'Event Completed', 'Sarah Jenkins', '2026-06-03 14:45:00+00'),
-('ORD-1008', 'LD-9008', 'Elizabeth Bennet', '+1 (555) 666-4444', 'Graduation Gala', '2026-06-03', '17:00:00', 'Longbourn Gardens', 'Estate Gala Cinematic', 4500, 2000, 2500, 'Completed', 'Editing Started', 'Sarah Jenkins', '2026-06-04 09:12:00+00'),
-('ORD-1009', 'LD-9009', 'Elon Musk', '+1 (555) 420-6969', 'Product Commercial', '2026-05-25', '12:00:00', 'Starbase Launch Pad A', 'High Dynamic Advertising Video', 15000, 5000, 10000, 'Completed', 'Customer Review', 'Sarah Jenkins', '2026-06-05 15:30:00+00'),
-('ORD-1010', 'LD-9010', 'Bruce Wayne', '+1 (555) 911-3948', 'Charity Elite Gala', '2026-05-18', '19:00:00', 'Wayne Manor Ball Room', 'Ultra Elite Grand Package', 20000, 10000, 10000, 'Delivered', 'Delivered', 'Sarah Jenkins', '2026-06-06 16:00:00+00'),
-('ORD-1011', 'LD-9011', 'Gerd Muller', '+1 (555) 711-2092', 'Real Estate Reel', '2026-05-02', '15:00:00', 'Beverly Hills Mansion 304', 'Super High-Res Aerial Package', 2500, 2500, 0, 'Closed', 'Closed', 'Sarah Jenkins', '2026-06-07 11:00:00+00')
+('ORD-1005', 'LD-9005', 'Victoria & Albert', '+1 (555) 434-2211', 'Weddings', '2026-09-01', '16:00:00', 'Udaipur Palace Resort', 'Royal Destination Platinum', 12500, 6250, 6250, 'Confirmed', 'Order Confirmed', 'Sarah Jenkins', '2026-06-01 10:00:00+00'),
+('ORD-1006', 'LD-9006', 'Marcus Aurelius', '+1 (555) 880-9988', 'Pre Weddings', '2026-06-20', '06:00:00', 'Sunrise Mountain Peak', 'Scenic Pre-Wedding Gold', 3200, 1600, 1600, 'Confirmed', 'Operations Assigned', 'Sarah Jenkins', '2026-06-02 11:30:00+00'),
+('ORD-1007', 'LD-9007', 'Billie Eilish', '+1 (555) 111-2222', 'Other', '2026-06-08', '20:00:00', 'Underground Concrete Tunnel', 'Aesthetic Music Video Premium', 8000, 4000, 4000, 'Completed', 'Event Completed', 'Sarah Jenkins', '2026-06-03 14:45:00+00'),
+('ORD-1008', 'LD-9008', 'Elizabeth Bennet', '+1 (555) 666-4444', 'Other', '2026-06-03', '17:00:00', 'Longbourn Gardens', 'Estate Gala Cinematic', 4500, 2000, 2500, 'Completed', 'Editing Started', 'Sarah Jenkins', '2026-06-04 09:12:00+00'),
+('ORD-1009', 'LD-9009', 'Elon Musk', '+1 (555) 420-6969', 'Product Shoot', '2026-05-25', '12:00:00', 'Starbase Launch Pad A', 'High Dynamic Advertising Video', 15000, 5000, 10000, 'Completed', 'Customer Review', 'Sarah Jenkins', '2026-06-05 15:30:00+00'),
+('ORD-1010', 'LD-9010', 'Bruce Wayne', '+1 (555) 911-3948', 'Other', '2026-05-18', '19:00:00', 'Wayne Manor Ball Room', 'Ultra Elite Grand Package', 20000, 10000, 10000, 'Delivered', 'Delivered', 'Sarah Jenkins', '2026-06-06 16:00:00+00'),
+('ORD-1011', 'LD-9011', 'Gerd Muller', '+1 (555) 711-2092', 'Other', '2026-05-02', '15:00:00', 'Beverly Hills Mansion 304', 'Super High-Res Aerial Package', 2500, 2500, 0, 'Closed', 'Closed', 'Sarah Jenkins', '2026-06-07 11:00:00+00')
 ON CONFLICT (order_id) DO NOTHING;
 
 INSERT INTO public.operations (operation_id, order_id, photographer_assigned, videographer_assigned, drone_operator_assigned, assistant_assigned, equipment_kit, reporting_time, event_status, remarks, updated_by) VALUES

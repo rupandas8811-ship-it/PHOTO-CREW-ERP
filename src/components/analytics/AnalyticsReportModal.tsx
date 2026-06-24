@@ -78,7 +78,7 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
             "Order ID": order?.order_id || '—',
             "Customer Name": l.customer_name || '—',
             "Mobile Number": l.mobile || '—',
-            "Event Type": l.event_type || '—',
+            "Event Type": l.event_type === 'Other' ? (l.custom_event_name || l.custom_event_type || 'Other') : (l.event_type || '—'),
             "Event Date": l.event_date || '—',
             "Current Status": l.status || '—',
             "Lead Source": l.lead_source || '—',
@@ -138,7 +138,17 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
           return {
             "Order ID": order?.order_id || p.tracking_id || '—',
             "Customer Name": order?.customer_name || p.customer_name || 'CRM Client',
-            "Event Type": order?.event_type || p.event_type || '—',
+            "Event Type": (() => {
+              const orderType = order?.event_type;
+              if (orderType === 'Other') {
+                return order?.custom_event_name || order?.custom_event_type || 'Other';
+              }
+              const pType = p.event_type;
+              if (pType === 'Other') {
+                return p.custom_event_type || 'Other';
+              }
+              return orderType || pType || '—';
+            })(),
             "Event Date": order?.event_date || p.event_date || '—',
             "Assigned Editors": p.editor_assigned || 'Unassigned',
             "Current Status": p.editing_status || '—',
@@ -230,7 +240,7 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
           return orders.map(o => ({
             "Order ID": o.order_id || '—',
             "Customer Name": o.customer_name || 'CRM Client',
-            "Event Type": o.event_type || '—',
+            "Event Type": o.event_type === 'Other' ? (o.custom_event_name || o.custom_event_type || 'Other') : (o.event_type || '—'),
             "Event Date": o.event_date || '—',
             "Amount": o.quotation_amount || 0,
             "Status": o.current_stage || '—'

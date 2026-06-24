@@ -4,6 +4,28 @@
 
 export type UserRole = 'Business Owner' | 'Sales Team' | 'Operations Team' | 'Production Team';
 
+export const EVENT_TYPES = [
+  'Weddings',
+  'Hindu/Malayali Weddings',
+  'Engagement',
+  'Pre Weddings',
+  'Maternity',
+  'Baby Shower',
+  'New Born',
+  'Baby Shoot',
+  'Birthday',
+  'Naming Ceremony',
+  'House Warming',
+  'Upanayana',
+  'Half Saree',
+  'Portfolio',
+  'Product Shoot',
+  'Corporate Events',
+  'Car Shoot',
+  'Bike Shoot',
+  'Other'
+];
+
 export type Department = 'Sales' | 'Operations' | 'Production' | 'Editor' | 'Dispatch';
 
 export const DEPARTMENT_STAGES: Record<Department, CurrentStage[]> = {
@@ -90,6 +112,7 @@ export interface Lead {
   email: string;
   event_type: string;
   custom_event_name?: string;
+  custom_event_type?: string;
   shoot_type?: string;
   event_date: string;
   event_time: string;
@@ -133,6 +156,7 @@ export interface Order {
   mobile: string;
   event_type: string;
   custom_event_name?: string;
+  custom_event_type?: string;
   shoot_type?: string;
   event_date: string;
   event_time: string;

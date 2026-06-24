@@ -1251,12 +1251,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       users: ['id', 'email', 'role', 'full_name', 'phone', 'active', 'created_at', 'password', 'username'],
       leads: [
         'lead_id', 'created_date', 'lead_source', 'customer_name', 'mobile', 'alternate_mobile', 
-        'email', 'event_type', 'event_date', 'event_time', 'event_location', 'budget', 
+        'email', 'event_type', 'custom_event_type', 'custom_event_name', 'event_date', 'event_time', 'event_location', 'budget', 
         'sales_person', 'status', 'remarks', 'created_by', 'updated_by', 'updated_at', 
         'assigned_editor', 'assigned_editors', 'production_role', 'delivery_target_date', 'current_status'
       ],
       orders: [
-        'order_id', 'lead_id', 'customer_name', 'mobile', 'event_type', 'event_date', 
+        'order_id', 'lead_id', 'customer_name', 'mobile', 'event_type', 'custom_event_type', 'custom_event_name', 'event_date', 
         'event_time', 'event_location', 'package_name', 'quotation_amount', 'advance_received', 
         'balance_amount', 'order_status', 'current_stage', 'sales_person', 'created_at', 
         'updated_by', 'updated_at'
