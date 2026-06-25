@@ -3,175 +3,43 @@ import { User, Lead, Order, Operation, RawFootage, Production, Payment, Activity
 export const INITIAL_USERS: User[] = [
   {
     id: 'U-001',
-    name: 'Rupand Das',
+    name: 'Business Owner',
     mobile: '+1 (555) 019-2834',
-    email: 'rupandas8811@gmail.com',
+    email: 'Owner@photocrew.com',
     role: 'Business Owner',
     active: true,
     created_at: '2026-05-01T08:00:00Z',
-    password: 'owner123'
+    password: 'owner@123'
   },
   {
     id: 'U-002',
-    name: 'Sarah Jenkins',
+    name: 'Sales',
     mobile: '+1 (555) 014-9988',
-    email: 'sarah.j@photocrew.com',
+    email: 'Sale@photocrew.com',
     role: 'Sales Team',
     active: true,
     created_at: '2026-05-02T09:30:00Z',
-    password: 'sales123'
+    password: 'sales@123'
   },
   {
     id: 'U-003',
-    name: 'Robert O\'Connor',
+    name: 'Operations',
     mobile: '+1 (555) 016-5544',
-    email: 'robert.o@photocrew.com',
+    email: 'Operation@photocrew.com',
     role: 'Operations Team',
     active: true,
     created_at: '2026-05-03T10:15:00Z',
-    password: 'ops123'
+    password: 'ops@123'
   },
   {
     id: 'U-004',
-    name: 'Emily Watson',
+    name: 'Production',
     mobile: '+1 (555) 012-3322',
-    email: 'emily.w@photocrew.com',
+    email: 'Production@photocrew.com',
     role: 'Production Team',
     active: true,
     created_at: '2026-05-04T11:00:00Z',
-    password: 'prod123'
-  },
-  {
-    id: 'U-005',
-    name: 'Demo Owner',
-    mobile: '+919999999901',
-    email: 'owner@demo.com',
-    username: 'owner',
-    role: 'Business Owner',
-    active: true,
-    created_at: '2026-06-12T00:00:00Z',
-    password: 'demo123'
-  },
-  {
-    id: 'U-006',
-    name: 'Demo Sales',
-    mobile: '+919999999902',
-    email: 'sales@demo.com',
-    username: 'sales',
-    role: 'Sales Team',
-    active: true,
-    created_at: '2026-06-12T00:00:00Z',
-    password: 'demo123'
-  },
-  {
-    id: 'U-007',
-    name: 'Demo Operations',
-    mobile: '+919999999903',
-    email: 'ops@demo.com',
-    username: 'ops',
-    role: 'Operations Team',
-    active: true,
-    created_at: '2026-06-12T00:00:00Z',
-    password: 'demo123'
-  },
-  {
-    id: 'U-008',
-    name: 'Demo Production',
-    mobile: '+919999999904',
-    email: 'prod@demo.com',
-    username: 'prod',
-    role: 'Production Team',
-    active: true,
-    created_at: '2026-06-12T00:00:00Z',
-    password: 'demo123'
-  },
-  {
-    id: 'U-009',
-    name: 'Business Owner Demo',
-    mobile: '+919999999909',
-    email: 'owner@photocrewdemo.com',
-    username: 'businessowner',
-    role: 'Business Owner',
-    active: true,
-    created_at: '2026-06-14T00:00:00Z',
-    password: 'Admin@123'
-  },
-  {
-    id: 'U-010',
-    name: 'Sales Team Demo',
-    mobile: '+919999999910',
-    email: 'sales@photocrewdemo.com',
-    username: 'salesteam',
-    role: 'Sales Team',
-    active: true,
-    created_at: '2026-06-14T00:00:00Z',
-    password: 'Sales@123'
-  },
-  {
-    id: 'U-011',
-    name: 'Operations Team Demo',
-    mobile: '+919999999911',
-    email: 'operations@photocrewdemo.com',
-    username: 'operationsteam',
-    role: 'Operations Team',
-    active: true,
-    created_at: '2026-06-14T00:00:00Z',
-    password: 'Ops@123'
-  },
-  {
-    id: 'U-012',
-    name: 'Production Team Demo',
-    mobile: '+919999999912',
-    email: 'production@photocrewdemo.com',
-    username: 'productionteam',
-    role: 'Production Team',
-    active: true,
-    created_at: '2026-06-14T00:00:00Z',
-    password: 'Prod@123'
-  },
-  {
-    id: 'U-013',
-    name: 'PhotoCrew Owner',
-    mobile: '+919999999913',
-    email: 'owner@photocrew.com',
-    username: 'owner_photocrew',
-    role: 'Business Owner',
-    active: true,
-    created_at: '2026-06-24T00:00:00Z',
-    password: 'Admin@123'
-  },
-  {
-    id: 'U-014',
-    name: 'PhotoCrew Sales',
-    mobile: '+919999999914',
-    email: 'sales@photocrew.com',
-    username: 'sales_photocrew',
-    role: 'Sales Team',
-    active: true,
-    created_at: '2026-06-24T00:00:00Z',
-    password: 'Sales@123'
-  },
-  {
-    id: 'U-015',
-    name: 'PhotoCrew Operations',
-    mobile: '+919999999915',
-    email: 'operations@photocrew.com',
-    username: 'operations_photocrew',
-    role: 'Operations Team',
-    active: true,
-    created_at: '2026-06-24T00:00:00Z',
-    password: 'Ops@123'
-  },
-  {
-    id: 'U-016',
-    name: 'PhotoCrew Production',
-    mobile: '+919999999916',
-    email: 'production@photocrew.com',
-    username: 'production_photocrew',
-    role: 'Production Team',
-    active: true,
-    created_at: '2026-06-24T00:00:00Z',
-    password: 'Prod@123'
+    password: 'prod@123'
   }
 ];
 

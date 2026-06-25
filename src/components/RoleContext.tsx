@@ -1410,6 +1410,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
+        // Always fetch fresh data from Supabase after successful INSERT
+        fetchFromDb().catch(console.error);
+
         return { success: true };
       }
     } catch (err: any) {
@@ -1553,6 +1556,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
+        // Always fetch fresh data from Supabase after successful UPDATE
+        fetchFromDb().catch(console.error);
+
         return { success: true };
       }
     } catch (err: any) {
@@ -1587,6 +1593,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateDiagnosticMetric('delete', 'fail', error.message);
       } else {
         updateDiagnosticMetric('delete', 'ok');
+        // Always fetch fresh data from Supabase after successful DELETE
+        fetchFromDb().catch(console.error);
       }
     } catch (err: any) {
       updateDiagnosticMetric('delete', 'fail', err?.message || String(err));
@@ -1604,6 +1612,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: error.message };
       } else {
         updateDiagnosticMetric('insert', 'ok');
+        // Always fetch fresh data from Supabase after successful UPSERT
+        fetchFromDb().catch(console.error);
         return { success: true };
       }
     } catch (err: any) {
@@ -1798,57 +1808,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (finalUsers) {
-        // Ensure standard demo accounts always exist in Supabase for convenient tests
-        const demoEmails = [
-          'owner@demo.com', 'sales@demo.com', 'ops@demo.com', 'prod@demo.com',
-          'owner@photocrewdemo.com', 'sales@photocrewdemo.com', 'operations@photocrewdemo.com', 'production@photocrewdemo.com',
-          'owner@photocrew.com', 'sales@photocrew.com', 'operations@photocrew.com', 'production@photocrew.com'
-        ];
-        const existingEmails = finalUsers.map(u => u.email.toLowerCase());
-        const missingDemos = INITIAL_USERS.filter(u => demoEmails.includes(u.email) && !existingEmails.includes(u.email));
-        
-        if (missingDemos.length > 0 && !uErr && dbUsers) {
-          console.log('Detected missing demo accounts, seeding them into Supabase...');
-          for (const u of missingDemos) {
-            try {
-              const { error: signUpError } = await supabaseClient.auth.signUp({
-                email: u.email,
-                password: u.password || 'Admin@123',
-                options: {
-                  data: {
-                    name: u.name,
-                    username: u.username || u.email.split('@')[0],
-                    mobile: u.mobile,
-                    role: u.role,
-                    password: u.password
-                  }
-                }
-              });
-              if (signUpError) {
-                console.warn(`Auth signUp notice (handled) for ${u.email}:`, signUpError.message);
-              } else {
-                console.log(`Auth signUp preconfigured for ${u.email}`);
-              }
-            } catch (authExc) {
-              console.warn(`Auth signUp exception for ${u.email}:`, authExc);
-            }
-
-            await supabaseClient.from('users').upsert({
-              ...u,
-              id: mapToDbUserId(u.id),
-              username: u.username || u.email.split('@')[0]
-            });
-          }
-          // Fetch users again to keep state synced cleanly
-          const { data: refreshedUsers } = await supabaseClient.from('users').select('*');
-          if (refreshedUsers) {
-            setUsers(refreshedUsers.map(mapUserFieldsFromDb));
-          } else {
-            setUsers(finalUsers.map(mapUserFieldsFromDb));
-          }
-        } else {
-          setUsers(finalUsers.map(mapUserFieldsFromDb));
-        }
+        setUsers(finalUsers.map(mapUserFieldsFromDb));
       }
 
       // 2. Resolve other database tables with robust cached fallbacks
@@ -2372,59 +2332,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         finalProfileUser = mapUserFieldsFromDb(dbUser);
         console.log(`[SYNC SESSION] Loaded profile successfully. Role: ${finalProfileUser.role}`);
       } else {
-        // Profile record is missing! Auto-create it.
-        console.log(`Profile missing for auth user ${email}. Auto-creating profile...`);
-        
-        // Role mapping based on email or metadata
-        let role: UserRole = 'Sales Team'; // default
-        if (email === 'owner@photocrew.com') {
-          role = 'Business Owner';
-        } else if (email === 'sales@photocrew.com') {
-          role = 'Sales Team';
-        } else if (email === 'operations@photocrew.com') {
-          role = 'Operations Team';
-        } else if (email === 'production@photocrew.com') {
-          role = 'Production Team';
-        } else {
-          // Look up from metadata
-          const metaRole = authUser.user_metadata?.role;
-          if (metaRole === 'Business Owner' || metaRole === 'Sales Team' || metaRole === 'Operations Team' || metaRole === 'Production Team') {
-            role = metaRole as UserRole;
-          } else if (metaRole === 'Sales') {
-            role = 'Sales Team';
-          } else if (metaRole === 'Operations') {
-            role = 'Operations Team';
-          } else if (metaRole === 'Production') {
-            role = 'Production Team';
-          }
-        }
-
-        const name = authUser.user_metadata?.name || authUser.user_metadata?.full_name || email?.split('@')[0] || 'Unknown User';
-        const mobile = authUser.user_metadata?.mobile || '';
-        const username = authUser.user_metadata?.username || email?.split('@')[0] || 'user';
-        const password = authUser.user_metadata?.password || 'temp123';
-
-        const newProfile = {
-          id: authUser.id,
-          name,
-          email: email || '',
-          mobile,
-          role,
-          active: true,
-          created_at: new Date().toISOString(),
-          password,
-          username
-        };
-
-        const { error: insertErr } = await supabaseClient
-          .from('users')
-          .upsert(stripClientOnlyFields('users', newProfile));
-
-        if (insertErr) {
-          console.error("Failed to auto-create profile in users table:", insertErr.message);
-        }
-
-        finalProfileUser = mapUserFieldsFromDb(newProfile);
+        // Profile record is missing! Do NOT auto-create it.
+        console.warn(`Profile missing for auth user ${email}. Deleting session...`);
+        logout();
+        return;
       }
 
       // Check if user is active
@@ -2584,8 +2495,32 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
     });
 
+    // Handle window focus and document visibility to fetch fresh data when user returns to app
+    const handleFocusOrVisible = () => {
+      console.log("[SYNC] App focused/visible, pulling fresh database records...");
+      fetchFromDb().catch(console.error);
+    };
+
+    window.addEventListener('focus', handleFocusOrVisible);
+    
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        handleFocusOrVisible();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Periodic synchronization to maintain alignment across multiple active devices
+    const syncInterval = setInterval(() => {
+      console.log("[SYNC] Periodic background pull...");
+      fetchFromDb().catch(console.error);
+    }, 8000); // Poll every 8 seconds
+
     return () => {
       channels.forEach(ch => supabaseClient.removeChannel(ch));
+      window.removeEventListener('focus', handleFocusOrVisible);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(syncInterval);
     };
   }, []);
 
@@ -2838,38 +2773,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           }
         } else {
-          console.log(`[LOGIN] Supabase Auth sign-in failed (${authErr?.message}). Checking if on-the-fly signup is needed...`);
-          // Try to sign up the user on the fly so they exist in Auth next time
-          const { data: signUpData, error: signUpErr } = await supabaseClient.auth.signUp({
-            email: dbUser.email,
-            password: password,
-            options: {
-              data: {
-                name: dbUser.name,
-                username: dbUser.username || dbUser.email.split('@')[0],
-                mobile: dbUser.mobile || '',
-                role: dbUser.role,
-                password: password
-              }
-            }
-          });
-
-          if (!signUpErr && signUpData?.user) {
-            console.log(`[LOGIN] On-the-fly signUp succeeded for ${dbUser.email}. Signing in...`);
-            const { data: retryData, error: retrySignInErr } = await supabaseClient.auth.signInWithPassword({
-              email: dbUser.email,
-              password: password
-            });
-
-            if (!retrySignInErr && retryData.user) {
-              if (dbUser.id !== retryData.user.id) {
-                await supabaseClient.from('users').update({ id: retryData.user.id }).eq('email', dbUser.email);
-                foundUser = { ...foundUser, id: mapFromDbUserId(retryData.user.id) };
-              }
-            }
-          } else {
-            console.warn('[LOGIN] On-the-fly signUp failed or not possible:', signUpErr?.message);
-          }
+          console.log(`[LOGIN] Supabase Auth sign-in failed (${authErr?.message}). Only pre-configured database users can login.`);
         }
       } catch (authErr: any) {
         console.error('[LOGIN] Resilient Auth Exception:', authErr);
@@ -2900,6 +2804,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setLogs((prev) => [newLog, ...prev]);
     pushInsert('activity_logs', newLog);
+
+    // Always fetch fresh data from Supabase when user logs in
+    await fetchFromDb();
 
     return { success: true };
   };
@@ -4236,198 +4143,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // User Management Admin features
   const addUser = async (name: string, email: string, mobile: string, role: UserRole, active: boolean, password?: string) => {
-    const pwd = password || 'temp123';
-    const username = email.split('@')[0];
-    let id = `U-${Math.floor(100 + Math.random() * 900)}`;
-
-    if (supabaseClient) {
-      try {
-        const { data, error } = await supabaseClient.auth.signUp({
-          email,
-          password: pwd,
-          options: {
-            data: {
-              name,
-              username,
-              mobile,
-              role,
-              password: pwd
-            }
-          }
-        });
-
-        if (error) {
-          console.warn('Supabase auth.signUp handled in addUser:', error.message);
-          // If auth fails (e.g. user already exists or trigger bypass needed), try to insert directly into users table as a fallback
-          const newUser: User = {
-            id,
-            name,
-            email,
-            mobile,
-            role,
-            active,
-            created_at: new Date().toISOString().split('T')[0],
-            password: pwd,
-            username
-          };
-          setUsers((prev) => {
-            if (prev.some(u => u.email === email)) return prev;
-            return [...prev, newUser];
-          });
-          await pushInsert('users', {
-            ...newUser,
-            id: mapToDbUserId(id)
-          });
-        } else if (data?.user) {
-          id = mapFromDbUserId(data.user.id);
-          const newUser: User = {
-            id,
-            name,
-            email,
-            mobile,
-            role,
-            active,
-            created_at: new Date().toISOString().split('T')[0],
-            password: pwd,
-            username
-          };
-          setUsers((prev) => {
-            if (prev.some(u => u.email === email)) return prev;
-            return [...prev, newUser];
-          });
-          // Let's call pushUpsert to make sure the users table has it immediately in real-time
-          await pushUpsert('users', {
-            ...newUser,
-            id: data.user.id
-          });
-        }
-      } catch (err) {
-        console.error('Error in addUser:', err);
-      }
-    } else {
-      const newUser: User = {
-        id,
-        name,
-        email,
-        mobile,
-        role,
-        active,
-        created_at: new Date().toISOString().split('T')[0],
-        password: pwd,
-        username
-      };
-      setUsers((prev) => [...prev, newUser]);
-    }
-
-    logActivity(`Created User Account: ${name} (${role})`, 'UserManagement', id);
+    throw new Error('Adding users is disabled. The system operates on four fixed accounts only.');
   };
 
   const signUpUser = async (name: string, username: string, email: string, mobile: string, role: UserRole, password: string) => {
-    let finalId = `U-${Math.floor(100 + Math.random() * 900)}`;
-    const dbId = mapToDbUserId(finalId);
-    if (supabaseClient) {
-      try {
-        const { data, error } = await supabaseClient.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              name,
-              username,
-              mobile,
-              role,
-              password
-            }
-          }
-        });
-
-        // Email rate limit / sign up disabled / configuration issue handled gracefully via direct insert fallback
-        if (error) {
-          console.warn('Supabase auth.signUp rate limit or configuration error, using direct profile registration fallback:', error.message);
-          const newUser: User = {
-            id: finalId,
-            name,
-            email,
-            mobile,
-            role,
-            active: true,
-            created_at: new Date().toISOString().split('T')[0],
-            password,
-            username
-          };
-          setUsers((prev) => {
-            if (prev.some(u => u.email === email)) return prev;
-            return [...prev, newUser];
-          });
-          await pushInsert('users', {
-            ...newUser,
-            id: dbId
-          });
-          return { success: true, user: newUser, warning: error.message };
-        }
-
-        if (data?.user) {
-          finalId = mapFromDbUserId(data.user.id);
-          const newUser: User = {
-            id: finalId,
-            name,
-            email,
-            mobile,
-            role,
-            active: true,
-            created_at: new Date().toISOString().split('T')[0],
-            password,
-            username
-          };
-          setUsers((prev) => {
-            if (prev.some(u => u.email === email)) return prev;
-            return [...prev, newUser];
-          });
-          // Call pushUpsert so the users table is populated with this specific user UUID immediately
-          await pushUpsert('users', {
-            ...newUser,
-            id: data.user.id
-          });
-          return { success: true, user: newUser };
-        }
-      } catch (err: any) {
-        console.error('Unhandled signup exception, registering as directory profile record directly:', err);
-        const newUser: User = {
-          id: finalId,
-          name,
-          email,
-          mobile,
-          role,
-          active: true,
-          created_at: new Date().toISOString().split('T')[0],
-          password,
-          username
-        };
-        setUsers((prev) => {
-          if (prev.some(u => u.email === email)) return prev;
-          return [...prev, newUser];
-        });
-        await pushInsert('users', {
-          ...newUser,
-          id: dbId
-        });
-        return { success: true, user: newUser, warning: err?.message };
-      }
-    } else {
-      const newUser: User = {
-        id: finalId,
-        name,
-        email,
-        mobile,
-        role,
-        active: true,
-        created_at: new Date().toISOString().split('T')[0],
-        password,
-        username
-      };
-      setUsers((prev) => [...prev, newUser]);
-      return { success: true, user: newUser };
-    }
+    throw new Error('User registration is disabled. Only pre-configured system accounts are permitted.');
   };
 
   const editUser = (id: string, updates: { name: string, email: string, mobile: string, role: UserRole, active: boolean }) => {
@@ -4526,6 +4246,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (supabaseClient) {
         await supabaseClient.from('packages').insert(newPkg);
+        fetchFromDb().catch(console.error);
       }
     } catch (err) {
       console.warn('Fallback to local: could not insert package to Supabase:', err);
@@ -4545,6 +4266,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (supabaseClient) {
         await supabaseClient.from('packages').update(updates).eq('package_id', packageId);
+        fetchFromDb().catch(console.error);
       }
     } catch (err) {
       console.warn('Fallback to local: could not update package in Supabase:', err);
@@ -4561,6 +4283,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (supabaseClient) {
         await supabaseClient.from('packages').delete().eq('package_id', packageId);
+        fetchFromDb().catch(console.error);
       }
     } catch (err) {
       console.warn('Fallback to local: could not delete package in Supabase:', err);
@@ -4585,6 +4308,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     // Save to database
     await saveNotificationToSupabase(newNotif);
+    fetchFromDb().catch(console.error);
   };
 
   const markNotificationRead = async (notificationId: string) => {
@@ -4596,6 +4320,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn("Failed updating notification with all fields, trying fallback:", error);
       await supabaseClient.from('notifications').update({ is_read: true }).eq('notification_id', notificationId);
     }
+    fetchFromDb().catch(console.error);
   };
 
   const addSpeciality = async (name: string) => {
@@ -4757,6 +4482,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { error } = await supabaseClient.from('quotations').insert(standardPayload);
       if (error) {
         console.warn('Could not insert quotation into Supabase with standard fields:', error.message);
+      } else {
+        fetchFromDb().catch(console.error);
       }
     } catch (err) {
       console.warn('Supabase exception on inserting quotation:', err);
@@ -4810,6 +4537,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { error } = await supabaseClient.from('quotations').update(standardPayload).eq('quotation_id', quotationId);
         if (error) {
           console.warn('Supabase Update error for quotations table:', error.message);
+        } else {
+          fetchFromDb().catch(console.error);
         }
       } catch (err) {
         console.warn('Supabase Exception on updating quotation:', err);
@@ -5058,6 +4787,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         alert('Order and all associated operational records deleted successfully!');
       }
       logActivity(`Deleted Order: ${orderId}`, 'Sales', orderId);
+      fetchFromDb().catch(console.error);
       return true;
     } catch (err: any) {
       console.error('Failed to delete order:', err);
@@ -5108,6 +4838,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       alert('Lead deleted successfully!');
       logActivity(`Deleted Lead: ${leadId}`, 'Sales', leadId);
+      fetchFromDb().catch(console.error);
       return true;
     } catch (err: any) {
       console.error('Failed to delete lead:', err);
@@ -5125,6 +4856,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) throw error;
       alert('Follow-up record deleted successfully!');
       logActivity(`Deleted Follow Up: ${followUpId}`, 'Sales', followUpId);
+      fetchFromDb().catch(console.error);
       return true;
     } catch (err: any) {
       console.error('Failed to delete follow up:', err);
@@ -5141,6 +4873,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setQuotations(prev => prev.filter(q => q.quotation_id !== quotationId));
       alert('Quotation deleted successfully!');
       logActivity(`Deleted Quotation: ${quotationId}`, 'Sales', quotationId);
+      fetchFromDb().catch(console.error);
       return true;
     } catch (err: any) {
       console.error('Failed to delete quotation:', err);
@@ -5157,6 +4890,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setPayments(prev => prev.filter(p => p.payment_id !== paymentId));
       alert('Payment record deleted successfully!');
       logActivity(`Deleted Payment: ${paymentId}`, 'Payments', paymentId);
+      fetchFromDb().catch(console.error);
       return true;
     } catch (err: any) {
       console.error('Failed to delete payment:', err);
@@ -5173,6 +4907,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setOperations(prev => prev.filter(o => o.operation_id !== operationId));
       alert('Operational record deleted successfully!');
       logActivity(`Deleted Operation: ${operationId}`, 'Operations', operationId);
+      fetchFromDb().catch(console.error);
       return true;
     } catch (err: any) {
       console.error('Failed to delete operation:', err);
@@ -5192,6 +4927,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setEditorAssignments(prev => prev.filter(ea => ea.production_id !== productionId));
       alert('Production record deleted successfully!');
       logActivity(`Deleted Production: ${productionId}`, 'Production', productionId);
+      fetchFromDb().catch(console.error);
       return true;
     } catch (err: any) {
       console.error('Failed to delete production:', err);
@@ -5208,6 +4944,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setStaffAssignments(prev => prev.filter(sa => sa.assignment_id !== assignmentId));
       alert('Staff assignment deleted successfully!');
       logActivity(`Deleted Staff Assignment: ${assignmentId}`, 'Operations', assignmentId);
+      fetchFromDb().catch(console.error);
       return true;
     } catch (err: any) {
       console.error('Failed to delete staff assignment:', err);
@@ -5235,6 +4972,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setRawFootage(prev => prev.filter(rf => rf.tracking_id !== trackingId));
       alert('Raw footage record deleted successfully!');
       logActivity(`Deleted Raw Footage: ${trackingId}`, 'Production', trackingId);
+      fetchFromDb().catch(console.error);
       return true;
     } catch (err: any) {
       console.error('Failed to delete raw footage:', err);

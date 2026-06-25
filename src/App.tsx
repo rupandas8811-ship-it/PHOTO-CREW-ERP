@@ -194,6 +194,8 @@ const MainAppContent: React.FC = () => {
     if (window.innerWidth < 1024) {
       setSidebarOpen(false);
     }
+    // Refresh data immediately when dashboard opens/changes
+    refreshData();
   };
 
   const handleSubTabSelect = (subTab: any) => {
@@ -201,6 +203,8 @@ const MainAppContent: React.FC = () => {
     if (window.innerWidth < 1024) {
       setSidebarOpen(false);
     }
+    // Refresh data immediately when dashboard opens/changes
+    refreshData();
   };
 
   // Guard direct unauthorized access by syncing active tabs with user roles
