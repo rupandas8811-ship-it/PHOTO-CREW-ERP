@@ -167,6 +167,16 @@ export const OperationsLeads: React.FC = () => {
 
   const [paymentCollectionStatus, setPaymentCollectionStatus] = useState<'Full Payment Received' | 'Partial Payment Received' | 'Payment Pending'>('Payment Pending');
   const [additionalReceived, setAdditionalReceived] = useState<number>(0);
+  const [transactionId, setTransactionId] = useState('');
+
+  useEffect(() => {
+    if (receivingFootageOrderId) {
+      const existingPayment = payments.find((p) => p.order_id === receivingFootageOrderId);
+      setTransactionId(existingPayment?.transaction_id || '');
+    } else {
+      setTransactionId('');
+    }
+  }, [receivingFootageOrderId, payments]);
 
   // Staff Assignment Success Popup State
   const [successModalData, setSuccessModalData] = useState<{
@@ -2136,7 +2146,8 @@ Please report on time and update status through the portal.`;
                   footageForm.storage_type,
                   compositeNotes,
                   paymentCollectionStatus,
-                  additionalReceived
+                  additionalReceived,
+                  transactionId
                 );
                 
                 setReceivingFootageOrderId(null);
@@ -2394,6 +2405,19 @@ Please report on time and update status through the portal.`;
                           <span className="text-zinc-450 text-[10px]">Status:</span>
                           <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 text-[9px] font-extrabold uppercase font-mono">Payment Pending</span>
                         </div>
+                      </div>
+                    )}
+
+                    {paymentCollectionStatus !== 'Payment Pending' && (
+                      <div className="space-y-1.5 pt-3 border-t border-zinc-900">
+                        <label className="text-[10px] text-zinc-400 uppercase font-sans font-bold">Transaction ID (Optional)</label>
+                        <input
+                          type="text"
+                          value={transactionId}
+                          onChange={(e) => setTransactionId(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          placeholder="UPI ID, Bank Ref, IMPS, RTGS, Card Txn etc."
+                        />
                       </div>
                     )}
                   </div>

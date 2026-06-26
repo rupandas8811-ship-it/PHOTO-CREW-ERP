@@ -36,6 +36,114 @@ const generateQuotationPDF = (
   const headerBgColor = [18, 18, 22];  // Luxury Carbon Black
   const goldColor = [212, 175, 55];   // #D4AF37 Classic Gold
 
+  // Helper routine to draw headers on every page
+  const drawPageHeader = (pageDoc: typeof doc) => {
+    // 1. BRAND HEADER (Black + Gold Premium Theme)
+    pageDoc.setFillColor(headerBgColor[0], headerBgColor[1], headerBgColor[2]);
+    pageDoc.rect(0, 0, 210, 42, 'F'); // 42mm tall header
+
+    // Bottom gold ribbon border
+    pageDoc.setFillColor(goldColor[0], goldColor[1], goldColor[2]);
+    pageDoc.rect(0, 41, 210, 1.2, 'F');
+
+    // Draw Logo
+    let logoY = 10;
+    let hasLogo = false;
+    if (logoBase64 && logoBase64.startsWith('data:image')) {
+      try {
+        pageDoc.addImage(logoBase64, 'PNG', 15, logoY, 22, 22);
+        hasLogo = true;
+      } catch (e) {
+        console.warn('Failed to add logo image to PDF, drawing fallback badge:', e);
+      }
+    }
+
+    if (!hasLogo) {
+      pageDoc.setDrawColor(goldColor[0], goldColor[1], goldColor[2]);
+      pageDoc.setLineWidth(0.6);
+      pageDoc.setFillColor(18, 18, 22);
+      pageDoc.circle(26, logoY + 11, 8, 'FD');
+      pageDoc.setFont('helvetica', 'bold');
+      pageDoc.setFontSize(10);
+      pageDoc.setTextColor(255, 255, 255);
+      pageDoc.text('P', 24.5, logoY + 14.5);
+    }
+
+    // Photocrew Pictures Branding
+    pageDoc.setFont('helvetica', 'bold');
+    pageDoc.setFontSize(15);
+    pageDoc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
+    pageDoc.text('PHOTOCREW PICTURES', 105, 19, { align: 'center' });
+
+    pageDoc.setFont('helvetica', 'normal');
+    pageDoc.setFontSize(7.5);
+    pageDoc.setTextColor(185, 185, 185);
+    pageDoc.text('PREMIUM PHOTOGRAPHY STUDIO & VISUAL PRODUCTION', 105, 24, { align: 'center' });
+
+    pageDoc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
+    pageDoc.setFontSize(6.5);
+    pageDoc.text('★ ★ ★ ★ ★', 105, 29, { align: 'center' });
+
+    // Right-aligned Contact Info
+    pageDoc.setTextColor(245, 245, 245);
+    pageDoc.setFont('helvetica', 'normal');
+    pageDoc.setFontSize(7.5);
+    pageDoc.text('www.photocrewpictures.com', 195, 17, { align: 'right' });
+    pageDoc.text('info@photocrewpictures.com', 195, 22, { align: 'right' });
+    pageDoc.text('+91 9060144016', 195, 27, { align: 'right' });
+  };
+
+  // Helper routine to draw footers on every page
+  const drawPageFooter = (pageDoc: typeof doc, pageNum: number, totalPages: number) => {
+    let footerY = 260;
+    
+    pageDoc.setDrawColor(226, 232, 240);
+    pageDoc.setLineWidth(0.3);
+    pageDoc.line(15, footerY, 195, footerY);
+
+    pageDoc.setFont('helvetica', 'bold');
+    pageDoc.setFontSize(8.5);
+    pageDoc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+    pageDoc.text('PHOTOCREW PICTURES', 15, footerY + 5);
+    
+    pageDoc.setFont('helvetica', 'normal');
+    pageDoc.setFontSize(7.5);
+    pageDoc.setTextColor(100, 116, 139);
+    pageDoc.text('Website : https://www.photocrewpictures.com/  |  Email: info@photocrewpictures.com  |  Phone: +91 9060144016', 15, footerY + 9);
+
+    pageDoc.setFont('helvetica', 'bold');
+    pageDoc.setFontSize(8);
+    pageDoc.setTextColor(goldColor[0], goldColor[1], goldColor[2]); // Gold primary accent
+    pageDoc.text('Thank You For Choosing Photocrew Pictures', 15, footerY + 14);
+
+    // Authorised Signatory right aligned
+    pageDoc.setFont('helvetica', 'normal');
+    pageDoc.setFontSize(7.5);
+    pageDoc.setTextColor(100, 116, 139);
+    pageDoc.text('For Photocrew Pictures', 150, footerY + 5);
+    pageDoc.setFont('helvetica', 'bold');
+    pageDoc.setFontSize(8);
+    pageDoc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+    pageDoc.text('Authorized Signatory', 150, footerY + 12);
+
+    // Add page numbering if multiple pages
+    if (totalPages > 1) {
+      pageDoc.setFont('helvetica', 'normal');
+      pageDoc.setFontSize(7);
+      pageDoc.setTextColor(148, 163, 184);
+      pageDoc.text(`Page ${pageNum} of ${totalPages}`, 195, footerY + 14, { align: 'right' });
+    }
+
+    // Bottom Accent ribbon
+    pageDoc.setFillColor(goldColor[0], goldColor[1], goldColor[2]);
+    pageDoc.rect(0, 292, 210, 5, 'F');
+  };
+
+  const createNewPage = () => {
+    doc.addPage();
+    return 52; // Content starts at 52mm on subsequent pages (leaving space for header)
+  };
+
   // Resolve dynamic services from input parameter. Fall back to standard defaults if empty
   let services = [...quoteServices];
   if (!services || services.length === 0) {
@@ -75,97 +183,16 @@ const generateQuotationPDF = (
     }
   }
 
-  // 1. BRAND HEADER (Black + Gold Premium Theme)
-  doc.setFillColor(headerBgColor[0], headerBgColor[1], headerBgColor[2]);
-  doc.rect(0, 0, 210, 42, 'F'); // 42mm tall header
-
-  // Bottom gold ribbon border
-  doc.setFillColor(goldColor[0], goldColor[1], goldColor[2]);
-  doc.rect(0, 41, 210, 1.2, 'F');
-
-  // Draw Logo
-  let logoY = 10;
-  let hasLogo = false;
-  if (logoBase64 && logoBase64.startsWith('data:image')) {
-    try {
-      doc.addImage(logoBase64, 'PNG', 15, logoY, 22, 22);
-      hasLogo = true;
-    } catch (e) {
-      console.warn('Failed to add logo image to PDF, drawing fallback badge:', e);
-    }
-  }
-
-  if (!hasLogo) {
-    doc.setDrawColor(goldColor[0], goldColor[1], goldColor[2]);
-    doc.setLineWidth(0.6);
-    doc.setFillColor(18, 18, 22);
-    doc.circle(26, logoY + 11, 8, 'FD');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(255, 255, 255);
-    doc.text('P', 24.5, logoY + 14.5);
-  }
-
-  // Photocrew Pictures Branding
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(15);
-  doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
-  doc.text('PHOTOCREW PICTURES', 105, 19, { align: 'center' });
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(185, 185, 185);
-  doc.text('PREMIUM PHOTOGRAPHY STUDIO & VISUAL PRODUCTION', 105, 24, { align: 'center' });
-
-  doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
-  doc.setFontSize(6.5);
-  doc.text('★ ★ ★ ★ ★', 105, 29, { align: 'center' });
-
-  // Right-aligned Contact Info
-  doc.setTextColor(245, 245, 245);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.text('www.photocrewpictures.com', 195, 17, { align: 'right' });
-  doc.text('info@photocrewpictures.com', 195, 22, { align: 'right' });
-  doc.text('+91 9060144016', 195, 27, { align: 'right' });
-
   // 2. CUSTOMER DETAILS & LOGISTICS
   let clientY = 49;
-  doc.setFillColor(bgLightGrid[0], bgLightGrid[1], bgLightGrid[2]);
-  doc.roundedRect(15, clientY, 180, 32, 1.5, 1.5, 'F');
-  doc.setDrawColor(226, 232, 240);
-  doc.setLineWidth(0.25);
-  doc.roundedRect(15, clientY, 180, 32, 1.5, 1.5, 'D');
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text('CUSTOMER DETAILS', 20, clientY + 6);
-  
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(71, 85, 105);
-  
-  const wrapCustName = doc.splitTextToSize(lead.customer_name || '', 55);
-  doc.text(`Customer Name  :  ${wrapCustName[0] || 'N/A'}`, 20, clientY + 11.5);
-  doc.text(`Mobile Number  :  ${lead.mobile || 'N/A'}`, 20, clientY + 16.5);
-  const wrapEmail = doc.splitTextToSize(lead.email || 'N/A', 55);
-  doc.text(`Email Address  :  ${wrapEmail[0]}`, 20, clientY + 21.5);
-  doc.text(`Quotation No   :  ${quoteNum}`, 20, clientY + 26.5);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text('EVENT LOGISTICS', 110, clientY + 6);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(71, 85, 105);
-  
+  // Split text and calculate required heights
+  const wrapCustName = doc.splitTextToSize(lead.customer_name || 'N/A', 50);
+  const wrapEmail = doc.splitTextToSize(lead.email || 'N/A', 50);
   const displayEventType = lead.event_type === 'Other' ? (lead.custom_event_name || lead.custom_event_type || 'Other') : (lead.event_type || 'N/A');
-  const wrapEventType = doc.splitTextToSize(displayEventType, 60);
-  doc.text(`Event Type      :  ${wrapEventType[0] || 'N/A'}`, 110, clientY + 11.5);
-  
+  const wrapEventType = doc.splitTextToSize(displayEventType, 50);
+  const wrapLocation = doc.splitTextToSize(lead.event_location || 'N/A', 50);
+
   let formattedEvDate = 'N/A';
   if (lead.event_date) {
     try {
@@ -178,19 +205,90 @@ const generateQuotationPDF = (
       }
     } catch(e) {}
   }
-  doc.text(`Event Date      :  ${formattedEvDate}`, 110, clientY + 16.5);
-  
-  const wrapLocation = doc.splitTextToSize(lead.event_location || 'N/A', 60);
-  doc.text(`Event Location  :  ${wrapLocation[0]}`, 110, clientY + 21.5);
-  doc.text(`Quotation Date  :  ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`, 110, clientY + 26.5);
+  const quoteDateStr = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
-  let currentY = 88;
+  let leftColYOffset = 0;
+  let rightColYOffset = 0;
+
+  leftColYOffset += (wrapCustName.length * 4.2);
+  leftColYOffset += 4.2; // Mobile Number
+  leftColYOffset += (wrapEmail.length * 4.2);
+  leftColYOffset += 4.2; // Quotation No
+
+  rightColYOffset += (wrapEventType.length * 4.2);
+  rightColYOffset += 4.2; // Event Date
+  rightColYOffset += (wrapLocation.length * 4.2);
+  rightColYOffset += 4.2; // Quotation Date
+
+  const boxHeight = Math.max(leftColYOffset, rightColYOffset) + 16;
+
+  doc.setFillColor(bgLightGrid[0], bgLightGrid[1], bgLightGrid[2]);
+  doc.roundedRect(15, clientY, 180, boxHeight, 1.5, 1.5, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.25);
+  doc.roundedRect(15, clientY, 180, boxHeight, 1.5, 1.5, 'D');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+  doc.text('CUSTOMER DETAILS', 20, clientY + 6);
+  
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+  doc.text('EVENT LOGISTICS', 110, clientY + 6);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+
+  let curLeftY = clientY + 11.5;
+  doc.text('Customer Name  :', 20, curLeftY);
+  wrapCustName.forEach((line: string, i: number) => {
+    doc.text(line, 45, curLeftY + (i * 4.2));
+  });
+  curLeftY += (wrapCustName.length * 4.2);
+
+  doc.text('Mobile Number  :', 20, curLeftY);
+  doc.text(lead.mobile || 'N/A', 45, curLeftY);
+  curLeftY += 4.2;
+
+  doc.text('Email Address  :', 20, curLeftY);
+  wrapEmail.forEach((line: string, i: number) => {
+    doc.text(line, 45, curLeftY + (i * 4.2));
+  });
+  curLeftY += (wrapEmail.length * 4.2);
+
+  doc.text('Quotation No   :', 20, curLeftY);
+  doc.text(quoteNum, 45, curLeftY);
+
+
+  let curRightY = clientY + 11.5;
+  doc.text('Event Type      :', 110, curRightY);
+  wrapEventType.forEach((line: string, i: number) => {
+    doc.text(line, 135, curRightY + (i * 4.2));
+  });
+  curRightY += (wrapEventType.length * 4.2);
+
+  doc.text('Event Date      :', 110, curRightY);
+  doc.text(formattedEvDate, 135, curRightY);
+  curRightY += 4.2;
+
+  doc.text('Event Location  :', 110, curRightY);
+  wrapLocation.forEach((line: string, i: number) => {
+    doc.text(line, 135, curRightY + (i * 4.2));
+  });
+  curRightY += (wrapLocation.length * 4.2);
+
+  doc.text('Quotation Date  :', 110, curRightY);
+  doc.text(quoteDateStr, 135, curRightY);
+
+  let currentY = clientY + boxHeight + 6;
 
   // Helper routine to render tables
   const drawTable = (title: string, items: { id: string; name: string; qty: number; price: number; isAdditional?: boolean }[]) => {
     if (currentY + 22 > 250) {
-      doc.addPage();
-      currentY = 20;
+      currentY = createNewPage();
     }
 
     doc.setFont('helvetica', 'bold');
@@ -209,7 +307,7 @@ const generateQuotationPDF = (
     doc.setTextColor(255, 255, 255);
     doc.text('SERVICE / ITEM SPECIFICATIONS', 19, currentY + 4.8);
     doc.text('QTY', 125, currentY + 4.8, { align: 'center' });
-    doc.text('AMOUNT (₹)', 191, currentY + 4.8, { align: 'right' });
+    doc.text('AMOUNT (\u20B9)', 191, currentY + 4.8, { align: 'right' }); // Using unicode for ₹
 
     currentY += 7.5;
 
@@ -235,8 +333,7 @@ const generateQuotationPDF = (
 
       if (currentY + rowHeight > 250) {
         doc.line(15, currentY, 195, currentY);
-        doc.addPage();
-        currentY = 20;
+        currentY = createNewPage();
 
         doc.setFillColor(30, 41, 59);
         doc.rect(15, currentY, 180, 7.5, 'F');
@@ -245,7 +342,7 @@ const generateQuotationPDF = (
         doc.setTextColor(255, 255, 255);
         doc.text('SERVICE / ITEM SPECIFICATIONS (CONTINUED)', 19, currentY + 4.8);
         doc.text('QTY', 125, currentY + 4.8, { align: 'center' });
-        doc.text('AMOUNT (₹)', 191, currentY + 4.8, { align: 'right' });
+        doc.text('AMOUNT (\u20B9)', 191, currentY + 4.8, { align: 'right' });
         currentY += 7.5;
       }
 
@@ -274,7 +371,7 @@ const generateQuotationPDF = (
 
       const itemAmt = Number(item.qty || 1) * Number(item.price || 0);
       const isBundledBase = !item.isAdditional && item.price === 0;
-      const amtStr = isBundledBase ? 'Bundled' : `₹ ${itemAmt.toLocaleString('en-IN')}`;
+      const amtStr = isBundledBase ? 'Bundled' : itemAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       doc.text(amtStr, 191, currentY + (rowHeight / 2) + 1.1, { align: 'right' });
 
       doc.line(15, currentY + rowHeight, 195, currentY + rowHeight);
@@ -294,10 +391,132 @@ const generateQuotationPDF = (
     drawTable('ADDITIONAL SPECIFICATIONS & SERVICE ADD-ONS', additionalServices);
   }
 
+  // Draw Detailed Deliverables & Inclusions if available
+  const allInclusions: { package: string; item: string }[] = [];
+  const allDeliverables: { package: string; item: string }[] = [];
+
+  activePkgs.forEach((pkg) => {
+    const pkgId = pkg.package_id || pkg.id || 'default';
+    const pkgName = pkg.package_name || pkg.name || 'Base Package';
+
+    // Inclusions
+    if (editableInclusions && editableInclusions[pkgId] && editableInclusions[pkgId].length > 0) {
+      editableInclusions[pkgId].forEach((inc) => {
+        allInclusions.push({ package: pkgName, item: inc });
+      });
+    } else if (pkg.inclusions) {
+      const incList = typeof pkg.inclusions === 'string'
+        ? pkg.inclusions.split(',').map((s: string) => s.trim()).filter(Boolean)
+        : Array.isArray(pkg.inclusions) ? pkg.inclusions : [];
+      incList.forEach((inc: string) => {
+        allInclusions.push({ package: pkgName, item: inc });
+      });
+    }
+
+    // Deliverables
+    if (editableDeliverables && editableDeliverables[pkgId] && editableDeliverables[pkgId].length > 0) {
+      editableDeliverables[pkgId].forEach((del) => {
+        allDeliverables.push({ package: pkgName, item: del });
+      });
+    } else if (pkg.deliverables) {
+      const delList = typeof pkg.deliverables === 'string'
+        ? pkg.deliverables.split(',').map((s: string) => s.trim()).filter(Boolean)
+        : Array.isArray(pkg.deliverables) ? pkg.deliverables : [];
+      delList.forEach((del: string) => {
+        allDeliverables.push({ package: pkgName, item: del });
+      });
+    }
+  });
+
+  const drawDeliverablesTable = (title: string, list: { package: string; item: string }[]) => {
+    if (list.length === 0) return;
+
+    if (currentY + 22 > 250) {
+      currentY = createNewPage();
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+    doc.text(title, 15, currentY);
+    currentY += 4;
+
+    // Header bar background
+    doc.setFillColor(30, 41, 59); // Slate-800
+    doc.rect(15, currentY, 180, 7.5, 'F');
+
+    // Header labels
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(255, 255, 255);
+    doc.text('PACKAGE / CATEGORY', 19, currentY + 4.8);
+    doc.text('INCLUSION / DELIVERABLE DETAIL', 69, currentY + 4.8);
+
+    currentY += 7.5;
+
+    // Outer borders
+    doc.setDrawColor(203, 213, 225); 
+    doc.setLineWidth(0.2);
+
+    list.forEach((item, index) => {
+      const wrappedPkg = doc.splitTextToSize(item.package || '', 45);
+      const wrappedDetail = doc.splitTextToSize(item.item || '', 120);
+      const rowHeight = Math.max(7.5, Math.max(wrappedPkg.length, wrappedDetail.length) * 4.2 + 2.5);
+
+      if (currentY + rowHeight > 250) {
+        doc.line(15, currentY, 195, currentY);
+        currentY = createNewPage();
+
+        doc.setFillColor(30, 41, 59);
+        doc.rect(15, currentY, 180, 7.5, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(255, 255, 255);
+        doc.text('PACKAGE / CATEGORY (CONTINUED)', 19, currentY + 4.8);
+        doc.text('INCLUSION / DELIVERABLE DETAIL', 69, currentY + 4.8);
+        currentY += 7.5;
+      }
+
+      // Alternating row background stripes
+      if (index % 2 === 1) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(15, currentY, 180, rowHeight, 'F');
+      }
+
+      // Side bounding and cell dividers
+      doc.line(15, currentY, 15, currentY + rowHeight);
+      doc.line(195, currentY, 195, currentY + rowHeight);
+      doc.line(65, currentY, 65, currentY + rowHeight);
+
+      // Render cells text
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.2);
+      doc.setTextColor(51, 65, 85);
+
+      wrappedPkg.forEach((line: string, i: number) => {
+        doc.text(line, 19, currentY + 4.3 + (i * 4.2));
+      });
+
+      wrappedDetail.forEach((line: string, i: number) => {
+        doc.text(line, 69, currentY + 4.3 + (i * 4.2));
+      });
+
+      doc.line(15, currentY + rowHeight, 195, currentY + rowHeight);
+      currentY += rowHeight;
+    });
+
+    currentY += 5; // space under table
+  };
+
+  // Render Detailed Deliverables Table in PDF
+  const combinedList = [...allInclusions, ...allDeliverables];
+  if (combinedList.length > 0) {
+    drawDeliverablesTable('PACKAGE INCLUSIONS & DELIVERABLES DETAILED LIST', combinedList);
+  }
+
   // 5. PRICING SUMMARY CARD
   if (currentY + 36 > 250) {
-    doc.addPage();
-    currentY = 20;
+    currentY = createNewPage();
   }
 
   doc.setFont('helvetica', 'bold');
@@ -336,24 +555,62 @@ const generateQuotationPDF = (
 
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(51, 65, 85);
-  doc.text(`₹ ${baseSumVal.toLocaleString('en-IN')}`, 191, currentY + 4.3, { align: 'right' });
-  doc.text(`₹ ${addlSumVal.toLocaleString('en-IN')}`, 191, currentY + 10.6, { align: 'right' });
-  doc.text(`- ₹ ${discountVal.toLocaleString('en-IN')}`, 191, currentY + 16.9, { align: 'right' });
+  doc.text(baseSumVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + 4.3, { align: 'right' });
+  doc.text(addlSumVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + 10.6, { align: 'right' });
+  doc.text('- ' + discountVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + 16.9, { align: 'right' });
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
-  doc.text(`₹ ${finalAmountSum.toLocaleString('en-IN')}`, 191, currentY + 23.2, { align: 'right' });
+  doc.text(finalAmountSum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + 23.2, { align: 'right' });
 
   currentY += 31;
 
-  // 6. REMARKS (CUSTOMER & INTERNAL)
+  // 6. PAYMENT DETAILS CARD
+  if (currentY + 26 > 250) {
+    currentY = createNewPage();
+  }
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+  doc.text('PAYMENT DETAILS', 15, currentY);
+  currentY += 4.5;
+  
+  doc.setFillColor(bgLightGrid[0], bgLightGrid[1], bgLightGrid[2]);
+  doc.roundedRect(15, currentY, 180, 20, 1.5, 1.5, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.25);
+  doc.roundedRect(15, currentY, 180, 20, 1.5, 1.5, 'D');
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  
+  // Column 1
+  doc.text('Name        :', 20, currentY + 6);
+  doc.text('Bank        :', 20, currentY + 10.5);
+  doc.text('Account No  :', 20, currentY + 15);
+  doc.setFont('helvetica', 'bold');
+  doc.text('PHOTOCREW PICTURES', 40, currentY + 6);
+  doc.text('HDFC BANK', 40, currentY + 10.5);
+  doc.text('50200103134840', 40, currentY + 15);
+  
+  // Column 2
+  doc.setFont('helvetica', 'normal');
+  doc.text('IFSC Code   :', 110, currentY + 6);
+  doc.text('Branch      :', 110, currentY + 10.5);
+  doc.setFont('helvetica', 'bold');
+  doc.text('HDFC0000312', 135, currentY + 6);
+  doc.text('VijayNagar, Bangalore', 135, currentY + 10.5);
+  
+  currentY += 26;
+
+  // 7. REMARKS (CUSTOMER & INTERNAL)
   const custRemarks = lead.remarks_raw || lead.remarks || '';
   const teamRemarks = lead.notes || ''; // private team notes
   
   if (custRemarks || teamRemarks) {
     if (currentY + 25 > 250) {
-      doc.addPage();
-      currentY = 20;
+      currentY = createNewPage();
     }
 
     doc.setFont('helvetica', 'bold');
@@ -364,7 +621,7 @@ const generateQuotationPDF = (
 
     let wrappedCust: string[] = [];
     let wrappedTeam: string[] = [];
-    let boxHeight = 10;
+    let boxHeight = 4; // padding
 
     if (custRemarks) {
       wrappedCust = doc.splitTextToSize(`Customer Notes: ${custRemarks}`, 170);
@@ -374,10 +631,10 @@ const generateQuotationPDF = (
       wrappedTeam = doc.splitTextToSize(`Internal Team Notes: ${teamRemarks}`, 170);
       boxHeight += wrappedTeam.length * 4.2 + (custRemarks ? 4 : 0);
     }
+    boxHeight += 2; // bottom padding
 
     if (currentY + boxHeight > 250) {
-      doc.addPage();
-      currentY = 20;
+      currentY = createNewPage();
     }
 
     doc.setFillColor(248, 250, 252);
@@ -426,10 +683,9 @@ const generateQuotationPDF = (
     currentY += boxHeight + 4.5;
   }
 
-  // 7. TERMS AND CONDITIONS
+  // 8. TERMS AND CONDITIONS
   if (currentY + 22 > 250) {
-    doc.addPage();
-    currentY = 20;
+    currentY = createNewPage();
   }
 
   doc.setFont('helvetica', 'bold');
@@ -439,11 +695,13 @@ const generateQuotationPDF = (
   currentY += 4.5;
 
   const defaultTerms = [
-    'Booking is subject to availability of dates and crew.',
-    'A non-refundable advance payment of 40% is required to lock the booking.',
-    'Remaining payments are split (40% on shoot day, 20% upon delivery of first drafts).',
-    'Travel and accommodation outside headquarters to be cleared by the client.',
-    'Client revisions to delivered albums/videos are capped at 2 iterations within 30 days.'
+    'Payments are non-refundable.',
+    'Crew food arrangements must be provided by the client.',
+    '50% advance payment is required, and the remaining 50% must be paid before collecting the raw footage.',
+    'If the event duration exceeds the agreed schedule, an additional charge of \u20B93,000 per service per hour will apply.',
+    'We expect 90% of the total payment immediately after the event is completed, and the remaining 10% before the final deliverables are handed over.',
+    'Pen drive and hard disk are not included in the package.',
+    'Edited photos and videos will be shared through a Google Drive link.'
   ];
 
   const termsToRender = termsText.split('\n').map(t => t.trim()).filter(Boolean).length > 0
@@ -451,58 +709,32 @@ const generateQuotationPDF = (
     : defaultTerms;
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6.8);
+  doc.setFontSize(7.5);
   doc.setTextColor(100, 116, 139);
 
+  const lineSpacing = 3.8;
+
   termsToRender.forEach((term, idx) => {
-    const wrapped = doc.splitTextToSize(`${idx + 1}. ${term}`, 175);
+    // Determine if it already has a number prefix. If it starts with digit + dot, don't add idx.
+    const isNumbered = /^\d+\.\s/.test(term);
+    const prefix = isNumbered ? '' : `${idx + 1}. `;
+    const wrapped = doc.splitTextToSize(`${prefix}${term}`, 180);
     wrapped.forEach((line: string) => {
-      if (currentY + 4 > 252) {
-        doc.addPage();
-        currentY = 20;
+      if (currentY + lineSpacing > 250) {
+        currentY = createNewPage();
       }
       doc.text(line, 15, currentY);
-      currentY += 3.8;
+      currentY += lineSpacing;
     });
   });
 
-  currentY += 4;
-
-  // 8. SIGNATURE AND FOOTER (Placed statically on bottom of the last page)
-  let footerY = 260;
-  
-  doc.setDrawColor(226, 232, 240);
-  doc.setLineWidth(0.3);
-  doc.line(15, footerY, 195, footerY);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text('PHOTOCREW PICTURES', 15, footerY + 5);
-  
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(100, 116, 139);
-  doc.text('Website : https://www.photocrewpictures.com/  |  Email: info@photocrewpictures.com  |  Phone: +91 9060144016', 15, footerY + 9);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]); // Gold primary accent
-  doc.text('Thank You For Choosing Photocrew Pictures', 15, footerY + 14);
-
-  // Authorised Signatory right aligned
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(100, 116, 139);
-  doc.text('For Photocrew Pictures', 150, footerY + 5);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text('Authorized Signatory', 150, footerY + 12);
-
-  // Bottom Accent ribbon
-  doc.setFillColor(goldColor[0], goldColor[1], goldColor[2]);
-  doc.rect(0, 292, 210, 5, 'F');
+  // Apply Brand Headers and Footers to ALL pages
+  const totalPages = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    drawPageHeader(doc);
+    drawPageFooter(doc, i, totalPages);
+  }
 
   return doc;
 };
@@ -573,7 +805,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     isRecordLocked,
     isDepartmentAllowedToEdit,
     deleteLead,
-    deleteOrder
+    deleteOrder,
+    statusHistory,
+    getLeadCurrentStatus
   } = useRole();
 
   const [logoBase64, setLogoBase64] = useState<string>('');
@@ -639,7 +873,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         l.mobile,
         l.event_type,
         l.event_date || 'N/A',
-        l.status,
+        getLeadCurrentStatus(l),
         l.remarks.slice(0, 50).replace(/["\n\r]/g, ' '),
         pay ? pay.payment_status : 'Pending',
         l.created_date
@@ -670,7 +904,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         l.mobile,
         l.event_type,
         l.event_date || 'N/A',
-        l.status,
+        getLeadCurrentStatus(l),
         l.remarks.slice(0, 50).replace(/["\t\n\r]/g, ' '),
         pay ? pay.payment_status : 'Pending',
         l.created_date
@@ -704,7 +938,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           <td>${l.mobile}</td>
           <td>${l.event_type}</td>
           <td>${l.event_date || 'N/A'}</td>
-          <td>${l.status}</td>
+          <td>${getLeadCurrentStatus(l)}</td>
           <td>${l.created_date}</td>
           <td>${pay ? pay.payment_status : 'Pending'}</td>
         </tr>
@@ -837,6 +1071,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     email: '',
     address: '',
     city: '',
+    state: '',
+    pincode: '',
     // Step 2
     event_type: '',
     custom_event_name: '',
@@ -932,6 +1168,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     whatsapp_number: '',
     address: '',
     city: '',
+    state: '',
+    pincode: '',
   });
 
   const [wizardStep, setWizardStep] = useState(1);
@@ -972,6 +1210,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       whatsapp_number: '',
       address: '',
       city: '',
+      state: '',
+      pincode: '',
     });
     setOtherSource('');
     setSelectedPkgIds([]);
@@ -1118,15 +1358,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     event_time: '',
     payment_mode: 'UPI',
     notes: '',
+    transaction_id: '',
   });
 
   // Quotation System State
   const [quotationTerms, setQuotationTerms] = useState(
-    "1. 50% advance payment required to confirm event booking.\n" +
-    "2. Remaining 50% balance must be cleared upon raw footage delivery.\n" +
-    "3. Videos will be hosted on Photocrew Cloud storage for 90 days.\n" +
-    "4. Extra shoot hours are billed at ₹5,000/hr.\n" +
-    "5. Delivery of final edits: 15-20 business days."
+    "1. Payments are non-refundable.\n" +
+    "2. Crew food arrangements must be provided by the client.\n" +
+    "3. 50% advance payment is required, and the remaining 50% must be paid before collecting the raw footage.\n" +
+    "4. If the event duration exceeds the agreed schedule, an additional charge of ₹3,000 per service per hour will apply.\n" +
+    "5. We expect 90% of the total payment immediately after the event is completed, and the remaining 10% before the final deliverables are handed over.\n" +
+    "6. Pen drive and hard disk are not included in the package.\n" +
+    "7. Edited photos and videos will be shared through a Google Drive link."
   );
   const [generatedPDFBlobUrl, setGeneratedPDFBlobUrl] = useState<string>('');
   const [activeQuoteNum, setActiveQuoteNum] = useState<string>('');
@@ -2238,6 +2481,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       email: lead.email || '',
       address: lead.address || '',
       city: lead.city || '',
+      state: lead.state || '',
+      pincode: lead.pincode || '',
       // Step 2
       event_type: lead.event_type || '',
       custom_event_name: lead.custom_event_name || '',
@@ -2336,6 +2581,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           email: wizardLeadData.email,
           address: wizardLeadData.address,
           city: wizardLeadData.city,
+          state: wizardLeadData.state,
+          pincode: wizardLeadData.pincode,
           lead_source: wizardLeadData.lead_source,
         });
         showToastMsg("CRM Updated Successfully.", "success");
@@ -2719,6 +2966,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             alternate_mobile: (createForm.alternate_mobile && createForm.alternate_mobile.trim() !== '' && createForm.alternate_mobile.trim() !== '+91') ? createForm.alternate_mobile : undefined,
             email: createForm.email,
             lead_source: finalSource,
+            whatsapp_number: createForm.whatsapp_number,
+            address: createForm.address,
+            city: createForm.city,
+            state: createForm.state,
+            pincode: createForm.pincode,
             event_type: 'Other',
             event_date: new Date().toISOString().split('T')[0],
             event_time: '12:00',
@@ -2735,6 +2987,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             alternate_mobile: (createForm.alternate_mobile && createForm.alternate_mobile.trim() !== '' && createForm.alternate_mobile.trim() !== '+91') ? createForm.alternate_mobile : undefined,
             email: createForm.email,
             lead_source: finalSource,
+            whatsapp_number: createForm.whatsapp_number,
+            address: createForm.address,
+            city: createForm.city,
+            state: createForm.state,
+            pincode: createForm.pincode,
             remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city)
           });
         }
@@ -2801,6 +3058,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           event_location: createForm.event_location || 'TBD',
           lead_source: finalSource || 'Walk-in',
           shoot_type: createForm.shoot_type || '',
+          whatsapp_number: createForm.whatsapp_number,
+          address: createForm.address,
+          city: createForm.city,
+          state: createForm.state,
+          pincode: createForm.pincode,
           remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city)
         });
         setWizardStep(3);
@@ -3111,7 +3373,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         confirmForm.event_date,
         confirmForm.event_time,
         confirmForm.payment_mode,
-        confirmForm.notes
+        confirmForm.notes,
+        undefined,
+        confirmForm.transaction_id
       );
 
       setShowConfirmModal(false);
@@ -3141,16 +3405,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const todayStr = '2026-06-10';
 
-  const statNewLeads = leads.filter(l => l.status === 'New Lead').length;
-  const statTodayFollowups = leads.filter(l => l.status === 'Follow Up' && getFollowUpDate(l.remarks) === todayStr).length;
+  const statNewLeads = leads.filter(l => getLeadCurrentStatus(l) === 'New Lead').length;
+  const statTodayFollowups = leads.filter(l => getLeadCurrentStatus(l) === 'Follow Up' && getFollowUpDate(l.remarks) === todayStr).length;
   const statOverdueFollowups = leads.filter(l => {
-    if (l.status !== 'Follow Up') return false;
+    if (getLeadCurrentStatus(l) !== 'Follow Up') return false;
     const fDate = getFollowUpDate(l.remarks);
     return fDate ? fDate < todayStr : false;
   }).length;
-  const statQuotesSent = leads.filter(l => l.status === 'Quotation Sent').length;
-  const statNegotiations = leads.filter(l => l.status === 'Negotiation').length;
-  const statConfirmedOrders = leads.filter(l => l.status === 'Order Confirmed').length;
+  const statQuotesSent = leads.filter(l => getLeadCurrentStatus(l) === 'Quotation Sent').length;
+  const statNegotiations = leads.filter(l => getLeadCurrentStatus(l) === 'Negotiation').length;
+  const statConfirmedOrders = leads.filter(l => getLeadCurrentStatus(l) === 'Order Confirmed').length;
 
   // Filter Leads List
   const filteredLeads = leads.filter((lead) => {
@@ -3160,16 +3424,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       lead.mobile.includes(filterQuery);
 
     const matchesSource = filterSource === '' || lead.lead_source === filterSource;
+    const leadStatus = getLeadCurrentStatus(lead);
     const matchesStatus = filterStatus === '' 
       ? true 
       : filterStatus === 'Overdue' 
         ? (() => {
-            if (lead.status !== 'Follow Up') return false;
+            if (leadStatus !== 'Follow Up') return false;
             const fDate = getFollowUpDate(lead.remarks);
             return fDate ? fDate < todayStr : false;
           })()
         : (() => {
-            const statusLower = (lead.status || '').toLowerCase().trim();
+            const statusLower = leadStatus.toLowerCase().trim();
             const filterLower = filterStatus.toLowerCase().trim();
             if (filterLower === 'customer review') {
               return statusLower === 'customer review' || statusLower === 'client review' || statusLower === 'client review sent';
@@ -3315,7 +3580,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             <div className="border-t border-slate-800 pt-3.5 grid grid-cols-2 gap-3 text-[11px]">
               <div>
                 <span className="text-slate-500 block">Shoot Type</span>
-                <strong className="text-slate-200 font-medium">{selectedLead.event_type}</strong>
+                <strong className="text-slate-200 font-medium">{selectedLead.event_type === 'Other' ? (selectedLead.custom_event_name || selectedLead.custom_event_type || 'Other') : selectedLead.event_type}</strong>
               </div>
               <div>
                 <span className="text-slate-500 block">Lead Source</span>
@@ -4781,6 +5046,34 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-sans"
                       />
                     </div>
+
+                    {/* State */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                        State
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Maharashtra"
+                        value={createForm.state}
+                        onChange={(e) => setCreateForm({ ...createForm, state: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-sans"
+                      />
+                    </div>
+
+                    {/* Pincode */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                        Pincode
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 400001"
+                        value={createForm.pincode}
+                        onChange={(e) => setCreateForm({ ...createForm, pincode: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-sans"
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -5713,18 +6006,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 <tbody className="divide-y divide-zinc-900/60">
                   {filteredLeads.length > 0 ? (
                     filteredLeads.map((lead) => {
-                      const isActiveInSales = ['New Lead', 'Follow Up', 'Quotation Sent', 'Negotiation'].includes(lead.status);
+                      const leadStatus = getLeadCurrentStatus(lead);
+                      const isActiveInSales = ['New Lead', 'Follow Up', 'Quotation Sent', 'Negotiation'].includes(leadStatus);
                       const linkedOrder = orders.find((o) => o.lead_id === lead.lead_id);
                       const paymentRecord = linkedOrder ? payments.find((p) => p.order_id === linkedOrder.order_id) : null;
                       const paymentLabel = paymentRecord ? paymentRecord.payment_status : 'N/A';
 
                       // Determine high-level stage
                       let stageLabel = 'Sales';
-                      if (['Order Confirmed', 'New Order Received', 'Operations Assigned', 'Event Scheduled', 'Staff Assigned', 'Event Completed', 'Operations Stage'].includes(lead.status)) {
+                      if (['Order Confirmed', 'New Order Received', 'Operations Assigned', 'Event Scheduled', 'Staff Assigned', 'Event Completed', 'Operations Stage'].includes(leadStatus)) {
                         stageLabel = 'Operations';
-                      } else if (['Raw Footage Received', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress', 'Final Approval', 'Production Stage', 'Approved'].includes(lead.status)) {
+                      } else if (['Raw Footage Received', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress', 'Final Approval', 'Production Stage', 'Approved'].includes(leadStatus)) {
                         stageLabel = 'Production';
-                      } else if (['Delivered', 'Closed'].includes(lead.status)) {
+                      } else if (['Delivered', 'Closed'].includes(leadStatus)) {
                         stageLabel = 'Closed / Delivered';
                       }
 
@@ -5763,14 +6057,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </td>
                           <td className="p-3.5">
                             <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold tracking-tight uppercase border ${
-                              lead.status === 'New Lead' ? 'bg-indigo-555/15 text-indigo-400 border-indigo-505/20' :
-                              lead.status === 'Follow Up' ? 'bg-emerald-555/15 text-emerald-400 border-emerald-505/20' :
-                              lead.status === 'Quotation Sent' ? 'bg-amber-555/15 text-amber-400 border-amber-505/20' :
-                              lead.status === 'Negotiation' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
-                              lead.status === 'Order Confirmed' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-450/40 font-black' :
+                              leadStatus === 'New Lead' ? 'bg-indigo-555/15 text-indigo-400 border-indigo-505/20' :
+                              leadStatus === 'Follow Up' ? 'bg-emerald-555/15 text-emerald-400 border-emerald-505/20' :
+                              leadStatus === 'Quotation Sent' ? 'bg-amber-555/15 text-amber-400 border-amber-505/20' :
+                              leadStatus === 'Negotiation' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
+                              leadStatus === 'Order Confirmed' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-450/40 font-black' :
                               'bg-zinc-900 text-zinc-400 border-zinc-800'
                             }`}>
-                              {lead.status}
+                              {leadStatus}
                             </span>
                           </td>
                           <td className="p-3.5">
@@ -5796,19 +6090,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 <Edit className="w-3 h-3" />
                                 <span>{isActiveInSales && canEdit ? 'Manage CRM' : 'View CRM'}</span>
                               </button>
-                              {canEdit && (
-                                <button
-                                  onClick={async () => {
-                                    if (confirm(`Are you absolutely sure you want to delete lead "${lead.customer_name}"? All associated history, quotations, payments, and operational records will be deleted.`)) {
-                                      await deleteLead(lead.lead_id);
-                                    }
-                                  }}
-                                  className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/15 hover:border-rose-500/30 rounded-xl transition-all cursor-pointer"
-                                  title="Delete Lead"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
                             </div>
                           </td>
                         </tr>
@@ -5849,7 +6130,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
             <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 text-[11px] space-y-1">
               <p className="text-slate-400">Client: <strong className="text-slate-200">{selectedLead.customer_name}</strong></p>
-              <p className="text-slate-400">Type: <strong className="text-slate-200">{selectedLead.event_type}</strong></p>
+              <p className="text-slate-400">Type: <strong className="text-slate-200">{selectedLead.event_type === 'Other' ? (selectedLead.custom_event_name || selectedLead.custom_event_type || 'Other') : selectedLead.event_type}</strong></p>
               <p className="text-slate-400">Address: <strong className="text-slate-200">{selectedLead.event_location}</strong></p>
             </div>
 
@@ -5942,6 +6223,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   <option value="Cheque">Cheque Deposit</option>
                 </select>
               </div>
+
+              {/* Transaction ID (Optional) */}
+              {confirmForm.advance_received > 0 && (
+                <div>
+                  <label className="block font-medium text-slate-400 mb-1">
+                    Transaction ID (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="UPI ID, Bank Ref, IMPS reference etc."
+                    value={confirmForm.transaction_id || ''}
+                    onChange={(e) => setConfirmForm({ ...confirmForm, transaction_id: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
+                  />
+                </div>
+              )}
 
               {/* Notes */}
               <div>
@@ -6150,6 +6447,28 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             onChange={(e) => setWizardLeadData({ ...wizardLeadData, city: e.target.value })}
                             className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
                             placeholder="e.g. Bangalore"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">State</label>
+                          <input
+                            type="text"
+                            value={wizardLeadData.state || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, state: e.target.value })}
+                            className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
+                            placeholder="e.g. Karnataka"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Pincode</label>
+                          <input
+                            type="text"
+                            value={wizardLeadData.pincode || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, pincode: e.target.value })}
+                            className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
+                            placeholder="e.g. 560001"
                           />
                         </div>
                       </div>

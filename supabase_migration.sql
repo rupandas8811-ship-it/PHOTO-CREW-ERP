@@ -15,12 +15,19 @@ BEGIN;
 ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS whatsapp_number VARCHAR(50);
 ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS address TEXT;
 ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS city VARCHAR(100);
+ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS state VARCHAR(100);
+ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS pincode VARCHAR(50);
 ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS shoot_type VARCHAR(100);
 ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS reporting_time VARCHAR(20);
 
 -- B. Update public.orders table
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS shoot_type VARCHAR(100);
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS reporting_time VARCHAR(20);
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS whatsapp_number VARCHAR(50);
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS city VARCHAR(100);
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS state VARCHAR(100);
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS pincode VARCHAR(50);
 
 -- C. Update public.raw_footage table
 ALTER TABLE public.raw_footage ADD COLUMN IF NOT EXISTS storage_type VARCHAR(100) DEFAULT 'Google Drive';
@@ -29,6 +36,7 @@ ALTER TABLE public.raw_footage ADD COLUMN IF NOT EXISTS upload_notes TEXT;
 -- D. Update public.payments table
 ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS payment_collection_status VARCHAR(100);
 ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS additional_received NUMERIC DEFAULT 0;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS transaction_id TEXT;
 
 -- E. Update public.users table
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS status VARCHAR(50);

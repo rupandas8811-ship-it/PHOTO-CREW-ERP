@@ -19,12 +19,15 @@ export const PaymentsModule: React.FC = () => {
   const [payAmount, setPayAmount] = useState<number | ''>('');
   const [payDate, setPayDate] = useState('');
   const [proofUrl, setProofUrl] = useState('');
+  const [transactionId, setTransactionId] = useState('');
 
   const handleSelectPayment = (orderId: string) => {
     setSelectedOrderId(orderId);
     setPayAmount('');
     setPayDate('');
     setProofUrl('');
+    const existingPayment = payments.find((p) => p.order_id === orderId);
+    setTransactionId(existingPayment?.transaction_id || '');
   };
 
   const handlePaySubmit = async (e: React.FormEvent) => {
@@ -37,7 +40,7 @@ export const PaymentsModule: React.FC = () => {
 
     try {
       setIsSaving(true);
-      await recordPayment(selectedOrderId, Number(payAmount), payDate, proofUrl);
+      await recordPayment(selectedOrderId, Number(payAmount), payDate, proofUrl, transactionId);
       setSelectedOrderId(null);
       alert('Payment balance recorded successfully. Stage updated in master ledger!');
     } catch (err: any) {
@@ -105,7 +108,12 @@ export const PaymentsModule: React.FC = () => {
                       }`}
                     >
                       <td className="p-3 pl-4 font-mono font-bold text-[11px] text-zinc-455">
-                        {p.payment_id}
+                        <div>{p.payment_id}</div>
+                        {p.transaction_id && (
+                          <div className="text-[9px] text-zinc-500 font-normal mt-0.5">
+                            Txn: {p.transaction_id}
+                          </div>
+                        )}
                       </td>
                       <td className="p-3 font-mono font-bold text-rose-400">
                         {p.order_id}
@@ -206,6 +214,13 @@ export const PaymentsModule: React.FC = () => {
                       </div>
                     </div>
 
+                    {paymentItem.transaction_id && (
+                      <div className="bg-zinc-950/50 rounded-xl p-3 border border-zinc-850 text-[11px] font-mono">
+                        <span className="text-zinc-500 block">Existing Transaction ID:</span>
+                        <p className="font-bold text-emerald-400 mt-0.5">{paymentItem.transaction_id}</p>
+                      </div>
+                    )}
+
                     {/* Commit Input */}
                     <div>
                       <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-1.5 font-mono">
@@ -237,6 +252,22 @@ export const PaymentsModule: React.FC = () => {
                         className="w-full bg-zinc-950 border border-zinc-850 rounded-xl py-3 px-4 text-zinc-100 font-mono focus:outline-none focus:ring-1 focus:ring-rose-500"
                       />
                     </div>
+
+                    {/* Transaction ID (Optional) */}
+                    {(payAmount !== '' && Number(payAmount) > 0) && (
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-1.5 font-mono">
+                          Transaction ID (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="UPI ID, Bank Ref, IMPS, RTGS, Card Txn etc."
+                          value={transactionId}
+                          onChange={(e) => setTransactionId(e.target.value)}
+                          className="w-full bg-zinc-950 border border-zinc-855 rounded-xl py-3 px-4 text-xs text-zinc-100 font-mono focus:outline-none focus:ring-1 focus:ring-rose-505"
+                        />
+                      </div>
+                    )}
 
                     {/* Proof url link */}
                     <div>
@@ -339,6 +370,13 @@ export const PaymentsModule: React.FC = () => {
                       </div>
                     </div>
 
+                    {paymentItem.transaction_id && (
+                      <div className="bg-zinc-900/50 rounded-xl p-3 border border-zinc-850 text-[11px] font-mono">
+                        <span className="text-zinc-500 block">Existing Transaction ID:</span>
+                        <p className="font-bold text-emerald-400 mt-0.5">{paymentItem.transaction_id}</p>
+                      </div>
+                    )}
+
                     {/* Commit Input */}
                     <div>
                       <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-1.5 font-mono">
@@ -370,6 +408,22 @@ export const PaymentsModule: React.FC = () => {
                         className="w-full bg-zinc-900 border border-zinc-840 rounded-xl py-3 px-4 text-zinc-100 font-mono focus:outline-none focus:ring-1 focus:ring-rose-500"
                       />
                     </div>
+
+                    {/* Transaction ID (Optional) */}
+                    {(payAmount !== '' && Number(payAmount) > 0) && (
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-1.5 font-mono">
+                          Transaction ID (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="UPI ID, Bank Ref, IMPS, RTGS, Card Txn etc."
+                          value={transactionId}
+                          onChange={(e) => setTransactionId(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-840 rounded-xl py-3 px-4 text-xs text-zinc-100 font-mono focus:outline-none focus:ring-1 focus:ring-rose-505"
+                        />
+                      </div>
+                    )}
 
                     {/* Proof url link */}
                     <div>

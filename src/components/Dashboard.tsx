@@ -24,8 +24,9 @@ export const Dashboard: React.FC = () => {
       if (kpiFilter === 'All') return true;
       if (kpiFilter === 'Total Leads') return true;
       if (kpiFilter === "Today's Inflow") return true;
-      if (kpiFilter === 'June Leads') {
-        return order.event_date.startsWith('2026-06');
+      if (kpiFilter === 'This Month Leads') {
+        const thisMonthStr = new Date().toISOString().substring(0, 7);
+        return order.event_date.startsWith(thisMonthStr);
       }
       if (kpiFilter === 'Signed Orders') {
         return order.order_status === 'Confirmed' || order.current_stage === 'Order Confirmed';
@@ -66,11 +67,13 @@ export const Dashboard: React.FC = () => {
   // 1. Total Leads
   const totalLeads = leads.length;
 
-  // 2. Today's Leads (Current date in context: 2026-06-10)
-  const todaysLeads = leads.filter(l => l.created_date === '2026-06-10').length;
+  // 2. Today's Leads
+  const todayIso = new Date().toISOString().split('T')[0];
+  const todaysLeads = leads.filter(l => l.created_date === todayIso).length;
 
-  // 3. This Month Leads (Created in June 2026)
-  const thisMonthLeads = leads.filter(l => l.created_date.startsWith('2026-06')).length;
+  // 3. This Month Leads
+  const thisMonthStr = todayIso.substring(0, 7);
+  const thisMonthLeads = leads.filter(l => l.created_date.startsWith(thisMonthStr)).length;
 
   // 4. Confirmed Orders (All orders are confirmed orders in this company)
   const confirmedOrdersNum = orders.length;
@@ -188,10 +191,10 @@ export const Dashboard: React.FC = () => {
               colSpan: "col-span-1"
             },
             {
-              label: "June Leads",
+              label: "This Month Leads",
               val: thisMonthLeads,
               theme: 'purple' as CameraLensTheme,
-              trendText: "June Active",
+              trendText: "Active",
               subText: "Campaign",
               chartPoints: [15, 10, 19, 14, 22, 18, 26],
               colSpan: "col-span-1"

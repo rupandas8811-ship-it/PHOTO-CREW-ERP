@@ -1755,7 +1755,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           <tr key={prod.production_id} className="hover:bg-zinc-900/40 transition-all font-mono">
                             <td className="p-3 text-violet-400 font-bold">{order.order_id}</td>
                             <td className="p-3 font-sans font-bold text-white">{order.customer_name}</td>
-                            <td className="p-3 text-zinc-300 font-sans">{order.event_type}</td>
+                            <td className="p-3 text-zinc-300 font-sans">{order.event_type === 'Other' ? (order.custom_event_name || order.custom_event_type || 'Other') : order.event_type}</td>
                             <td className="p-3 text-zinc-400">{order.event_date || 'N/A'}</td>
                             <td className="p-3 font-sans text-zinc-350">{assignedTeamText}</td>
                             <td className="p-3">

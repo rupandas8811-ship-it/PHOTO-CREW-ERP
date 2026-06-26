@@ -1,11 +1,19 @@
 import { createClient } from '@supabase/supabase-js';
 
-const url = process.env.SUPABASE_URL || '';
-const anonKey = process.env.SUPABASE_ANON_KEY || '';
+const getUrl = () => {
+  return typeof window !== 'undefined' ? `${window.location.origin}/supabase` : 'http://localhost:3000/supabase';
+};
 
-export const supabaseClient = url && anonKey ? createClient(url, anonKey, {
+const getAnonKey = () => {
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.VITE_SUPABASE_ANON_KEY) {
+    return (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
+  }
+  return 'dummy-anon-key';
+};
+
+export const supabaseClient = createClient(getUrl(), getAnonKey(), {
   auth: { persistSession: true }
-}) : null;
+});
 
 // Diagnostic Metrics Store
 export interface DiagnosticReport {

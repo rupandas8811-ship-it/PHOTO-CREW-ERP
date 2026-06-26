@@ -7,7 +7,6 @@ const anonKey = process.env.SUPABASE_ANON_KEY || '';
 const supabase = createClient(url, anonKey);
 
 async function run() {
-  console.log('Logging in as sale@photocrew.com...');
   const { data: authData, error: loginErr } = await supabase.auth.signInWithPassword({
     email: 'sale@photocrew.com',
     password: 'sales@123'
@@ -17,12 +16,12 @@ async function run() {
     console.error('Login failed:', loginErr.message);
     return;
   }
-
-  const { data: role, error: rpcErr } = await supabase.rpc('get_user_role');
-  if (rpcErr) {
-    console.error('RPC get_user_role failed:', rpcErr);
+  
+  const { data, error } = await supabase.from('leads').select('*').limit(1);
+  if (error) {
+    console.error("SELECT failed:", error);
   } else {
-    console.log('Role returned by RPC:', role);
+    console.log("SELECT succeeded, got rows:", data.length);
   }
 }
 

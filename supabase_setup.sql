@@ -27,6 +27,7 @@ DROP TABLE IF EXISTS public.notifications CASCADE;
 DROP TABLE IF EXISTS public.analytics_snapshots CASCADE;
 DROP TABLE IF EXISTS public.leads CASCADE;
 DROP TABLE IF EXISTS public.users CASCADE;
+DROP TABLE IF EXISTS public.login_logs CASCADE;
 
 -- 2. CREATE DATABASE TABLES
 
@@ -43,6 +44,17 @@ CREATE TABLE public.users (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     password TEXT, -- Included for backward compatibility/graceful legacy auth
     username VARCHAR(255)
+);
+
+CREATE TABLE public.login_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username_or_email TEXT,
+    user_id UUID,
+    login_status VARCHAR(50) NOT NULL,
+    failure_reason TEXT,
+    ip_address TEXT,
+    user_agent TEXT,
+    attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- LEADS TABLE
@@ -300,13 +312,19 @@ RETURNS text AS $$
 DECLARE
   v_role TEXT;
 BEGIN
-  -- 1. Try to find role by matching user ID
+  -- 1. Try to get role from JWT user_metadata first (fastest, avoids DB query)
+  v_role := auth.jwt() -> 'user_metadata' ->> 'role';
+  IF v_role IS NOT NULL THEN
+    RETURN v_role;
+  END IF;
+
+  -- 2. Try to find role by matching user ID in public.users
   SELECT role::text INTO v_role FROM public.users WHERE id = auth.uid();
   IF v_role IS NOT NULL THEN
     RETURN v_role;
   END IF;
 
-  -- 2. Fallback to matching by email from JWT claim
+  -- 3. Fallback to matching by email from JWT claim in public.users
   SELECT role::text INTO v_role FROM public.users WHERE LOWER(email) = LOWER(auth.jwt()->>'email');
   IF v_role IS NOT NULL THEN
     RETURN v_role;
@@ -319,6 +337,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- 5. ENABLE ROW LEVEL SECURITY (RLS) ON ALL TABLES
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.login_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.follow_ups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.quotations ENABLE ROW LEVEL SECURITY;
@@ -354,6 +373,14 @@ CREATE POLICY self_update_users_policy ON public.users
 DROP POLICY IF EXISTS anon_insert_users_policy ON public.users;
 CREATE POLICY anon_insert_users_policy ON public.users
     FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS login_logs_insert_policy ON public.login_logs;
+CREATE POLICY login_logs_insert_policy ON public.login_logs
+    FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS login_logs_select_policy ON public.login_logs;
+CREATE POLICY login_logs_select_policy ON public.login_logs
+    FOR SELECT USING (true);
 
 -- B. LEADS POLICIES
 DROP POLICY IF EXISTS leads_select_policy ON public.leads;

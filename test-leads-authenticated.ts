@@ -18,11 +18,19 @@ async function run() {
     return;
   }
 
-  const { data: role, error: rpcErr } = await supabase.rpc('get_user_role');
-  if (rpcErr) {
-    console.error('RPC get_user_role failed:', rpcErr);
+  console.log('Logged in successfully!');
+  
+  // Test role RPC
+  const { data: role } = await supabase.rpc('get_user_role');
+  console.log('Role RPC returned:', role);
+
+  // Test selecting from leads
+  console.log('Selecting from leads...');
+  const { data: leads, error: selectErr } = await supabase.from('leads').select('*');
+  if (selectErr) {
+    console.error('Select leads failed:', selectErr);
   } else {
-    console.log('Role returned by RPC:', role);
+    console.log('Select leads succeeded! Rows count:', leads?.length);
   }
 }
 

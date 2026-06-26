@@ -5,12 +5,34 @@ import { Camera, Aperture, Sparkles, RefreshCw } from 'lucide-react';
 interface StudioLoaderProps {
   onComplete?: () => void;
   duration?: number; // duration in ms
+  isLoading?: boolean;
 }
 
-export const StudioLoader: React.FC<StudioLoaderProps> = ({ onComplete, duration = 2400 }) => {
+export const StudioLoader: React.FC<StudioLoaderProps> = ({ 
+  onComplete, 
+  duration = 2000,
+  isLoading = false
+}) => {
   const [progress, setProgress] = useState(0);
   const [loadingMessage, setLoadingMessage] = useState('Initializing studio hardware...');
   const [isDone, setIsDone] = useState(false);
+
+  // Dynamic professional photography workflow messages based on progress
+  useEffect(() => {
+    if (progress < 25) {
+      setLoadingMessage('Initializing studio hardware...');
+    } else if (progress < 50) {
+      setLoadingMessage('Configuring camera lens clusters...');
+    } else if (progress < 75) {
+      setLoadingMessage('Preparing Your Creative Workspace...');
+    } else if (progress < 90) {
+      setLoadingMessage('Loading Studio Dashboard...');
+    } else if (progress < 100) {
+      setLoadingMessage('Synchronizing executive ledger data...');
+    } else {
+      setLoadingMessage('Workspace synchronized!');
+    }
+  }, [progress]);
 
   useEffect(() => {
     // Progress increment timer
@@ -21,43 +43,36 @@ export const StudioLoader: React.FC<StudioLoaderProps> = ({ onComplete, duration
           clearInterval(progressTimer);
           return 100;
         }
-        return prev + 1;
+
+        // If the database is still loading, cap the progress at 90%
+        if (isLoading && prev >= 90) {
+          return 90;
+        }
+
+        // Increment the progress
+        // If loading is done, accelerate progress to 100%
+        const step = (!isLoading && prev >= 90) ? 5 : 1;
+        const next = prev + step;
+        return next > 100 ? 100 : next;
       });
     }, interval);
 
-    // Dynamic professional photography workflow messages
-    const messageTimeout1 = setTimeout(() => {
-      setLoadingMessage('Configuring camera lens clusters...');
-    }, duration * 0.25);
-
-    const messageTimeout2 = setTimeout(() => {
-      setLoadingMessage('Preparing Your Creative Workspace...');
-    }, duration * 0.5);
-
-    const messageTimeout3 = setTimeout(() => {
-      setLoadingMessage('Loading Studio Dashboard...');
-    }, duration * 0.75);
-
-    const messageTimeout4 = setTimeout(() => {
-      setLoadingMessage('Synchronizing executive ledger data...');
-    }, duration * 0.9);
-
-    const doneTimer = setTimeout(() => {
-      setIsDone(true);
-      if (onComplete) {
-        setTimeout(onComplete, 400); // allow exit animation to play
-      }
-    }, duration);
-
     return () => {
       clearInterval(progressTimer);
-      clearTimeout(messageTimeout1);
-      clearTimeout(messageTimeout2);
-      clearTimeout(messageTimeout3);
-      clearTimeout(messageTimeout4);
-      clearTimeout(doneTimer);
     };
-  }, [duration, onComplete]);
+  }, [duration, isLoading]);
+
+  useEffect(() => {
+    if (progress >= 100) {
+      const doneTimer = setTimeout(() => {
+        setIsDone(true);
+        if (onComplete) {
+          setTimeout(onComplete, 400); // allow exit animation to play
+        }
+      }, 200);
+      return () => clearTimeout(doneTimer);
+    }
+  }, [progress, onComplete]);
 
   return (
     <AnimatePresence>

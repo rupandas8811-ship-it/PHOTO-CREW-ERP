@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { User, Lead, LeadPackage, Order, Operation, RawFootage, Production, Payment, ActivityLog, UserRole, CurrentStage, EditingStatus, Staff, Notification, Equipment, Package, StaffAssignment, ProductionSpeciality, EditorAssignment, PaymentStatus, EquipmentHandover, UnlockOverride, DEPARTMENT_STAGES, ROLE_DEPARTMENT_MAP, Department } from '../types';
 import { INITIAL_USERS, INITIAL_LEADS, INITIAL_ORDERS, INITIAL_OPERATIONS, INITIAL_RAW_FOOTAGE, INITIAL_PRODUCTION, INITIAL_PAYMENTS, INITIAL_LOGS, INITIAL_EQUIPMENT } from '../data';
 
@@ -10,6 +10,7 @@ interface RoleContextType {
   currentUserName: string;
   setCurrentRole: (role: UserRole) => void;
   setCurrentUserName: (name: string) => void;
+  isDataLoading: boolean;
   login: (emailOrUsername: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   users: User[];
@@ -66,7 +67,8 @@ interface RoleContextType {
     eventTime?: string,
     paymentMode?: string,
     notes?: string,
-    reportingTime?: string
+    reportingTime?: string,
+    transactionId?: string
   ) => string;
   assignOperations: (
     orderId: string, 
@@ -91,7 +93,8 @@ interface RoleContextType {
     storageType?: string,
     uploadNotes?: string,
     paymentCollectionStatus?: string,
-    additionalReceived?: number
+    additionalReceived?: number,
+    transactionId?: string
   ) => Promise<void>;
   updateOrderStage: (orderId: string, stage: CurrentStage) => Promise<void>;
   acceptRawFootage: (trackingId: string) => Promise<void>;
@@ -104,10 +107,13 @@ interface RoleContextType {
     orderId: string, 
     amountReceived: number, 
     paymentDate: string, 
-    proofUrl?: string
+    proofUrl?: string,
+    transactionId?: string
   ) => Promise<void>;
   resetAllData: () => Promise<void>;
   refreshData: () => void;
+  statusHistory: any[];
+  getLeadCurrentStatus: (lead: Lead) => string;
   
   // User Management Admin features
   addUser: (name: string, email: string, mobile: string, role: UserRole, active: boolean, password?: string) => Promise<void>;
@@ -807,11 +813,19 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Initialize state arrays as empty so data is always loaded directly from Supabase (the single source of truth) without relying on cached or stale demo data
   const [users, setUsers] = useState<User[]>([]);
+  const [isDataLoading, setIsDataLoading] = useState<boolean>(false);
 
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('erp_current_user');
     return saved ? JSON.parse(saved) : null;
   });
+
+  const currentUserRef = useRef<User | null>(null);
+  const isLoggingInRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
 
   const [currentRole, setCurrentRoleState] = useState<UserRole>(() => {
     return (localStorage.getItem('erp_role') as UserRole) || 'Business Owner';
@@ -823,6 +837,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [leads, setLeads] = useState<Lead[]>(() => {
     const cached = localStorage.getItem('erp_leads');
+    return cached ? JSON.parse(cached) : [];
+  });
+  const [statusHistory, setStatusHistory] = useState<any[]>(() => {
+    const cached = localStorage.getItem('erp_status_history');
     return cached ? JSON.parse(cached) : [];
   });
   const [quotations, setQuotations] = useState<any[]>(() => {
@@ -1293,13 +1311,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'email', 'event_type', 'custom_event_type', 'custom_event_name', 'event_date', 'event_time', 'event_location', 'budget', 
         'sales_person', 'status', 'remarks', 'created_by', 'updated_by', 'updated_at', 
         'assigned_editor', 'assigned_editors', 'production_role', 'delivery_target_date', 'current_status',
-        'whatsapp_number', 'address', 'city', 'shoot_type', 'reporting_time'
+        'whatsapp_number', 'address', 'city', 'state', 'pincode', 'shoot_type', 'reporting_time'
       ],
       orders: [
         'order_id', 'lead_id', 'customer_name', 'mobile', 'event_type', 'custom_event_type', 'custom_event_name', 'event_date', 
         'event_time', 'event_location', 'package_name', 'quotation_amount', 'advance_received', 
         'balance_amount', 'order_status', 'current_stage', 'sales_person', 'created_at', 
-        'updated_by', 'updated_at', 'shoot_type', 'reporting_time'
+        'updated_by', 'updated_at', 'whatsapp_number', 'address', 'city', 'state', 'pincode', 'shoot_type', 'reporting_time'
       ],
       operations: [
         'operation_id', 'order_id', 'photographer_assigned', 'videographer_assigned', 
@@ -1321,7 +1339,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       payments: [
         'payment_id', 'order_id', 'quotation_amount', 'advance_received', 'balance_due', 
         'final_payment_received', 'payment_date', 'payment_proof_url', 'payment_status',
-        'payment_collection_status', 'additional_received'
+        'payment_collection_status', 'additional_received', 'transaction_id'
       ],
       activity_logs: [
         'log_id', 'user_name', 'role', 'action', 'module', 'record_id', 'timestamp', 
@@ -1377,18 +1395,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const { error } = await supabaseClient.from(table).insert(sanitized);
       if (error) {
+        if (['activity_logs', 'notifications', 'analytics_snapshots'].includes(table)) {
+          return { success: true };
+        }
         console.error(`Supabase Insert error in ${table}:`, error);
         updateDiagnosticMetric('insert', 'fail', error.message);
-        
-        // Save to local fallback store
-        const localKey = `erp_local_${table}`;
-        const existingLocalStr = localStorage.getItem(localKey);
-        const localRecords = existingLocalStr ? JSON.parse(existingLocalStr) : [];
-        localRecords.push(record);
-        localStorage.setItem(localKey, JSON.stringify(localRecords));
-
-        console.log(`[LOCAL FALLBACK] Saved new record in ${table} locally due to insert block.`);
-        return { success: true, localFallback: true };
+        return { success: false, error: error.message };
       } else {
         updateDiagnosticMetric('insert', 'ok');
 
@@ -1410,22 +1422,15 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
-        // Always fetch fresh data from Supabase after successful INSERT
-        fetchFromDb().catch(console.error);
+        // Realtime subscription will handle syncing new records
+        broadcastSyncPing();
 
         return { success: true };
       }
     } catch (err: any) {
       console.error(`Supabase Insert exception in ${table}:`, err);
       updateDiagnosticMetric('insert', 'fail', err?.message || String(err));
-      
-      const localKey = `erp_local_${table}`;
-      const existingLocalStr = localStorage.getItem(localKey);
-      const localRecords = existingLocalStr ? JSON.parse(existingLocalStr) : [];
-      localRecords.push(record);
-      localStorage.setItem(localKey, JSON.stringify(localRecords));
-
-      return { success: true, localFallback: true };
+      return { success: false, error: err?.message || String(err) };
     }
   };
 
@@ -1509,37 +1514,73 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
          }
       }
       if (error) {
+        if (['activity_logs', 'notifications', 'analytics_snapshots'].includes(table)) {
+          return { success: true };
+        }
         console.error(`[pushUpdate ERROR] in ${table}:`, error);
         updateDiagnosticMetric('update', 'fail', error.message);
-        
-        // Save to local fallback store
-        const localKey = `erp_local_${table}`;
-        const existingLocalStr = localStorage.getItem(localKey);
-        let localRecords = existingLocalStr ? JSON.parse(existingLocalStr) : [];
-        
-        const existingRecordIndex = localRecords.findIndex((r: any) => r[matchColumn] === matchValue);
-        if (existingRecordIndex !== -1) {
-          localRecords[existingRecordIndex] = { ...localRecords[existingRecordIndex], ...updates };
-        } else {
-          let baseRecord = null;
-          if (table === 'leads') {
-            baseRecord = leads.find(l => l[matchColumn] === matchValue);
-          } else if (table === 'orders') {
-            baseRecord = orders.find(o => o[matchColumn] === matchValue);
-          }
-          if (baseRecord) {
-            localRecords.push({ ...baseRecord, ...updates });
-          } else {
-            localRecords.push({ [matchColumn]: matchValue, ...updates });
-          }
-        }
-        localStorage.setItem(localKey, JSON.stringify(localRecords));
-        console.log(`[LOCAL FALLBACK] Saved update on ${table} (match: ${matchColumn}=${matchValue}) locally.`);
-
-        return { success: true, localFallback: true };
+        return { success: false, error: error.message };
       } else {
         console.log(`[pushUpdate SUCCESS] returned data:`, data);
         updateDiagnosticMetric('update', 'ok');
+
+        if (table === 'leads') {
+          const leadId = matchValue;
+          const prevLead = leads.find(l => l.lead_id === leadId);
+          const oldStatus = prevLead ? (prevLead.current_status || prevLead.status || 'New Lead') : 'New Lead';
+          const anyStatus = sanitized.status || sanitized.current_status || updates.status || updates.current_status;
+          
+          if (anyStatus && anyStatus !== oldStatus) {
+            const timestamp = new Date().toISOString();
+            const linkedOrder = orders.find(o => o.lead_id === leadId);
+            const orderId = linkedOrder?.order_id || null;
+            
+            const roleParts = (currentUserName && currentUserName.includes('|')) 
+              ? currentUserName.split('|') 
+              : [currentUserName || 'System', currentRole || 'System'];
+            const changedBy = roleParts[0];
+            const changedByRole = roleParts[1] || currentRole || 'System';
+            
+            const newHist = {
+              lead_id: leadId,
+              order_id: orderId,
+              old_status: oldStatus,
+              new_status: anyStatus,
+              changed_by: changedBy,
+              changed_by_role: changedByRole,
+              remarks: updates.remarks || sanitized.remarks || 'Status updated from dashboard',
+              created_at: timestamp
+            };
+            
+            await supabaseClient.from('lead_status_history').insert(newHist).then((insertRes) => {
+              if (insertRes.error) {
+                console.error("Failed to insert lead status history in pushUpdate:", insertRes.error);
+              } else {
+                setStatusHistory(prev => {
+                  const updatedHist = [...prev, newHist];
+                  localStorage.setItem('erp_status_history', JSON.stringify(updatedHist));
+                  return updatedHist;
+                });
+              }
+            });
+            
+            setLeads((prev) => 
+              prev.map((ld) => {
+                if (ld.lead_id === leadId) {
+                  return {
+                    ...ld,
+                    status: anyStatus,
+                    current_status: anyStatus,
+                    updated_at: timestamp
+                  };
+                }
+                return ld;
+              })
+            );
+            
+            await fetchFromDb();
+          }
+        }
 
         // Clean up from erp_local_<tableKey> upon successful db write
         const localKey = `erp_local_${table}`;
@@ -1556,22 +1597,15 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
-        // Always fetch fresh data from Supabase after successful UPDATE
-        fetchFromDb().catch(console.error);
+        // Realtime subscription will handle syncing updated records
+        broadcastSyncPing();
 
         return { success: true };
       }
     } catch (err: any) {
       console.error(`[pushUpdate EXCEPTION] in ${table}:`, err);
       updateDiagnosticMetric('update', 'fail', err?.message || String(err));
-      
-      const localKey = `erp_local_${table}`;
-      const existingLocalStr = localStorage.getItem(localKey);
-      let localRecords = existingLocalStr ? JSON.parse(existingLocalStr) : [];
-      localRecords.push({ [matchColumn]: matchValue, ...updates });
-      localStorage.setItem(localKey, JSON.stringify(localRecords));
-
-      return { success: true, localFallback: true };
+      return { success: false, error: err?.message || String(err) };
     }
   };
 
@@ -1589,12 +1623,15 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const { error } = await supabaseClient.from(table).delete().eq(matchColumn, matchValue);
       if (error) {
+        if (['activity_logs', 'notifications', 'analytics_snapshots'].includes(table)) {
+          return;
+        }
         console.error(`Supabase Delete error in ${table}:`, error);
         updateDiagnosticMetric('delete', 'fail', error.message);
       } else {
         updateDiagnosticMetric('delete', 'ok');
-        // Always fetch fresh data from Supabase after successful DELETE
-        fetchFromDb().catch(console.error);
+        // Realtime subscription will handle syncing deleted records
+        broadcastSyncPing();
       }
     } catch (err: any) {
       updateDiagnosticMetric('delete', 'fail', err?.message || String(err));
@@ -1612,8 +1649,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: error.message };
       } else {
         updateDiagnosticMetric('insert', 'ok');
-        // Always fetch fresh data from Supabase after successful UPSERT
-        fetchFromDb().catch(console.error);
+        // Realtime subscription will handle syncing
+        broadcastSyncPing();
         return { success: true };
       }
     } catch (err: any) {
@@ -1641,8 +1678,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (INITIAL_RAW_FOOTAGE?.length > 0) await supabaseClient.from('raw_footage').upsert(INITIAL_RAW_FOOTAGE);
       if (INITIAL_PRODUCTION?.length > 0) await supabaseClient.from('production').upsert(INITIAL_PRODUCTION);
       if (INITIAL_PAYMENTS?.length > 0) await supabaseClient.from('payments').upsert(INITIAL_PAYMENTS);
-      if (INITIAL_LOGS?.length > 0) await supabaseClient.from('activity_logs').upsert(INITIAL_LOGS);
-      if (INITIAL_PACKAGES?.length > 0) await supabaseClient.from('packages').upsert(INITIAL_PACKAGES);
+      try { if (INITIAL_LOGS?.length > 0) await supabaseClient.from('activity_logs').upsert(INITIAL_LOGS); } catch (e) {}
+      try { if (INITIAL_PACKAGES?.length > 0) await supabaseClient.from('packages').upsert(INITIAL_PACKAGES); } catch (e) {}
 
       console.log('Database initial seeding completed successfully.');
     } catch (err: any) {
@@ -1651,8 +1688,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Fetch full dataset from Supabase
-  const fetchFromDb = async () => {
+  const fetchFromDb = async (showLoader = false) => {
     if (!supabaseClient) return;
+    if (showLoader) setIsDataLoading(true);
     try {
       const dbOperationsPromise = supabaseClient.from('operations').select('*');
       const dbRawFootagePromise = supabaseClient.from('raw_footage').select('*');
@@ -1803,7 +1841,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (finalUsers && finalUsers.length === 0) {
         await seedDatabase();
         // retry fetch once
-        await fetchFromDb();
+        await fetchFromDb(showLoader);
         return;
       }
 
@@ -1816,12 +1854,14 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (ldErr || !dbLeads) {
         const cached = localStorage.getItem('erp_leads');
         resolvedLeads = cached ? JSON.parse(cached) : INITIAL_LEADS;
+      } else {
+        localStorage.removeItem('erp_local_leads');
       }
 
-      // Merge with any local-only leads
+      // Merge with any local-only leads (only if we failed to fetch from Supabase)
       const localLeadsKey = 'erp_local_leads';
       const localLeadsStr = localStorage.getItem(localLeadsKey);
-      if (localLeadsStr) {
+      if (ldErr && localLeadsStr) {
         try {
           const localLeads = JSON.parse(localLeadsStr);
           if (Array.isArray(localLeads) && localLeads.length > 0) {
@@ -1850,12 +1890,14 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (ordErr || !dbOrders) {
         const cached = localStorage.getItem('erp_orders');
         resolvedOrders = cached ? JSON.parse(cached) : INITIAL_ORDERS;
+      } else {
+        localStorage.removeItem('erp_local_orders');
       }
 
-      // Merge with any local-only orders
+      // Merge with any local-only orders (only if we failed to fetch from Supabase)
       const localOrdersKey = 'erp_local_orders';
       const localOrdersStr = localStorage.getItem(localOrdersKey);
-      if (localOrdersStr) {
+      if (ordErr && localOrdersStr) {
         try {
           const localOrders = JSON.parse(localOrdersStr);
           if (Array.isArray(localOrders) && localOrders.length > 0) {
@@ -1917,8 +1959,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (leadPackagesRes?.error || !leadPackagesRes?.data) {
         const cached = localStorage.getItem('erp_lead_packages');
         resolvedLeadPackages = cached ? JSON.parse(cached) : [];
+      } else {
+        localStorage.removeItem('erp_local_lead_packages');
       }
-      if (localLeadPkgsStr) {
+      if (leadPackagesRes?.error && localLeadPkgsStr) {
         try {
           const localPkgs = JSON.parse(localLeadPkgsStr);
           if (Array.isArray(localPkgs) && localPkgs.length > 0) {
@@ -1932,20 +1976,52 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // 3. Populate React state with mapped variables
+      let resolvedStatusHistory = statusHistoryRes?.data;
+      if (statusHistoryRes?.error || !statusHistoryRes?.data) {
+        const cached = localStorage.getItem('erp_status_history');
+        resolvedStatusHistory = cached ? JSON.parse(cached) : [];
+      } else {
+        localStorage.setItem('erp_status_history', JSON.stringify(statusHistoryRes.data));
+      }
+      setStatusHistory(resolvedStatusHistory);
+
       if (resolvedLeads) {
-        const statusHistory = statusHistoryRes?.data || [];
+        const dbStatusHist = resolvedStatusHistory || [];
         const mappedLeads = resolvedLeads.map(ld => {
-          const historyForLead = (statusHistory || []).filter((h: any) => h && h.lead_id === ld.lead_id);
-          const latestHistory = historyForLead.length > 0 ? historyForLead[historyForLead.length - 1] : null;
-          const finalStatus = ld.current_status || latestHistory?.new_status || ld.status || 'New Lead';
+          const rawStatus = ld.status || 'New Lead';
+          
+          // Get latest history status
+          const historyForLead = dbStatusHist.filter((h: any) => h.lead_id === ld.lead_id);
+          const sorted = [...historyForLead].sort((a: any, b: any) => 
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+          const latestHistoryStatus = sorted[0]?.new_status;
+          
+          const finalStatus = latestHistoryStatus || ld.current_status || rawStatus;
+          
           return {
             ...ld,
             status: finalStatus as CurrentStage,
             current_status: finalStatus
           };
         });
-        setLeads(mappedLeads);
-        localStorage.setItem('erp_leads', JSON.stringify(mappedLeads));
+        setLeads(prev => {
+          const merged = mappedLeads.map(dbLead => {
+            const prevLead = prev.find(p => p.lead_id === dbLead.lead_id);
+            if (!prevLead) return dbLead;
+            
+            const dbTime = dbLead.updated_at ? new Date(dbLead.updated_at).getTime() : 0;
+            const localTime = prevLead.updated_at ? new Date(prevLead.updated_at).getTime() : 0;
+            
+            // If the local state is newer (e.g. from an optimistic update), keep it
+            if (localTime > dbTime) {
+              return { ...dbLead, ...prevLead };
+            }
+            return dbLead;
+          });
+          localStorage.setItem('erp_leads', JSON.stringify(merged));
+          return merged;
+        });
       }
 
       if (resolvedLeadPackages) {
@@ -2270,6 +2346,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err: any) {
       console.error('Fetch error:', err);
       updateDiagnosticMetric('read', 'fail', err.message);
+    } finally {
+      setIsDataLoading(false);
     }
   };
 
@@ -2284,6 +2362,16 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const authUser = session.user;
       const email = authUser.email?.toLowerCase().trim();
       
+      // Skip DB fetch if already logged in via login function or currently logging in
+      if (isLoggingInRef.current) {
+        console.log(`[SYNC SESSION] Skipping fetch for ${email} because login is in progress.`);
+        return;
+      }
+      if (currentUserRef.current && currentUserRef.current.id === mapFromDbUserId(authUser.id)) {
+        console.log(`[SYNC SESSION] Skipping fetch for ${email} because user is already set.`);
+        return;
+      }
+
       console.log(`[SYNC SESSION] Syncing profile for ${email} / Auth ID: ${authUser.id}`);
       
       // Look up profile in public.users table
@@ -2386,7 +2474,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Synchronous database fetching and real-time subscription channels
   useEffect(() => {
-    fetchFromDb();
+    fetchFromDb(true);
 
     if (!supabaseClient) return;
 
@@ -2404,7 +2492,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       { table: 'equipment', key: 'equipment_id', setter: setEquipment },
       { table: 'production_specialties', key: 'speciality_id', setter: setSpecialities },
       { table: 'editor_assignments', key: 'assignment_id', setter: setEditorAssignments },
-      { table: 'staff_assignments', key: 'assignment_id', setter: setStaffAssignments }
+      { table: 'staff_assignments', key: 'assignment_id', setter: setStaffAssignments },
+      { table: 'lead_status_history', key: 'id', setter: setStatusHistory }
     ].map(({ table, key, setter }) => {
       return supabaseClient
         .channel(`rt-${table}`)
@@ -2421,7 +2510,18 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   mappedItem = mapNotificationFromDb(item);
                 }
                 if (table === 'leads') {
-                  const finalStatus = mappedItem.current_status || mappedItem.status || 'New Lead';
+                  let finalStatus = mappedItem.current_status || mappedItem.status || 'New Lead';
+                  if (statusHistory && statusHistory.length > 0) {
+                    const historyForLead = statusHistory.filter((h: any) => h.lead_id === mappedItem.lead_id);
+                    if (historyForLead.length > 0) {
+                      const sorted = [...historyForLead].sort((a: any, b: any) => 
+                        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                      );
+                      if (sorted[0]?.new_status) {
+                        finalStatus = sorted[0].new_status;
+                      }
+                    }
+                  }
                   mappedItem = { ...mappedItem, status: finalStatus as CurrentStage, current_status: finalStatus };
                 }
                 if (table === 'orders') {
@@ -2454,7 +2554,18 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   mappedItem = mapNotificationFromDb(item);
                 }
                 if (table === 'leads') {
-                  const finalStatus = mappedItem.current_status || mappedItem.status || 'New Lead';
+                  let finalStatus = mappedItem.current_status || mappedItem.status || 'New Lead';
+                  if (statusHistory && statusHistory.length > 0) {
+                    const historyForLead = statusHistory.filter((h: any) => h.lead_id === mappedItem.lead_id);
+                    if (historyForLead.length > 0) {
+                      const sorted = [...historyForLead].sort((a: any, b: any) => 
+                        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                      );
+                      if (sorted[0]?.new_status) {
+                        finalStatus = sorted[0].new_status;
+                      }
+                    }
+                  }
                   mappedItem = { ...mappedItem, status: finalStatus as CurrentStage, current_status: finalStatus };
                 }
                 if (table === 'orders') {
@@ -2498,7 +2609,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Handle window focus and document visibility to fetch fresh data when user returns to app
     const handleFocusOrVisible = () => {
       console.log("[SYNC] App focused/visible, pulling fresh database records...");
-      fetchFromDb().catch(console.error);
+      fetchFromDb(false).catch(console.error);
     };
 
     window.addEventListener('focus', handleFocusOrVisible);
@@ -2510,19 +2621,17 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // Periodic synchronization to maintain alignment across multiple active devices
-    const syncInterval = setInterval(() => {
-      console.log("[SYNC] Periodic background pull...");
-      fetchFromDb().catch(console.error);
-    }, 8000); // Poll every 8 seconds
-
+    // Realtime subscriptions handle granular updates. No global sync needed.
     return () => {
       channels.forEach(ch => supabaseClient.removeChannel(ch));
       window.removeEventListener('focus', handleFocusOrVisible);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      clearInterval(syncInterval);
     };
   }, []);
+
+  const broadcastSyncPing = async () => {
+    // No-op: realtime postgres_changes handles granular syncing
+  };
 
   const runAutomatedChecks = async () => {
     const localTime = new Date();
@@ -2674,7 +2783,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Handle auto-logout if user is deactivated
   useEffect(() => {
     if (currentUser && users.length > 0) {
-      const dbUser = users.find(u => u.id === currentUser.id);
+      const dbUser = users.find(u => u.id === currentUser.id || u.email === currentUser.email);
       if (!dbUser || !dbUser.active) {
         logout();
         alert('Your account is no longer active. You have been logged out.');
@@ -2702,45 +2811,115 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Login action
   const login = async (emailOrUsername: string, password: string) => {
-    const cleanInput = emailOrUsername.trim().toLowerCase();
-    let dbUser: any = null;
+    isLoggingInRef.current = true;
+    try {
+      const cleanInput = emailOrUsername.trim();
+      let dbUser: any = null;
 
+      if (!cleanInput) {
+        return { success: false, error: 'Username or Email is required.' };
+      }
+      if (!password) {
+        return { success: false, error: 'Password is required.' };
+      }
+
+    const logAttempt = (status: string, reason: string, userId?: string) => {
+      console.log(`[LOGIN ${status}] ${emailOrUsername} - ${reason}`);
+      if (supabaseClient) {
+        supabaseClient.from('login_logs').insert({
+          username_or_email: cleanInput,
+          user_id: userId || null,
+          login_status: status,
+          failure_reason: reason,
+          user_agent: navigator.userAgent
+        }).then(({ error }) => {
+          if (error) console.warn('Failed to write to login_logs:', error);
+        });
+      }
+    };
+
+    let serverUnavailable = false;
+    let qErr: any = null;
     if (supabaseClient) {
       try {
         // Direct query of public.users table (allows email or username login)
-        const { data: qData } = await supabaseClient
+        const res = await supabaseClient
           .from('users')
           .select('*')
-          .or(`email.ilike.${cleanInput},username.ilike.${cleanInput}`);
+          .or(`email.eq.${cleanInput.toLowerCase()},username.eq.${cleanInput}`);
+        
+        qErr = res.error;
+        const qData = res.data;
 
-        if (qData && qData.length > 0) {
+        if (qErr) {
+           console.warn("Direct users table fetch failed:", qErr);
+           serverUnavailable = true; // Connection or database error
+        } else if (qData && qData.length > 0) {
           dbUser = qData[0];
         }
       } catch (err) {
-        console.warn("Direct users table fetch failed, falling back to local users state:", err);
+        qErr = err;
+        console.warn("Direct users table fetch failed with exception:", err);
+        serverUnavailable = true;
       }
+    } else {
+      serverUnavailable = true;
     }
 
-    // Fallback to local users state
+    // Fallback to local users state if not found via server but not failing
     if (!dbUser) {
       dbUser = users.find(u => 
-        u.email.toLowerCase() === cleanInput || 
-        (u.username && u.username.toLowerCase() === cleanInput)
+        (u.email && u.email.toLowerCase() === cleanInput.toLowerCase()) || 
+        (u.username && u.username.toLowerCase() === cleanInput.toLowerCase())
       );
     }
 
+    if (!dbUser && serverUnavailable) {
+      let exactReason = 'Unable to connect to the server. Please try again later.';
+      if (qErr) {
+        exactReason = qErr.message || JSON.stringify(qErr);
+      } else if (!(import.meta as any).env?.VITE_SUPABASE_URL) {
+        exactReason = 'Missing environment variables for database connection.';
+      } else {
+        exactReason = 'API request failed or Supabase connection failed.';
+      }
+      
+      logAttempt('Failed', exactReason);
+      return { success: false, error: exactReason };
+    }
+
     if (!dbUser) {
-      return { success: false, error: 'User account not found.' };
+      const msg = 'User not found.';
+      logAttempt('Failed', msg);
+      return { success: false, error: msg };
     }
 
     // Validate active status
     if (!dbUser.active) {
-      return { success: false, error: 'Your account has been deactivated. Please contact your system administrator.' };
+      const msg = 'Your account has been deactivated. Please contact the administrator.';
+      logAttempt('Failed', msg, dbUser.id);
+      return { success: false, error: msg };
     }
 
     // Validate password
     if (dbUser.password !== password) {
-      return { success: false, error: 'Incorrect email/username or password.' };
+      const msg = 'Incorrect password.';
+      logAttempt('Failed', msg, dbUser.id);
+      return { success: false, error: msg };
+    }
+
+    // Validate role
+    if (!dbUser.role) {
+      const msg = 'User role is not configured.';
+      logAttempt('Failed', msg, dbUser.id);
+      return { success: false, error: msg };
+    }
+
+    const validRoles = ['Business Owner', 'Sales Team', 'Operations Team', 'Production Team'];
+    if (!validRoles.includes(dbUser.role)) {
+      const msg = 'You do not have permission to access this page.';
+      logAttempt('Failed', msg, dbUser.id);
+      return { success: false, error: msg };
     }
 
     // Load credentials & fields
@@ -2754,6 +2933,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: dbUser.email,
           password: password
         });
+
+        if (authErr) {
+          const msg = 'Login successful, but the session could not be created.';
+          logAttempt('Failed', msg, dbUser.id);
+          return { success: false, error: msg };
+        }
 
         if (!authErr && authData.user) {
           console.log(`[LOGIN] Supabase Auth sign-in succeeded for ${dbUser.email}`);
@@ -2789,6 +2974,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('erp_current_user', JSON.stringify(foundUser));
     localStorage.setItem('erp_role', foundUser.role);
     localStorage.setItem('erp_user_name', foundUser.name);
+    localStorage.setItem('erp_session_token', `local_${Date.now()}`);
 
     // Log login
     const userName = foundUser.name;
@@ -2806,9 +2992,18 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     pushInsert('activity_logs', newLog);
 
     // Always fetch fresh data from Supabase when user logs in
-    await fetchFromDb();
-
+    try {
+      fetchFromDb(true).catch(e => console.error("[LOGIN] fetchFromDb threw:", e));
+    } catch (e) {
+      console.error("[LOGIN] fetchFromDb threw:", e);
+    }
+    
+    logAttempt('Success', 'Login successful.', dbUser.id);
+    console.log("[LOGIN] Login successful, returning true");
     return { success: true };
+    } finally {
+      isLoggingInRef.current = false;
+    }
   };
 
   // Logout action
@@ -3049,7 +3244,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    await fetchFromDb();
+    // await fetchFromDb(); // Disabled to prevent full reload
 
     logActivity(`Created Lead: ${newLead.customer_name}`, 'Sales', leadId, 'N/A', 'New Lead');
     return leadId;
@@ -3073,7 +3268,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    await fetchFromDb();
+    // await fetchFromDb(); // Disabled to prevent full reload
   };
 
   // 2. Lead Follow-Up (Screen 3)
@@ -3112,7 +3307,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const changedBy = roleParts[0];
       const changedByRole = roleParts[1] || currentRole || 'System';
 
-      await pushInsert('lead_status_history', {
+      const newHist = {
         lead_id: leadId,
         order_id: orderId,
         old_status: previousStage,
@@ -3121,8 +3316,28 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         changed_by_role: changedByRole,
         remarks: callNotes || 'Status updated from CRM follow-up panel',
         created_at: timestamp
-      }).catch(err => console.error("Failed to insert lead status history:", err));
+      };
+
+      await pushInsert('lead_status_history', newHist).catch(err => console.error("Failed to insert lead status history:", err));
+      setStatusHistory(prev => [...prev, newHist]);
     }
+
+    setLeads((prev) => 
+      prev.map((ld) => {
+        if (ld.lead_id === leadId) {
+          return {
+            ...ld,
+            status,
+            current_status: status,
+            budget: quotationAmount !== undefined ? quotationAmount : ld.budget,
+            remarks: `${ld.remarks || ''}\n[Update ${timestamp.split('T')[0]}]: ${callNotes}. ${negotiationNotes ? 'Neg Notes: ' + negotiationNotes : ''}. Next follow-up: ${nextFollowUpDate}`,
+            updated_by: currentUserName,
+            updated_at: timestamp
+          };
+        }
+        return ld;
+      })
+    );
 
     await fetchFromDb();
     logActivity(`Updated Lead Follow-up, stage: ${status}`, 'Sales', leadId, previousStage, status);
@@ -3138,7 +3353,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     eventTime?: string,
     paymentMode?: string,
     notes?: string,
-    reportingTime?: string
+    reportingTime?: string,
+    transactionId?: string
   ) => {
     const targetLead = leads.find((ld) => ld.lead_id === leadId);
     if (!targetLead) return '';
@@ -3169,6 +3385,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       mobile: targetLead.mobile,
       event_type: targetLead.event_type,
       custom_event_name: targetLead.custom_event_name || '',
+      custom_event_type: targetLead.custom_event_type || '',
       shoot_type: targetLead.shoot_type || '',
       event_date: eventDate || targetLead.event_date,
       event_time: eventTime || targetLead.event_time,
@@ -3183,7 +3400,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       sales_person: currentUserName,
       created_at: timestamp,
       updated_by: currentUserName,
-      updated_at: timestamp
+      updated_at: timestamp,
+      whatsapp_number: targetLead.whatsapp_number || '',
+      address: targetLead.address || '',
+      city: targetLead.city || '',
+      state: targetLead.state || '',
+      pincode: targetLead.pincode || '',
     };
 
     const paymentId = `PAY-${Math.floor(3012 + Math.random() * 800)}`;
@@ -3196,6 +3418,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       final_payment_received: 0,
       payment_proof_url: undefined,
       payment_status: advanceReceived >= quotationAmount ? 'Fully Paid' : (advanceReceived > 0 ? 'Partially Paid' : 'Pending'),
+      transaction_id: transactionId || undefined,
     };
 
     const opId = `OP-${Math.floor(5012 + Math.random() * 800)}`;
@@ -3228,7 +3451,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const changedBy = roleParts[0];
       const changedByRole = roleParts[1] || currentRole || 'System';
 
-      await pushInsert('lead_status_history', {
+      const newHist = {
         lead_id: leadId,
         order_id: orderId,
         old_status: oldStatus,
@@ -3237,7 +3460,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         changed_by_role: changedByRole,
         remarks: notes || 'Order Confirmed & transitioned to Operations',
         created_at: timestamp
-      }).catch(err => console.error("Failed to insert lead status history:", err));
+      };
+
+      await pushInsert('lead_status_history', newHist).catch(err => console.error("Failed to insert lead status history:", err));
+      setStatusHistory(prev => [...prev, newHist]);
     }
 
     addNotification({
@@ -3249,6 +3475,25 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       message: `A new order (${orderId}) has been confirmed for ${targetLead.customer_name}. Package: ${packageName}. Please assign crew and schedule the event!`,
       recipient_role: 'Operations Team'
     });
+
+    setLeads((prev) => 
+      prev.map((ld) => {
+        if (ld.lead_id === leadId) {
+          return {
+            ...ld,
+            status: 'Order Confirmed',
+            current_status: 'Order Confirmed',
+            event_date: eventDate || ld.event_date,
+            event_time: eventTime || ld.event_time,
+            reporting_time: reportingTime || ld.reporting_time,
+            remarks: resolvedRemarks,
+            updated_by: currentUserName,
+            updated_at: timestamp
+          };
+        }
+        return ld;
+      })
+    );
 
     await fetchFromDb();
 
@@ -3357,7 +3602,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error(resOp?.error || "Failed to update operation crew data.");
     }
 
-    await fetchFromDb();
+    // await fetchFromDb(); // Disabled to prevent full reload
 
     logActivity(`Assigned Crew for Order: ${orderId} (Status: ${targetStatus})`, 'Operations', opId, previousStage, targetStageNum);
   };
@@ -3413,7 +3658,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    await fetchFromDb();
+    // await fetchFromDb(); // Disabled to prevent full reload
 
     // Create notifications for assigned staff
     newAssignments.forEach((a) => {
@@ -3514,7 +3759,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await pushInsert('raw_footage', newRawFootage);
     await pushInsert('production', newProd);
 
-    await fetchFromDb();
+    // await fetchFromDb(); // Disabled to prevent full reload
 
     logActivity(`Marked Event Completed for Order ${orderId}. Raw Footage recorded: ${trackingId}`, 'Operations', orderId, previousStage, 'Event Completed');
   };
@@ -3753,7 +3998,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    await fetchFromDb();
+    // await fetchFromDb(); // Disabled to prevent full reload
 
     logActivity(
       `Updated Production ${productionId}: status=${updates.editing_status || 'unchanged'}`, 
@@ -3800,7 +4045,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    await fetchFromDb();
+    // await fetchFromDb(); // Disabled to prevent full reload
 
     logActivity(`Audited & accepted Raw Footage for Order: ${orderId}. Assigned to editing pipelines.`, 'Production', orderId, previousStage, 'Raw Footage Received');
   };
@@ -3811,7 +4056,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     storageType?: string,
     uploadNotes?: string,
     paymentCollectionStatus?: string,
-    additionalReceived?: number
+    additionalReceived?: number,
+    transactionId?: string
   ) => {
     const targetOrder = augmentedOrders.find((o) => o.order_id === orderId);
     if (!targetOrder) return;
@@ -3862,6 +4108,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         payment_collection_status: paymentCollectionStatus,
         additional_received: paymentCollectionStatus === 'Full Payment Received' ? (totalAmount - advanceAmount) : finalReceived,
         payment_date: new Date().toISOString().split('T')[0],
+        transaction_id: transactionId || existingPayment?.transaction_id || undefined,
       };
 
       if (existingPayment) {
@@ -3956,7 +4203,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       recipient_role: 'Production Team'
     });
 
-    await fetchFromDb();
+    // await fetchFromDb(); // Disabled to prevent full reload
 
     logActivity(`Raw Footage Received and Confirmed in system for Order: ${orderId}. Drive Link: ${resolvedLink}. Storage: ${storageType || 'Google Drive'}`, 'Operations', orderId, previousStage, targetStage);
   };
@@ -3987,7 +4234,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    await fetchFromDb();
+    // await fetchFromDb(); // Disabled to prevent full reload
 
     logActivity(`Updated stage for Order ${orderId}`, 'Operations', orderId, previousStage, stage);
   };
@@ -4067,7 +4314,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    await fetchFromDb();
+    // await fetchFromDb(); // Disabled to prevent full reload
 
     logActivity(`Marked Project Delivered to client for Order: ${orderId}`, 'Production', trackingId, previousStage, targetStage);
   };
@@ -4077,7 +4324,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     orderId: string, 
     amountReceived: number, 
     paymentDate: string, 
-    proofUrl?: string
+    proofUrl?: string,
+    transactionId?: string
   ) => {
     let isFullyPaid = false;
     const targetPayment = augmentedPayments.find((p) => p.order_id === orderId);
@@ -4093,7 +4341,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       balance_due: outstanding,
       payment_date: paymentDate,
       payment_proof_url: resolvedProofUrl,
-      payment_status: isFullyPaid ? 'Fully Paid' : 'Partially Paid'
+      payment_status: isFullyPaid ? 'Fully Paid' : 'Partially Paid',
+      transaction_id: transactionId || targetPayment.transaction_id || undefined
     });
     if (!rPay?.success) {
       throw new Error("Failed to record payment in database: " + rPay?.error);
@@ -4136,7 +4385,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    await fetchFromDb();
+    // await fetchFromDb(); // Disabled to prevent full reload
 
     logActivity(`Recorded payment of ₹${amountReceived} for Order ${orderId}. Fully paid: ${isFullyPaid}`, 'Finance', orderId, previousStage, nextStage);
   };
@@ -4246,7 +4495,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (supabaseClient) {
         await supabaseClient.from('packages').insert(newPkg);
-        fetchFromDb().catch(console.error);
+        // fetchFromDb().catch(console.error); // Disabled to prevent full reload
       }
     } catch (err) {
       console.warn('Fallback to local: could not insert package to Supabase:', err);
@@ -4266,7 +4515,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (supabaseClient) {
         await supabaseClient.from('packages').update(updates).eq('package_id', packageId);
-        fetchFromDb().catch(console.error);
+        // fetchFromDb().catch(console.error); // Disabled to prevent full reload
       }
     } catch (err) {
       console.warn('Fallback to local: could not update package in Supabase:', err);
@@ -4283,7 +4532,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (supabaseClient) {
         await supabaseClient.from('packages').delete().eq('package_id', packageId);
-        fetchFromDb().catch(console.error);
+        // fetchFromDb().catch(console.error); // Disabled to prevent full reload
       }
     } catch (err) {
       console.warn('Fallback to local: could not delete package in Supabase:', err);
@@ -4308,7 +4557,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     // Save to database
     await saveNotificationToSupabase(newNotif);
-    fetchFromDb().catch(console.error);
+    // fetchFromDb().catch(console.error); // Disabled to prevent full reload
   };
 
   const markNotificationRead = async (notificationId: string) => {
@@ -4320,7 +4569,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn("Failed updating notification with all fields, trying fallback:", error);
       await supabaseClient.from('notifications').update({ is_read: true }).eq('notification_id', notificationId);
     }
-    fetchFromDb().catch(console.error);
+    // fetchFromDb().catch(console.error); // Disabled to prevent full reload
   };
 
   const addSpeciality = async (name: string) => {
@@ -4483,7 +4732,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) {
         console.warn('Could not insert quotation into Supabase with standard fields:', error.message);
       } else {
-        fetchFromDb().catch(console.error);
+        // fetchFromDb().catch(console.error); // Disabled to prevent full reload
       }
     } catch (err) {
       console.warn('Supabase exception on inserting quotation:', err);
@@ -4538,7 +4787,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (error) {
           console.warn('Supabase Update error for quotations table:', error.message);
         } else {
-          fetchFromDb().catch(console.error);
+          // fetchFromDb().catch(console.error); // Disabled to prevent full reload
         }
       } catch (err) {
         console.warn('Supabase Exception on updating quotation:', err);
@@ -4555,6 +4804,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setEquipmentHandovers(prev => [newHandover, ...prev]);
     await pushInsert('equipment_handovers', newHandover);
+    // fetchFromDb().catch(console.error); // Disabled to prevent full reload
     logActivity(`Registered Equipment Handover status for ${handover.equipment_name}: ${handover.return_status}`, 'Operations', handover.order_id);
   };
 
@@ -4569,6 +4819,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await pushInsert('equipment_handovers', h);
       logActivity(`Registered Equipment Handover status for ${h.equipment_name}: ${h.return_status}`, 'Operations', h.order_id);
     }
+    // fetchFromDb().catch(console.error); // Disabled to prevent full reload
   };
 
   const updateLead = async (leadId: string, updates: Partial<Lead>) => {
@@ -4610,7 +4861,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const changedBy = roleParts[0];
       const changedByRole = roleParts[1] || currentRole || 'System';
       
-      await pushInsert('lead_status_history', {
+      const newHist = {
         lead_id: leadId,
         order_id: orderId,
         old_status: oldStatus,
@@ -4619,7 +4870,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         changed_by_role: changedByRole,
         remarks: finalUpdates.remarks || 'Status updated from CRM',
         created_at: timestamp
-      }).catch(err => console.error("Failed to insert lead status history:", err));
+      };
+
+      await pushInsert('lead_status_history', newHist).catch(err => console.error("Failed to insert lead status history:", err));
+      setStatusHistory(prev => [...prev, newHist]);
     }
 
     await fetchFromDb();
@@ -4630,6 +4884,27 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const saved = localStorage.getItem('erp_unlocked_records');
     return saved ? JSON.parse(saved) : [];
   });
+
+  const getLeadCurrentStatus = (lead: Lead): string => {
+    if (statusHistory && statusHistory.length > 0) {
+      const historyForLead = statusHistory.filter((h: any) => h.lead_id === lead.lead_id);
+      if (historyForLead.length > 0) {
+        const sorted = [...historyForLead].sort((a: any, b: any) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        if (sorted[0]?.new_status) {
+          return sorted[0].new_status;
+        }
+      }
+    }
+
+    const current = lead.current_status;
+    if (current && current.trim() !== "") {
+      return current;
+    }
+    
+    return lead.status || 'New Lead';
+  };
 
   // RBAC Helper: Define allowed statuses per department
   const getDepartmentForStage = (stage: CurrentStage): Department | undefined => {
@@ -4662,7 +4937,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logActivity(`Unlocked ${module} Record for ${recordId}. Reason: ${reason}`, 'UserManagement', recordId);
     
     // Add a specific log log entry to activity logs if needed, also can trigger refresh
-    fetchFromDb().catch(console.error);
+    // fetchFromDb().catch(console.error); // Disabled to prevent full reload
   };
 
   const lockRecord = (recordId: string, module: 'Sales' | 'Operations' | 'Production') => {
@@ -4787,7 +5062,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         alert('Order and all associated operational records deleted successfully!');
       }
       logActivity(`Deleted Order: ${orderId}`, 'Sales', orderId);
-      fetchFromDb().catch(console.error);
+      // fetchFromDb().catch(console.error); // Disabled to prevent full reload
       return true;
     } catch (err: any) {
       console.error('Failed to delete order:', err);
@@ -4838,7 +5113,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       alert('Lead deleted successfully!');
       logActivity(`Deleted Lead: ${leadId}`, 'Sales', leadId);
-      fetchFromDb().catch(console.error);
+      // fetchFromDb().catch(console.error); // Disabled to prevent full reload
       return true;
     } catch (err: any) {
       console.error('Failed to delete lead:', err);
@@ -4856,7 +5131,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) throw error;
       alert('Follow-up record deleted successfully!');
       logActivity(`Deleted Follow Up: ${followUpId}`, 'Sales', followUpId);
-      fetchFromDb().catch(console.error);
+      // fetchFromDb().catch(console.error); // Disabled to prevent full reload
       return true;
     } catch (err: any) {
       console.error('Failed to delete follow up:', err);
@@ -4873,7 +5148,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setQuotations(prev => prev.filter(q => q.quotation_id !== quotationId));
       alert('Quotation deleted successfully!');
       logActivity(`Deleted Quotation: ${quotationId}`, 'Sales', quotationId);
-      fetchFromDb().catch(console.error);
+      // fetchFromDb().catch(console.error); // Disabled to prevent full reload
       return true;
     } catch (err: any) {
       console.error('Failed to delete quotation:', err);
@@ -4890,7 +5165,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setPayments(prev => prev.filter(p => p.payment_id !== paymentId));
       alert('Payment record deleted successfully!');
       logActivity(`Deleted Payment: ${paymentId}`, 'Payments', paymentId);
-      fetchFromDb().catch(console.error);
+      // fetchFromDb().catch(console.error); // Disabled to prevent full reload
       return true;
     } catch (err: any) {
       console.error('Failed to delete payment:', err);
@@ -4907,7 +5182,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setOperations(prev => prev.filter(o => o.operation_id !== operationId));
       alert('Operational record deleted successfully!');
       logActivity(`Deleted Operation: ${operationId}`, 'Operations', operationId);
-      fetchFromDb().catch(console.error);
+      // fetchFromDb().catch(console.error); // Disabled to prevent full reload
       return true;
     } catch (err: any) {
       console.error('Failed to delete operation:', err);
@@ -4927,7 +5202,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setEditorAssignments(prev => prev.filter(ea => ea.production_id !== productionId));
       alert('Production record deleted successfully!');
       logActivity(`Deleted Production: ${productionId}`, 'Production', productionId);
-      fetchFromDb().catch(console.error);
+      // fetchFromDb().catch(console.error); // Disabled to prevent full reload
       return true;
     } catch (err: any) {
       console.error('Failed to delete production:', err);
@@ -4944,7 +5219,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setStaffAssignments(prev => prev.filter(sa => sa.assignment_id !== assignmentId));
       alert('Staff assignment deleted successfully!');
       logActivity(`Deleted Staff Assignment: ${assignmentId}`, 'Operations', assignmentId);
-      fetchFromDb().catch(console.error);
+      // fetchFromDb().catch(console.error); // Disabled to prevent full reload
       return true;
     } catch (err: any) {
       console.error('Failed to delete staff assignment:', err);
@@ -4972,7 +5247,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setRawFootage(prev => prev.filter(rf => rf.tracking_id !== trackingId));
       alert('Raw footage record deleted successfully!');
       logActivity(`Deleted Raw Footage: ${trackingId}`, 'Production', trackingId);
-      fetchFromDb().catch(console.error);
+      // fetchFromDb().catch(console.error); // Disabled to prevent full reload
       return true;
     } catch (err: any) {
       console.error('Failed to delete raw footage:', err);
@@ -4989,6 +5264,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentUserName,
         setCurrentRole,
         setCurrentUserName,
+        isDataLoading,
         login,
         logout,
         users,
@@ -5033,6 +5309,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         recordPayment,
         resetAllData,
         refreshData,
+        statusHistory,
+        getLeadCurrentStatus,
         addUser,
         signUpUser,
         editUser,

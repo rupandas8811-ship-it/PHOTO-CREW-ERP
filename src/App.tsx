@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { RoleProvider, useRole } from './components/RoleContext';
 import { RoleSwitcher } from './components/RoleSwitcher';
 import { Dashboard } from './components/Dashboard';
@@ -57,10 +57,30 @@ const MainAppContent: React.FC = () => {
     logout,
     globalDateRange,
     setGlobalDateRange,
-    resetGlobalDateRange
+    resetGlobalDateRange,
+    isDataLoading
   } = useRole();
-  const [appLoaded, setAppLoaded] = useState(false);
+  const [appLoaded, setAppLoaded] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const [showInitialLoader, setShowInitialLoader] = useState(() => {
+    return localStorage.getItem('erp_current_user') !== null;
+  });
+  const hasShownLoaderRef = useRef(localStorage.getItem('erp_current_user') !== null);
+  const [prevUser, setPrevUser] = useState(currentUser);
+
+  if (currentUser !== prevUser) {
+    setPrevUser(currentUser);
+    if (currentUser) {
+      if (!hasShownLoaderRef.current) {
+        setShowInitialLoader(true);
+        hasShownLoaderRef.current = true;
+      }
+    } else {
+      setShowInitialLoader(false);
+      hasShownLoaderRef.current = false;
+    }
+  }
 
   const isTabAllowed = (tab: string): boolean => {
     if (currentRole === 'Business Owner') {
@@ -103,12 +123,9 @@ const MainAppContent: React.FC = () => {
     return false;
   };
 
-  useEffect(() => {
-    if (!currentUser) {
-      setAppLoaded(false);
-    }
-  }, [currentUser]);
+  // Handled appLoaded state above
 
+  // Handle date inputs
   const [startInput, setStartInput] = useState(globalDateRange.start);
   const [endInput, setEndInput] = useState(globalDateRange.end);
 
@@ -237,10 +254,7 @@ const MainAppContent: React.FC = () => {
     return <LoginScreen />;
   }
 
-  // Photography-themed loading screen
-  if (!appLoaded) {
-    return <StudioLoader onComplete={() => setAppLoaded(true)} duration={2400} />;
-  }
+  // App is loaded
 
   // Determine if active tab is write-protected for the current user
   const getWriteStatus = () => {
@@ -605,7 +619,14 @@ const MainAppContent: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-[#030303] text-zinc-100 flex flex-col font-sans antialiased">
+    <>
+      {showInitialLoader && (
+        <StudioLoader 
+          onComplete={() => setShowInitialLoader(false)} 
+          isLoading={isDataLoading} 
+        />
+      )}
+      <div className="min-h-screen bg-[#030303] text-zinc-100 flex flex-col font-sans antialiased">
       
       {/* Platform Header with collapsible controller */}
       <RoleSwitcher sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
@@ -753,6 +774,7 @@ const MainAppContent: React.FC = () => {
 
       </div>
     </div>
+    </>
   );
 };
 

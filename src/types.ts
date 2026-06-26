@@ -137,6 +137,8 @@ export interface Lead {
   whatsapp_number?: string;
   address?: string;
   city?: string;
+  state?: string;
+  pincode?: string;
 }
 
 export interface LeadPackage {
@@ -176,6 +178,11 @@ export interface Order {
   created_at: string;
   updated_by?: string;
   updated_at?: string;
+  whatsapp_number?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
 }
 
 export interface Customer {
@@ -256,6 +263,7 @@ export interface Payment {
   payment_status: PaymentStatus;
   payment_collection_status?: string;
   additional_received?: number;
+  transaction_id?: string;
 }
 
 export interface ActivityLog {

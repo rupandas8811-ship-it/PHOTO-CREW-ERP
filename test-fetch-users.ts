@@ -7,13 +7,13 @@ const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(url, serviceRoleKey);
 
 async function run() {
-  const { data, error } = await supabase.from('leads').select('*').limit(1);
+  const { data: users, error } = await supabase.from('users').select('*');
   if (error) {
-    console.error("Error fetching leads:", error);
-  } else if (data && data.length > 0) {
-    console.log("Columns:", Object.keys(data[0]));
+    console.error('Error fetching users:', error);
   } else {
-    console.log("No rows in leads table, but select succeeded!");
+    console.log('Users in public.users:');
+    console.log(JSON.stringify(users, null, 2));
   }
 }
+
 run();

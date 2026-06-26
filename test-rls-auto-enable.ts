@@ -7,13 +7,13 @@ const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(url, serviceRoleKey);
 
 async function run() {
-  const { data, error } = await supabase.from('leads').select('*').limit(1);
+  console.log('Invoking rls_auto_enable...');
+  const { data, error } = await supabase.rpc('rls_auto_enable');
   if (error) {
-    console.error("Error fetching leads:", error);
-  } else if (data && data.length > 0) {
-    console.log("Columns:", Object.keys(data[0]));
+    console.error('rls_auto_enable failed:', error);
   } else {
-    console.log("No rows in leads table, but select succeeded!");
+    console.log('rls_auto_enable returned:', data);
   }
 }
+
 run();
