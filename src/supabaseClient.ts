@@ -1,22 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
-const getUrl = () => {
-  if (typeof window !== 'undefined') {
-    // Standardize origin to not have a trailing slash
-    const origin = window.location.origin.replace(/\/$/, '');
-    return `${origin}/supabase`;
-  }
-  return 'http://localhost:3000/supabase';
-};
+const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || 'https://plrtavqnsbqopvqtwezb.supabase.co';
+const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_Qdmf44q1ASJboY1_AZoOVQ_YfYrWvcB';
 
-const getAnonKey = () => {
-  if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.VITE_SUPABASE_ANON_KEY) {
-    return (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
-  }
-  return 'sb_publishable_Qdmf44q1ASJboY1_AZoOVQ_YfYrWvcB';
-};
-
-export const supabaseClient = createClient(getUrl(), getAnonKey(), {
+export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
   auth: { persistSession: true }
 });
 

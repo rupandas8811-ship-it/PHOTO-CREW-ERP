@@ -56,8 +56,8 @@ export const LoginScreen: React.FC = () => {
     setRealtimeTest('untested');
     setDiagnosticFailMsg('');
 
-    const url = typeof window !== 'undefined' ? `${window.location.origin}/supabase` : 'http://localhost:3000/supabase';
-    const anonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || 'dummy-anon-key';
+    const url = (import.meta as any).env.VITE_SUPABASE_URL || 'https://plrtavqnsbqopvqtwezb.supabase.co';
+    const anonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_Qdmf44q1ASJboY1_AZoOVQ_YfYrWvcB';
 
     try {
       const supabase = createClient(url, anonKey, {

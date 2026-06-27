@@ -8,7 +8,7 @@ import { createClient } from '@supabase/supabase-js';
 
 dotenv.config();
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://aqifyxsimhqayfjwzzwj.supabase.co';
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://plrtavqnsbqopvqtwezb.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_Qdmf44q1ASJboY1_AZoOVQ_YfYrWvcB';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -57,9 +57,9 @@ async function startServer() {
           proxyRes: (proxyRes, req, res) => {
             console.log(`[Proxy Res] ${req.method} ${req.url} <- Status ${proxyRes.statusCode}`);
           },
-          error: (err, req, res) => {
+          error: (err, req, res: any) => {
             console.error('[Proxy Error]', err);
-            if (!res.headersSent) {
+            if (res && !res.headersSent) {
               res.status(502).json({ success: false, error: 'Proxy error: ' + err.message });
             }
           }
