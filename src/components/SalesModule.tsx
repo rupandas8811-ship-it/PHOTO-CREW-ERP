@@ -1244,6 +1244,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     city: '',
     state: '',
     pincode: '',
+    client_residence_address: '',
+    desired_event_shoot_type: '',
     // Step 2
     event_type: '',
     custom_event_name: '',
@@ -1270,6 +1272,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     confirmed_event_time: '',
     final_amount: 0,
     advance_received: 0,
+    package_price: 0,
+    deliverables_description: '',
+    notes_special_customizations: '',
+    quotation_discount: 0,
+    additional_services_cost: 0,
+    total_pax: 0,
+    reference_source: '',
+    lead_value: 0,
+    lead_score: 0,
+    booking_status: 'Pending',
   });
 
   const [crmToast, setCrmToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -1341,6 +1353,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     city: '',
     state: '',
     pincode: '',
+    client_residence_address: '',
+    desired_event_shoot_type: '',
+    total_pax: 0,
+    reference_source: '',
+    lead_value: 0,
+    lead_score: 0,
+    booking_status: 'Pending',
   });
 
   const [wizardStep, setWizardStep] = useState(1);
@@ -1383,6 +1402,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       city: '',
       state: '',
       pincode: '',
+      client_residence_address: '',
+      desired_event_shoot_type: '',
+      total_pax: 0,
+      reference_source: '',
+      lead_value: 0,
+      lead_score: 0,
+      booking_status: 'Pending',
     });
     setOtherSource('');
     setSelectedPkgIds([]);
@@ -1887,20 +1913,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         event_type: wizardLeadData.event_type,
         shoot_type: wizardLeadData.shoot_type,
         budget: wizardLeadData.budget,
-        whatsapp_number: wizardLeadData.whatsapp_number
+        whatsapp_number: wizardLeadData.whatsapp_number,
+        address: wizardLeadData.address,
+        city: wizardLeadData.city,
+        state: wizardLeadData.state,
+        pincode: wizardLeadData.pincode,
+        client_residence_address: wizardLeadData.client_residence_address,
+        desired_event_shoot_type: wizardLeadData.desired_event_shoot_type,
+        deliverables_description: wizardLeadData.deliverables,
+        notes_special_customizations: wizardLeadData.notes
       };
     } else {
       return {
+        ...createForm,
         lead_id: createdLeadId || 'DRAFT-LEAD',
-        customer_name: createForm.customer_name,
-        mobile: createForm.mobile,
-        email: createForm.email,
-        event_date: createForm.event_date,
-        event_location: createForm.event_location,
-        event_type: createForm.event_type,
-        shoot_type: createForm.shoot_type,
-        budget: createForm.budget,
-        whatsapp_number: createForm.whatsapp_number
+        deliverables_description: selectedPkgs.map(p => pkgDeliverables[p.id] || p.deliverables || 'N/A').join('\n'),
+        notes_special_customizations: selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
       };
     }
   };
@@ -1928,7 +1956,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         customer_name: leadObj.customer_name || 'Customer',
         order_id: '',
         package_name: activePkgs.map(p => p.package_name).join(' + '),
-        package_cost: basePkgSum,
+        package_price: basePkgSum,
         discount: quoteDiscount,
         additional_services_cost: quoteAdditional,
         final_quotation_amount: finalAmt,
@@ -1937,7 +1965,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         generated_date: new Date().toISOString().split('T')[0],
         whatsapp_sent_status: false,
         viewed_status: false,
-        terms_conditions: quotationTerms
+        terms_conditions: quotationTerms,
+        deliverables_description: leadObj.deliverables_description,
+        notes_special_customizations: leadObj.notes_special_customizations,
+        client_residence_address: leadObj.client_residence_address,
+        city: leadObj.city,
+        state: leadObj.state,
+        pincode: leadObj.pincode,
+        desired_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type
       };
 
       await addQuotation(standardQuotation);
@@ -2128,6 +2163,24 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
     };
 
+    const leadValue = isEdit ? wizardLeadData.lead_value : createForm.lead_value;
+    const setLeadValue = (val: number) => {
+      if (isEdit) {
+        setWizardLeadData(prev => ({ ...prev, lead_value: val }));
+      } else {
+        setCreateForm(prev => ({ ...prev, lead_value: val }));
+      }
+    };
+
+    const leadScore = isEdit ? wizardLeadData.lead_score : createForm.lead_score;
+    const setLeadScore = (val: number) => {
+      if (isEdit) {
+        setWizardLeadData(prev => ({ ...prev, lead_score: val }));
+      } else {
+        setCreateForm(prev => ({ ...prev, lead_score: val }));
+      }
+    };
+
     return (
       <div className="space-y-6">
         {/* Section 1: Proposed Client Budget */}
@@ -2135,23 +2188,51 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-2">
             <span>💰</span> Section 1: Proposed Client Budget
           </h4>
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-              Proposed Client Budget (₹) *
-            </label>
-            <input
-              id={isEdit ? "wizard_edit_step4_first_field" : "wizard_create_step4_first_field"}
-              type="number"
-              required
-              value={budgetValue || ''}
-              onChange={(e) => setBudget(Number(e.target.value))}
-              placeholder="E.g., 50000"
-              className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 font-mono transition-all"
-            />
-            <p className="text-[10px] text-slate-500 mt-1 font-mono">
-              Auto-filled with package price (₹{basePkgSum.toLocaleString('en-IN')}) but remains fully editable.
-            </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Proposed Client Budget (₹) *
+              </label>
+              <input
+                id={isEdit ? "wizard_edit_step4_first_field" : "wizard_create_step4_first_field"}
+                type="number"
+                required
+                value={budgetValue || ''}
+                onChange={(e) => setBudget(Number(e.target.value))}
+                placeholder="E.g., 50000"
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 font-mono transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Lead Value (Target)
+              </label>
+              <input
+                type="number"
+                value={leadValue || ''}
+                onChange={(e) => setLeadValue(Number(e.target.value))}
+                placeholder="E.g., 75000"
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-amber-400 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 font-mono transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Lead Score (1-100)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={leadScore || ''}
+                onChange={(e) => setLeadScore(Number(e.target.value))}
+                placeholder="E.g., 85"
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-emerald-400 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 font-mono transition-all"
+              />
+            </div>
           </div>
+          <p className="text-[10px] text-slate-500 mt-1 font-mono">
+            Auto-filled with package price (₹{basePkgSum.toLocaleString('en-IN')}) but remains fully editable.
+          </p>
         </div>
 
         {/* Deliverables Section with Add / Edit / Remove functionality */}
@@ -2654,6 +2735,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       city: lead.city || '',
       state: lead.state || '',
       pincode: lead.pincode || '',
+      client_residence_address: lead.client_residence_address || '',
+      desired_event_shoot_type: lead.desired_event_shoot_type || '',
       // Step 2
       event_type: lead.event_type || '',
       custom_event_name: lead.custom_event_name || '',
@@ -2666,7 +2749,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       // Step 3
       selected_package_id: primaryLP?.package_id || '',
       package_cost: primaryLP ? Number(primaryLP.package_cost) : 0,
-      deliverables: primaryLP?.package_name || '',
+      package_price: primaryLP ? Number(primaryLP.package_cost) : 0,
+      deliverables: primaryLP?.deliverables_description || primaryLP?.package_name || '',
+      deliverables_description: primaryLP?.deliverables_description || '',
+      notes_special_customizations: primaryLP?.notes_special_customizations || '',
       notes: lead.remarks || '',
       // Step 4
       budget: lead.budget || 0,
@@ -2680,6 +2766,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       confirmed_event_time: lead.event_time || '',
       final_amount: 0,
       advance_received: 0,
+      total_pax: lead.total_pax || 0,
+      reference_source: lead.reference_source || '',
+      lead_value: lead.lead_value || 0,
+      lead_score: lead.lead_score || 0,
+      booking_status: lead.booking_status || 'Pending',
     });
 
     setFollowUpForm({
@@ -2754,7 +2845,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           city: wizardLeadData.city,
           state: wizardLeadData.state,
           pincode: wizardLeadData.pincode,
+          client_residence_address: wizardLeadData.client_residence_address,
           lead_source: wizardLeadData.lead_source,
+          total_pax: wizardLeadData.total_pax,
+          reference_source: wizardLeadData.reference_source,
         });
         showToastMsg("CRM Updated Successfully.", "success");
       } else if (step === 2) {
@@ -2778,6 +2872,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           event_location: wizardLeadData.event_location,
           lead_source: wizardLeadData.lead_source,
           shoot_type: wizardLeadData.shoot_type,
+          desired_event_shoot_type: wizardLeadData.desired_event_shoot_type,
         });
         showToastMsg("CRM Updated Successfully.", "success");
       } else if (step === 3) {
@@ -2795,18 +2890,26 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             quantity: 1,
             total_amount: Number(wizardLeadData.package_cost),
             discount: 0,
-            final_amount: Number(wizardLeadData.package_cost)
+            final_amount: Number(wizardLeadData.package_cost),
+            deliverables_description: wizardLeadData.deliverables,
+            notes_special_customizations: wizardLeadData.notes,
+            additional_services_cost: 0
           }]);
         }
         await updateLead(selectedLead.lead_id, {
           budget: Number(wizardLeadData.package_cost),
+          package_price: Number(wizardLeadData.package_cost),
+          deliverables_description: wizardLeadData.deliverables,
+          notes_special_customizations: wizardLeadData.notes,
           remarks: wizardLeadData.notes
         });
         showToastMsg("CRM Updated Successfully.", "success");
       } else if (step === 4) {
         await updateLead(selectedLead.lead_id, {
           budget: Number(wizardLeadData.budget),
-          remarks: wizardLeadData.remarks
+          remarks: wizardLeadData.remarks,
+          lead_value: wizardLeadData.lead_value,
+          lead_score: wizardLeadData.lead_score,
         });
         showToastMsg("CRM Updated Successfully.", "success");
       } else if (step === 5) {
@@ -2968,10 +3071,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
   };
 
-  const getRemarksPayload = (formRemarks: string, intNotes: string, fDate: string, wNum: string, adr: string, cty: string) => {
+  const getRemarksPayload = (formRemarks: string, intNotes: string, fDate: string, wNum: string, adr: string, cty: string, resAdr?: string) => {
     let result = '';
     if (wNum) result += `WhatsApp: ${wNum}\n`;
-    if (adr) result += `Address: ${adr}\n`;
+    if (adr) result += `Event Venue: ${adr}\n`;
+    if (resAdr) result += `Residence: ${resAdr}\n`;
     if (cty) result += `City: ${cty}\n`;
     if (fDate) result += `Follow-up Date: ${fDate}\n`;
     if (intNotes) result += `Internal Notes: ${intNotes}\n`;
@@ -3142,12 +3246,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             city: createForm.city,
             state: createForm.state,
             pincode: createForm.pincode,
+            client_residence_address: createForm.client_residence_address,
+            desired_event_shoot_type: createForm.desired_event_shoot_type,
+            total_pax: createForm.total_pax,
+            reference_source: createForm.reference_source,
+            lead_value: createForm.lead_value,
+            lead_score: createForm.lead_score,
+            booking_status: createForm.booking_status,
             event_type: 'Other',
             event_date: new Date().toISOString().split('T')[0],
             event_time: '12:00',
             event_location: 'TBD',
             budget: 0,
-            remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city)
+            remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address)
           });
           setCreatedLeadId(newId);
           console.log(`Created lead with ID: ${newId}`);
@@ -3163,7 +3274,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             city: createForm.city,
             state: createForm.state,
             pincode: createForm.pincode,
-            remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city)
+            client_residence_address: createForm.client_residence_address,
+            desired_event_shoot_type: createForm.desired_event_shoot_type,
+            total_pax: createForm.total_pax,
+            reference_source: createForm.reference_source,
+            lead_value: createForm.lead_value,
+            lead_score: createForm.lead_score,
+            booking_status: createForm.booking_status,
+            remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address)
           });
         }
         setWizardStep(2);
@@ -3229,12 +3347,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           event_location: createForm.event_location || 'TBD',
           lead_source: finalSource || 'Walk-in',
           shoot_type: createForm.shoot_type || '',
+          desired_event_shoot_type: createForm.desired_event_shoot_type,
           whatsapp_number: createForm.whatsapp_number,
           address: createForm.address,
           city: createForm.city,
           state: createForm.state,
           pincode: createForm.pincode,
-          remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city)
+          client_residence_address: createForm.client_residence_address,
+          remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address)
         });
         setWizardStep(3);
         showToastMsg("Event details saved successfully.", "success");
@@ -3272,13 +3392,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           quantity: 1,
           total_amount: pkgPrices[pkg.id] !== undefined ? pkgPrices[pkg.id] : pkg.cost,
           discount: leadDiscount,
-          final_amount: pkgPrices[pkg.id] !== undefined ? pkgPrices[pkg.id] : pkg.cost
+          final_amount: pkgPrices[pkg.id] !== undefined ? pkgPrices[pkg.id] : pkg.cost,
+          deliverables_description: pkgDeliverables[pkg.id] || pkg.deliverables || 'N/A',
+          notes_special_customizations: pkgNotes[pkg.id] || '',
+          additional_services_cost: 0
         }));
         await saveLeadPackages(createdLeadId!, packagesPayload);
 
         await updateLead(createdLeadId!, {
           budget: finalTotal,
-          remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city)
+          package_price: finalTotal,
+          deliverables_description: selectedPkgs.map(p => pkgDeliverables[p.id] || p.deliverables || 'N/A').join('\n'),
+          notes_special_customizations: selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
+          remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address)
         });
 
         // Sync local states
@@ -3311,7 +3437,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         setIsSaving(true);
         await updateLead(createdLeadId!, {
           budget: Number(createForm.budget),
-          remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city)
+          remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address)
         });
         setWizardStep(5);
         showToastMsg("Proposed budget and remarks saved successfully.", "success");
@@ -3340,7 +3466,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setIsSaving(true);
       await updateLead(createdLeadId!, {
         status: salesStatus as CurrentStage,
-        remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city)
+        budget: finalTotal,
+        package_price: finalTotal,
+        deliverables_description: selectedPkgs.map(p => pkgDeliverables[p.id] || p.deliverables || 'N/A').join('\n'),
+        notes_special_customizations: selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
+        remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address)
       });
       alert("Lead Saved Successfully.");
       resetForm();
@@ -3391,7 +3521,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         confirmedEventDate,
         confirmedEventTime,
         'UPI / Cash / Bank Transfer',
-        getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city),
+        getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
         reportingTime
       );
       
@@ -5193,11 +5323,25 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     {/* Address */}
                     <div className="sm:col-span-2">
                       <label className="block text-xs font-semibold text-slate-404 mb-1.5">
-                        Address
+                        Client Residence Address
                       </label>
                       <input
                         type="text"
-                        placeholder="Street address / House details"
+                        placeholder="House details / Residence location"
+                        value={createForm.client_residence_address}
+                        onChange={(e) => setCreateForm({ ...createForm, client_residence_address: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-sans"
+                      />
+                    </div>
+
+                    {/* Venue/Event Location */}
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                        Venue / Event Location Address
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Street address / Venue details"
                         value={createForm.address}
                         onChange={(e) => setCreateForm({ ...createForm, address: e.target.value })}
                         className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-sans"
@@ -5299,8 +5443,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         Desired Event Shoot Type *
                       </label>
                       <select
-                        value={createForm.shoot_type}
-                        onChange={(e) => setCreateForm({ ...createForm, shoot_type: e.target.value })}
+                        value={createForm.desired_event_shoot_type}
+                        onChange={(e) => setCreateForm({ ...createForm, desired_event_shoot_type: e.target.value })}
                         className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all cursor-pointer"
                       >
                         <option value="">Select Shoot Type</option>
@@ -5723,8 +5867,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <p className="text-slate-300">Name: <strong className="text-white">{createForm.customer_name}</strong></p>
                           <p className="text-slate-300">Mobile: <span className="font-mono text-cyan-400 font-semibold">{createForm.mobile}</span> {createForm.whatsapp_number && <span className="text-[10px] text-emerald-500 bg-emerald-950/40 px-1 py-0.5 rounded font-mono font-medium ml-1">WhatsApp synced</span>}</p>
                           {createForm.email && <p className="text-slate-300">Email: <span className="text-slate-200">{createForm.email}</span></p>}
+                          {createForm.client_residence_address && (
+                            <p className="text-slate-300">Residence: <span className="text-slate-300">{createForm.client_residence_address}</span></p>
+                          )}
                           {(createForm.address || createForm.city) && (
-                            <p className="text-slate-300">Location: <span className="text-slate-300">{[createForm.address, createForm.city].filter(Boolean).join(', ')}</span></p>
+                            <p className="text-slate-300">Event City/State: <span className="text-slate-300">{[createForm.city, createForm.state].filter(Boolean).join(', ')}</span></p>
                           )}
                         </div>
                       </div>
@@ -5734,9 +5881,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         <span className="text-[10px] uppercase font-bold text-slate-450 tracking-wider font-mono block border-b border-slate-850 pb-1">🗓️ Event Details</span>
                         <div className="space-y-1">
                           <p className="text-slate-300">Event: <strong className="text-amber-400">{createForm.event_type === 'Other' ? createForm.custom_event_name : createForm.event_type}</strong></p>
-                          <p className="text-slate-300">Shoot Type: <span className="text-white font-medium">{createForm.shoot_type}</span></p>
+                          <p className="text-slate-300">Shoot Type: <span className="text-white font-medium">{createForm.desired_event_shoot_type || createForm.shoot_type}</span></p>
                           <p className="text-slate-300">Date/Time: <span className="font-mono text-slate-200">{createForm.event_date || 'TBD'} @ {createForm.event_time || 'TBD'}</span> {reportingTime && <span className="text-slate-400 font-mono text-[10px]">(Report: {reportingTime})</span>}</p>
-                          <p className="text-slate-300">Location: <span className="text-slate-300">{createForm.event_location || 'TBD'}</span></p>
+                          <p className="text-slate-300">Venue Address: <span className="text-slate-300">{createForm.event_location || createForm.address || 'TBD'}</span></p>
                         </div>
                       </div>
 
@@ -6584,11 +6731,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Client Residence Address</label>
                           <textarea
                             rows={2}
+                            value={wizardLeadData.client_residence_address || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, client_residence_address: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
+                            placeholder="Complete residential address..."
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Venue Address</label>
+                          <textarea
+                            rows={2}
                             value={wizardLeadData.address || ''}
                             disabled={isLeadLocked}
                             onChange={(e) => setWizardLeadData({ ...wizardLeadData, address: e.target.value })}
                             className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
-                            placeholder="Complete billing / residential address..."
+                            placeholder="Marriage hall, resort or location details..."
                           />
                         </div>
                         <div>
@@ -6715,13 +6873,43 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         </div>
                         <div>
                           <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Desired Event Shoot Type</label>
+                          <select
+                            value={wizardLeadData.desired_event_shoot_type || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, desired_event_shoot_type: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white cursor-pointer"
+                          >
+                            <option value="">── Select Shoot Type ──</option>
+                            <option value="Traditional">Traditional</option>
+                            <option value="Candid">Candid</option>
+                            <option value="Cinematic">Cinematic Film</option>
+                            <option value="Candid + Cinematic">Candid + Cinematic</option>
+                            <option value="Candid + Traditional">Candid + Traditional</option>
+                            <option value="All Inclusive">All Inclusive (Candid+Trad+Cinematic)</option>
+                            <option value="Live Streaming">Live Streaming</option>
+                            <option value="Drone Only">Drone Only</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider font-mono">Total Pax (Guests Expected)</label>
+                          <input
+                            type="number"
+                            value={wizardLeadData.total_pax || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, total_pax: parseInt(e.target.value) || 0 })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
+                            placeholder="e.g. 500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider font-mono">Reference Source</label>
                           <input
                             type="text"
-                            value={wizardLeadData.shoot_type || ''}
+                            value={wizardLeadData.reference_source || ''}
                             disabled={isLeadLocked}
-                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, shoot_type: e.target.value })}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, reference_source: e.target.value })}
                             className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
-                            placeholder="e.g. Cinematic Film + Candid Photo"
+                            placeholder="e.g. Instagram, Friend name..."
                           />
                         </div>
                       </div>
@@ -6861,6 +7049,21 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             <option value="Negotiation">Negotiation</option>
                             <option value="Order Confirmed">Order Confirmed (Moves to Operations & Locks CRM)</option>
                             <option value="Lost Lead">Lost Lead</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider text-xs font-black">Booking Status</label>
+                          <select
+                            value={wizardLeadData.booking_status || 'Pending'}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, booking_status: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-amber-400 font-bold cursor-pointer"
+                          >
+                            <option value="Pending">Pending</option>
+                            <option value="Confirmed">Confirmed</option>
+                            <option value="Cancelled">Cancelled</option>
+                            <option value="Completed">Completed</option>
                           </select>
                         </div>
 

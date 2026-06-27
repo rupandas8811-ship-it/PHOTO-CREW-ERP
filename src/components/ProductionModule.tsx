@@ -1779,19 +1779,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               <StatusText status={prodStatus} />
                             </td>
                             <td className="p-3 text-right pr-4">
-                              {rf && (
-                                <button
-                                  onClick={async () => {
-                                    if (confirm(`Are you absolutely sure you want to delete raw footage tracking ID "${rf.tracking_id}"? This will also remove any linked editor projects and assignments.`)) {
-                                      await deleteRawFootage(rf.tracking_id);
-                                    }
-                                  }}
-                                  className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/15 hover:border-rose-500/30 rounded-lg transition-all cursor-pointer"
-                                  title="Delete Raw Footage"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
+                              {/* Action removed to follow business requirement of no delete from leads table */}
                             </td>
                           </tr>
                         );
@@ -2150,19 +2138,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 className="text-[9px] text-zinc-500 hover:text-zinc-350 hover:underline mt-0.5 cursor-pointer"
                               >
                                 Edit Full Dossier ✎
-                              </button>
-                              
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  if (confirm(`Are you absolutely sure you want to delete production folder "${prod.production_id}"? This will also remove any linked editor projects and assignments.`)) {
-                                    await deleteProduction(prod.production_id);
-                                  }
-                                }}
-                                className="text-[9px] text-rose-500 hover:text-rose-400 hover:underline mt-1 cursor-pointer flex items-center justify-center gap-1"
-                              >
-                                <Trash2 className="w-2.5 h-2.5" />
-                                <span>Delete Folder</span>
                               </button>
                             </div>
                           </td>
@@ -5165,7 +5140,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   const wl = getStaffWorkload(s.name);
                                   return (
                                     <option key={s.staff_id} value={`${s.staff_id}|${s.name}`}>
-                                      {isMatch ? '★ ' : ''}{s.name} ({wl.activeCount} Active Jobs)
+                                      {isMatch ? '★ ' : ''}{s.name} | {s.production_role_speciality || s.role} | {s.department} | {s.status} ({wl.activeCount} Jobs)
                                     </option>
                                   );
                                 })}

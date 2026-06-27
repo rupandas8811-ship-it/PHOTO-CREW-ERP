@@ -33,6 +33,7 @@ export const OperationsLeads: React.FC = () => {
     leadStaffAssignmentHistory,
     updateEquipment,
     refreshData,
+    addLeadEquipmentHistory,
     getLeadCurrentStatus
   } = useRole();
 
@@ -435,6 +436,25 @@ export const OperationsLeads: React.FC = () => {
       return;
     }
 
+    // NEW: Equipment Validation
+    if (!assignForm.equipment_kit) {
+      alert('Please select at least one equipment kit/item.');
+      return;
+    }
+    
+    const kitsToAssign = assignForm.equipment_kit.split(',').map(s => s.trim()).filter(Boolean);
+    for (const kitName of kitsToAssign) {
+      const found = equipment.find(eq => eq.equipment_name === kitName);
+      if (!found) {
+        alert(`Equipment "${kitName}" not found in inventory.`);
+        return;
+      }
+      if (found.status !== 'Available') {
+        alert(`Equipment "${kitName}" is currently ${found.status} and cannot be assigned.`);
+        return;
+      }
+    }
+
     try {
       setIsSaving(true);
       // First save the multi-staff role assignments to Supabase & Context state!
@@ -450,22 +470,28 @@ export const OperationsLeads: React.FC = () => {
         const removedKits = previousKits.filter(pk => !selectedKits.includes(pk));
         
         for (const kitStr of removedKits) {
-          const found = equipment.find(eq => 
-            eq.name === kitStr || 
-            `${eq.name} [${eq.brand} ${eq.model}]` === kitStr
-          );
+          const found = equipment.find(eq => eq.equipment_name === kitStr);
           if (found) {
             await updateEquipment(found.equipment_id, { status: 'Available' });
           }
         }
 
         for (const kitStr of selectedKits) {
-          const found = equipment.find(eq => 
-            eq.name === kitStr || 
-            `${eq.name} [${eq.brand} ${eq.model}]` === kitStr
-          );
+          const found = equipment.find(eq => eq.equipment_name === kitStr);
           if (found) {
             await updateEquipment(found.equipment_id, { status: 'Assigned' });
+            
+            // NEW: Record History
+            if (addLeadEquipmentHistory) {
+              const matchedOrder = orders.find(o => o.order_id === assigningOrderId);
+              await addLeadEquipmentHistory({
+                lead_id: matchedOrder?.lead_id || 'UNKNOWN',
+                order_id: assigningOrderId,
+                equipment_name: found.equipment_name,
+                equipment_status: 'Assigned',
+                remarks: `Assigned to order ${assigningOrderId} by ${currentUserName}`
+              });
+            }
           }
         }
       }
@@ -539,6 +565,9 @@ export const OperationsLeads: React.FC = () => {
   const getStaffForRole = (role: string) => {
     const filtered = staff ? staff.filter(s => {
       const sRole = s.role.toLowerCase();
+      const isActive = s.status === 'Active';
+      if (!isActive) return false;
+      
       if (role === 'Lead Photographer') return sRole.includes('lead') && sRole.includes('photo');
       if (role === 'Associate Photographer') return sRole.includes('associate') && sRole.includes('photo');
       if (role === 'Lead Videographer') return sRole.includes('lead') && sRole.includes('video');
@@ -548,38 +577,7 @@ export const OperationsLeads: React.FC = () => {
       return false;
     }) : [];
 
-    if (filtered.length > 0) return filtered;
-
-    // Premium seed listings so options are ALWAYS completely filled and useful
-    const mockRosters: Record<string, { staff_id: string; name: string }[]> = {
-      'Lead Photographer': [
-        { staff_id: 'LP1', name: 'Ramesh Kumar' },
-        { staff_id: 'LP2', name: 'Amit Sharma' },
-        { staff_id: 'LP3', name: 'Priya Patel' }
-      ],
-      'Associate Photographer': [
-        { staff_id: 'AP1', name: 'Suresh Singh' },
-        { staff_id: 'AP2', name: 'Neha Gupta' }
-      ],
-      'Lead Videographer': [
-        { staff_id: 'LV1', name: 'Rahul Verma' },
-        { staff_id: 'LV2', name: 'Vikram Malhotra' }
-      ],
-      'Drone & Aerial Operator': [
-        { staff_id: 'DO1', name: 'Karan Johar' },
-        { staff_id: 'DO2', name: 'Arjun Kapoor' }
-      ],
-      'Production Assistant': [
-        { staff_id: 'PA1', name: 'Rohan Mehra' },
-        { staff_id: 'PA2', name: 'Simran Kaur' }
-      ],
-      'Post-Production Editor': [
-        { staff_id: 'ED1', name: 'Alan Cole' },
-        { staff_id: 'ED2', name: 'Sarah Connor' },
-        { staff_id: 'ED3', name: 'Dennis Nedry' }
-      ]
-    };
-    return mockRosters[role] || [];
+    return filtered;
   };
 
   const triggerCompletionModal = (orderId: string) => {
@@ -672,29 +670,8 @@ export const OperationsLeads: React.FC = () => {
   }, [orders, operationsOrders, rawFootage, operations]);
 
   const availableGearOptions = useMemo(() => {
-    // Basic preloaded checklist options in case equipment state is small
-    const presets = [
-      "Camera Kit A",
-      "Camera Kit B",
-      "Drone Kit",
-      "Drone Battery Kit",
-      "Drone Accessories",
-      "Lighting Kit",
-      "Audio Recording Kit",
-      "Gimbal Kit",
-      "LED Wall Kit",
-      "Live Streaming Kit",
-      "Crane/Jib Kit",
-      "Backup Camera Kit",
-      "Kit Gold: Sony A7iv, RED Komodo, DJI Inspire 3 Drone",
-      "Kit Platinum Max: Hasselblad H6D, RED V-Raptor"
-    ];
-
-    const dbItems = equipment ? equipment.map((eq: any) => `${eq.name} [${eq.brand} ${eq.model}]`) : [];
-    
-    // Combine both and remove duplicates
-    const combined = Array.from(new Set([...presets, ...dbItems]));
-    return combined;
+    if (!equipment) return [];
+    return equipment.map(eq => eq.equipment_name);
   }, [equipment]);
 
   const toggleSort = (field: 'event_date' | 'customer_name' | 'status' | 'assignment_date') => {
@@ -979,25 +956,57 @@ export const OperationsLeads: React.FC = () => {
                   assignmentsHistory = leadStaffAssignmentHistory ? leadStaffAssignmentHistory.filter(h => h.order_id === ord.order_id) : [];
                 }
 
-                // 2. Load latest assignment for each role
-                const latestAssignmentsMap = new Map<string, string>();
+                // 2. Load all current assignments for each role
+                // A staff is considered assigned to a role if their latest history entry for that role is an assignment (not "unassigned" or empty)
+                // However, the user wants "Display all assigned staff names".
+                // If the history has multiple people for the same role, we should show them.
+                const roleStaffMap = new Map<string, Set<string>>();
+                
+                // Sort history by date to process in order
                 const sortedAssignments = [...assignmentsHistory].sort((a, b) => new Date(a.assigned_at).getTime() - new Date(b.assigned_at).getTime());
                 
                 sortedAssignments.forEach(h => {
-                  if (h.assigned_staff && h.assigned_staff.trim() && h.assigned_staff.toLowerCase() !== 'unassigned' && h.assigned_staff.toLowerCase() !== 'none') {
-                    latestAssignmentsMap.set(h.assigned_role, h.assigned_staff.trim());
+                  const role = h.assigned_role;
+                  const staffName = h.assigned_staff?.trim();
+                  
+                  if (!roleStaffMap.has(role)) {
+                    roleStaffMap.set(role, new Set());
+                  }
+                  
+                  const staffSet = roleStaffMap.get(role)!;
+                  
+                  if (staffName && staffName.toLowerCase() !== 'unassigned' && staffName.toLowerCase() !== 'none' && staffName !== '') {
+                    // Check if it's a comma-separated list of names
+                    if (staffName.includes(',')) {
+                      staffName.split(',').forEach(name => {
+                        const trimmedName = name.trim();
+                        if (trimmedName) staffSet.add(trimmedName);
+                      });
+                    } else {
+                      staffSet.add(staffName);
+                    }
                   } else {
-                    latestAssignmentsMap.delete(h.assigned_role);
+                    // If "unassigned" or empty, we clear the set for this role? 
+                    // Usually "unassigned" means removing staff. 
+                    // But if we want to "Display all", maybe we just want the latest set.
+                    // Let's assume "unassigned" clears the role.
+                    staffSet.clear();
                   }
                 });
 
-                const crewNames = Array.from(latestAssignmentsMap.entries()).map(([role, name]) => `${name} (${role})`);
+                const crewNames: string[] = [];
+                roleStaffMap.forEach((staffSet, role) => {
+                  staffSet.forEach(name => {
+                    crewNames.push(`${name} (${role})`);
+                  });
+                });
 
                 const lead = leads.find(l => l.lead_id === ord.lead_id);
                 const currentStage = lead ? getLeadCurrentStatus(lead) : (ord.current_stage || 'Order Confirmed');
+                const isLocked = currentStage === 'Raw Footage Received';
 
                 return (
-                  <tr key={ord.order_id} className="hover:bg-zinc-900/20 transition-all">
+                  <tr key={ord.order_id} className={`hover:bg-zinc-900/20 transition-all ${isLocked ? 'opacity-85' : ''}`}>
                     <td className="p-4">
                       <span className="font-mono text-indigo-400 font-bold bg-slate-900/80 px-2 py-0.5 border border-slate-800 rounded">
                         {ord.order_id}
@@ -1058,7 +1067,7 @@ export const OperationsLeads: React.FC = () => {
                         </button>
 
                         {/* Update Status */}
-                        {canEdit && (
+                        {canEdit && !isLocked && (
                           <select
                             value=""
                             disabled={isSaving}
@@ -1137,7 +1146,7 @@ export const OperationsLeads: React.FC = () => {
                           </button>
                         )}
                         {/* Before Event Actions: Assign Staff */}
-                        {canEdit && (currentStage === 'Order Confirmed' || currentStage === 'New Order Received' || currentStage === 'Operations Assigned') && (
+                        {canEdit && !isLocked && (currentStage === 'Order Confirmed' || currentStage === 'New Order Received' || currentStage === 'Operations Assigned') && (
                           <button
                             onClick={() => startAssigning(ord)}
                             className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 font-mono font-bold text-[10px] border border-amber-500/30 rounded cursor-pointer transition-all uppercase"
@@ -1147,7 +1156,7 @@ export const OperationsLeads: React.FC = () => {
                         )}
 
                         {/* Edit Assignment: visible in post-assignment stages if canEdit */}
-                        {canEdit && (currentStage === 'Staff Assigned' || currentStage === 'Event Scheduled') && (
+                        {canEdit && !isLocked && (currentStage === 'Staff Assigned' || currentStage === 'Event Scheduled') && (
                           <button
                             onClick={() => startAssigning(ord)}
                             className="px-2 py-1 bg-sky-505/10 hover:bg-sky-505/20 text-zinc-400 hover:text-zinc-300 font-mono text-[9px] border border-zinc-750 rounded cursor-pointer transition-all uppercase"
@@ -1219,6 +1228,15 @@ export const OperationsLeads: React.FC = () => {
                         {currentStage === 'Raw Footage Received' && (() => {
                           const rf = rawFootage ? rawFootage.find(f => f.order_id === ord.order_id) : null;
                           const path = rf?.server_path || '';
+                          
+                          if (!path) {
+                            return (
+                              <span className="text-zinc-550 italic font-mono text-[10px] bg-zinc-950/50 px-2 py-1 rounded border border-zinc-800/50">
+                                No Raw Footage Link Available
+                              </span>
+                            );
+                          }
+
                           return (
                             <div className="flex items-center gap-1">
                               <button
@@ -1240,17 +1258,15 @@ export const OperationsLeads: React.FC = () => {
                               >
                                 Copy Link
                               </button>
-                              {path && (
-                                <a
-                                  href={path}
-                                  target="_blank"
-                                  referrerPolicy="no-referrer"
-                                  className="px-1.5 py-1 bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-505/20 text-indigo-400 font-mono text-[9px] font-bold rounded cursor-pointer inline-block"
-                                  title="Open Drive Link"
-                                >
-                                  Open Link
-                                </a>
-                              )}
+                              <a
+                                href={path}
+                                target="_blank"
+                                referrerPolicy="no-referrer"
+                                className="px-1.5 py-1 bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-505/20 text-indigo-400 font-mono text-[9px] font-bold rounded cursor-pointer inline-block"
+                                title="Open Drive Link"
+                              >
+                                Open Link
+                              </a>
                             </div>
                           );
                         })()}
@@ -1589,15 +1605,12 @@ export const OperationsLeads: React.FC = () => {
                         <div className="absolute left-4 right-4 z-50 mt-1 max-h-56 overflow-y-auto bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl divide-y divide-zinc-900">
                           {filteredGearOptions.length > 0 ? (
                             filteredGearOptions.map((opt, i) => {
-                              const eqItem = equipment ? equipment.find(eq => 
-                                eq.name === opt || 
-                                `${eq.name} [${eq.brand} ${eq.model}]` === opt
-                              ) : null;
+                              const eqItem = equipment ? equipment.find(eq => eq.equipment_name === opt) : null;
                               
                               const isSelected = selectedKits.includes(opt);
                               
-                              const displayName = eqItem ? `${eqItem.name} (${eqItem.brand} ${eqItem.model})` : opt;
-                              const category = eqItem ? eqItem.type : 'Kit Preset';
+                              const displayName = opt;
+                              const category = eqItem ? eqItem.equipment_type : 'Kit Preset';
                               const status = eqItem ? eqItem.status : 'Available';
                               
                               const statusColor = 

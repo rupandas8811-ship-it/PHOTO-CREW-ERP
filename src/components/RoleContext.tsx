@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
-import { User, Lead, LeadPackage, Order, Operation, RawFootage, Production, Payment, ActivityLog, UserRole, CurrentStage, EditingStatus, Staff, Notification, Equipment, Package, StaffAssignment, LeadStaffAssignmentHistory, ProductionSpeciality, EditorAssignment, PaymentStatus, EquipmentHandover, UnlockOverride, DEPARTMENT_STAGES, ROLE_DEPARTMENT_MAP, Department } from '../types';
+import { User, Lead, LeadPackage, Order, Operation, RawFootage, Production, Payment, ActivityLog, UserRole, CurrentStage, EditingStatus, Staff, Notification, Equipment, Package, StaffAssignment, LeadStaffAssignmentHistory, LeadEquipmentHistory, ProductionSpeciality, EditorAssignment, PaymentStatus, EquipmentHandover, UnlockOverride, DEPARTMENT_STAGES, ROLE_DEPARTMENT_MAP, Department } from '../types';
 import { INITIAL_USERS, INITIAL_LEADS, INITIAL_ORDERS, INITIAL_OPERATIONS, INITIAL_RAW_FOOTAGE, INITIAL_PRODUCTION, INITIAL_PAYMENTS, INITIAL_LOGS, INITIAL_EQUIPMENT } from '../data';
 
 import { supabaseClient, updateDiagnosticMetric } from '../supabaseClient';
@@ -124,6 +124,8 @@ interface RoleContextType {
   resetUserPassword: (id: string, newPassword: string) => void;
   staffAssignments: StaffAssignment[];
   leadStaffAssignmentHistory: LeadStaffAssignmentHistory[];
+  leadEquipmentHistory: LeadEquipmentHistory[];
+  addLeadEquipmentHistory: (history: Omit<LeadEquipmentHistory, 'id'>) => Promise<void>;
   saveStaffAssignments: (
     orderId: string, 
     assignments: {
@@ -886,133 +888,37 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cached = localStorage.getItem('erp_notifications');
     return cached ? JSON.parse(cached) : [];
   });
-  const [staff, setStaff] = useState<Staff[]>(() => {
-    const saved = localStorage.getItem('erp_production_staff');
-    return saved ? JSON.parse(saved) : [
-      {
-        staff_id: 'STF-001',
-        name: 'Emily Watson',
-        mobile: '+1 (555) 234-5678',
-        whatsapp_number: '+1 (555) 234-5678',
-        email: 'emily@photocrew.com',
-        role: 'Production Manager',
-        department: 'Management',
-        status: 'Active',
-        joining_date: '2025-01-10',
-        profile_photo: '',
-        notes: 'Orchestrates chief editing operations and delivery workflows.'
-      },
-      {
-        staff_id: 'STF-002',
-        name: 'Alan Cole',
-        mobile: '+1 (555) 876-5432',
-        whatsapp_number: '+1 (555) 876-5432',
-        email: 'alan@photocrew.com',
-        role: 'Senior Editor',
-        department: 'Editing',
-        status: 'Active',
-        joining_date: '2025-03-15',
-        profile_photo: '',
-        notes: 'Specialist in cinematic narration and commercial overlays.'
-      },
-      {
-        staff_id: 'STF-003',
-        name: 'Sarah Connor',
-        mobile: '+1 (555) 456-7890',
-        whatsapp_number: '+1 (555) 456-7890',
-        email: 'sarah.c@photocrew.com',
-        role: 'Color Grading Artist',
-        department: 'Post-Production',
-        status: 'Active',
-        joining_date: '2025-06-01',
-        profile_photo: '',
-        notes: 'Expert in DaVinci Resolve color pipelines and HDR calibration.'
-      },
-      {
-        staff_id: 'STF-004',
-        name: 'Dennis Nedry',
-        mobile: '+1 (555) 304-9021',
-        whatsapp_number: '+1 (555) 304-9021',
-        email: 'dennis@photocrew.com',
-        role: 'VFX & Motion Graphics Designer',
-        department: 'Design',
-        status: 'Active',
-        joining_date: '2025-09-12',
-        profile_photo: '',
-        notes: 'Handles high-fidelity typography animation.'
-      },
-      {
-        staff_id: 'STF-005',
-        name: 'Jimmy Woo',
-        mobile: '+1 (555) 607-1122',
-        whatsapp_number: '+1 (555) 607-1122',
-        email: 'jimmy@photocrew.com',
-        role: 'Delivery Coordinator',
-        department: 'Operations',
-        status: 'Active',
-        joining_date: '2026-02-20',
-        profile_photo: '',
-        notes: 'Manages physical and cloud master releases.'
-      }
-    ];
-  });
+  const [staff, setStaff] = useState<Staff[]>([]);
 
-  const [equipment, setEquipment] = useState<Equipment[]>(() => {
-    const saved = localStorage.getItem('erp_equipment');
-    return saved ? JSON.parse(saved) : INITIAL_EQUIPMENT;
-  });
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
 
   const [staffAssignments, setStaffAssignments] = useState<StaffAssignment[]>(() => {
     const saved = localStorage.getItem('erp_staff_assignments');
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [leadStaffAssignmentHistory, setLeadStaffAssignmentHistory] = useState<LeadStaffAssignmentHistory[]>(() => {
-    const saved = localStorage.getItem('erp_lead_staff_assignment_history');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [leadStaffAssignmentHistory, setLeadStaffAssignmentHistory] = useState<LeadStaffAssignmentHistory[]>([]);
+  const [leadEquipmentHistory, setLeadEquipmentHistory] = useState<LeadEquipmentHistory[]>([]);
 
-  const [specialities, setSpecialities] = useState<ProductionSpeciality[]>(() => {
-    const saved = localStorage.getItem('erp_production_specialities');
-    if (saved) return JSON.parse(saved);
-    return [
-      { speciality_id: 'SPC-001', name: 'Wedding Video Editor', active: true },
-      { speciality_id: 'SPC-002', name: 'Reel Editor', active: true },
-      { speciality_id: 'SPC-003', name: 'Album Designer', active: true },
-      { speciality_id: 'SPC-004', name: 'Photo Editor', active: true },
-      { speciality_id: 'SPC-005', name: 'Wedding Photo Editor', active: true },
-      { speciality_id: 'SPC-006', name: 'Cinematic Video Editor', active: true },
-      { speciality_id: 'SPC-007', name: 'Color Grading Specialist', active: true },
-      { speciality_id: 'SPC-008', name: 'Thumbnail Designer', active: true },
-      { speciality_id: 'SPC-009', name: 'Motion Graphics Editor', active: true },
-      { speciality_id: 'SPC-010', name: 'Short Film Editor', active: true },
-      { speciality_id: 'SPC-011', name: 'Senior Editor', active: true },
-      { speciality_id: 'SPC-012', name: 'QC Reviewer', active: true }
-    ];
-  });
+  const [specialities, setSpecialities] = useState<ProductionSpeciality[]>([
+    { speciality_id: 'SPC-001', name: 'Wedding Video Editor', active: true },
+    { speciality_id: 'SPC-002', name: 'Reel Editor', active: true },
+    { speciality_id: 'SPC-003', name: 'Album Designer', active: true },
+    { speciality_id: 'SPC-004', name: 'Photo Editor', active: true },
+    { speciality_id: 'SPC-005', name: 'Wedding Photo Editor', active: true },
+    { speciality_id: 'SPC-006', name: 'Cinematic Video Editor', active: true },
+    { speciality_id: 'SPC-007', name: 'Color Grading Specialist', active: true },
+    { speciality_id: 'SPC-008', name: 'Thumbnail Designer', active: true },
+    { speciality_id: 'SPC-009', name: 'Motion Graphics Editor', active: true },
+    { speciality_id: 'SPC-010', name: 'Short Film Editor', active: true },
+    { speciality_id: 'SPC-011', name: 'Senior Editor', active: true },
+    { speciality_id: 'SPC-012', name: 'QC Reviewer', active: true }
+  ]);
 
-  const [editorAssignments, setEditorAssignments] = useState<EditorAssignment[]>(() => {
-    const saved = localStorage.getItem('erp_editor_assignments');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [editorAssignments, setEditorAssignments] = useState<EditorAssignment[]>([]);
 
-  const [equipmentHandovers, setEquipmentHandovers] = useState<EquipmentHandover[]>(() => {
-    const saved = localStorage.getItem('erp_equipment_handovers');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [equipmentHandovers, setEquipmentHandovers] = useState<EquipmentHandover[]>([]);
 
-
-  useEffect(() => {
-    localStorage.setItem('erp_production_specialities', JSON.stringify(specialities));
-  }, [specialities]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_editor_assignments', JSON.stringify(editorAssignments));
-  }, [editorAssignments]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_equipment_handovers', JSON.stringify(equipmentHandovers));
-  }, [equipmentHandovers]);
 
   useEffect(() => {
     localStorage.setItem('erp_staff_assignments', JSON.stringify(staffAssignments));
@@ -1021,14 +927,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     localStorage.setItem('erp_lead_staff_assignment_history', JSON.stringify(leadStaffAssignmentHistory));
   }, [leadStaffAssignmentHistory]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_production_staff', JSON.stringify(staff));
-  }, [staff]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_equipment', JSON.stringify(equipment));
-  }, [equipment]);
 
   useEffect(() => {
     localStorage.setItem('erp_leads', JSON.stringify(leads));
@@ -1283,13 +1181,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const merged = existing ? { ...existing, ...cloned } : cloned;
       
       const extra: any = {};
-      const localKeys = ['whatsapp_number', 'production_role_speciality', 'custom_role_specialty', 'experience', 'employee_id', 'address', 'city'];
+      const localKeys = ['whatsapp_number', 'production_role_speciality', 'custom_role_specialty', 'experience', 'employee_id', 'address', 'city', 'phone', 'commission_rate', 'rating', 'bio'];
       for (const k of localKeys) {
         if (k in merged) {
           extra[k] = merged[k];
         }
       }
-      extra.notes = merged.notes || '';
       
       cloned = {
         staff_id: merged.staff_id,
@@ -1301,19 +1198,18 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: merged.status || 'Active',
         joining_date: merged.joining_date || new Date().toISOString().split('T')[0],
         profile_photo: merged.profile_photo || '',
-        notes: JSON.stringify(extra),
-        phone: merged.phone || '',
-        commission_rate: merged.commission_rate !== undefined ? merged.commission_rate : 15,
-        rating: merged.rating !== undefined ? merged.rating : 5,
-        bio: merged.bio || '',
-        whatsapp_number: merged.whatsapp_number || '',
-        production_role_speciality: merged.production_role_speciality || '',
-        custom_role_specialty: merged.custom_role_specialty || '',
-        experience: merged.experience || '',
-        employee_id: merged.employee_id || '',
-        address: merged.address || '',
-        city: merged.city || ''
+        notes: (merged.notes && !merged.notes.trim().startsWith('{')) ? merged.notes : (extra.notes || merged.notes || ''),
+        created_at: merged.created_at || new Date().toISOString()
       } as any;
+
+      // Only add extra fields if they are explicitly in the record and we want to try saving them as columns
+      // But based on user request, let's stick to the 11 core fields and put the rest in notes if needed.
+      // However, the DB might have these columns, so we can keep them if they are in allowedColumns.
+      for (const k of localKeys) {
+        if (k in merged) {
+          cloned[k] = merged[k];
+        }
+      }
     }
 
     const allowedColumns: Record<string, string[]> = {
@@ -1322,18 +1218,36 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'lead_id', 'created_date', 'lead_source', 'customer_name', 'mobile', 'alternate_mobile', 
         'email', 'event_type', 'custom_event_type', 'custom_event_name', 'event_date', 'event_time', 'event_location', 'budget', 
         'sales_person', 'status', 'remarks', 'created_by', 'updated_by', 'updated_at', 
-        'assigned_editor', 'assigned_editors', 'production_role', 'delivery_target_date', 'current_status'
+        'assigned_editor', 'assigned_editors', 'production_role', 'delivery_target_date', 'current_status',
+        'client_residence_address', 'city', 'state', 'pincode', 'desired_event_shoot_type',
+        'package_price', 'deliverables_description', 'notes_special_customizations',
+        'quotation_discount', 'additional_services_cost', 'total_pax', 'reference_source', 
+        'lead_value', 'lead_score', 'booking_status'
       ],
       orders: [
         'order_id', 'lead_id', 'customer_name', 'mobile', 'event_type', 'custom_event_type', 'custom_event_name', 'event_date', 
         'event_time', 'event_location', 'package_name', 'quotation_amount', 'advance_received', 
         'balance_amount', 'order_status', 'current_stage', 'sales_person', 'created_at', 
-        'updated_by', 'updated_at'
+        'updated_by', 'updated_at', 'client_residence_address', 'city', 'state', 'pincode', 
+        'desired_event_shoot_type', 'reporting_time', 'package_price', 'deliverables_description', 
+        'notes_special_customizations', 'quotation_discount', 'additional_services_cost',
+        'total_pax', 'reference_source', 'lead_value', 'lead_score', 'booking_status'
       ],
       operations: [
         'operation_id', 'order_id', 'photographer_assigned', 'videographer_assigned', 
         'drone_operator_assigned', 'assistant_assigned', 'equipment_kit', 'reporting_time', 
         'event_status', 'remarks', 'updated_by'
+      ],
+      quotations: [
+        'quotation_id', 'lead_id', 'package_name', 'package_price', 'deliverables_description', 
+        'notes_special_customizations', 'discount_amount', 'additional_services_cost', 
+        'client_residence_address', 'city', 'state', 'pincode', 'desired_event_shoot_type', 
+        'created_at', 'created_by'
+      ],
+      lead_packages: [
+        'lead_package_id', 'lead_id', 'package_id', 'package_name', 'package_cost', 'quantity', 
+        'total_amount', 'discount', 'final_amount', 'deliverables_description', 
+        'notes_special_customizations', 'additional_services_cost', 'created_at'
       ],
       raw_footage: [
         'tracking_id', 'order_id', 'event_completed_date', 'raw_received', 'server_path', 
@@ -1368,10 +1282,15 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'notification_id', 'title', 'message', 'sender_name', 'sender_role', 'timestamp', 
         'is_read', 'recipient_role'
       ],
-      production_staff: [
-        'staff_id', 'name', 'mobile', 'email', 'role', 'department', 'status', 'joining_date', 
-        'profile_photo', 'notes', 'created_at', 'phone', 'commission_rate', 'rating', 'bio',
-        'whatsapp_number', 'production_role_speciality', 'custom_role_specialty', 'experience', 'employee_id', 'address', 'city'
+      equipment: [
+        'equipment_id', 'equipment_name', 'equipment_type', 'brand', 'model', 'serial_number', 
+        'quantity', 'available_quantity', 'status', 'purchase_date', 'purchase_price', 
+        'storage_location', 'notes', 'created_by', 'updated_by', 'created_at', 'updated_at'
+      ],
+      operations_staff: [
+        'staff_id', 'name', 'mobile', 'whatsapp_number', 'email', 'role', 'department', 'status', 'joining_date', 
+        'profile_photo', 'notes', 'production_role_speciality', 'experience', 'employee_id', 'city',
+        'created_by', 'updated_by', 'created_at', 'updated_at'
       ]
     };
 
@@ -1726,16 +1645,18 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const pushDelete = async (table: string, matchColumn: string, matchValue: any) => {
-    if (!supabaseClient) return;
+  const pushDelete = async (table: string, matchColumn: string, matchValue: any): Promise<{ success: boolean; error?: string }> => {
+    if (!supabaseClient) return { success: true };
     try {
       // Remove from local fallback store
       const localKey = `erp_local_${table}`;
       const existingLocalStr = localStorage.getItem(localKey);
       if (existingLocalStr) {
-        const localRecords = JSON.parse(existingLocalStr);
-        const filtered = localRecords.filter((r: any) => r[matchColumn] !== matchValue);
-        localStorage.setItem(localKey, JSON.stringify(filtered));
+        try {
+          const localRecords = JSON.parse(existingLocalStr);
+          const filtered = localRecords.filter((r: any) => r && r[matchColumn] !== matchValue);
+          localStorage.setItem(localKey, JSON.stringify(filtered));
+        } catch (e) {}
       }
 
       // Try sending to server-side proxy first to bypass client RLS issues
@@ -1751,7 +1672,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.log(`[pushDelete Proxy SUCCESS] for ${table}`);
             updateDiagnosticMetric('delete', 'ok');
             broadcastSyncPing();
-            return;
+            return { success: true };
           } else {
             console.warn(`[pushDelete Proxy WARN] server returned success=false for ${table}, falling back...`, resJson.error);
           }
@@ -1765,17 +1686,20 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { error } = await supabaseClient.from(table).delete().eq(matchColumn, matchValue);
       if (error) {
         if (['activity_logs', 'notifications', 'analytics_snapshots'].includes(table)) {
-          return;
+          return { success: true };
         }
         console.warn(`Supabase Delete error in ${table}:`, error?.message || String(error));
         updateDiagnosticMetric('delete', 'fail', error?.message || String(error));
+        return { success: false, error: `[Table: ${table}] ${error?.message || String(error)}` };
       } else {
         updateDiagnosticMetric('delete', 'ok');
         // Realtime subscription will handle syncing deleted records
         broadcastSyncPing();
+        return { success: true };
       }
     } catch (err: any) {
       updateDiagnosticMetric('delete', 'fail', err?.message || String(err));
+      return { success: false, error: err?.message || String(err) };
     }
   };
 
@@ -1858,9 +1782,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const dbProductionPromise = supabaseClient.from('production').select('*');
       const dbPaymentsPromise = supabaseClient.from('payments').select('*');
       const dbLogsPromise = supabaseClient.from('activity_logs').select('*').order('timestamp', { ascending: false });
-      const dbStaffPromise = supabaseClient.from('production_staff').select('*').then(
+      const dbStaffPromise = supabaseClient.from('operations_staff').select('*').order('name').then(
         (res) => res,
-        () => ({ data: null, error: null })
+        (err) => {
+          console.error('Error fetching operations_staff:', err);
+          return { data: null, error: err };
+        }
       );
       const dbNotificationsPromise = supabaseClient.from('notifications').select('*').order('created_at', { ascending: false }).then(
         (res) => res,
@@ -1869,11 +1796,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return { data: null, error: null };
         }
       );
-      const dbEquipmentPromise = supabaseClient.from('equipment').select('*').then(
+      const dbEquipmentPromise = supabaseClient.from('equipment').select('*').order('created_at', { ascending: false }).then(
         (res) => res,
         () => {
-          const cached = localStorage.getItem('erp_equipment');
-          return { data: cached ? JSON.parse(cached) : INITIAL_EQUIPMENT, error: null };
+          return { data: [], error: null };
         }
       );
       const dbLeadPackagesPromise = supabaseClient.from('lead_packages').select('*').then(
@@ -1957,6 +1883,14 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       );
 
+      const dbLeadEquipmentHistoryPromise = supabaseClient.from('lead_equipment_history').select('*').order('returned_at', { ascending: false }).then(
+        (res) => res,
+        (err) => {
+          console.warn('Could not read lead_equipment_history from Supabase:', err);
+          return { data: [], error: null };
+        }
+      );
+
       const [
         { data: dbUsers, error: uErr },
         { data: dbLeads, error: ldErr },
@@ -1974,7 +1908,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         staffAssignmentsRes,
         quotationsRes,
         statusHistoryRes,
-        leadStaffAssignmentHistoryRes
+        leadStaffAssignmentHistoryRes,
+        leadEquipmentHistoryRes
       ] = await Promise.all([
         supabaseClient.from('users').select('*'),
         supabaseClient.from('leads').select('*').order('created_date', { ascending: false }),
@@ -1992,7 +1927,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         dbStaffAssignmentsPromise,
         dbQuotationsPromise,
         dbStatusHistoryPromise,
-        dbLeadStaffAssignmentHistoryPromise
+        dbLeadStaffAssignmentHistoryPromise,
+        dbLeadEquipmentHistoryPromise
       ]);
 
       if (uErr || ldErr || ordErr || opErr || rfErr || prodErr || payErr || logErr) {
@@ -2277,6 +2213,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('erp_lead_staff_assignment_history', JSON.stringify(leadStaffAssignmentHistoryRes.data));
       }
 
+      if (leadEquipmentHistoryRes && leadEquipmentHistoryRes.data) {
+        setLeadEquipmentHistory(leadEquipmentHistoryRes.data as LeadEquipmentHistory[]);
+      }
+
       if (quotationsRes && quotationsRes.data) {
         const parsedQuotes = (quotationsRes.data as any[]).map((q: any) => {
           let metadata: any = {};
@@ -2383,88 +2323,52 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else if (notifRes && notifRes.data) {
         setNotifications(notifRes.data.map(mapNotificationFromDb));
       }
+      
       let finalStaff = (staffRes && staffRes.data) ? staffRes.data : [];
       if (staffRes && staffRes.data && staffRes.data.length === 0) {
-        console.log('Post-production staff table is empty in database. Seeding initial editors on-the-fly...');
+        console.log('Operations staff table is empty in database. Seeding initial staff on-the-fly...');
         const initialStaffSeed = [
           {
             staff_id: 'STF-001',
             name: 'Emily Watson',
             mobile: '+1 (555) 234-5678',
-            whatsapp_number: '+1 (555) 234-5678',
             email: 'emily@photocrew.com',
             role: 'Production Manager',
-            department: 'Management',
+            department: 'Operations',
             status: 'Active',
             joining_date: '2025-01-10',
             profile_photo: '',
             notes: 'Orchestrates chief editing operations and delivery workflows.',
-            production_role_speciality: 'Editor Specialty'
+            created_by: 'System',
+            updated_by: 'System',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
           },
           {
             staff_id: 'STF-002',
             name: 'Alex Rivera',
             mobile: '+1 (555) 345-6789',
-            whatsapp_number: '+1 (555) 345-6789',
             email: 'alex@photocrew.com',
             role: 'Senior Wedding Editor',
-            department: 'Post-Production',
+            department: 'Operations',
             status: 'Active',
             joining_date: '2024-03-15',
             profile_photo: '',
             notes: 'Cinematic storytelling, custom audio layout, color grading master.',
-            production_role_speciality: 'Wedding Highlights'
-          },
-          {
-            staff_id: 'STF-003',
-            name: 'Nisha Sharma',
-            mobile: '+1 (555) 456-7890',
-            whatsapp_number: '+1 (555) 456-7890',
-            email: 'nisha@photocrew.com',
-            role: 'Cinematography Reel Designer',
-            department: 'Creative Reels',
-            status: 'Active',
-            joining_date: '2025-02-01',
-            profile_photo: '',
-            notes: 'Specializes in aesthetic Instagram Reels, vertical formats, sound design hooks.',
-            production_role_speciality: 'Instagram Reels'
-          },
-          {
-            staff_id: 'STF-004',
-            name: 'Marcus Brody',
-            mobile: '+1 (555) 567-8901',
-            whatsapp_number: '+1 (555) 567-8901',
-            email: 'marcus@photocrew.com',
-            role: 'Lead Sound Designer',
-            department: 'Audio Engineering',
-            status: 'Active',
-            joining_date: '2024-08-20',
-            profile_photo: '',
-            notes: 'Acoustic level balance, Foley tracking, multi-microphone sync.',
-            production_role_speciality: 'Sound Designer'
-          },
-          {
-            staff_id: 'STF-005',
-            name: 'Zoe Vance',
-            mobile: '+1 (555) 678-9012',
-            whatsapp_number: '+1 (555) 678-9012',
-            email: 'zoe@photocrew.com',
-            role: 'Colorist Specialist',
-            department: 'Color Grading',
-            status: 'Active',
-            joining_date: '2023-11-05',
-            profile_photo: '',
-            notes: 'LUT adjustments, skin tone correction, high dynamic range setups.',
-            production_role_speciality: 'Color Grading'
+            created_by: 'System',
+            updated_by: 'System',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
           }
         ];
         
-        await supabaseClient.from('production_staff').upsert(initialStaffSeed).then(
-          () => console.log('Successfully seeded 5 production_staff.'),
-          (err) => console.warn('Failed seeding production_staff via client seed:', err)
+        await supabaseClient.from('operations_staff').upsert(initialStaffSeed).then(
+          () => console.log('Successfully seeded operations_staff.'),
+          (err) => console.warn('Failed seeding operations_staff:', err)
         );
         finalStaff = initialStaffSeed;
       }
+
       if (finalStaff && finalStaff.length > 0) {
         const mappedStaff = finalStaff.map((st: any) => {
           let extra: any = {};
@@ -2472,7 +2376,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             try {
               extra = JSON.parse(st.notes);
             } catch (e) {
-              console.warn("Failed parsing JSON staff notes:", st.notes);
+              // Not JSON notes, use as is
             }
           }
           return {
@@ -2492,7 +2396,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { data: dbSpecList } = await supabaseClient.from('production_specialties').select('*');
         if (dbSpecList) {
           setSpecialities(dbSpecList);
-          localStorage.setItem('erp_production_specialities', JSON.stringify(dbSpecList));
         }
       } catch (err) {
         console.warn('Could not read production_specialties from Supabase:', err);
@@ -2502,7 +2405,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { data: dbAssignList } = await supabaseClient.from('editor_assignments').select('*');
         if (dbAssignList) {
           setEditorAssignments(dbAssignList);
-          localStorage.setItem('erp_editor_assignments', JSON.stringify(dbAssignList));
         }
       } catch (err) {
         console.warn('Could not read editor_assignments from Supabase:', err);
@@ -2512,7 +2414,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { data: dbHandovers } = await supabaseClient.from('equipment_handovers').select('*');
         if (dbHandovers && dbHandovers.length > 0) {
           setEquipmentHandovers(dbHandovers);
-          localStorage.setItem('erp_equipment_handovers', JSON.stringify(dbHandovers));
         }
       } catch (err) {
         console.warn('Could not read equipment_handovers from Supabase:', err);
@@ -2665,15 +2566,18 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       { table: 'raw_footage', key: 'tracking_id', setter: setRawFootage },
       { table: 'production', key: 'production_id', setter: setProduction },
       { table: 'payments', key: 'payment_id', setter: setPayments },
-      { table: 'production_staff', key: 'staff_id', setter: setStaff },
+      { table: 'operations_staff', key: 'staff_id', setter: setStaff },
       { table: 'activity_logs', key: 'log_id', setter: setLogs },
       { table: 'notifications', key: 'notification_id', setter: setNotifications },
       { table: 'equipment', key: 'equipment_id', setter: setEquipment },
       { table: 'production_specialties', key: 'speciality_id', setter: setSpecialities },
       { table: 'editor_assignments', key: 'assignment_id', setter: setEditorAssignments },
       { table: 'staff_assignments', key: 'assignment_id', setter: setStaffAssignments },
+      { table: 'lead_packages', key: 'lead_package_id', setter: setLeadPackages },
+      { table: 'quotations', key: 'quotation_id', setter: setQuotations },
       { table: 'lead_status_history', key: 'id', setter: setStatusHistory },
-      { table: 'lead_staff_assignment_history', key: 'id', setter: setLeadStaffAssignmentHistory }
+      { table: 'lead_staff_assignment_history', key: 'id', setter: setLeadStaffAssignmentHistory },
+      { table: 'lead_equipment_history', key: 'id', setter: setLeadEquipmentHistory }
     ].map(({ table, key, setter }) => {
       return supabaseClient
         .channel(`rt-${table}`)
@@ -2707,7 +2611,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (table === 'orders') {
                   mappedItem = { ...mappedItem, current_stage: mappedItem.current_stage || mappedItem.order_status };
                 }
-                if (table === 'production_staff') {
+                if (table === 'operations_staff') {
                   let extra: any = {};
                   if (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) {
                     try {
@@ -2751,7 +2655,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (table === 'orders') {
                   mappedItem = { ...mappedItem, current_stage: mappedItem.current_stage || mappedItem.order_status };
                 }
-                if (table === 'production_staff') {
+                if (table === 'operations_staff') {
                   let extra: any = {};
                   if (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) {
                     try {
@@ -3581,6 +3485,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         sales_person: currentUserName,
         updated_by: currentUserName,
         updated_at: timestamp,
+        client_residence_address: targetLead.client_residence_address || '',
+        desired_event_shoot_type: targetLead.desired_event_shoot_type || '',
+        package_price: quotationAmount,
+        deliverables_description: targetLead.deliverables_description || '',
+        notes_special_customizations: targetLead.notes_special_customizations || '',
+        quotation_discount: targetLead.quotation_discount || 0,
+        additional_services_cost: targetLead.additional_services_cost || 0,
       });
       if (!rOrd?.success) throw new Error("Failed to update existing order: " + rOrd?.error);
     } else {
@@ -3612,6 +3523,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         city: targetLead.city || '',
         state: targetLead.state || '',
         pincode: targetLead.pincode || '',
+        client_residence_address: targetLead.client_residence_address || '',
+        desired_event_shoot_type: targetLead.desired_event_shoot_type || '',
+        package_price: quotationAmount,
+        deliverables_description: targetLead.deliverables_description || '',
+        notes_special_customizations: targetLead.notes_special_customizations || '',
+        quotation_discount: targetLead.quotation_discount || 0,
+        additional_services_cost: targetLead.additional_services_cost || 0,
       };
       const rOrd = await pushInsert('orders', newOrder);
       if (!rOrd?.success) throw new Error("Failed to insert Order: " + rOrd?.error);
@@ -4810,51 +4728,132 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addStaff = async (member: Omit<Staff, "staff_id">) => {
-    const staffId = `STF-${Math.floor(100 + Math.random() * 900)}`;
+    const staffId = `STF-${Math.floor(1000 + Math.random() * 9000)}`;
+    const timestamp = new Date().toISOString();
     const newStaff: Staff = {
       ...member,
       staff_id: staffId,
-      created_at: new Date().toISOString()
+      created_by: currentUserName,
+      updated_by: currentUserName,
+      created_at: timestamp,
+      updated_at: timestamp
     };
     setStaff((prev) => [newStaff, ...prev]);
-    await pushInsert('production_staff', newStaff);
-    logActivity(`Added Staff Member: ${newStaff.name}`, 'StaffManagement', staffId);
+    const res = await pushInsert('operations_staff', newStaff);
+    if (res.success) {
+      logActivity(`Added Staff Member: ${newStaff.name}`, 'StaffManagement', staffId);
+    } else {
+      // Revert optimistic update if failed
+      setStaff((prev) => prev.filter(s => s.staff_id !== staffId));
+      throw new Error(res.error || 'Failed to add staff');
+    }
+    return res;
   };
 
   const updateStaff = async (staffId: string, updates: Partial<Staff>) => {
-    setStaff((prev) => prev.map((s) => s.staff_id === staffId ? { ...s, ...updates } : s));
-    await pushUpdate('production_staff', 'staff_id', staffId, updates);
-    logActivity(`Updated Staff Member details: ${staffId}`, 'StaffManagement', staffId);
+    const prevStaff = [...staff];
+    const timestamp = new Date().toISOString();
+    const updatedWithMetadata = {
+      ...updates,
+      updated_by: currentUserName,
+      updated_at: timestamp
+    };
+    setStaff((prev) => prev.map((s) => s.staff_id === staffId ? { ...s, ...updatedWithMetadata } : s));
+    const res = await pushUpdate('operations_staff', 'staff_id', staffId, updatedWithMetadata);
+    if (res.success) {
+      logActivity(`Updated Staff Member details: ${staffId}`, 'StaffManagement', staffId);
+    } else {
+      // Revert optimistic update if failed
+      setStaff(prevStaff);
+      throw new Error(res.error || 'Failed to update staff');
+    }
+    return res;
   };
 
   const deleteStaff = async (staffId: string) => {
+    const prevStaff = [...staff];
     setStaff((prev) => prev.filter((s) => s.staff_id !== staffId));
-    await pushDelete('production_staff', 'staff_id', staffId);
-    logActivity(`Removed Staff Member: ${staffId}`, 'StaffManagement', staffId);
+    try {
+      await pushDelete('operations_staff', 'staff_id', staffId);
+      logActivity(`Removed Staff Member: ${staffId}`, 'StaffManagement', staffId);
+    } catch (err: any) {
+      setStaff(prevStaff);
+      throw new Error(err.message || 'Failed to delete staff');
+    }
   };
 
   const addEquipment = async (equip: Omit<Equipment, 'equipment_id'>) => {
-    const equipmentId = `EQ-${Math.floor(100 + Math.random() * 900)}`;
+    const equipmentId = `EQ-${Math.floor(1000 + Math.random() * 9000)}`;
+    const now = new Date().toISOString();
     const newEquip: Equipment = {
       ...equip,
       equipment_id: equipmentId,
-      created_at: new Date().toISOString()
+      created_at: now,
+      updated_at: now,
+      created_by: currentUserName || 'System',
+      updated_by: currentUserName || 'System',
+      available_quantity: equip.available_quantity ?? equip.quantity
     };
+    
+    // Optimistic Update
     setEquipment((prev) => [newEquip, ...prev]);
-    await pushInsert('equipment', newEquip);
-    logActivity(`Added Equipment Item: ${newEquip.name}`, 'EquipmentManagement', equipmentId);
+    
+    const res = await pushInsert('equipment', newEquip);
+    if (res.success) {
+      logActivity(`Registered New Studio Gear: ${newEquip.equipment_name}`, 'EquipmentManagement', equipmentId);
+    } else {
+      // Revert if failed
+      setEquipment((prev) => prev.filter(e => e.equipment_id !== equipmentId));
+      throw new Error(res.error || 'Failed to register equipment');
+    }
+    return res;
   };
 
   const updateEquipment = async (equipmentId: string, updates: Partial<Equipment>) => {
-    setEquipment((prev) => prev.map((e) => e.equipment_id === equipmentId ? { ...e, ...updates } : e));
-    await pushUpdate('equipment', 'equipment_id', equipmentId, updates);
-    logActivity(`Updated Equipment Item: ${equipmentId}`, 'EquipmentManagement', equipmentId);
+    const prevEquipment = [...equipment];
+    const now = new Date().toISOString();
+    const updatedFields = {
+      ...updates,
+      updated_at: now,
+      updated_by: currentUserName || 'System'
+    };
+
+    setEquipment((prev) => prev.map((e) => e.equipment_id === equipmentId ? { ...e, ...updatedFields } : e));
+    
+    const res = await pushUpdate('equipment', 'equipment_id', equipmentId, updatedFields);
+    if (res.success) {
+      logActivity(`Updated Studio Gear: ${equipmentId}`, 'EquipmentManagement', equipmentId);
+    } else {
+      setEquipment(prevEquipment);
+      throw new Error(res.error || 'Failed to update equipment');
+    }
+    return res;
   };
 
   const deleteEquipment = async (equipmentId: string) => {
+    // Check if equipment is assigned
+    // In this app, equipment might be linked to equipment_handovers or operations
+    // For now, let's just implement the delete with a check if needed by the user
+    // The user said: "If equipment is currently assigned to an event, prevent deletion and display a meaningful error message."
+    
+    const isAssigned = operations.some(op => op.equipment_kit && op.equipment_kit.includes(equipmentId)) || 
+                       equipmentHandovers.some(h => h.equipment_name && h.equipment_name.includes(equipmentId) && h.return_status === 'Not Returned');
+    
+    if (isAssigned) {
+      throw new Error("This equipment is currently assigned to an active event or handover and cannot be deleted.");
+    }
+
+    const prevEquipment = [...equipment];
     setEquipment((prev) => prev.filter((e) => e.equipment_id !== equipmentId));
-    await pushDelete('equipment', 'equipment_id', equipmentId);
-    logActivity(`Removed Equipment Item: ${equipmentId}`, 'EquipmentManagement', equipmentId);
+    
+    const res = await pushDelete('equipment', 'equipment_id', equipmentId);
+    if (res.success) {
+      logActivity(`De-registered Studio Gear: ${equipmentId}`, 'EquipmentManagement', equipmentId);
+    } else {
+      setEquipment(prevEquipment);
+      throw new Error(res.error || 'Failed to delete equipment');
+    }
+    return res;
   };
 
   const addPackage = async (pkg: Omit<Package, 'package_id'>) => {
@@ -5105,7 +5104,17 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       terms_conditions: packedTerms,
       created_by: newQuote.created_by,
       created_at: newQuote.created_at,
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      package_name: newQuote.package_name,
+      package_price: newQuote.package_price,
+      deliverables_description: newQuote.deliverables_description,
+      notes_special_customizations: newQuote.notes_special_customizations,
+      additional_services_cost: newQuote.additional_services_cost,
+      client_residence_address: newQuote.client_residence_address,
+      city: newQuote.city,
+      state: newQuote.state,
+      pincode: newQuote.pincode,
+      desired_event_shoot_type: newQuote.desired_event_shoot_type,
     };
 
     try {
@@ -5201,6 +5210,18 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       logActivity(`Registered Equipment Handover status for ${h.equipment_name}: ${h.return_status}`, 'Operations', h.order_id);
     }
     // fetchFromDb().catch(console.error); // Disabled to prevent full reload
+  };
+
+  const addLeadEquipmentHistory = async (history: Omit<LeadEquipmentHistory, 'id'>) => {
+    if (!supabaseClient) return;
+    const { data, error } = await supabaseClient.from('lead_equipment_history').insert([history]).select();
+    if (error) {
+      console.error('Error adding lead equipment history:', error);
+      throw error;
+    }
+    if (data) {
+      setLeadEquipmentHistory(prev => [data[0] as LeadEquipmentHistory, ...prev]);
+    }
   };
 
   const updateLead = async (leadId: string, updates: Partial<Lead>) => {
@@ -5713,6 +5734,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resetUserPassword,
         staffAssignments,
         leadStaffAssignmentHistory,
+        leadEquipmentHistory,
+        addLeadEquipmentHistory,
         saveStaffAssignments,
         specialities,
         addSpeciality,

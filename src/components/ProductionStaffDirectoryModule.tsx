@@ -41,6 +41,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
   const [formEmail, setFormEmail] = useState('');
   const [formEmployeeId, setFormEmployeeId] = useState('');
   const [formCity, setFormCity] = useState('');
+  const [formDepartment, setFormDepartment] = useState('Post-Production');
   const [formStatus, setFormStatus] = useState<'Active' | 'Inactive'>('Active');
   const [formSpeciality, setFormSpeciality] = useState('');
 
@@ -56,6 +57,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     const randomId = `EMP-${Math.floor(1000 + Math.random() * 9000)}`;
     setFormEmployeeId(randomId);
     setFormCity('');
+    setFormDepartment('Post-Production');
     setFormStatus('Active');
     
     // Default to the first active speciality or empty
@@ -75,6 +77,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     // Use notes or a direct attribute for employee_id / city
     setFormEmployeeId((member as any).employee_id || member.staff_id);
     setFormCity((member as any).city || 'N/A');
+    setFormDepartment(member.department || 'Post-Production');
     setFormStatus(member.status);
     setFormSpeciality(member.production_role_speciality || '');
     setIsFormOpen(true);
@@ -83,18 +86,21 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
   // Handle submit addition or edit
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formName.trim() || !formMobile.trim() || !formEmail.trim() || !formSpeciality) {
-      alert('Please fill out the required fields: Full Name, Mobile, Email, and Speciality.');
-      return;
-    }
+    
+    // Strict Validation
+    if (!formName.trim()) { alert('Full Name is required.'); return; }
+    if (!formMobile.trim()) { alert('Mobile Number is required.'); return; }
+    if (!formEmail.trim()) { alert('Email Address is required.'); return; }
+    if (!formSpeciality) { alert('Role Speciality is required.'); return; }
+    if (!formDepartment) { alert('Department is required.'); return; }
 
     const payload = {
       name: formName.trim(),
       mobile: formMobile.trim(),
       whatsapp_number: formWhatsapp.trim() || formMobile.trim(),
       email: formEmail.trim(),
-      role: 'Production Editor',
-      department: 'Post-Production',
+      role: formSpeciality, // Using speciality as the role for consistency
+      department: formDepartment,
       status: formStatus,
       joining_date: new Date().toISOString().split('T')[0],
       production_role_speciality: formSpeciality,
@@ -106,15 +112,14 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     try {
       if (editingStaff) {
         // Edit Mode
-        await updateStaff(editingStaff.staff_id, {
+        const res = await updateStaff(editingStaff.staff_id, {
           ...payload,
-          // Merge with any custom client-side attributes
           ...{ employee_id: formEmployeeId.trim(), city: formCity.trim() || 'N/A' } as any
         });
         alert('Staff details updated successfully.');
       } else {
         // New Staff Mode
-        await addStaff({
+        const res = await addStaff({
           ...payload,
           ...{ employee_id: formEmployeeId.trim(), city: formCity.trim() || 'N/A' } as any
         });
@@ -124,7 +129,8 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
       setEditingStaff(null);
     } catch (err: any) {
       console.warn("Failed saving staff", err?.message || err);
-      alert('An error occurred while saving the staff member.');
+      const errorMsg = err?.message || "Check network or permissions.";
+      alert(`Error: ${errorMsg}`);
     }
   };
 
@@ -753,6 +759,25 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                       onChange={(e) => setFormCity(e.target.value)}
                       className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
                     />
+                  </div>
+
+                  {/* Department */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold block">
+                      Department *
+                    </label>
+                    <select
+                      value={formDepartment}
+                      onChange={(e) => setFormDepartment(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-zinc-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      required
+                    >
+                      <option value="Post-Production">Post-Production</option>
+                      <option value="Creative Reels">Creative Reels</option>
+                      <option value="Album Design">Album Design</option>
+                      <option value="Management">Management</option>
+                      <option value="Quality Control">Quality Control</option>
+                    </select>
                   </div>
 
                   {/* Production Role Speciality Dropdown */}

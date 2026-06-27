@@ -15,12 +15,12 @@ export const OperationsStaffManagement: React.FC = () => {
     name: '',
     role: 'Lead Photographer',
     email: '',
-    phone: '',
-    whatsapp_number: '',
+    mobile: '',
+    department: 'Operations',
     status: 'Active' as Staff['status'],
-    commission_rate: 15, // Default field service fee
-    rating: 5,
-    bio: ''
+    joining_date: new Date().toISOString().split('T')[0],
+    profile_photo: '',
+    notes: ''
   });
 
   const handleSelectEdit = (st: Staff) => {
@@ -29,12 +29,12 @@ export const OperationsStaffManagement: React.FC = () => {
       name: st.name,
       role: st.role,
       email: st.email || '',
-      phone: st.phone || st.mobile || '',
-      whatsapp_number: st.whatsapp_number || '',
+      mobile: st.mobile || '',
+      department: st.department || 'Operations',
       status: st.status,
-      commission_rate: st.commission_rate || 15,
-      rating: st.rating || 5,
-      bio: st.bio || ''
+      joining_date: st.joining_date || new Date().toISOString().split('T')[0],
+      profile_photo: st.profile_photo || '',
+      notes: st.notes || ''
     });
   };
 
@@ -44,37 +44,49 @@ export const OperationsStaffManagement: React.FC = () => {
       name: '',
       role: 'Lead Photographer',
       email: '',
-      phone: '',
-      whatsapp_number: '',
+      mobile: '',
+      department: 'Operations',
       status: 'Active',
-      commission_rate: 15,
-      rating: 5,
-      bio: ''
+      joining_date: new Date().toISOString().split('T')[0],
+      profile_photo: '',
+      notes: ''
     });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || !form.email) {
-      alert('Please fill out the name and email address fields.');
+    if (!form.name || !form.email || !form.mobile) {
+      alert('Please fill out the name, email, and mobile fields.');
       return;
     }
 
-    const payload = {
-      ...form,
-      mobile: form.phone,
-      whatsapp_number: form.whatsapp_number || form.phone,
-      department: 'Operations'
-    };
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(form.email)) {
+      alert('Please enter a valid email address.');
+      return;
+    }
+
+    const mobileRegex = /^[0-9+\s-]{10,}$/;
+    if (!mobileRegex.test(form.mobile)) {
+      alert('Please enter a valid mobile number.');
+      return;
+    }
 
     if (editingId) {
-      updateStaff(editingId, payload);
-      alert('Crew profile updated.');
+      updateStaff(editingId, form).then(() => {
+        alert('Staff profile updated.');
+        handleCancel();
+      }).catch(err => {
+        alert(`Failed to update staff: ${err.message}`);
+      });
     } else {
-      addStaff(payload);
-      alert('New field operative registered.');
+      addStaff(form).then(() => {
+        alert('New staff member registered.');
+        handleCancel();
+      }).catch(err => {
+        alert(`Failed to register staff: ${err.message}`);
+      });
     }
-    handleCancel();
   };
 
   const handleDelete = (id: string, name: string) => {
@@ -141,6 +153,23 @@ export const OperationsStaffManagement: React.FC = () => {
               </select>
             </div>
 
+            <div>
+              <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
+                Department
+              </label>
+              <select
+                value={form.department}
+                onChange={(e) => setForm({ ...form, department: e.target.value })}
+                className="w-full bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white"
+              >
+                <option value="Operations">Operations</option>
+                <option value="Sales">Sales</option>
+                <option value="Production">Production</option>
+                <option value="Post-Production">Post-Production</option>
+                <option value="Management">Management</option>
+              </select>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-455 mb-1">
@@ -158,14 +187,14 @@ export const OperationsStaffManagement: React.FC = () => {
 
               <div>
                 <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-455 mb-1">
-                  Mobile / Comms *
+                  Mobile Number *
                 </label>
                 <input
                   type="text"
                   required
                   placeholder="+1 (555) 0192"
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  value={form.mobile}
+                  onChange={(e) => setForm({ ...form, mobile: e.target.value })}
                   className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none"
                 />
               </div>
@@ -173,13 +202,12 @@ export const OperationsStaffManagement: React.FC = () => {
 
             <div>
               <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-455 mb-1">
-                WhatsApp Number
+                Joining Date
               </label>
               <input
-                type="text"
-                placeholder="e.g. +1 (555) 0192"
-                value={form.whatsapp_number}
-                onChange={(e) => setForm({ ...form, whatsapp_number: e.target.value })}
+                type="date"
+                value={form.joining_date}
+                onChange={(e) => setForm({ ...form, joining_date: e.target.value })}
                 className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none"
               />
             </div>
@@ -201,28 +229,27 @@ export const OperationsStaffManagement: React.FC = () => {
 
               <div>
                 <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-455 mb-1">
-                  Service Fee / Day Rate (%)
+                  Profile Photo URL
                 </label>
                 <input
-                  type="number"
-                  min={5}
-                  max={90}
-                  value={form.commission_rate}
-                  onChange={(e) => setForm({ ...form, commission_rate: parseInt(e.target.value) || 15 })}
-                  className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white"
+                  type="text"
+                  placeholder="https://example.com/photo.jpg"
+                  value={form.profile_photo}
+                  onChange={(e) => setForm({ ...form, profile_photo: e.target.value })}
+                  className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none"
                 />
               </div>
             </div>
 
             <div>
               <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-455 mb-1">
-                Professional Bio & Gear Proficiencies
+                Notes / Bio
               </label>
               <textarea
                 rows={3}
                 placeholder="List qualified camera systems, certified Part 107 licensing details, active shoot preferences..."
-                value={form.bio}
-                onChange={(e) => setForm({ ...form, bio: e.target.value })}
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 className="w-full bg-zinc-955 border border-zinc-850 rounded-xl p-2.5 text-white focus:outline-none"
               />
             </div>
@@ -294,16 +321,15 @@ export const OperationsStaffManagement: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-1.5">
                           <Phone className="w-3.5 h-3.5 text-zinc-550 flex-shrink-0" />
-                          <span>{st.phone || st.mobile}</span>
+                          <span>{st.mobile}</span>
                         </div>
-                        <div className="flex items-center gap-1.5 text-emerald-450 font-bold">
-                          <span className="text-[11px]">💬</span>
-                          <span>WhatsApp: {st.whatsapp_number || st.phone || st.mobile || '—'}</span>
+                        <div className="flex items-center gap-1.5 text-zinc-500 font-mono text-[10px]">
+                          <span>Dept: {st.department}</span>
                         </div>
                       </td>
                       <td className="p-3.5">
                         <div className="font-semibold text-zinc-200">{st.role}</div>
-                        <div className="text-[10px] text-amber-500 mt-0.5">★ {st.rating || 5}.0 rating</div>
+                        <div className="text-[10px] text-zinc-500 mt-0.5">Joined: {st.joining_date}</div>
                       </td>
                       <td className="p-3.5">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${

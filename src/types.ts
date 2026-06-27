@@ -140,6 +140,18 @@ export interface Lead {
   city?: string;
   state?: string;
   pincode?: string;
+  client_residence_address?: string;
+  desired_event_shoot_type?: string;
+  package_price?: number;
+  deliverables_description?: string;
+  notes_special_customizations?: string;
+  quotation_discount?: number;
+  additional_services_cost?: number;
+  total_pax?: number;
+  reference_source?: string;
+  lead_value?: number;
+  lead_score?: number;
+  booking_status?: string;
 }
 
 export interface LeadPackage {
@@ -153,6 +165,9 @@ export interface LeadPackage {
   discount: number;
   final_amount: number;
   created_at?: string;
+  deliverables_description?: string;
+  notes_special_customizations?: string;
+  additional_services_cost?: number;
 }
 
 export interface Order {
@@ -184,6 +199,18 @@ export interface Order {
   city?: string;
   state?: string;
   pincode?: string;
+  client_residence_address?: string;
+  desired_event_shoot_type?: string;
+  package_price?: number;
+  deliverables_description?: string;
+  notes_special_customizations?: string;
+  quotation_discount?: number;
+  additional_services_cost?: number;
+  total_pax?: number;
+  reference_source?: string;
+  lead_value?: number;
+  lead_score?: number;
+  booking_status?: string;
 }
 
 export interface Customer {
@@ -285,6 +312,7 @@ export interface Staff {
   staff_id: string;
   name: string;
   mobile: string;
+  whatsapp_number?: string;
   email: string;
   role: string;
   department: string;
@@ -292,18 +320,14 @@ export interface Staff {
   joining_date: string;
   profile_photo?: string;
   notes?: string;
-  phone?: string;
-  commission_rate?: number;
-  rating?: number;
-  bio?: string;
-  created_at?: string;
-  whatsapp_number?: string;
   production_role_speciality?: string;
-  custom_role_specialty?: string;
   experience?: string;
   employee_id?: string;
-  address?: string;
   city?: string;
+  created_by?: string;
+  updated_by?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ProductionSpeciality {
@@ -363,16 +387,22 @@ export interface Notification {
 
 export interface Equipment {
   equipment_id: string;
-  name: string;
-  type: 'Camera' | 'Lens' | 'Drone' | 'Gimbal' | 'Tripod' | 'Light' | 'Audio Equipment' | 'Memory Cards' | 'Batteries' | 'Other' | string;
+  equipment_name: string;
+  equipment_type: string;
   brand: string;
   model: string;
   serial_number: string;
   quantity: number;
-  status: 'Available' | 'Assigned' | 'In Use' | 'Under Maintenance' | 'Damaged';
+  available_quantity: number;
+  status: 'Available' | 'Assigned' | 'Maintenance' | 'Damaged' | 'Lost' | 'Retired' | string;
   purchase_date: string;
+  purchase_price?: number;
+  storage_location?: string;
   notes?: string;
+  created_by?: string;
+  updated_by?: string;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface Package {
@@ -401,6 +431,17 @@ export interface EquipmentHandover {
   returned_by: string;
   notes: string;
   created_at?: string;
+}
+
+export interface LeadEquipmentHistory {
+  id?: string;
+  lead_id: string;
+  order_id?: string;
+  equipment_name: string;
+  equipment_status: string;
+  returned_by?: string;
+  returned_at?: string;
+  remarks?: string;
 }
 
 export interface UnlockOverride {
