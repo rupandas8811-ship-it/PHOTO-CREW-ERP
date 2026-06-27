@@ -11,6 +11,11 @@ dotenv.config();
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://aqifyxsimhqayfjwzzwj.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_Qdmf44q1ASJboY1_AZoOVQ_YfYrWvcB';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+console.log('[Server Init] SUPABASE_URL:', SUPABASE_URL);
+console.log('[Server Init] SUPABASE_ANON_KEY configured:', !!SUPABASE_ANON_KEY);
+console.log('[Server Init] SUPABASE_SERVICE_ROLE_KEY configured:', !!SUPABASE_SERVICE_ROLE_KEY);
+
 if (!SUPABASE_SERVICE_ROLE_KEY) {
   console.warn('SUPABASE_SERVICE_ROLE_KEY is not set. Some database operations may fail.');
 }
@@ -24,35 +29,39 @@ async function startServer() {
   // Proxy /supabase to the actual Supabase project
   // MUST be before express.json() to prevent body from being consumed
   if (SUPABASE_URL) {
+    console.log('[Server] Mounting /supabase proxy to:', SUPABASE_URL);
     app.use(
       '/supabase',
       createProxyMiddleware({
         target: SUPABASE_URL,
         changeOrigin: true,
         ws: true,
-        pathRewrite: {
-          '^/supabase': '', // remove /supabase prefix when forwarding
-        },
+        logger: console,
         on: {
           proxyReq: (proxyReq, req, res) => {
-            if (proxyReq.path.startsWith('/auth/v1/')) {
-              proxyReq.setHeader('apikey', SUPABASE_ANON_KEY);
-              // If there's no auth header, or it has dummy-anon-key, inject the real anon key
-              if (!req.headers.authorization || req.headers.authorization.includes('dummy-anon-key') || req.headers.authorization === `Bearer sb_publishable_Qdmf44q1ASJboY1_AZoOVQ_YfYrWvcB`) {
-                // Actually GoTrue needs the anon key in Bearer for anon requests
-                // Wait, if it's a login request, the user doesn't have a session JWT yet.
-                // The Supabase client sends the anon key as the Bearer token for login.
-                proxyReq.setHeader('Authorization', `Bearer ${SUPABASE_ANON_KEY}`);
-              }
-            } else if (proxyReq.path.startsWith('/rest/v1/') || proxyReq.path.startsWith('/graphql/v1/') || proxyReq.path.startsWith('/storage/v1/') || proxyReq.path.startsWith('/realtime/v1/')) {
-              proxyReq.setHeader('apikey', SUPABASE_ANON_KEY);
+            // When mounted at /supabase, proxyReq.path is already the part after /supabase
+            const targetPath = proxyReq.path;
+            console.log(`[Proxy Req] ${req.method} ${req.url} -> ${targetPath}`);
+            
+            proxyReq.setHeader('apikey', SUPABASE_ANON_KEY);
+            
+            // For auth requests or if the client sent a dummy key, ensure the real anon key is used
+            if (targetPath.startsWith('/auth/v1/') || !req.headers.authorization || req.headers.authorization.includes('dummy-anon-key')) {
+              // For login, we need the anon key in the Authorization header
+              // If it's already there and not "dummy", we keep it (it might be a real session token for other requests)
               if (!req.headers.authorization || req.headers.authorization.includes('dummy-anon-key')) {
                 proxyReq.setHeader('Authorization', `Bearer ${SUPABASE_ANON_KEY}`);
               }
             }
           },
-          proxyReqWs: (proxyReq, req, socket, options, head) => {
-            proxyReq.setHeader('apikey', SUPABASE_ANON_KEY);
+          proxyRes: (proxyRes, req, res) => {
+            console.log(`[Proxy Res] ${req.method} ${req.url} <- Status ${proxyRes.statusCode}`);
+          },
+          error: (err, req, res) => {
+            console.error('[Proxy Error]', err);
+            if (!res.headersSent) {
+              res.status(502).json({ success: false, error: 'Proxy error: ' + err.message });
+            }
           }
         }
       })

@@ -1,7 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 
 const getUrl = () => {
-  return typeof window !== 'undefined' ? `${window.location.origin}/supabase` : 'http://localhost:3000/supabase';
+  if (typeof window !== 'undefined') {
+    // Standardize origin to not have a trailing slash
+    const origin = window.location.origin.replace(/\/$/, '');
+    return `${origin}/supabase`;
+  }
+  return 'http://localhost:3000/supabase';
 };
 
 const getAnonKey = () => {
