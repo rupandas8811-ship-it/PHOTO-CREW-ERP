@@ -1216,19 +1216,19 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       users: ['id', 'email', 'role', 'name', 'full_name', 'mobile', 'phone', 'active', 'created_at', 'password', 'username', 'status'],
       leads: [
         'lead_id', 'created_date', 'lead_source', 'customer_name', 'mobile', 'alternate_mobile', 
-        'email', 'event_type', 'custom_event_type', 'custom_event_name', 'event_date', 'event_time', 'event_location', 'budget', 
+        'email', 'event_type', 'custom_event_type', 'custom_event_name', 'shoot_type', 'event_date', 'event_time', 'event_location', 'budget', 
         'sales_person', 'status', 'remarks', 'created_by', 'updated_by', 'updated_at', 
         'assigned_editor', 'assigned_editors', 'production_role', 'delivery_target_date', 'current_status',
-        'client_residence_address', 'city', 'state', 'pincode', 'desired_event_shoot_type',
+        'whatsapp_number', 'address', 'client_residence_address', 'city', 'state', 'pincode', 'desired_event_shoot_type',
         'package_price', 'deliverables_description', 'notes_special_customizations',
         'quotation_discount', 'additional_services_cost', 'total_pax', 'reference_source', 
         'lead_value', 'lead_score', 'booking_status'
       ],
       orders: [
-        'order_id', 'lead_id', 'customer_name', 'mobile', 'event_type', 'custom_event_type', 'custom_event_name', 'event_date', 
+        'order_id', 'lead_id', 'customer_name', 'mobile', 'event_type', 'custom_event_type', 'custom_event_name', 'shoot_type', 'event_date', 
         'event_time', 'event_location', 'package_name', 'quotation_amount', 'advance_received', 
         'balance_amount', 'order_status', 'current_stage', 'sales_person', 'created_at', 
-        'updated_by', 'updated_at', 'client_residence_address', 'city', 'state', 'pincode', 
+        'updated_by', 'updated_at', 'whatsapp_number', 'address', 'client_residence_address', 'city', 'state', 'pincode', 
         'desired_event_shoot_type', 'reporting_time', 'package_price', 'deliverables_description', 
         'notes_special_customizations', 'quotation_discount', 'additional_services_cost',
         'total_pax', 'reference_source', 'lead_value', 'lead_score', 'booking_status'
@@ -1243,7 +1243,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'tax_amount', 'final_amount', 'quotation_status', 'valid_until', 'terms_conditions', 
         'package_name', 'package_price', 'deliverables_description', 
         'notes_special_customizations', 'additional_services_cost', 
-        'client_residence_address', 'city', 'state', 'pincode', 'desired_event_shoot_type', 
+        'whatsapp_number', 'address', 'shoot_type', 'client_residence_address', 'city', 'state', 'pincode', 'desired_event_shoot_type', 
+        'quotation_discount', 'total_pax', 'reference_source', 'lead_value', 'lead_score', 'booking_status',
         'created_at', 'created_by', 'updated_at'
       ],
       lead_packages: [

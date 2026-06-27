@@ -18,7 +18,13 @@ import { StudioLoader } from './components/StudioLoader';
 import { UserManagementModule } from './components/UserManagementModule';
 import { DatabaseHealthModule } from './components/DatabaseHealthModule';
 import { NotificationsModule } from './components/NotificationsModule';
-import { OwnerTeamPerformance, OwnerRevenueAnalytics, OwnerEventCalendar, OwnerBusinessReports } from './components/OwnerModule';
+import { 
+  OwnerRevenueAnalytics, 
+  OwnerEventCalendar, 
+  OwnerSalesReport, 
+  OwnerOperationsReport, 
+  OwnerProductionReport 
+} from './components/OwnerModule';
 import { AppLogo } from './components/AppLogo';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -89,18 +95,15 @@ const MainAppContent: React.FC = () => {
         'sales',
         'operations',
         'production',
-        'owner_team_performance',
         'owner_revenue',
         'owner_calendar',
-        'owner_reports',
+        'owner_sales_report',
+        'owner_operations_report',
+        'owner_production_report',
         'notifications',
         'search',
         'users',
         'diagnostics',
-        'sales_analytics',
-        'operations_analytics',
-        'production_analytics',
-        'business_overview_analytics',
         'pending_payments'
       ].includes(tab);
     }
@@ -193,7 +196,10 @@ const MainAppContent: React.FC = () => {
     | 'owner_team_performance'
     | 'owner_revenue'
     | 'owner_calendar'
-    | 'owner_reports'
+    | 'owner_sales_report'
+    | 'owner_operations_report'
+    | 'owner_production_report'
+    | 'notifications'
   >(() => {
     const savedUser = localStorage.getItem('erp_current_user');
     if (savedUser) {
@@ -202,7 +208,7 @@ const MainAppContent: React.FC = () => {
       if (user.role === 'Operations Team') return 'operations';
       if (user.role === 'Production Team') return 'production';
     }
-    return 'owner_team_performance';
+    return 'owner_revenue';
   });
 
   // Responsive tab toggles that collapse sidebar automatically on Tablet / Mobile sizes
@@ -548,11 +554,12 @@ const MainAppContent: React.FC = () => {
           </div>
           <nav className="space-y-1.5">
             {[
-              { id: 'owner_team_performance', label: '1. Team Performance', icon: Users, color: 'text-indigo-400' },
-              { id: 'owner_revenue', label: '2. Revenue Analytics', icon: Landmark, color: 'text-emerald-400' },
-              { id: 'owner_calendar', label: '3. Event Calendar', icon: Calendar, color: 'text-purple-400' },
-              { id: 'notifications', label: '4. Notification Center', icon: Bell, color: 'text-rose-400' },
-              { id: 'owner_reports', label: '5. Business Reports', icon: FileText, color: 'text-amber-500' },
+              { id: 'owner_revenue', label: '1. Revenue Analytics', icon: Landmark, color: 'text-emerald-400' },
+              { id: 'owner_calendar', label: '2. Event Calendar', icon: Calendar, color: 'text-purple-400' },
+              { id: 'owner_sales_report', label: '3. Sales Report & Analytics', icon: TrendingUp, color: 'text-indigo-400' },
+              { id: 'owner_operations_report', label: '4. Operations Report & Analytics', icon: Briefcase, color: 'text-emerald-400' },
+              { id: 'owner_production_report', label: '5. Production Report & Analytics', icon: Video, color: 'text-purple-400' },
+              { id: 'notifications', label: '6. Notifications', icon: Bell, color: 'text-rose-400' },
               { id: 'dashboard', label: 'Main Dashboard', icon: Target, color: 'text-blue-500' },
               { id: 'sales', label: 'Sales Desk', icon: Briefcase, color: 'text-zinc-500' },
               { id: 'operations', label: 'Operations Desk', icon: Target, color: 'text-zinc-500' },
@@ -740,10 +747,11 @@ const MainAppContent: React.FC = () => {
                   <AccessDeniedView section={activeTab.split('_').join(' ').toUpperCase()} />
                 ) : (
                   <>
-                    {activeTab === 'owner_team_performance' && <OwnerTeamPerformance globalDateRange={globalDateRange} />}
                     {activeTab === 'owner_revenue' && <OwnerRevenueAnalytics />}
                     {activeTab === 'owner_calendar' && <OwnerEventCalendar />}
-                    {activeTab === 'owner_reports' && <OwnerBusinessReports />}
+                    {activeTab === 'owner_sales_report' && <OwnerSalesReport />}
+                    {activeTab === 'owner_operations_report' && <OwnerOperationsReport />}
+                    {activeTab === 'owner_production_report' && <OwnerProductionReport />}
                     {activeTab === 'sales_analytics' && <SalesAnalytics />}
                     {activeTab === 'pending_payments' && (currentRole === 'Business Owner' || currentRole === 'Sales Team') && <PendingPaymentsReport />}
                     {activeTab === 'operations_analytics' && <OperationsAnalytics />}
