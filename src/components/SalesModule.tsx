@@ -357,8 +357,8 @@ const generateQuotationPDF = (
 
       while (simTermsIndex < termsToRender.length) {
         const term = termsToRender[simTermsIndex];
-        const cleanTerm = term.replace(/^\d+[\.\s\-)]+\s*/, '');
-        const wrapped = doc.splitTextToSize(cleanTerm, 164);
+        const cleanTerm = term.replace(/^\d+[\.\s\-)]+\s*/, '').replace(/₹/g, 'Rs.').replace(/\u20B9/g, 'Rs.').replace(/\s+/g, ' ').trim();
+        const wrapped = doc.splitTextToSize(cleanTerm, 163);
         const termH = (wrapped.length * cfg.termsSpacing) + 3; // spacing between terms
 
         if (tempY + termH > 248) {
@@ -1040,9 +1040,9 @@ const generateQuotationPDF = (
 
     while (termsIndex < termsToRender.length) {
       const term = termsToRender[termsIndex];
-      const cleanTerm = term.replace(/^\d+[\.\s\-)]+\s*/, '');
+      const cleanTerm = term.replace(/^\d+[\.\s\-)]+\s*/, '').replace(/₹/g, 'Rs.').replace(/\u20B9/g, 'Rs.').replace(/\s+/g, ' ').trim();
       const prefix = `${termsIndex + 1}. `;
-      const wrapped = doc.splitTextToSize(cleanTerm, 164); // fits beautifully inside 180mm box with margins and padding
+      const wrapped = doc.splitTextToSize(cleanTerm, 163); // fits beautifully inside 180mm box with margins and padding
       const termHeight = (wrapped.length * cfg.termsSpacing) + 3; // spacing between terms
 
       if (tempY + termHeight > 248) {
@@ -1074,7 +1074,7 @@ const generateQuotationPDF = (
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(7.2);
         doc.setTextColor(100, 116, 139);
-        doc.text(pt.prefix, 20, textOffset); // Left-aligned prefix
+        doc.text(pt.prefix, 23, textOffset, { align: 'right' }); // Right-aligned prefix for vertical alignment
 
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(7.2);
