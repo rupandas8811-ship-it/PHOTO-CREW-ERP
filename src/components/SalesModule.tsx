@@ -3714,7 +3714,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         showToastMsg("Please enter a Custom Event Name.", "error");
         return;
       }
-      if (!createForm.shoot_type || createForm.shoot_type === '') {
+      if (!createForm.desired_event_shoot_type || createForm.desired_event_shoot_type === '') {
         showToastMsg("Please select a Desired Event Shoot Type.", "error");
         return;
       }
@@ -3735,7 +3735,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           reporting_time: reportingTime,
           event_location: createForm.event_location || 'TBD',
           lead_source: finalSource || 'Walk-in',
-          shoot_type: createForm.shoot_type || '',
+          shoot_type: createForm.desired_event_shoot_type || createForm.shoot_type || '',
           desired_event_shoot_type: createForm.desired_event_shoot_type,
           whatsapp_number: createForm.whatsapp_number,
           address: createForm.address,
