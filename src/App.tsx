@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { RoleProvider, useRole } from './components/RoleContext';
+import { APIProvider } from '@vis.gl/react-google-maps';
 import { RoleSwitcher } from './components/RoleSwitcher';
 import { Dashboard } from './components/Dashboard';
 import { SalesAnalytics } from './components/analytics/SalesAnalytics';
@@ -795,10 +796,18 @@ const ChevronRightIcon: React.FC<{ active: boolean }> = ({ active }) => {
   );
 };
 
+const GOOGLE_MAPS_API_KEY =
+  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
+  (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+  (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY ||
+  '';
+
 export default function App() {
   return (
-    <RoleProvider>
-      <MainAppContent />
-    </RoleProvider>
+    <APIProvider apiKey={GOOGLE_MAPS_API_KEY} version="weekly">
+      <RoleProvider>
+        <MainAppContent />
+      </RoleProvider>
+    </APIProvider>
   );
 }

@@ -5,11 +5,12 @@ import { supabaseClient } from '../supabaseClient';
 import { 
   Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, Check, Package, Trash2
 } from 'lucide-react';
-import { Lead, CurrentStage, LeadPackage, EVENT_TYPES } from '../types';
+import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES } from '../types';
 import { StatusText } from './ui/StatusText';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
 import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus } from '../utils';
 import { SalesCalendar } from './SalesCalendar';
+import { AddressAutocomplete } from './AddressAutocomplete';
 import { jsPDF } from 'jspdf';
 
 const getLogoBase64FromUrl = (url: string): Promise<{ base64: string; aspect: number }> => {
@@ -1281,7 +1282,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [statusFilter, setStatusFilter] = useState('All');
   const [pkgForm, setPkgForm] = useState({
     package_name: '',
-    category: 'Wedding',
+    category: 'Weddings',
     price: 0,
     status: 'Active' as 'Active' | 'Inactive',
     deliverables: '',
@@ -1315,8 +1316,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   // Group active packages directly loaded from Supabase!
   const categoriesList = React.useMemo(() => {
-    const rawCats = Array.from(new Set((packages || []).map((p) => p.category)));
-    return rawCats.sort();
+    const dbCats = Array.from(new Set((packages || []).map((p) => p.category))).filter(Boolean) as string[];
+    const customCats = dbCats.filter(c => !PACKAGE_CATEGORIES.includes(c)).sort();
+    return [...PACKAGE_CATEGORIES, ...customCats];
   }, [packages]);
 
   const PACKAGES_LIST = categoriesList.map((cat) => ({
@@ -5248,7 +5250,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     setEditingPackage(null);
                     setPkgForm({ 
                       package_name: '', 
-                      category: 'Wedding', 
+                      category: 'Weddings', 
                       price: 0, 
                       status: 'Active', 
                       deliverables: '', 
@@ -5428,7 +5430,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         setEditingPackage(null);
                         setPkgForm({ 
                           package_name: '', 
-                          category: 'Wedding', 
+                          category: 'Weddings', 
                           price: 0, 
                           status: 'Active', 
                           deliverables: '', 
@@ -5481,7 +5483,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         setEditingPackage(null);
                         setPkgForm({ 
                           package_name: '', 
-                          category: 'Wedding', 
+                          category: 'Weddings', 
                           price: 0, 
                           status: 'Active', 
                           deliverables: '', 
@@ -5882,12 +5884,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       <label className="block text-xs font-semibold text-slate-404 mb-1.5">
                         Client Residence Address
                       </label>
-                      <input
-                        type="text"
+                      <AddressAutocomplete
+                        value={createForm.client_residence_address || ''}
+                        onChange={(val) => setCreateForm({ ...createForm, client_residence_address: val })}
+                        onSelectAddress={(data) => {
+                          setCreateForm({
+                            ...createForm,
+                            client_residence_address: data.client_residence_address,
+                            city: data.city || createForm.city,
+                            state: data.state || createForm.state,
+                            pincode: data.pincode || createForm.pincode,
+                          });
+                        }}
                         placeholder="House details / Residence location"
-                        value={createForm.client_residence_address}
-                        onChange={(e) => setCreateForm({ ...createForm, client_residence_address: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-sans"
+                        className="bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-sans"
                       />
                     </div>
 
@@ -7286,11 +7296,21 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         </div>
                         <div className="md:col-span-2">
                           <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Client Residence Address</label>
-                          <textarea
+                          <AddressAutocomplete
+                            isTextArea={true}
                             rows={2}
                             value={wizardLeadData.client_residence_address || ''}
                             disabled={isLeadLocked}
-                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, client_residence_address: e.target.value })}
+                            onChange={(val) => setWizardLeadData({ ...wizardLeadData, client_residence_address: val })}
+                            onSelectAddress={(data) => {
+                              setWizardLeadData({
+                                ...wizardLeadData,
+                                client_residence_address: data.client_residence_address,
+                                city: data.city || wizardLeadData.city,
+                                state: data.state || wizardLeadData.state,
+                                pincode: data.pincode || wizardLeadData.pincode,
+                              });
+                            }}
                             className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
                             placeholder="Complete residential address..."
                           />

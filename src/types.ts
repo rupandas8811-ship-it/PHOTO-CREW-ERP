@@ -27,6 +27,27 @@ export const EVENT_TYPES = [
   'Other'
 ];
 
+export const PACKAGE_CATEGORIES = [
+  'Weddings',
+  'Hamarlok Weddings',
+  'Engagement',
+  'Pre Weddings',
+  'Maternity',
+  'Baby Shower',
+  'New Born',
+  'Baby Shoot',
+  'Birthday',
+  'Naming Ceremony',
+  'House Warming',
+  'Upanayana',
+  'Half Saree',
+  'Portfolio',
+  'Product Shoot',
+  'Corporate Events',
+  'Car Shoot',
+  'Bike Shoot'
+];
+
 export type Department = 'Sales' | 'Operations' | 'Production' | 'Editor' | 'Dispatch';
 
 export const DEPARTMENT_STAGES: Record<Department, CurrentStage[]> = {
