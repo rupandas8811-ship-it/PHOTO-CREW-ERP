@@ -3526,7 +3526,19 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data: dbLead, error: leadErr } = await supabaseClient.from('leads').select('lead_id').eq('lead_id', leadId).single();
       if (leadErr || !dbLead) {
         if (targetLead) {
-          await pushInsert('leads', targetLead);
+          const preparedLead = {
+            ...targetLead,
+            lead_source: targetLead.lead_source || 'Direct',
+            email: targetLead.email || '—',
+            event_time: targetLead.event_time || '12:00',
+            event_location: targetLead.event_location || '—',
+            budget: targetLead.budget !== undefined && targetLead.budget !== null ? targetLead.budget : 0,
+            sales_person: targetLead.sales_person || 'Sales Team'
+          };
+          const res = await pushInsert('leads', preparedLead);
+          if (!res.success) {
+            throw new Error(`Failed to initialize Lead record in database:\n\n${res.error}`);
+          }
         } else {
           throw new Error(`Database Error: Missing Lead Record in DB (${leadId}).`);
         }
@@ -3535,7 +3547,18 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data: dbOrder, error: orderErr } = await supabaseClient.from('orders').select('order_id, lead_id').eq('order_id', orderId).single();
       if (orderErr || !dbOrder) {
         if (targetOrder) {
-          await pushInsert('orders', targetOrder);
+          const preparedOrder = {
+            ...targetOrder,
+            event_time: targetOrder.event_time || '12:00',
+            event_location: targetOrder.event_location || '—',
+            package_name: targetOrder.package_name || 'Custom Shoot Package',
+            balance_amount: targetOrder.balance_amount !== undefined && targetOrder.balance_amount !== null ? targetOrder.balance_amount : 0,
+            sales_person: targetOrder.sales_person || 'Sales Team'
+          };
+          const res = await pushInsert('orders', preparedOrder);
+          if (!res.success) {
+            throw new Error(`Failed to initialize Order record in database:\n\n${res.error}`);
+          }
         } else {
           throw new Error(`Database Error: Missing Order Record in DB (${orderId}).`);
         }
@@ -3546,7 +3569,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data: dbOp, error: opErr } = await supabaseClient.from('operations').select('operation_id').eq('order_id', orderId).maybeSingle();
       if (opErr || !dbOp) {
         if (targetOp) {
-          await pushInsert('operations', targetOp);
+          const res = await pushInsert('operations', targetOp);
+          if (!res.success) {
+            throw new Error(`Failed to initialize Operations record in database:\n\n${res.error}`);
+          }
         } else {
           throw new Error(`Database Error: Missing Operations Record in DB for Order (${orderId}).`);
         }
