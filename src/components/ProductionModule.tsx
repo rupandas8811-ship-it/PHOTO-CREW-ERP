@@ -1837,7 +1837,37 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               <StatusText status={prodStatus} />
                             </td>
                             <td className="p-3 text-right pr-4">
-                              {/* Action removed to follow business requirement of no delete from leads table */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveWorkflowProd(prod);
+                                  setWfEditor(prod.editor_assigned || 'Unassigned');
+                                  setWfTargetDeliveryDate(prod.target_delivery_date || '');
+                                  setWfPriority(prod.project_priority || 'Medium');
+                                  setWfProjectNotes(prod.project_notes || prod.remarks || '');
+                                  setWfInternalComments(prod.internal_comments || '');
+                                  setWfError('');
+                                  
+                                  const assignedForThis = editorAssignments.filter(a => a.production_id === prod.production_id);
+                                  setSelectedStaffIds(assignedForThis.map(a => a.staff_id));
+                                  if (assignedForThis.length > 0) {
+                                    setWfSpeciality(assignedForThis[0].speciality);
+                                    setAssignmentRows(assignedForThis.map(a => ({
+                                      speciality: a.speciality,
+                                      staffId: a.staff_id,
+                                      staffName: a.staff_name
+                                    })));
+                                  } else {
+                                    setWfSpeciality('');
+                                    setAssignmentRows([{ speciality: '', staffId: '', staffName: '' }]);
+                                  }
+                                  
+                                  setWorkflowActionType('assign_editor');
+                                }}
+                                className="px-3 py-1.5 bg-purple-600 border border-purple-500 text-white hover:bg-purple-500 hover:border-purple-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer inline-flex items-center gap-1"
+                              >
+                                <span>👤</span> Assign Editor
+                              </button>
                             </td>
                           </tr>
                         );
@@ -1896,6 +1926,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
                       const order = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === prod.production_id.replace('PRD-', ''));
                       if (!order) return false;
+                      
+                      // Only show in active Production table once editor assignment has been completed
+                      if (prod.editing_status === 'Raw Footage Received') return false;
                       
                       const searchLower = leadSearch.toLowerCase();
                       const clientMatch = order.customer_name?.toLowerCase().includes(searchLower) || order.order_id.toLowerCase().includes(searchLower);

@@ -68,6 +68,7 @@ export interface CalendarEvent {
   editingStatus?: string;
   expectedDeliveryDate?: string;
   targetDeliveryDate?: string;
+  orderId?: string;
   
   raw: any;
 }
@@ -365,6 +366,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
           editingStatus: p.editing_status,
           expectedDeliveryDate: editDue,
           targetDeliveryDate: editDue,
+          orderId: o.order_id,
           raw: p
         });
       }
@@ -388,6 +390,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
           editingStatus: p.editing_status,
           expectedDeliveryDate: editDue,
           targetDeliveryDate: editDue,
+          orderId: o.order_id,
           raw: p
         });
       }
@@ -441,8 +444,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
         return ev.sourceType === 'order' && ev.currentStage === 'Event Scheduled';
       }
       if (role === 'production') {
-        // Production focuses on post processing, start phases, targets, editing statuses
-        return ev.sourceType === 'production';
+        // Production focuses strictly on Target Delivery Date events
+        return ev.sourceType === 'production' && (ev.eventClass === 'Delivery Due' || ev.eventClass === 'Overdue');
       }
       if (role === 'worker') {
         // Worker only sees order and operations
@@ -1220,10 +1223,22 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                                   {ev.currentStage || ev.eventClass}
                                 </span>
                               </div>
-                              <div className="text-[7.5px] opacity-75 font-mono flex items-center justify-between gap-1">
-                                <span className="break-words max-w-[60%]">{ev.eventType}</span>
-                                <span className="text-zinc-400 font-bold shrink-0">{ev.eventTime}</span>
-                              </div>
+                              {role === 'production' ? (
+                                <>
+                                  {ev.orderId && (
+                                    <div className="text-[7px] font-mono text-zinc-400">Order ID: {ev.orderId}</div>
+                                  )}
+                                  <div className="text-[7.5px] opacity-75 font-mono flex items-center justify-between gap-1">
+                                    <span className="break-words max-w-[60%]">{ev.eventType}</span>
+                                    <span className="text-pink-400 font-bold shrink-0">{ev.targetDeliveryDate || ev.date}</span>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="text-[7.5px] opacity-75 font-mono flex items-center justify-between gap-1">
+                                  <span className="break-words max-w-[60%]">{ev.eventType}</span>
+                                  <span className="text-zinc-400 font-bold shrink-0">{ev.eventTime}</span>
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -1297,12 +1312,25 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                                 className={`p-2 rounded-xl text-xs flex flex-col gap-1 transition ${col.card}`}
                               >
                                 <span className="font-bold text-zinc-100 line-clamp-1">{ev.customerName}</span>
-                                <div className="flex items-center gap-1 text-[9px] text-zinc-400 font-mono">
-                                  <Clock className="w-2.5 h-2.5" />
-                                  <span>{ev.eventTime}</span>
-                                </div>
+                                {role === 'production' ? (
+                                  <>
+                                    {ev.orderId && (
+                                      <span className="text-[9px] font-mono text-zinc-400">Order ID: {ev.orderId}</span>
+                                    )}
+                                    <div className="flex items-center gap-1 text-[9px] text-zinc-400 font-mono">
+                                      <Clock className="w-2.5 h-2.5" />
+                                      <span>{ev.eventType}</span>
+                                    </div>
+                                    <div className="text-[9px] font-mono text-pink-400 font-bold">Due: {ev.targetDeliveryDate || ev.date}</div>
+                                  </>
+                                ) : (
+                                  <div className="flex items-center gap-1 text-[9px] text-zinc-400 font-mono">
+                                    <Clock className="w-2.5 h-2.5" />
+                                    <span>{ev.eventTime}</span>
+                                  </div>
+                                )}
                                 <span className={`${col.badge} text-[9px] font-semibold px-1.5 py-0.5 rounded-md self-start font-mono border text-center  overflow-hidden text-ellipsis break-words max-w-full`}>
-                                  {ev.eventClass}
+                                  {ev.currentStage || ev.eventClass}
                                 </span>
                               </div>
                             );
@@ -1361,7 +1389,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                               {ev.eventType}
                             </span>
                             <span className={`text-[10px] px-2 py-0.5 border rounded-md font-mono font-bold shadow ${col.badge}`}>
-                              {ev.eventClass}
+                              {ev.currentStage || ev.eventClass}
                             </span>
                           </div>
 
@@ -1369,16 +1397,31 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                             {ev.customerName}
                           </h3>
 
-                          <div className="flex items-center gap-4 text-xs font-mono text-zinc-400 flex-wrap">
-                            <div className="flex items-center gap-1">
-                              <Clock className="w-3.5 h-3.5 text-zinc-500" />
-                              <span>{ev.eventTime}</span>
+                          {role === 'production' ? (
+                            <div className="flex items-center gap-4 text-xs font-mono text-zinc-400 flex-wrap">
+                              {ev.orderId && (
+                                <div className="flex items-center gap-1 text-yellow-500">
+                                  <span>Order ID:</span>
+                                  <span>{ev.orderId}</span>
+                                </div>
+                              )}
+                              <div className="flex items-center gap-1 text-pink-400 font-bold">
+                                <span>Target Delivery:</span>
+                                <span>{ev.targetDeliveryDate || ev.date}</span>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-1">
-                              <MapPin className="w-3.5 h-3.5 text-zinc-500" />
-                              <span className="break-words max-w-[200px]">{ev.eventLocation}</span>
+                          ) : (
+                            <div className="flex items-center gap-4 text-xs font-mono text-zinc-400 flex-wrap">
+                              <div className="flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5 text-zinc-500" />
+                                <span>{ev.eventTime}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <MapPin className="w-3.5 h-3.5 text-zinc-500" />
+                                <span className="break-words max-w-[200px]">{ev.eventLocation}</span>
+                              </div>
                             </div>
-                          </div>
+                          )}
                         </div>
 
                         {/* Extra details indicator */}
@@ -1682,46 +1725,91 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                 </h4>
 
                 <div className="grid grid-cols-3 gap-y-2 text-zinc-300">
-                  <span className="text-zinc-500 font-mono">Contact </span>
-                  <span className="col-span-2 font-semibold">
-                    {selectedEvent.mobile !== 'N/A' ? (
-                      <a href={`tel:${selectedEvent.mobile}`} className="hover:text-yellow-500 flex items-center gap-1.5 font-bold">
-                        <Phone className="w-3.5 h-3.5 text-zinc-500 inline" />
-                        {selectedEvent.mobile}
-                      </a>
-                    ) : 'N/A'}
-                  </span>
-
-                  <span className="text-zinc-500 font-mono">Date</span>
-                  <span className="col-span-2 font-mono font-bold text-yellow-405">
-                    {selectedEvent.date}
-                  </span>
-
-                  <span className="text-zinc-500 font-mono">Session time</span>
-                  <span className="col-span-2 font-mono">
-                    {selectedEvent.eventTime}
-                  </span>
-
-                  <span className="text-zinc-500 font-mono">Venue Address</span>
-                  <span className="col-span-2 text-zinc-350 leading-relaxed font-mono text-[11px]">
-                    {selectedEvent.eventLocation}
-                  </span>
-
-                  {selectedEvent.packageName && (
+                  {selectedEvent.sourceType === 'production' ? (
                     <>
-                      <span className="text-zinc-500 font-mono">Kit Package</span>
-                      <span className="col-span-2 font-semibold break-words text-[11px]">
-                        {selectedEvent.packageName}
+                      <span className="text-zinc-500 font-mono">Customer</span>
+                      <span className="col-span-2 font-bold text-white">
+                        {selectedEvent.customerName}
+                      </span>
+
+                      {selectedEvent.orderId && (
+                        <>
+                          <span className="text-zinc-500 font-mono">Order ID</span>
+                          <span className="col-span-2 font-bold text-yellow-500">{selectedEvent.orderId}</span>
+                        </>
+                      )}
+
+                      <span className="text-zinc-500 font-mono">Event Type</span>
+                      <span className="col-span-2 text-zinc-200 font-mono">
+                        {selectedEvent.eventType}
+                      </span>
+
+                      {selectedEvent.targetDeliveryDate && (
+                        <>
+                          <span className="text-zinc-500 font-mono">Target Delivery</span>
+                          <span className="col-span-2 font-bold text-pink-400">{selectedEvent.targetDeliveryDate}</span>
+                        </>
+                      )}
+
+                      <span className="text-zinc-500 font-mono">Prod Status</span>
+                      <span className="col-span-2 px-2 py-0.5 bg-zinc-950 rounded border border-zinc-800 text-zinc-300 self-start font-mono font-bold">
+                        {selectedEvent.currentStage || selectedEvent.editingStatus || 'Pending'}
+                      </span>
+
+                      <span className="text-zinc-500 font-mono">Contact </span>
+                      <span className="col-span-2 font-semibold">
+                        {selectedEvent.mobile !== 'N/A' ? (
+                          <a href={`tel:${selectedEvent.mobile}`} className="hover:text-yellow-500 flex items-center gap-1.5 font-bold">
+                            <Phone className="w-3.5 h-3.5 text-zinc-500 inline" />
+                            {selectedEvent.mobile}
+                          </a>
+                        ) : 'N/A'}
                       </span>
                     </>
-                  )}
-
-                  {selectedEvent.totalAmount !== undefined && selectedEvent.totalAmount > 0 && (
+                  ) : (
                     <>
-                      <span className="text-zinc-500 font-mono">Budget</span>
-                      <span className="col-span-2 font-bold text-emerald-450">
-                        {formatINR(selectedEvent.totalAmount)}
+                      <span className="text-zinc-500 font-mono">Contact </span>
+                      <span className="col-span-2 font-semibold">
+                        {selectedEvent.mobile !== 'N/A' ? (
+                          <a href={`tel:${selectedEvent.mobile}`} className="hover:text-yellow-500 flex items-center gap-1.5 font-bold">
+                            <Phone className="w-3.5 h-3.5 text-zinc-500 inline" />
+                            {selectedEvent.mobile}
+                          </a>
+                        ) : 'N/A'}
                       </span>
+
+                      <span className="text-zinc-500 font-mono">Date</span>
+                      <span className="col-span-2 font-mono font-bold text-yellow-405">
+                        {selectedEvent.date}
+                      </span>
+
+                      <span className="text-zinc-500 font-mono">Session time</span>
+                      <span className="col-span-2 font-mono">
+                        {selectedEvent.eventTime}
+                      </span>
+
+                      <span className="text-zinc-500 font-mono">Venue Address</span>
+                      <span className="col-span-2 text-zinc-350 leading-relaxed font-mono text-[11px]">
+                        {selectedEvent.eventLocation}
+                      </span>
+
+                      {selectedEvent.packageName && (
+                        <>
+                          <span className="text-zinc-500 font-mono">Kit Package</span>
+                          <span className="col-span-2 font-semibold break-words text-[11px]">
+                            {selectedEvent.packageName}
+                          </span>
+                        </>
+                      )}
+
+                      {selectedEvent.totalAmount !== undefined && selectedEvent.totalAmount > 0 && (
+                        <>
+                          <span className="text-zinc-500 font-mono">Budget</span>
+                          <span className="col-span-2 font-bold text-emerald-450">
+                            {formatINR(selectedEvent.totalAmount)}
+                          </span>
+                        </>
+                      )}
                     </>
                   )}
                 </div>

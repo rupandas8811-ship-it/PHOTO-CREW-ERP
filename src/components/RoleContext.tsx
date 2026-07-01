@@ -4780,6 +4780,17 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const deleteNotification = async (notificationId: string) => {
     setNotifications((prev) => prev.filter((n) => n.notification_id !== notificationId));
 
+    try {
+      const deletedStr = localStorage.getItem('erp_deleted_notifications');
+      const deletedIds = deletedStr ? JSON.parse(deletedStr) : [];
+      if (!deletedIds.includes(notificationId)) {
+        deletedIds.push(notificationId);
+        localStorage.setItem('erp_deleted_notifications', JSON.stringify(deletedIds));
+      }
+    } catch (e) {
+      console.warn("Failed to write deleted notification to localStorage:", e);
+    }
+
     if (!supabaseClient) return;
 
     const { error } = await supabaseClient
@@ -5577,6 +5588,129 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return false;
     }
   };
+
+  // Automatic Reminder Notifications for Target Delivery Date
+  useEffect(() => {
+    if (isDataLoading) return;
+
+    const checkAndGenerateReminders = async () => {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const nowMs = Date.now();
+      
+      // Load deleted notification IDs to avoid recreation
+      let deletedIds: string[] = [];
+      try {
+        const deletedStr = localStorage.getItem('erp_deleted_notifications');
+        if (deletedStr) {
+          deletedIds = JSON.parse(deletedStr);
+        }
+      } catch (e) {
+        console.warn("Error parsing deleted notifications:", e);
+      }
+
+      const newlyAddedIds = new Set<string>();
+
+      for (const p of augmentedProduction) {
+        const targetDateStr = p.target_delivery_date || p.expected_delivery_date;
+        if (!targetDateStr) continue;
+
+        const cleanDateStr = targetDateStr.split('T')[0];
+        // Target is at 6:00 PM on target date
+        const targetTimeObj = new Date(cleanDateStr + 'T18:00:00');
+        const targetMs = targetTimeObj.getTime();
+        const diffMs = targetMs - nowMs;
+        const diffHours = diffMs / (1000 * 60 * 60);
+
+        // Find customer name
+        const ord = augmentedOrders.find(o => o.order_id === p.tracking_id || o.lead_id === p.tracking_id);
+        const parentLead = leads.find(l => l.lead_id === p.tracking_id || (ord && l.lead_id === ord.lead_id));
+        const customerName = ord?.customer_name || parentLead?.customer_name || 'Customer';
+        const orderIdValue = ord?.order_id || p.tracking_id || 'N/A';
+
+        // Check if project is marked as delivered
+        const isDelivered = p.editing_status === 'Delivered' || p.editing_status === 'Closed' || p.editing_status === 'Approved' || p.editing_status === 'Final Approval';
+
+        // 1. 24 Hours Before Reminder
+        if (diffHours > 0 && diffHours <= 24 && !isDelivered) {
+          const notifId = `NTF-rem-${p.production_id}-24h`;
+          const exists = notifications.some(n => n.notification_id === notifId) || deletedIds.includes(notifId) || newlyAddedIds.has(notifId);
+          if (!exists) {
+            newlyAddedIds.add(notifId);
+            await addNotification({
+              notification_id: notifId,
+              title: 'Target Delivery Reminder',
+              message: `Project for **${customerName}** is due for delivery in 24 hours.`,
+              recipient_role: 'Production Team',
+              task_id: 'Delivery Reminder',
+              notification_type: 'Target Delivery Reminder',
+              project_id: orderIdValue,
+              priority: 'High'
+            });
+          }
+        }
+
+        // 2. 5 Hours Before Reminder
+        if (diffHours > 0 && diffHours <= 5 && !isDelivered) {
+          const notifId = `NTF-rem-${p.production_id}-5h`;
+          const exists = notifications.some(n => n.notification_id === notifId) || deletedIds.includes(notifId) || newlyAddedIds.has(notifId);
+          if (!exists) {
+            newlyAddedIds.add(notifId);
+            await addNotification({
+              notification_id: notifId,
+              title: 'Urgent Delivery Reminder',
+              message: `Project for **${customerName}** is due for delivery in 5 hours.`,
+              recipient_role: 'Production Team',
+              task_id: 'Delivery Reminder',
+              notification_type: 'Target Delivery Reminder',
+              project_id: orderIdValue,
+              priority: 'Critical'
+            });
+          }
+        }
+
+        // 3. On Target Delivery Date Reminder
+        if (todayStr === cleanDateStr && !isDelivered) {
+          const notifId = `NTF-rem-${p.production_id}-today`;
+          const exists = notifications.some(n => n.notification_id === notifId) || deletedIds.includes(notifId) || newlyAddedIds.has(notifId);
+          if (!exists) {
+            newlyAddedIds.add(notifId);
+            await addNotification({
+              notification_id: notifId,
+              title: 'Delivery Due Today',
+              message: `Project for **${customerName}** must be delivered today.`,
+              recipient_role: 'Production Team',
+              task_id: 'Delivery Reminder',
+              notification_type: 'Target Delivery Reminder',
+              project_id: orderIdValue,
+              priority: 'Critical'
+            });
+          }
+        }
+
+        // 4. Overdue Delivery Reminder
+        const isOverdue = (nowMs > targetMs || todayStr > cleanDateStr) && !isDelivered;
+        if (isOverdue) {
+          const notifId = `NTF-rem-${p.production_id}-overdue`;
+          const exists = notifications.some(n => n.notification_id === notifId) || deletedIds.includes(notifId) || newlyAddedIds.has(notifId);
+          if (!exists) {
+            newlyAddedIds.add(notifId);
+            await addNotification({
+              notification_id: notifId,
+              title: 'Delivery Overdue',
+              message: `Project for **${customerName}** has passed its Target Delivery Date and is still pending delivery.`,
+              recipient_role: 'Production Team',
+              task_id: 'Delivery Reminder',
+              notification_type: 'Target Delivery Reminder',
+              project_id: orderIdValue,
+              priority: 'Critical'
+            });
+          }
+        }
+      }
+    };
+
+    checkAndGenerateReminders().catch(e => console.warn("checkAndGenerateReminders error:", e));
+  }, [isDataLoading, augmentedProduction, notifications, augmentedOrders, leads]);
 
   return (
     <RoleContext.Provider
