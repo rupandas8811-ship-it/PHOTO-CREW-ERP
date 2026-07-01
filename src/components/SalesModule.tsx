@@ -1662,6 +1662,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       pincode: '',
       client_residence_address: '',
       desired_event_shoot_type: '',
+      Select_Package_Option: '',
       total_pax: '',
       reference_source: '',
       lead_value: '',
@@ -1733,6 +1734,34 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setAdvanceReceived('');
     setQuoteDiscount('');
     setQuoteAdditional('');
+    
+    setFollowUpForm({
+      status: '',
+      quotation_amount: '',
+      advance_received: '',
+      call_notes: ''
+    });
+    setConfirmForm({
+      package_name: '',
+      quotation_amount: '',
+      advance_received: '',
+      event_date: '',
+      event_time: ''
+    });
+    setShowConfirmModal(false);
+    setGeneratedPDFBlobUrl('');
+    setActiveQuoteNum('');
+    setEditableInclusions({});
+    setEditableDeliverables({});
+    setQuoteServices([]);
+    setEditingServiceId(null);
+    setNewServiceName('');
+    setNewServiceQty(1);
+    setNewServicePrice(0);
+    setIsAddingInline(false);
+    setStatusError(null);
+    setUnlockingRecordId(null);
+    setPkgSearchQuery('');
 
     // Clear cached quote services
     localStorage.removeItem('erp_quote_services_create');
@@ -2043,22 +2072,39 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         ];
         const defaultPrices = [20000, 15000, 10000, 10050, 8000, 7000, 5000, 5000];
         const sumDefault = defaultPrices.reduce((a, b) => a + b, 0);
-        const ratio = lp.package_cost ? (lp.package_cost / sumDefault) : 1;
+        const totalCost = Number(lp.package_cost || 0);
+        const ratio = totalCost ? (totalCost / sumDefault) : 1;
 
+        let distributed = 0;
         defaultItems.forEach((name, idx) => {
+          let pricePerItem;
+          if (idx === defaultItems.length - 1) {
+            pricePerItem = totalCost - distributed;
+          } else {
+            pricePerItem = Math.round((defaultPrices[idx] || 5000) * ratio);
+            distributed += pricePerItem;
+          }
           initialServices.push({
             id: `base_${pkgKey}_${idx}`,
             name,
             qty: 1,
-            price: Math.round((defaultPrices[idx] || 5000) * ratio),
+            price: pricePerItem,
             isAdditional: false
           });
         });
       } else {
         // Divide lp.package_cost equally among combined items
         const count = combined.length;
-        const pricePerItem = Math.round(Number(lp.package_cost || 0) / count);
+        const totalCost = Number(lp.package_cost || 0);
+        let distributed = 0;
         combined.forEach((name, idx) => {
+          let pricePerItem;
+          if (idx === count - 1) {
+            pricePerItem = totalCost - distributed;
+          } else {
+            pricePerItem = Math.round(totalCost / count);
+            distributed += pricePerItem;
+          }
           initialServices.push({
             id: `base_${pkgKey}_${idx}`,
             name,
@@ -2656,7 +2702,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-2">
             <span>💰</span> Section 1: Proposed Client Budget
           </h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-400 mb-1.5">
                 Proposed Client Budget (₹) *
@@ -2669,32 +2715,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 onChange={(e) => setBudget(e.target.value === '' ? '' : Number(e.target.value))}
                 placeholder="E.g., 50000"
                 className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 font-mono transition-all"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Lead Value (Target)
-              </label>
-              <input
-                type="number"
-                value={leadValue === 0 ? '' : leadValue}
-                onChange={(e) => setLeadValue(e.target.value === '' ? '' : Number(e.target.value))}
-                placeholder="E.g., 75000"
-                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-amber-400 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 font-mono transition-all"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Lead Score (1-100)
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={leadScore === 0 ? '' : leadScore}
-                onChange={(e) => setLeadScore(e.target.value === '' ? '' : Number(e.target.value))}
-                placeholder="E.g., 85"
-                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-emerald-400 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 font-mono transition-all"
               />
             </div>
           </div>
@@ -3358,8 +3378,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         await updateLead(selectedLead.lead_id, {
           budget: Number(wizardLeadData.budget),
           remarks: wizardLeadData.remarks,
-          lead_value: wizardLeadData.lead_value,
-          lead_score: wizardLeadData.lead_score,
           client_residence_address: wizardLeadData.client_residence_address,
           city: wizardLeadData.city,
           state: wizardLeadData.state,
@@ -3732,8 +3750,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             desired_event_shoot_type: createForm.desired_event_shoot_type,
             total_pax: createForm.total_pax !== '' ? Number(createForm.total_pax) : undefined,
             reference_source: createForm.reference_source,
-            lead_value: createForm.lead_value !== '' ? Number(createForm.lead_value) : undefined,
-            lead_score: createForm.lead_score !== '' ? Number(createForm.lead_score) : undefined,
             booking_status: createForm.booking_status || undefined,
             event_type: createForm.event_type || 'Other',
             event_date: createForm.event_date || new Date().toISOString().split('T')[0],
@@ -3761,8 +3777,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             desired_event_shoot_type: createForm.desired_event_shoot_type,
             total_pax: createForm.total_pax !== '' ? Number(createForm.total_pax) : undefined,
             reference_source: createForm.reference_source,
-            lead_value: createForm.lead_value !== '' ? Number(createForm.lead_value) : undefined,
-            lead_score: createForm.lead_score !== '' ? Number(createForm.lead_score) : undefined,
             booking_status: createForm.booking_status || undefined,
             remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
             Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
@@ -4395,7 +4409,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
 
     return matchesSearch && matchesSource && matchesStatus && matchesSales && matchesDate && matchesDateRange;
-  });
+  }).sort((a, b) => new Date(b.created_date).getTime() - new Date(a.created_date).getTime());
 
   return (
     <div id="sales_module" className="space-y-6">
