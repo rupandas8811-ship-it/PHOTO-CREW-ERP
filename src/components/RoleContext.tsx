@@ -3805,6 +3805,17 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const orderName = 'Project';
     const oId = inferredTrackingId;
 
+    // Automatically set dates when stages are completed
+    if (updates.editing_status) {
+      const todayDateStr = new Date().toISOString().split('T')[0];
+      if (updates.editing_status === 'Editing Started') {
+        updates.editing_start_date = todayDateStr;
+      } else if (['Project Delivered', 'Delivered', 'Completed'].includes(updates.editing_status)) {
+        updates.delivery_date = todayDateStr;
+        updates.actual_delivery_date = todayDateStr;
+      }
+    }
+
     // Send notifications if needed
     if (updates.editor_assigned && updates.editor_assigned !== 'Unassigned') {
       const oldEditor = targetProd?.editor_assigned;

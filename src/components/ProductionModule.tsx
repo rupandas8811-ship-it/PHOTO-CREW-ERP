@@ -4642,6 +4642,92 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         const order = rf ? orders.find(o => o.order_id === rf.order_id) : null;
         if (!order) return null;
 
+        const projectLogs = (logs || []).filter(log => 
+          log.record_id === selectedLeadProd.production_id ||
+          log.record_id === selectedLeadProd.tracking_id ||
+          log.record_id === order.order_id
+        );
+
+        // Calculate timeline dates dynamically from the corresponding tables
+        const rfRecord = rawFootage.find(f => 
+          f.tracking_id === selectedLeadProd.tracking_id || 
+          f.order_id === order.order_id
+        );
+        const rawFootageDateRaw = rfRecord && (rfRecord.status === 'Received' || rfRecord.raw_received) 
+          ? (rfRecord.uploaded_date || rfRecord.event_completed_date) 
+          : null;
+
+        const editingStartedLog = projectLogs.find(log => 
+          log.new_stage === 'Editing Started' || 
+          log.action.includes('Editing Started')
+        );
+        const editingStartedDateRaw = selectedLeadProd.editing_start_date || 
+          (editingStartedLog ? editingStartedLog.timestamp : null);
+
+        const clientReviewLog = projectLogs.find(log => 
+          log.new_stage === 'Client Review Sent' || 
+          log.new_stage === 'Customer Review' ||
+          log.action.includes('Client Review Sent') ||
+          log.action.includes('Customer Review')
+        );
+        const clientReviewDateRaw = clientReviewLog ? clientReviewLog.timestamp : null;
+
+        const clientApprovalLog = projectLogs.find(log => 
+          log.new_stage === 'Final Approval' || 
+          log.new_stage === 'Approved' ||
+          log.action.includes('Final Approval') ||
+          log.action.includes('Approved')
+        );
+        const clientApprovalDateRaw = clientApprovalLog ? clientApprovalLog.timestamp : null;
+
+        const isDelivered = ['Project Delivered', 'Delivered', 'Completed', 'Closed', 'Project Closed'].includes(selectedLeadProd.editing_status);
+        const handoverLog = projectLogs.find(log => 
+          log.new_stage === 'Project Delivered' || 
+          log.new_stage === 'Delivered' || 
+          log.new_stage === 'Completed' ||
+          log.action.includes('Project Delivered') ||
+          log.action.includes('Delivered')
+        );
+        const handoverDateRaw = isDelivered 
+          ? (selectedLeadProd.delivery_date || selectedLeadProd.actual_delivery_date || (handoverLog ? handoverLog.timestamp : null)) 
+          : null;
+
+        const formatTimelineDate = (dateStr?: string | null): string => {
+          if (!dateStr) return 'Pending';
+          try {
+            let cleanStr = dateStr;
+            if (cleanStr.includes('T')) {
+              cleanStr = cleanStr.split('T')[0];
+            }
+            const parts = cleanStr.split('-');
+            if (parts.length === 3) {
+              if (parts[0].length === 4) {
+                // YYYY-MM-DD
+                const [year, month, day] = parts;
+                return `${day.padStart(2, '0')}-${month.padStart(2, '0')}-${year}`;
+              } else if (parts[2].length === 4) {
+                // DD-MM-YYYY or MM-DD-YYYY
+                const [day, month, year] = parts;
+                return `${day.padStart(2, '0')}-${month.padStart(2, '0')}-${year}`;
+              }
+            }
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return 'Pending';
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const year = d.getFullYear();
+            return `${day}-${month}-${year}`;
+          } catch (e) {
+            return 'Pending';
+          }
+        };
+
+        const formattedFootageReceived = formatTimelineDate(rawFootageDateRaw);
+        const formattedEditingStarted = formatTimelineDate(editingStartedDateRaw);
+        const formattedReviewUploaded = formatTimelineDate(clientReviewDateRaw);
+        const formattedApprovalDate = formatTimelineDate(clientApprovalDateRaw);
+        const formattedHandoverDate = formatTimelineDate(handoverDateRaw);
+
         // Load payments info
         const payment = payments.find(p => p.order_id === order.order_id);
         const totalAmount = order.quotation_amount || 0;
@@ -4773,54 +4859,53 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       <div className="space-y-2 text-xs text-zinc-400">
                         <div className="flex justify-between items-center pb-2 border-b border-zinc-900/60">
                           <span className="text-[9px] text-zinc-500 font-mono">1. Raw Footage Received Date</span>
-                          <input
-                            type="date"
-                            value={dateFootageReceived}
-                            onChange={(e) => setDateFootageReceived(e.target.value)}
-                            className="bg-zinc-900 border border-zinc-800 text-[10px] font-mono text-zinc-350 rounded px-1.5 py-0.5 focus:outline-none"
-                          />
+                          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                            formattedFootageReceived === 'Pending' 
+                              ? 'text-amber-500/90 bg-amber-500/5 border-amber-500/10' 
+                              : 'text-zinc-300 bg-zinc-950 border-zinc-900'
+                          }`}>
+                            {formattedFootageReceived}
+                          </span>
                         </div>
                         <div className="flex justify-between items-center pb-2 border-b border-zinc-900/60">
                           <span className="text-[9px] text-zinc-500 font-mono">2. Editing Started Date</span>
-                          <input
-                            type="date"
-                            value={dateEditingStarted || leadStartDate}
-                            onChange={(e) => {
-                              setDateEditingStarted(e.target.value);
-                              setLeadStartDate(e.target.value);
-                            }}
-                            className="bg-zinc-900 border border-zinc-800 text-[10px] font-mono text-zinc-350 rounded px-1.5 py-0.5 focus:outline-none"
-                          />
+                          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                            formattedEditingStarted === 'Pending' 
+                              ? 'text-amber-500/90 bg-amber-500/5 border-amber-500/10' 
+                              : 'text-zinc-300 bg-zinc-950 border-zinc-900'
+                          }`}>
+                            {formattedEditingStarted}
+                          </span>
                         </div>
                         <div className="flex justify-between items-center pb-2 border-b border-zinc-900/60">
                           <span className="text-[9px] text-zinc-500 font-mono">3. Client Review Upload Date</span>
-                          <input
-                            type="date"
-                            value={dateReview}
-                            onChange={(e) => setDateReview(e.target.value)}
-                            className="bg-zinc-900 border border-zinc-800 text-[10px] font-mono text-zinc-350 rounded px-1.5 py-0.5 focus:outline-none"
-                          />
+                          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                            formattedReviewUploaded === 'Pending' 
+                              ? 'text-amber-500/90 bg-amber-500/5 border-amber-500/10' 
+                              : 'text-zinc-300 bg-zinc-950 border-zinc-900'
+                          }`}>
+                            {formattedReviewUploaded}
+                          </span>
                         </div>
                         <div className="flex justify-between items-center pb-2 border-b border-zinc-900/60">
                           <span className="text-[9px] text-zinc-500 font-mono">4. Client Approval Date</span>
-                          <input
-                            type="date"
-                            value={dateApproval}
-                            onChange={(e) => setDateApproval(e.target.value)}
-                            className="bg-zinc-900 border border-zinc-800 text-[10px] font-mono text-zinc-350 rounded px-1.5 py-0.5 focus:outline-none"
-                          />
+                          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                            formattedApprovalDate === 'Pending' 
+                              ? 'text-amber-500/90 bg-amber-500/5 border-amber-500/10' 
+                              : 'text-zinc-300 bg-zinc-950 border-zinc-900'
+                          }`}>
+                            {formattedApprovalDate}
+                          </span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-[9px] text-zinc-500 font-mono">5. Handover / Delivery Date</span>
-                          <input
-                            type="date"
-                            value={dateDelivery || leadActualDeliveryDate}
-                            onChange={(e) => {
-                              setDateDelivery(e.target.value);
-                              setLeadActualDeliveryDate(e.target.value);
-                            }}
-                            className="bg-zinc-900 border border-zinc-800 text-[10px] font-mono text-zinc-355 rounded px-1.5 py-0.5 focus:outline-none"
-                          />
+                          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                            formattedHandoverDate === 'Pending' 
+                              ? 'text-amber-500/90 bg-amber-500/5 border-amber-500/10' 
+                              : 'text-zinc-300 bg-zinc-950 border-zinc-900'
+                          }`}>
+                            {formattedHandoverDate}
+                          </span>
                         </div>
                       </div>
                     </div>

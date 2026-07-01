@@ -231,10 +231,26 @@ const MainAppContent: React.FC = () => {
   };
 
   const prevRoleRef = useRef<string>(currentRole);
+  const prevUserRef = useRef<any>(null);
 
   // Guard direct unauthorized access by syncing active tabs with user roles
   useEffect(() => {
     if (currentUser) {
+      // 1. Detect fresh login/session recovery and direct to appropriate landing tab
+      if (!prevUserRef.current) {
+        if (currentRole === 'Business Owner') {
+          setActiveTab('dashboard');
+        } else if (currentRole === 'Sales Team') {
+          setActiveTab('sales');
+        } else if (currentRole === 'Operations Team') {
+          setActiveTab('operations');
+        } else if (currentRole === 'Production Team') {
+          setActiveTab('production');
+        }
+      }
+      prevUserRef.current = currentUser;
+
+      // 2. Detect on-the-fly role changes (e.g. from RoleSwitcher/Admin switch)
       if (prevRoleRef.current !== currentRole) {
         prevRoleRef.current = currentRole;
         if (currentRole === 'Business Owner') {
@@ -243,6 +259,7 @@ const MainAppContent: React.FC = () => {
         }
       }
 
+      // 3. Ensure role boundaries are strictly preserved
       if (currentRole === 'Sales Team') {
         if (!['sales', 'sales_analytics', 'pending_payments', 'notifications'].includes(activeTab)) {
           setActiveTab('sales');
@@ -262,6 +279,8 @@ const MainAppContent: React.FC = () => {
           setActiveSubTab('production_leads');
         }
       }
+    } else {
+      prevUserRef.current = null;
     }
   }, [currentUser, currentRole, activeTab, activeOpSubTab, activeSubTab]);
 

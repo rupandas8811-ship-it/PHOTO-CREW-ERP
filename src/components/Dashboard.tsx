@@ -115,6 +115,77 @@ export const Dashboard: React.FC = () => {
     return leads.filter(l => stages.includes(l.status)).length;
   };
 
+  const executiveAnalytics = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const todayDate = new Date(today);
+    const sevenDaysAgo = new Date(todayDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const thisMonth = today.substring(0, 7); // YYYY-MM
+    const thisYear = today.substring(0, 4);  // YYYY
+
+    // 1. Revenue Calculations
+    let todayRevenue = 0;
+    let weeklyRevenue = 0;
+    let monthlyRevenue = 0;
+    let yearlyRevenue = 0;
+    let totalRevenue = 0;
+
+    payments.forEach(p => {
+      const amount = (p.advance_received || 0) + (p.final_payment_received || 0) + (p.additional_received || 0);
+      const pDateStr = p.payment_date || (p as any).created_at?.split('T')[0] || today;
+      
+      totalRevenue += amount;
+
+      if (pDateStr === today) {
+        todayRevenue += amount;
+      }
+
+      const pDate = new Date(pDateStr);
+      if (pDate >= sevenDaysAgo && pDate <= new Date(todayDate.getTime() + 24 * 60 * 60 * 1000)) {
+        weeklyRevenue += amount;
+      }
+
+      if (pDateStr.startsWith(thisMonth)) {
+        monthlyRevenue += amount;
+      }
+
+      if (pDateStr.startsWith(thisYear)) {
+        yearlyRevenue += amount;
+      }
+    });
+
+    const outstandingPayments = payments.reduce((sum, p) => sum + (p.balance_due || 0), 0);
+    const pendingPaymentsCount = payments.filter(p => p.balance_due > 0).length;
+    const pendingPaymentsAmount = payments.filter(p => p.balance_due > 0).reduce((sum, p) => sum + (p.balance_due || 0), 0);
+
+    const totalPotential = totalRevenue + outstandingPayments;
+    const collectionRate = totalPotential > 0 ? Math.round((totalRevenue / totalPotential) * 100) : 100;
+
+    // 2. Leads Calculations
+    const totalLeadsCount = leads.length;
+    const todayLeadsCount = leads.filter(l => l.created_date === today).length;
+    
+    const weeklyLeadsCount = leads.filter(l => {
+      if (!l.created_date) return false;
+      const lDate = new Date(l.created_date);
+      return lDate >= sevenDaysAgo && lDate <= new Date(todayDate.getTime() + 24 * 60 * 60 * 1000);
+    }).length;
+
+    return {
+      todayRevenue,
+      weeklyRevenue,
+      monthlyRevenue,
+      yearlyRevenue,
+      totalRevenue,
+      outstandingPayments,
+      pendingPaymentsCount,
+      pendingPaymentsAmount,
+      collectionRate,
+      totalLeadsCount,
+      todayLeadsCount,
+      weeklyLeadsCount
+    };
+  }, [payments, leads]);
+
   return (
     <div id="ceo_dashboard" className="space-y-6">
       
@@ -168,6 +239,141 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* SECTION: Global Business Analytics */}
+      <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 p-5 sm:p-6 rounded-2xl border border-zinc-800 shadow-2xl space-y-6 relative overflow-hidden animate-in fade-in duration-300">
+        <div className="absolute top-0 right-0 w-[300px] h-[300px] rounded-full bg-amber-500/[0.02] blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-[200px] h-[200px] rounded-full bg-indigo-500/[0.02] blur-[100px] pointer-events-none" />
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-850 pb-4 relative z-10">
+          <div className="space-y-1">
+            <h2 className="text-xs font-black text-white flex items-center gap-2 tracking-widest font-mono">
+              <span className="p-1 px-2.5 bg-amber-500/10 text-amber-450 border border-amber-500/20 text-[9px] rounded font-black font-mono">EXECUTIVE DATA</span>
+              <span>GLOBAL BUSINESS ANALYTICS</span>
+            </h2>
+            <p className="text-[11px] text-zinc-405">
+              Live consolidated KPIs across sales, revenue collection, operations, and lead generation cycles.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest">REAL-TIME TELEMETRY</span>
+          </div>
+        </div>
+
+        {/* Bento Grid: Revenue Analytics & Leads Analytics */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10">
+          
+          {/* Column 1: REVENUE ANALYTICS (8 cols) */}
+          <div className="lg:col-span-8 space-y-4">
+            <h3 className="text-[10.5px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono flex items-center gap-2">
+              <span className="text-emerald-450">💰</span>
+              <span>Revenue Analytics</span>
+            </h3>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              
+              {/* Today's Revenue */}
+              <div className="bg-[#07070a]/80 border border-zinc-850/60 hover:border-zinc-800 p-4 rounded-xl space-y-2 transition-all">
+                <span className="text-[9px] font-mono tracking-widest text-zinc-500 uppercase block">Today's Revenue</span>
+                <div className="text-lg font-black text-white font-mono">{formatINR(executiveAnalytics.todayRevenue)}</div>
+                <div className="text-[9px] text-emerald-450 font-bold bg-emerald-500/10 px-2 py-0.5 rounded w-fit uppercase">Cleared Today</div>
+              </div>
+
+              {/* Weekly Revenue */}
+              <div className="bg-[#07070a]/80 border border-zinc-850/60 hover:border-zinc-800 p-4 rounded-xl space-y-2 transition-all">
+                <span className="text-[9px] font-mono tracking-widest text-zinc-500 uppercase block">Weekly Revenue</span>
+                <div className="text-lg font-black text-amber-400 font-mono">{formatINR(executiveAnalytics.weeklyRevenue)}</div>
+                <div className="text-[9px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded w-fit uppercase">Last 7 Days</div>
+              </div>
+
+              {/* Monthly Revenue */}
+              <div className="bg-[#07070a]/80 border border-zinc-850/60 hover:border-zinc-800 p-4 rounded-xl space-y-2 transition-all">
+                <span className="text-[9px] font-mono tracking-widest text-zinc-500 uppercase block">Monthly Revenue</span>
+                <div className="text-lg font-black text-indigo-400 font-mono">{formatINR(executiveAnalytics.monthlyRevenue)}</div>
+                <div className="text-[9px] text-indigo-400 font-bold bg-indigo-500/10 px-2 py-0.5 rounded w-fit uppercase">This Month</div>
+              </div>
+
+              {/* Yearly Revenue */}
+              <div className="bg-[#07070a]/80 border border-zinc-850/60 hover:border-zinc-800 p-4 rounded-xl space-y-2 transition-all">
+                <span className="text-[9px] font-mono tracking-widest text-zinc-500 uppercase block">Yearly Revenue</span>
+                <div className="text-lg font-black text-purple-400 font-mono">{formatINR(executiveAnalytics.yearlyRevenue)}</div>
+                <div className="text-[9px] text-purple-400 font-bold bg-purple-500/10 px-2 py-0.5 rounded w-fit uppercase">This Year</div>
+              </div>
+
+              {/* Total Revenue */}
+              <div className="bg-[#07070a]/80 border border-zinc-850/60 hover:border-zinc-800 p-4 rounded-xl space-y-2 transition-all">
+                <span className="text-[9px] font-mono tracking-widest text-zinc-500 uppercase block">Total Revenue</span>
+                <div className="text-lg font-black text-emerald-450 font-mono">{formatINR(executiveAnalytics.totalRevenue)}</div>
+                <div className="text-[9px] text-zinc-400">Cumulative collected funds</div>
+              </div>
+
+              {/* Outstanding Payments */}
+              <div className="bg-[#07070a]/80 border border-zinc-850/60 hover:border-zinc-800 p-4 rounded-xl space-y-2 transition-all">
+                <span className="text-[9px] font-mono tracking-widest text-zinc-500 uppercase block">Outstanding</span>
+                <div className="text-lg font-black text-rose-455 font-mono">{formatINR(executiveAnalytics.outstandingPayments)}</div>
+                <div className="text-[9px] text-rose-455">Awaiting final collection</div>
+              </div>
+
+              {/* Pending Payments */}
+              <div className="bg-[#07070a]/80 border border-zinc-850/60 hover:border-zinc-800 p-4 rounded-xl space-y-2 transition-all">
+                <span className="text-[9px] font-mono tracking-widest text-zinc-500 uppercase block">Pending Invoices</span>
+                <div className="text-lg font-black text-sky-400 font-mono">{executiveAnalytics.pendingPaymentsCount}</div>
+                <div className="text-[9px] text-zinc-400">Orders with active balance</div>
+              </div>
+
+              {/* Payment Collection Rate */}
+              <div className="bg-[#07070a]/80 border border-zinc-850/60 hover:border-zinc-800 p-4 rounded-xl space-y-2 transition-all">
+                <span className="text-[9px] font-mono tracking-widest text-zinc-500 uppercase block">Collection Rate</span>
+                <div className="text-lg font-black text-emerald-450 font-mono">{executiveAnalytics.collectionRate}%</div>
+                <div className="text-[9px] text-zinc-400">Overall collection performance</div>
+              </div>
+
+            </div>
+          </div>
+
+          {/* Column 2: LEADS ANALYTICS (4 cols) */}
+          <div className="lg:col-span-4 space-y-4">
+            <h3 className="text-[10.5px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono flex items-center gap-2">
+              <span className="text-amber-500">📈</span>
+              <span>Leads Analytics</span>
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-4">
+              
+              {/* Total Leads */}
+              <div className="bg-[#07070a]/80 border border-zinc-850/60 hover:border-zinc-800 p-4 rounded-xl flex items-center justify-between transition-all">
+                <div className="space-y-1">
+                  <span className="text-[9px] font-mono tracking-widest text-zinc-500 uppercase block">Total Leads</span>
+                  <div className="text-2xl font-black text-white font-mono">{executiveAnalytics.totalLeadsCount}</div>
+                </div>
+                <span className="text-2xl">👥</span>
+              </div>
+
+              {/* Today's Leads */}
+              <div className="bg-[#07070a]/80 border border-zinc-850/60 hover:border-zinc-800 p-4 rounded-xl flex items-center justify-between transition-all">
+                <div className="space-y-1">
+                  <span className="text-[9px] font-mono tracking-widest text-zinc-500 uppercase block">Today's Leads</span>
+                  <div className="text-2xl font-black text-amber-450 font-mono">{executiveAnalytics.todayLeadsCount}</div>
+                </div>
+                <span className="text-[9px] text-amber-400 font-bold bg-amber-500/10 px-2 py-1 rounded font-mono uppercase">New</span>
+              </div>
+
+              {/* Weekly Leads */}
+              <div className="bg-[#07070a]/80 border border-zinc-850/60 hover:border-zinc-800 p-4 rounded-xl flex items-center justify-between transition-all">
+                <div className="space-y-1">
+                  <span className="text-[9px] font-mono tracking-widest text-zinc-500 uppercase block">Weekly Leads</span>
+                  <div className="text-2xl font-black text-purple-400 font-mono">{executiveAnalytics.weeklyLeadsCount}</div>
+                </div>
+                <span className="text-[9px] text-purple-450 font-bold bg-purple-500/10 px-2 py-1 rounded font-mono uppercase">7 Days</span>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+
       {/* Grid: 11 Primary Metrics in Elegant Bento Style */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {(() => {
