@@ -37,10 +37,14 @@ export const OwnerOperationsDetailed: React.FC = () => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const data = months.map(m => ({ name: m, events: 0 }));
     orders.forEach(o => {
+      if (!o.event_date) return;
       const date = new Date(o.event_date);
-      if (date.getFullYear() === new Date().getFullYear()) {
+      const year = date.getFullYear();
+      if (!isNaN(year) && year === new Date().getFullYear()) {
         const monthIndex = date.getMonth();
-        data[monthIndex].events++;
+        if (!isNaN(monthIndex) && data[monthIndex]) {
+          data[monthIndex].events++;
+        }
       }
     });
     return data;

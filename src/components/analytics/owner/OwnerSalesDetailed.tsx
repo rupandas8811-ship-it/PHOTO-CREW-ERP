@@ -63,10 +63,14 @@ export const OwnerSalesDetailed: React.FC = () => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const data = months.map(m => ({ name: m, leads: 0 }));
     leads.forEach(l => {
+      if (!l.created_date) return;
       const date = new Date(l.created_date);
-      if (date.getFullYear() === new Date().getFullYear()) {
+      const year = date.getFullYear();
+      if (!isNaN(year) && year === new Date().getFullYear()) {
         const monthIndex = date.getMonth();
-        data[monthIndex].leads++;
+        if (!isNaN(monthIndex) && data[monthIndex]) {
+          data[monthIndex].leads++;
+        }
       }
     });
     return data;
@@ -268,9 +272,17 @@ export const OwnerSalesDetailed: React.FC = () => {
             <tbody className="divide-y divide-zinc-900">
               {leads.slice(0, 10).map((l, idx) => (
                 <tr key={idx} className="hover:bg-zinc-900/40 transition-colors">
-                  <td className="p-4 text-zinc-400 font-mono">{new Date(l.created_date).toLocaleDateString()}</td>
+                  <td className="p-4 text-zinc-400 font-mono">
+                    {l.created_date && !isNaN(new Date(l.created_date).getTime()) 
+                      ? new Date(l.created_date).toLocaleDateString() 
+                      : 'N/A'}
+                  </td>
                   <td className="p-4 font-bold text-zinc-100">{l.customer_name}</td>
-                  <td className="p-4 text-zinc-400 font-mono">{l.event_date ? new Date(l.event_date).toLocaleDateString() : 'N/A'}</td>
+                  <td className="p-4 text-zinc-400 font-mono">
+                    {l.event_date && !isNaN(new Date(l.event_date).getTime()) 
+                      ? new Date(l.event_date).toLocaleDateString() 
+                      : 'N/A'}
+                  </td>
                   <td className="p-4 text-zinc-300 italic">{l.assigned_to_name || 'Unassigned'}</td>
                   <td className="p-4">
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${

@@ -49,9 +49,12 @@ export const OwnerProductionDetailed: React.FC = () => {
     const data = months.map(m => ({ name: m, projects: 0 }));
     production.forEach(p => {
       const date = p.created_at ? new Date(p.created_at) : new Date();
-      if (date.getFullYear() === new Date().getFullYear()) {
+      const year = date.getFullYear();
+      if (!isNaN(year) && year === new Date().getFullYear()) {
         const monthIndex = date.getMonth();
-        data[monthIndex].projects++;
+        if (!isNaN(monthIndex) && data[monthIndex]) {
+          data[monthIndex].projects++;
+        }
       }
     });
     return data;

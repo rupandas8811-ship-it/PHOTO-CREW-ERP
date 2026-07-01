@@ -42,18 +42,25 @@ export const OwnerRevenueDetailed: React.FC = () => {
     const data = months.map(m => ({ name: m, revenue: 0, collected: 0 }));
     
     orders.forEach(o => {
+      if (!o.event_date) return;
       const date = new Date(o.event_date);
-      if (date.getFullYear() === new Date().getFullYear()) {
+      const year = date.getFullYear();
+      if (!isNaN(year) && year === new Date().getFullYear()) {
         const monthIndex = date.getMonth();
-        data[monthIndex].revenue += (o.quotation_amount || 0);
+        if (!isNaN(monthIndex) && data[monthIndex]) {
+          data[monthIndex].revenue += (o.quotation_amount || 0);
+        }
       }
     });
 
     payments.forEach(p => {
       const date = p.created_at ? new Date(p.created_at) : new Date();
-      if (date.getFullYear() === new Date().getFullYear()) {
+      const year = date.getFullYear();
+      if (!isNaN(year) && year === new Date().getFullYear()) {
         const monthIndex = date.getMonth();
-        data[monthIndex].collected += (p.advance_received || 0) + (p.final_payment_received || 0);
+        if (!isNaN(monthIndex) && data[monthIndex]) {
+          data[monthIndex].collected += (p.advance_received || 0) + (p.final_payment_received || 0);
+        }
       }
     });
 

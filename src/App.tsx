@@ -583,16 +583,13 @@ const MainAppContent: React.FC = () => {
           </div>
           <nav className="space-y-1.5">
             {[
+              { id: 'dashboard', label: 'Executive Dashboard', icon: Target, color: 'text-amber-500' },
               { id: 'owner_revenue', label: '1. Revenue Analytics', icon: Landmark, color: 'text-emerald-400' },
               { id: 'owner_calendar', label: '2. Event Calendar', icon: Calendar, color: 'text-purple-400' },
               { id: 'owner_sales_report', label: '3. Sales Report & Analytics', icon: TrendingUp, color: 'text-indigo-400' },
               { id: 'owner_operations_report', label: '4. Operations Report & Analytics', icon: Briefcase, color: 'text-emerald-400' },
               { id: 'owner_production_report', label: '5. Production Report & Analytics', icon: Video, color: 'text-purple-400' },
-              { id: 'notifications', label: '6. Notifications', icon: Bell, color: 'text-rose-400' },
-              { id: 'dashboard', label: 'Main Dashboard', icon: Target, color: 'text-blue-500' },
-              { id: 'sales', label: 'Sales Desk', icon: Briefcase, color: 'text-zinc-500' },
-              { id: 'operations', label: 'Operations Desk', icon: Target, color: 'text-zinc-500' },
-              { id: 'production', label: 'Production Desk', icon: Video, color: 'text-zinc-500' }
+              { id: 'notifications', label: '6. Notifications', icon: Bell, color: 'text-rose-400' }
             ].map((tab) => {
               const IconComponent = tab.icon;
               const isSelected = activeTab === tab.id;
