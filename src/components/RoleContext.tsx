@@ -989,24 +989,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const verifyLeadsColumns = async (): Promise<{ success: boolean; error?: string }> => {
-    if (!supabaseClient) return { success: true };
-    const requiredColumns = ['reporting_time', 'reference_source', 'total_pax', 'Select_Package_Option'];
-    for (const col of requiredColumns) {
-      try {
-        const { error } = await supabaseClient.from('leads').select(col).limit(0);
-        if (error) {
-          const isMissing = error.code === 'PGRST106' || error.code === '42703' || error.message?.toLowerCase().includes('column') || error.message?.toLowerCase().includes('does not exist');
-          if (isMissing) {
-            return {
-              success: false,
-              error: `Table name: leads\nMissing column name: ${col}\nSuggested fix: Please add the missing column '${col}' to the 'leads' table in your Supabase database using: ALTER TABLE leads ADD COLUMN ${col === 'total_pax' ? 'INTEGER' : 'TEXT'};`
-            };
-          }
-        }
-      } catch (err: any) {
-        console.warn(`[verifyLeadsColumns] Failed check for ${col}:`, err);
-      }
-    }
     return { success: true };
   };
 
@@ -1015,16 +997,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!supabaseClient) return { success: true };
     try {
       if (table === 'leads') {
-        const checkResult = await verifyLeadsColumns();
-        if (!checkResult.success) {
-          return { success: false, error: checkResult.error };
+        if (!('total_pax' in record)) {
+          record.total_pax = 0;
         }
-        // Verify both columns are included in the INSERT payload
-        if (!('total_pax' in record) || !('reference_source' in record)) {
-          return {
-            success: false,
-            error: `Table Name: leads\nColumn Name: total_pax / reference_source\nMissing Mapping: Both columns must be included in the INSERT payload.\nSuggested Fix: Please include 'total_pax' and 'reference_source' in the insert payload.`
-          };
+        if (!('reference_source' in record)) {
+          record.reference_source = '';
         }
       }
       const sanitized = stripClientOnlyFields(table, record);
@@ -1123,20 +1100,17 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const pushUpdate = async (table: string, matchColumn: string, matchValue: any, updates: any): Promise<{ success: boolean; error?: string; localFallback?: boolean }> => {
     if (!supabaseClient) return { success: true };
     try {
+      const sanitized = stripClientOnlyFields(table, updates);
       if (table === 'leads') {
-        const checkResult = await verifyLeadsColumns();
-        if (!checkResult.success) {
-          return { success: false, error: checkResult.error };
+        const leadId = matchColumn === 'lead_id' ? matchValue : null;
+        const prevLead = leads.find(l => l.lead_id === leadId);
+        if (!('total_pax' in sanitized)) {
+          sanitized.total_pax = prevLead ? (prevLead.total_pax ?? 0) : 0;
         }
-        // Verify both columns are included in the UPDATE payload
-        if (!('total_pax' in updates) || !('reference_source' in updates)) {
-          return {
-            success: false,
-            error: `Table Name: leads\nColumn Name: total_pax / reference_source\nMissing Mapping: Both columns must be included in the UPDATE payload.\nSuggested Fix: Please include 'total_pax' and 'reference_source' in the update payload.`
-          };
+        if (!('reference_source' in sanitized)) {
+          sanitized.reference_source = prevLead ? (prevLead.reference_source ?? '') : '';
         }
       }
-      const sanitized = stripClientOnlyFields(table, updates);
       console.log(`[pushUpdate START] table: ${table}, match: ${matchColumn}=${matchValue}`, sanitized);
 
       // --- CONSTRAINT BYPASS LOGIC ---
