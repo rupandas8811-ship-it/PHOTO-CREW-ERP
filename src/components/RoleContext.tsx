@@ -32,6 +32,9 @@ interface RoleContextType {
   notifications: Notification[];
   addNotification: (payload: Omit<Notification, 'notification_id' | 'created_at' | 'read_status'> & { notification_id?: string; read_status?: boolean }) => Promise<void>;
   markNotificationRead: (notificationId: string) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
+  deleteNotification: (notificationId: string) => Promise<void>;
+  archiveNotification: (notificationId: string, archiveStatus?: boolean) => Promise<void>;
   
   leadPackages: LeadPackage[];
   packages: Package[];
@@ -119,9 +122,9 @@ interface RoleContextType {
   // User Management Admin features
   addUser: (name: string, email: string, mobile: string, role: UserRole, active: boolean, password?: string) => Promise<void>;
   signUpUser: (name: string, username: string, email: string, mobile: string, role: UserRole, password: string) => Promise<any>;
-  editUser: (id: string, updates: { name: string, email: string, mobile: string, role: UserRole, active: boolean }) => void;
-  toggleUserStatus: (id: string) => void;
-  resetUserPassword: (id: string, newPassword: string) => void;
+  editUser: (id: string, updates: { name: string, email: string, mobile: string, role: UserRole, active: boolean }) => Promise<void>;
+  toggleUserStatus: (id: string) => Promise<void>;
+  resetUserPassword: (id: string, newPassword: string) => Promise<void>;
   staffAssignments: StaffAssignment[];
   leadStaffAssignmentHistory: LeadStaffAssignmentHistory[];
   leadEquipmentHistory: LeadEquipmentHistory[];
@@ -237,8 +240,20 @@ const mapNotificationFromDb = (notif: any): Notification => {
     message: notif.message,
     read_status: !!read_status,
     is_read: !!read_status,
+    read: !!read_status,
     created_at: notif.created_at,
-    recipient_role: notif.recipient_role
+    recipient_role: notif.recipient_role,
+    priority: notif.priority,
+    recipient_user_id: notif.recipient_user_id,
+    recipient_email: notif.recipient_email,
+    sender_user_id: notif.sender_user_id,
+    sender_name: notif.sender_name,
+    related_table: notif.related_table,
+    related_record_id: notif.related_record_id,
+    action_url: notif.action_url,
+    is_archived: !!notif.is_archived,
+    read_at: notif.read_at,
+    expires_at: notif.expires_at,
   };
 };
 
@@ -256,6 +271,17 @@ const saveNotificationToSupabase = async (notif: Notification) => {
     task_id: notif.task_id,
     notification_type: notif.notification_type,
     read_status: notif.read_status,
+    priority: notif.priority || 'Medium',
+    recipient_user_id: notif.recipient_user_id,
+    recipient_email: notif.recipient_email,
+    sender_user_id: notif.sender_user_id,
+    sender_name: notif.sender_name,
+    related_table: notif.related_table,
+    related_record_id: notif.related_record_id,
+    action_url: notif.action_url,
+    is_archived: notif.is_archived ?? false,
+    read_at: notif.read_at,
+    expires_at: notif.expires_at,
     created_at: notif.created_at || new Date().toISOString()
   };
 
@@ -268,7 +294,17 @@ const saveNotificationToSupabase = async (notif: Notification) => {
       project_id: notif.project_id,
       task_id: notif.task_id,
       notification_type: notif.notification_type,
-      read_status: notif.read_status
+      read_status: notif.read_status,
+      priority: notif.priority,
+      recipient_user_id: notif.recipient_user_id,
+      recipient_email: notif.recipient_email,
+      sender_user_id: notif.sender_user_id,
+      sender_name: notif.sender_name,
+      related_table: notif.related_table,
+      related_record_id: notif.related_record_id,
+      is_archived: notif.is_archived,
+      read_at: notif.read_at,
+      expires_at: notif.expires_at
     });
     
     const fallbackPayload = {
@@ -293,7 +329,7 @@ const INITIAL_PACKAGES: Package[] = [
   { 
     package_id: 'PKG_WED_01', 
     package_name: 'Wedding - Bronze', 
-    category: 'Wedding Packages', 
+    category: 'Weddings', 
     price: 79999, 
     status: 'Active',
     deliverables: '1 Traditional Photographer, 1 Traditional Videographer, Standard Album, Full HD Output Video',
@@ -303,7 +339,7 @@ const INITIAL_PACKAGES: Package[] = [
 ];
 
 export const mapDbRecordToPackage = (record: any): Package => {
-  let category = 'Wedding Packages'; // Default fallback
+  let category = 'Weddings'; // Default fallback
   let deliverables = record.description || '';
   let team_members = '';
   let seasonal_offer = '';
@@ -520,10 +556,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cached = localStorage.getItem('erp_activity_logs');
     return cached ? JSON.parse(cached) : [];
   });
-  const [notifications, setNotifications] = useState<Notification[]>(() => {
-    const cached = localStorage.getItem('erp_notifications');
-    return cached ? JSON.parse(cached) : [];
-  });
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
 
   const [equipment, setEquipment] = useState<Equipment[]>([]);
@@ -588,9 +621,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('erp_payments', JSON.stringify(payments));
   }, [payments]);
 
-  useEffect(() => {
-    localStorage.setItem('erp_notifications', JSON.stringify(notifications));
-  }, [notifications]);
+
 
   useEffect(() => {
     localStorage.setItem('erp_quotations', JSON.stringify(quotations));
@@ -1954,82 +1985,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('erp_quotations', JSON.stringify(parsedQuotes));
       }
 
-      // Seed 5 custom notifications on-the-fly if empty in Supabase
-      if (notifRes && notifRes.data && notifRes.data.length === 0) {
-        console.log('Seeding 5 default notifications into Supabase...');
-        const sampleNotifications = [
-          {
-            notification_id: 'NTF-SEED-001',
-            recipient_role: 'Sales Team',
-            title: 'New Lead Assigned',
-            message: 'You have been assigned a new lead: Sophia Loren',
-            is_read: false,
-            read_status: false,
-            user_id: mapToDbUserId('U-010'), // Sales Demo
-            project_id: 'LD-9001',
-            task_id: 'Sales Inquiry',
-            notification_type: 'Lead Assignment',
-            created_at: new Date().toISOString()
-          },
-          {
-            notification_id: 'NTF-SEED-002',
-            recipient_role: 'Operations Team',
-            title: 'Event Operational Setup',
-            message: 'Please verify crew assignment & reporting time for Order ORD-1006',
-            is_read: false,
-            read_status: false,
-            user_id: mapToDbUserId('U-011'), // Operations Demo
-            project_id: 'ORD-1006',
-            task_id: 'Operations Allocation',
-            notification_type: 'Incident / Update',
-            created_at: new Date().toISOString()
-          },
-          {
-            notification_id: 'NTF-SEED-003',
-            recipient_role: 'Production Team',
-            title: 'Raw Footage Pending Review',
-            message: 'Post-production raw footage for project SpaceX (ORD-1009) is uploaded.',
-            is_read: false,
-            read_status: false,
-            user_id: mapToDbUserId('U-012'), // Production Demo
-            project_id: 'PRD-4009',
-            task_id: 'Quality Control',
-            notification_type: 'New Source Footage',
-            created_at: new Date().toISOString()
-          },
-          {
-            notification_id: 'NTF-SEED-004',
-            recipient_role: 'Business Owner',
-            title: 'Milestone Invoice Paid',
-            message: 'Advance payment of ₹10,000 for Charity Elite Gala confirmed.',
-            is_read: false,
-            read_status: false,
-            user_id: mapToDbUserId('U-009'), // Owner Demo
-            project_id: 'ORD-1010',
-            task_id: 'Receivable Clearance',
-            notification_type: 'Payment Cleared',
-            created_at: new Date().toISOString()
-          },
-          {
-            notification_id: 'NTF-SEED-005',
-            recipient_role: 'Production Team',
-            title: 'Production Task Overdue',
-            message: "Project 'Bennet Graduation' (ORD-1008) expected delivery date is approaching.",
-            is_read: false,
-            read_status: false,
-            user_id: mapToDbUserId('U-012'), // Production Demo
-            project_id: 'PRD-4008',
-            task_id: 'Editing',
-            notification_type: 'Due Date Alert',
-            created_at: new Date().toISOString()
-          }
-        ];
-        await supabaseClient.from('notifications').upsert(sampleNotifications).then(
-          () => console.log('Successfully seeded 5 notifications.'),
-          (err) => console.warn('Failed seeding notifications via query, will retry individually:', err)
-        );
-        setNotifications(sampleNotifications.map(mapNotificationFromDb));
-      } else if (notifRes && notifRes.data) {
+      if (notifRes && notifRes.data) {
         setNotifications(notifRes.data.map(mapNotificationFromDb));
       }
       
@@ -2433,152 +2389,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // No-op: realtime postgres_changes handles granular syncing
   };
 
-  const runAutomatedChecks = async () => {
-    const localTime = new Date();
-    const todayStr = localTime.toISOString().split('T')[0];
-    const tomorrow = new Date(localTime);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
-    // 1. Event Reminders (24 hours and 5 hours before event)
-    const activeScheduled = augmentedOrders.filter(o => o.current_stage === 'Event Scheduled');
-    for (const o of activeScheduled) {
-      if (!o.event_date) continue;
-      const eventTime = o.event_time || '09:00';
-      const eventDateTimeStr = `${o.event_date}T${eventTime}`;
-      const eventTimeMs = new Date(eventDateTimeStr).getTime();
-      const currentTimeMs = Date.now();
-      
-      const diffMs = eventTimeMs - currentTimeMs;
-      const diffHrs = diffMs / (1000 * 60 * 60);
-
-      const op = operations.find(x => x.order_id === o.order_id);
-      const reportingTime = op?.reporting_time || o.reporting_time || '08:00';
-      const assignedStaff = op?.assigned_staff || op?.photographer_assigned || 'Ramesh Kumar';
-
-      // 24-hour reminder check (if event is in <= 24 hours and > 0 hours)
-      if (diffHrs <= 24 && diffHrs > 0) {
-        const notifId = `NTF-REMINDER-24H-${o.order_id}`;
-        const exists = notifications.some(n => n.notification_id === notifId);
-        if (!exists) {
-          await addNotification({
-            notification_id: notifId,
-            user_id: 'All',
-            project_id: o.order_id,
-            task_id: 'Event Reminder',
-            notification_type: 'Upcoming Event Alert',
-            title: `24-Hour Event Reminder: ${o.customer_name}`,
-            message: `Event Reminder (24 hours left):\nCustomer Name: ${o.customer_name}\nEvent Type: ${o.event_type}\nEvent Date: ${o.event_date}\nEvent Time: ${o.event_time || 'N/A'}\nReporting Time: ${reportingTime}\nAssigned Staff: ${assignedStaff}`,
-            recipient_role: 'Operations Team'
-          });
-        }
-      }
-
-      // 5-hour reminder check (if event is in <= 5 hours and > 0 hours)
-      if (diffHrs <= 5 && diffHrs > 0) {
-        const notifId = `NTF-REMINDER-5H-${o.order_id}`;
-        const exists = notifications.some(n => n.notification_id === notifId);
-        if (!exists) {
-          await addNotification({
-            notification_id: notifId,
-            user_id: 'All',
-            project_id: o.order_id,
-            task_id: 'Event Reminder',
-            notification_type: 'Upcoming Event Alert',
-            title: `5-Hour Event Reminder: ${o.customer_name}`,
-            message: `Event Reminder (5 hours left):\nCustomer Name: ${o.customer_name}\nEvent Type: ${o.event_type}\nEvent Date: ${o.event_date}\nEvent Time: ${o.event_time || 'N/A'}\nReporting Time: ${reportingTime}\nAssigned Staff: ${assignedStaff}`,
-            recipient_role: 'Operations Team'
-          });
-        }
-      }
-    }
-
-    // 2. Production Deadline / Review Alerts
-    if (production.length > 0) {
-      for (const prod of production) {
-        if (prod.editing_status === 'Delivered') continue;
-
-        const rf = rawFootage.find((f) => f.tracking_id === prod.tracking_id);
-        const linkedOrder = rf ? augmentedOrders.find((o) => o.order_id === rf.order_id) : undefined;
-        const orderName = linkedOrder?.package_name || 'Project';
-        const oId = linkedOrder?.order_id || '';
-
-        // Check expected_delivery_date
-        if (prod.expected_delivery_date) {
-          if (prod.expected_delivery_date === todayStr) {
-            const notifId = `NTF-DUE-TODAY-${prod.production_id}-${todayStr}`;
-            const exists = notifications.some(n => n.notification_id === notifId);
-            if (!exists) {
-              await addNotification({
-                notification_id: notifId,
-                user_id: prod.editor_assigned,
-                project_id: prod.production_id,
-                task_id: 'Editing',
-                notification_type: 'Due Date Alert',
-                title: 'Task Due Today',
-                message: `The project "${orderName}" (Order: ${oId}) is due today!`,
-                recipient_role: 'Production Team'
-              });
-            }
-          } else if (prod.expected_delivery_date === tomorrowStr) {
-            const notifId = `NTF-DUE-TOMORROW-${prod.production_id}-${tomorrowStr}`;
-            const exists = notifications.some(n => n.notification_id === notifId);
-            if (!exists) {
-              await addNotification({
-                notification_id: notifId,
-                user_id: prod.editor_assigned,
-                project_id: prod.production_id,
-                task_id: 'Editing',
-                notification_type: 'Due Date Alert',
-                title: 'Task Due Tomorrow',
-                message: `Project "${orderName}" (Order: ${oId}) editing is due tomorrow.`,
-                recipient_role: 'Production Team'
-              });
-            }
-          } else if (prod.expected_delivery_date < todayStr) {
-            const notifId = `NTF-OVERDUE-${prod.production_id}-${todayStr}`;
-            const exists = notifications.some(n => n.notification_id === notifId);
-            if (!exists) {
-              await addNotification({
-                notification_id: notifId,
-                user_id: prod.editor_assigned,
-                project_id: prod.production_id,
-                task_id: 'Editing',
-                notification_type: 'Due Date Alert',
-                title: 'Task Overdue / Delivery Crossed',
-                message: `Project "${orderName}" (Order: ${oId}) expected delivery date (${prod.expected_delivery_date}) was crossed!`,
-                recipient_role: 'All'
-              });
-            }
-          }
-        }
-
-        // Check pending customer review
-        if (prod.customer_review_status === 'Pending Review') {
-          const notifId = `NTF-PENDING-REV-${prod.production_id}-${todayStr}`;
-          const exists = notifications.some(n => n.notification_id === notifId);
-          if (!exists) {
-            await addNotification({
-              notification_id: notifId,
-              user_id: prod.editor_assigned,
-              project_id: prod.production_id,
-              task_id: 'Review',
-              notification_type: 'Due Date Alert',
-              title: 'Pending Customer Review',
-              message: `Project "${orderName}" (Order: ${oId}) has been pending customer review.`,
-              recipient_role: 'Operations Team'
-            });
-          }
-        }
-      }
-    }
-  };
-
-  useEffect(() => {
-    if (notifications.length > 0) {
-      runAutomatedChecks();
-    }
-  }, [production, notifications, augmentedOrders, operations]);
 
   // Handle auto-logout if user is deactivated
   useEffect(() => {
@@ -4467,33 +4278,27 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     throw new Error('User registration is disabled. Only pre-configured system accounts are permitted.');
   };
 
-  const editUser = (id: string, updates: { name: string, email: string, mobile: string, role: UserRole, active: boolean }) => {
+  const editUser = async (id: string, updates: { name: string, email: string, mobile: string, role: UserRole, active: boolean }) => {
     setUsers((prev) => prev.map((u) => u.id === id ? { ...u, ...updates } : u));
-    pushUpdate('users', 'id', mapToDbUserId(id), updates);
+    await pushUpdate('users', 'id', mapToDbUserId(id), updates);
     logActivity(`Updated User Account Profile: ${updates.name}`, 'UserManagement', id);
   };
 
-  const toggleUserStatus = (id: string) => {
-    setUsers((prev) => prev.map((u) => {
-      if (u.id === id) {
-        const nextActive = !u.active;
-        pushUpdate('users', 'id', mapToDbUserId(id), { active: nextActive });
-        logActivity(`${nextActive ? 'Activated' : 'Deactivated'} User Account: ${u.name}`, 'UserManagement', id);
-        return { ...u, active: nextActive };
-      }
-      return u;
-    }));
+  const toggleUserStatus = async (id: string) => {
+    let targetUser = users.find(u => u.id === id);
+    if (!targetUser) return;
+    const nextActive = !targetUser.active;
+    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, active: nextActive } : u));
+    await pushUpdate('users', 'id', mapToDbUserId(id), { active: nextActive });
+    logActivity(`${nextActive ? 'Activated' : 'Deactivated'} User Account: ${targetUser.name}`, 'UserManagement', id);
   };
 
-  const resetUserPassword = (id: string, newPassword: string) => {
-    setUsers((prev) => prev.map((u) => {
-      if (u.id === id) {
-        pushUpdate('users', 'id', mapToDbUserId(id), { password: newPassword });
-        logActivity(`Reset Password for User account: ${u.name}`, 'UserManagement', id);
-        return { ...u, password: newPassword };
-      }
-      return u;
-    }));
+  const resetUserPassword = async (id: string, newPassword: string) => {
+    let targetUser = users.find(u => u.id === id);
+    if (!targetUser) return;
+    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, password: newPassword } : u));
+    await pushUpdate('users', 'id', mapToDbUserId(id), { password: newPassword });
+    logActivity(`Reset Password for User account: ${targetUser.name}`, 'UserManagement', id);
   };
 
   const addStaff = async (member: Omit<Staff, "staff_id">) => {
@@ -4799,15 +4604,72 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const markNotificationRead = async (notificationId: string) => {
-    setNotifications((prev) => prev.map((n) => n.notification_id === notificationId ? { ...n, read_status: true, is_read: true } : n));
+    const now = new Date().toISOString();
+    setNotifications((prev) => prev.map((n) => n.notification_id === notificationId ? { ...n, read_status: true, is_read: true, read: true, read_at: now } : n));
     if (!supabaseClient) return;
     
-    const { error } = await supabaseClient.from('notifications').update({ read_status: true, is_read: true }).eq('notification_id', notificationId);
+    const { error } = await supabaseClient.from('notifications').update({ read_status: true, is_read: true, read_at: now }).eq('notification_id', notificationId);
     if (error) {
       console.warn("Failed updating notification with all fields, trying fallback:", error);
-      await supabaseClient.from('notifications').update({ is_read: true }).eq('notification_id', notificationId);
+      await supabaseClient.from('notifications').update({ is_read: true, read_at: now }).eq('notification_id', notificationId);
     }
-    // fetchFromDb().catch(console.error); // Disabled to prevent full reload
+  };
+
+  const markAllNotificationsRead = async () => {
+    const visibleNotifs = notifications.filter(n => {
+      if (currentRole !== 'Business Owner') {
+        return n.recipient_role === currentRole || n.recipient_role === 'All';
+      }
+      return true;
+    });
+
+    const unreadIds = visibleNotifs.filter(n => !n.read_status).map(n => n.notification_id);
+    if (unreadIds.length === 0) return;
+
+    const now = new Date().toISOString();
+    setNotifications((prev) => prev.map((n) => unreadIds.includes(n.notification_id) ? { ...n, read_status: true, is_read: true, read: true, read_at: now } : n));
+
+    if (!supabaseClient) return;
+
+    const { error } = await supabaseClient
+      .from('notifications')
+      .update({ read_status: true, is_read: true, read_at: now })
+      .in('notification_id', unreadIds);
+    if (error) {
+      console.warn("Failed batch update of notifications, trying fallback:", error);
+      await supabaseClient
+        .from('notifications')
+        .update({ is_read: true, read_at: now })
+        .in('notification_id', unreadIds);
+    }
+  };
+
+  const deleteNotification = async (notificationId: string) => {
+    setNotifications((prev) => prev.filter((n) => n.notification_id !== notificationId));
+
+    if (!supabaseClient) return;
+
+    const { error } = await supabaseClient
+      .from('notifications')
+      .delete()
+      .eq('notification_id', notificationId);
+    if (error) {
+      console.warn("Failed to delete notification in Supabase:", error);
+    }
+  };
+
+  const archiveNotification = async (notificationId: string, archiveStatus = true) => {
+    setNotifications((prev) => prev.map((n) => n.notification_id === notificationId ? { ...n, is_archived: archiveStatus } : n));
+
+    if (!supabaseClient) return;
+
+    const { error } = await supabaseClient
+      .from('notifications')
+      .update({ is_archived: archiveStatus })
+      .eq('notification_id', notificationId);
+    if (error) {
+      console.warn("Failed to archive notification in Supabase:", error);
+    }
   };
 
   const addSpeciality = async (name: string) => {
@@ -5613,6 +5475,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         notifications,
         addNotification,
         markNotificationRead,
+        markAllNotificationsRead,
+        deleteNotification,
+        archiveNotification,
         leadPackages,
         packages,
         addPackage,

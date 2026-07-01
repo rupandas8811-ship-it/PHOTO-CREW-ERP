@@ -3,13 +3,15 @@ import { useRole } from './RoleContext';
 import { Notification } from '../types';
 import { 
   Bell, AlertCircle, AlertTriangle, CheckCircle2, Info, Eye, Clock,
-  Layers, User, Calendar, Trash2, ShieldAlert, Sparkles, X, Send, Play, CheckSquare, Search
+  Layers, User, Calendar, Trash2, ShieldAlert, Sparkles, X, Send, Play, CheckSquare, Search, Archive
 } from 'lucide-react';
 
 export const NotificationsModule: React.FC = () => {
   const { 
     notifications, 
     markNotificationRead, 
+    deleteNotification,
+    archiveNotification,
     production, 
     orders, 
     rawFootage, 
@@ -26,6 +28,9 @@ export const NotificationsModule: React.FC = () => {
   // Search filter
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Show archived state
+  const [showArchived, setShowArchived] = useState(false);
+
   // Handle marking read
   const handleMarkRead = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -39,7 +44,11 @@ export const NotificationsModule: React.FC = () => {
         return false;
       }
     }
-    return true;
+    if (showArchived) {
+      return !!notif.is_archived;
+    } else {
+      return !notif.is_archived;
+    }
   });
 
   // Helper selectors
@@ -144,26 +153,41 @@ export const NotificationsModule: React.FC = () => {
           })}
         </div>
 
-        {/* Search */}
-        <div className="relative w-full md:w-64">
-          <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-zinc-500">
-            <Search className="w-4 h-4" />
-          </span>
-          <input
-            type="text"
-            placeholder="Search notifications..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2 pl-9 pr-4 text-xs text-zinc-150 font-mono focus:outline-none focus:ring-1 focus:ring-red-500"
-          />
-          {searchQuery && (
-            <button 
-              onClick={() => setSearchQuery('')}
-              className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-500 hover:text-white"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
+        {/* Archived Toggle & Search */}
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          <button
+            onClick={() => setShowArchived(!showArchived)}
+            className={`px-3 py-2 text-xs font-mono uppercase tracking-wider font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 border ${
+              showArchived
+                ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
+            }`}
+          >
+            <Archive className="w-4 h-4" />
+            <span>{showArchived ? 'Viewing Archived' : 'View Archive'}</span>
+          </button>
+
+          {/* Search */}
+          <div className="relative w-full md:w-64">
+            <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-zinc-500">
+              <Search className="w-4 h-4" />
+            </span>
+            <input
+              type="text"
+              placeholder="Search notifications..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2 pl-9 pr-4 text-xs text-zinc-150 font-mono focus:outline-none focus:ring-1 focus:ring-red-500"
+            />
+            {searchQuery && (
+              <button 
+                onClick={() => setSearchQuery('')}
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-500 hover:text-white"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -259,16 +283,42 @@ export const NotificationsModule: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Mark read button */}
-                {isUnread && (
+                {/* Action panel */}
+                <div className="flex items-center gap-1.5 flex-shrink-0 self-center">
+                  {isUnread && (
+                    <button
+                      onClick={(e) => handleMarkRead(notif.notification_id, e)}
+                      className="px-2.5 py-1.5 border border-zinc-850 hover:border-emerald-500/30 hover:bg-emerald-950/20 text-[10px] uppercase font-mono font-bold text-zinc-400 hover:text-emerald-400 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                      title="Mark alert as read"
+                    >
+                      <span>Read</span>
+                    </button>
+                  )}
                   <button
-                    onClick={(e) => handleMarkRead(notif.notification_id, e)}
-                    className="p-2 border border-zinc-850 hover:bg-zinc-900 text-[10px] uppercase font-mono font-bold text-zinc-400 hover:text-white rounded-lg transition-all flex items-center gap-1 flex-shrink-0 cursor-pointer self-center"
-                    title="Mark alert as read"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      archiveNotification(notif.notification_id, !notif.is_archived);
+                    }}
+                    className={`p-1.5 border rounded-lg transition-all cursor-pointer ${
+                      notif.is_archived
+                        ? 'border-amber-500/20 bg-amber-500/5 text-amber-400 hover:text-white hover:bg-amber-500/10'
+                        : 'border-zinc-850 hover:border-amber-500/20 text-zinc-450 hover:text-amber-400 hover:bg-zinc-900'
+                    }`}
+                    title={notif.is_archived ? "Unarchive alert" : "Archive alert"}
                   >
-                    <span>Read</span>
+                    <Archive className="w-3.5 h-3.5" />
                   </button>
-                )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteNotification(notif.notification_id);
+                    }}
+                    className="p-1.5 border border-zinc-850 hover:border-red-500/20 hover:bg-zinc-900 text-zinc-450 hover:text-red-400 rounded-lg transition-all cursor-pointer"
+                    title="Delete alert"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             );
           })}

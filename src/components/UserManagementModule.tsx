@@ -136,6 +136,7 @@ export const UserManagementModule: React.FC = () => {
 
   // Password reset state
   const [newResetPasswordValue, setNewResetPasswordValue] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -145,6 +146,7 @@ export const UserManagementModule: React.FC = () => {
     }
 
     try {
+      setIsSaving(true);
       await addUser(newName, newEmail, newMobile, newRole, newActive, newPassword);
       
       // Clear state
@@ -159,6 +161,8 @@ export const UserManagementModule: React.FC = () => {
       alert('Staff account registered successfully in system directory!');
     } catch (err: any) {
       alert(`Registration failed: ${err?.message || err}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -175,7 +179,7 @@ export const UserManagementModule: React.FC = () => {
     setEditActive(usr.active);
   };
 
-  const handleEditSubmit = (e: React.FormEvent) => {
+  const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
     if (!editName.trim() || !editEmail.trim() || !editMobile.trim()) {
@@ -183,19 +187,26 @@ export const UserManagementModule: React.FC = () => {
       return;
     }
 
-    editUser(editingUser.id, {
-      name: editName,
-      email: editEmail,
-      mobile: editMobile,
-      role: editRole,
-      active: editActive
-    });
+    try {
+      setIsSaving(true);
+      await editUser(editingUser.id, {
+        name: editName,
+        email: editEmail,
+        mobile: editMobile,
+        role: editRole,
+        active: editActive
+      });
 
-    setEditingUser(null);
-    alert(`Account details of ${editName} updated successfully!`);
+      setEditingUser(null);
+      alert(`Account details of ${editName} updated successfully!`);
+    } catch (err: any) {
+      alert(`Failed to update user: ${err.message || err}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleResetPasswordSubmit = (e: React.FormEvent) => {
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resettingPasswordUser) return;
     if (!newResetPasswordValue.trim()) {
@@ -203,10 +214,17 @@ export const UserManagementModule: React.FC = () => {
       return;
     }
 
-    resetUserPassword(resettingPasswordUser.id, newResetPasswordValue);
-    setNewResetPasswordValue('');
-    setResettingPasswordUser(null);
-    alert('Access credentials updated in secure index!');
+    try {
+      setIsSaving(true);
+      await resetUserPassword(resettingPasswordUser.id, newResetPasswordValue);
+      setNewResetPasswordValue('');
+      setResettingPasswordUser(null);
+      alert('Access credentials updated in secure index!');
+    } catch (err: any) {
+      alert(`Failed to reset password: ${err.message || err}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Helper calculations
@@ -573,9 +591,10 @@ export const UserManagementModule: React.FC = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-1.5 bg-indigo-650 hover:bg-indigo-555 text-white font-semibold rounded cursor-pointer"
+                    disabled={isSaving}
+                    className="px-4 py-1.5 bg-indigo-650 hover:bg-indigo-555 text-white font-semibold rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Commit account
+                    {isSaving ? 'Processing...' : 'Commit account'}
                   </button>
                 </div>
               </form>
@@ -680,9 +699,10 @@ export const UserManagementModule: React.FC = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-1.5 bg-indigo-650 hover:bg-indigo-555 text-white font-semibold rounded cursor-pointer"
+                    disabled={isSaving}
+                    className="px-4 py-1.5 bg-indigo-650 hover:bg-indigo-555 text-white font-semibold rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Save Changes
+                    {isSaving ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </form>
@@ -734,9 +754,10 @@ export const UserManagementModule: React.FC = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded cursor-pointer"
+                    disabled={isSaving}
+                    className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Override Password Key
+                    {isSaving ? 'Processing...' : 'Override Password Key'}
                   </button>
                 </div>
               </form>
@@ -897,9 +918,10 @@ export const UserManagementModule: React.FC = () => {
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-1.5 bg-indigo-650 hover:bg-indigo-555 text-white font-semibold rounded cursor-pointer"
+                      disabled={isSaving}
+                      className="px-4 py-1.5 bg-indigo-650 hover:bg-indigo-555 text-white font-semibold rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Commit account
+                      {isSaving ? 'Processing...' : 'Commit account'}
                     </button>
                   </div>
                 </form>
@@ -988,9 +1010,10 @@ export const UserManagementModule: React.FC = () => {
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-1.5 bg-indigo-650 hover:bg-indigo-555 text-white font-semibold rounded cursor-pointer"
+                      disabled={isSaving}
+                      className="px-4 py-1.5 bg-indigo-650 hover:bg-indigo-555 text-white font-semibold rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Save Changes
+                      {isSaving ? 'Saving...' : 'Save Changes'}
                     </button>
                   </div>
                 </form>
@@ -1026,9 +1049,10 @@ export const UserManagementModule: React.FC = () => {
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded cursor-pointer"
+                      disabled={isSaving}
+                      className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Override Password Key
+                      {isSaving ? 'Processing...' : 'Override Password Key'}
                     </button>
                   </div>
                 </form>

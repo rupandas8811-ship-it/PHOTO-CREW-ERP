@@ -12,6 +12,7 @@ export const OperationsNotifications: React.FC = () => {
   // Filters notifications that mention keywords like booking, confirm, schedule, crew, photographer, videographer, operations
   const opsNotificationKeywords = ['booking', 'confirm', 'schedule', 'crew', 'photographers', 'operations', 'shoot', 'equipment', 'gear', 'raw', 'footage'];
   const filteredNotifications = notifications.filter(notif => {
+    if (notif.is_archived) return false;
     const text = (notif.message + ' ' + (notif.title || '')).toLowerCase();
     return opsNotificationKeywords.some(keyword => text.includes(keyword));
   });

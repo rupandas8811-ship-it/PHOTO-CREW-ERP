@@ -11,6 +11,7 @@ export const OperationsStaffManagement: React.FC = () => {
 
   // Modal / Form state
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState({
     name: '',
     role: 'Lead Photographer',
@@ -53,7 +54,7 @@ export const OperationsStaffManagement: React.FC = () => {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.email || !form.mobile) {
       alert('Please fill out the name, email, and mobile fields.');
@@ -72,20 +73,21 @@ export const OperationsStaffManagement: React.FC = () => {
       return;
     }
 
-    if (editingId) {
-      updateStaff(editingId, form).then(() => {
+    try {
+      setIsSaving(true);
+      if (editingId) {
+        await updateStaff(editingId, form);
         alert('Staff profile updated.');
         handleCancel();
-      }).catch(err => {
-        alert(`Failed to update staff: ${err.message}`);
-      });
-    } else {
-      addStaff(form).then(() => {
+      } else {
+        await addStaff(form);
         alert('New staff member registered.');
         handleCancel();
-      }).catch(err => {
-        alert(`Failed to register staff: ${err.message}`);
-      });
+      }
+    } catch (err: any) {
+      alert(`Operation failed: ${err.message || err}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -268,9 +270,10 @@ export const OperationsStaffManagement: React.FC = () => {
               )}
               <button
                 type="submit"
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-black font-semibold text-xs rounded-xl cursor-pointer"
+                disabled={isSaving}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-black font-semibold text-xs rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {editingId ? 'Save Changes' : 'Confirm Onboarding'}
+                {isSaving ? 'Processing...' : (editingId ? 'Save Changes' : 'Confirm Onboarding')}
               </button>
             </div>
           ) : (

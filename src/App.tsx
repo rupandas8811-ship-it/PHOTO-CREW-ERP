@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { RoleProvider, useRole } from './components/RoleContext';
-import { APIProvider } from '@vis.gl/react-google-maps';
 import { RoleSwitcher } from './components/RoleSwitcher';
 import { Dashboard } from './components/Dashboard';
 import { SalesAnalytics } from './components/analytics/SalesAnalytics';
@@ -138,7 +137,7 @@ const MainAppContent: React.FC = () => {
     setEndInput(globalDateRange.end);
   }, [globalDateRange]);
 
-  const unreadNotificationsCount = notifications.filter(n => !n.read_status && (currentRole === 'Business Owner' || n.recipient_role === currentRole || n.recipient_role === 'All')).length;
+  const unreadNotificationsCount = notifications.filter(n => !n.is_archived && !n.read_status && (currentRole === 'Business Owner' || n.recipient_role === currentRole || n.recipient_role === 'All')).length;
 
   const handleRefresh = () => {
     setIsRefreshing(true);
@@ -209,7 +208,7 @@ const MainAppContent: React.FC = () => {
       if (user.role === 'Operations Team') return 'operations';
       if (user.role === 'Production Team') return 'production';
     }
-    return 'owner_revenue';
+    return 'dashboard';
   });
 
   // Responsive tab toggles that collapse sidebar automatically on Tablet / Mobile sizes
@@ -231,9 +230,19 @@ const MainAppContent: React.FC = () => {
     refreshData();
   };
 
+  const prevRoleRef = useRef<string>(currentRole);
+
   // Guard direct unauthorized access by syncing active tabs with user roles
   useEffect(() => {
     if (currentUser) {
+      if (prevRoleRef.current !== currentRole) {
+        prevRoleRef.current = currentRole;
+        if (currentRole === 'Business Owner') {
+          setActiveTab('dashboard');
+          return;
+        }
+      }
+
       if (currentRole === 'Sales Team') {
         if (!['sales', 'sales_analytics', 'pending_payments', 'notifications'].includes(activeTab)) {
           setActiveTab('sales');
@@ -796,18 +805,10 @@ const ChevronRightIcon: React.FC<{ active: boolean }> = ({ active }) => {
   );
 };
 
-const GOOGLE_MAPS_API_KEY =
-  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
-  (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
-  (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY ||
-  '';
-
 export default function App() {
   return (
-    <APIProvider apiKey={GOOGLE_MAPS_API_KEY} version="weekly">
-      <RoleProvider>
-        <MainAppContent />
-      </RoleProvider>
-    </APIProvider>
+    <RoleProvider>
+      <MainAppContent />
+    </RoleProvider>
   );
 }

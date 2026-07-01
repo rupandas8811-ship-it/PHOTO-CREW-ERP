@@ -226,66 +226,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
     return urgencies[0].highlights;
   };
 
-  // Automatic Notification Integrations trigger effect
-  useEffect(() => {
-    if (role !== 'operations' && role !== 'owner') return;
 
-    const existingNotifKeys = new Set(
-      notifications.map(n => `${n.project_id}_${n.task_id}`)
-    );
-
-    orders.forEach(o => {
-      const orderId = o.order_id;
-      const isCompleted = ['Event Completed', 'Raw Footage Received', 'Delivered', 'Paid', 'Closed'].includes(o.current_stage);
-      const dateStr = o.event_date;
-
-      // 1. Tomorrow's Events: Notification of "1 Day Before Event"
-      if (dateStr === tomorrowStr && !isCompleted) {
-        const key = `${orderId}_1_day_before`;
-        if (!existingNotifKeys.has(key)) {
-          addNotification({
-            title: `[1-Day Reminder] Shoot for ${o.customer_name}`,
-            message: `Tomorrow: ${o.event_type} with client ${o.customer_name} at ${o.event_location}. Ensure crew and gear allocation check-in. Time: ${o.event_time || '10:00 AM'}.`,
-            recipient_role: 'Operations Team',
-            notification_type: 'Operations Alert',
-            project_id: orderId,
-            task_id: '1_day_before'
-          }).catch(err => console.warn("Auto Reminder generation failed", err?.message || err));
-        }
-      }
-
-      // 2. Today's Events: Notification of "Event Day Morning"
-      if (dateStr === todayStr && !isCompleted) {
-        const key = `${orderId}_event_day_morning`;
-        if (!existingNotifKeys.has(key)) {
-          addNotification({
-            title: `[Event Day Morning] Today's Shoot: ${o.customer_name}`,
-            message: `Morning Briefing: Today's ${o.event_type} with client ${o.customer_name} at ${o.event_location} starts at ${o.event_time || '10:00 AM'}. Verify active dispatch status.`,
-            recipient_role: 'Operations Team',
-            notification_type: 'Operations Alert',
-            project_id: orderId,
-            task_id: 'event_day_morning'
-          }).catch(err => console.warn("Auto Daily Brief generation failed", err?.message || err));
-        }
-      }
-
-      // 3. Overdue Events: Notification of "Overdue Event Alert"
-      const isOverdue = dateStr < todayStr && !isCompleted;
-      if (isOverdue) {
-        const key = `${orderId}_overdue_alert`;
-        if (!existingNotifKeys.has(key)) {
-          addNotification({
-            title: `[Overdue Alert] Milestone Missed for ${o.customer_name}`,
-            message: `OVERDUE: Event scheduled on ${o.event_date} for ${o.customer_name} remains incomplete. Immediate action required.`,
-            recipient_role: 'Operations Team',
-            notification_type: 'Operations Alert',
-            project_id: orderId,
-            task_id: 'overdue_alert'
-          }).catch(err => console.warn("Auto Overdue Alert generation failed", err?.message || err));
-        }
-      }
-    });
-  }, [orders, notifications, addNotification, role]);
 
   // Helper to extract follow-up dates from remarks
   const parseFollowUpDate = (remarks: string | undefined): string | null => {

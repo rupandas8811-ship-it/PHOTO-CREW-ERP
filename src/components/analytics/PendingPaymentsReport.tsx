@@ -32,8 +32,9 @@ export const PendingPaymentsReport: React.FC = () => {
   // Modal State for Payment Update
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentModalRecord, setPaymentModalRecord] = useState<any>(null);
-  const [paymentAmount, setPaymentAmount] = useState<number | ''>('');
+  const [paymentAmount, setPaymentAmount] = useState<number | ''>( '');
   const [paymentNotes, setPaymentNotes] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   
   // Start date default: 3 months ago to 1 year ahead
   const defaultStartDate = useMemo(() => {
@@ -873,17 +874,24 @@ export const PendingPaymentsReport: React.FC = () => {
                 Cancel
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
                   const amt = Number(paymentAmount);
                   if (amt > 0) {
-                    recordPayment(paymentModalRecord.orderId, amt, new Date().toISOString().split('T')[0], paymentNotes);
-                    setShowPaymentModal(false);
+                    try {
+                      setIsSaving(true);
+                      await recordPayment(paymentModalRecord.orderId, amt, new Date().toISOString().split('T')[0], paymentNotes);
+                      setShowPaymentModal(false);
+                    } catch (err: any) {
+                      alert(`Failed to save payment: ${err.message || err}`);
+                    } finally {
+                      setIsSaving(false);
+                    }
                   }
                 }}
-                disabled={!paymentAmount || Number(paymentAmount) <= 0}
+                disabled={isSaving || !paymentAmount || Number(paymentAmount) <= 0}
                 className="flex-1 py-2 rounded-xl text-xs font-bold text-zinc-950 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition uppercase tracking-wider"
               >
-                Save Payment
+                {isSaving ? 'Saving...' : 'Save Payment'}
               </button>
             </div>
           </motion.div>

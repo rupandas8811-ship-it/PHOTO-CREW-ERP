@@ -405,7 +405,19 @@ export interface Notification {
   read_status: boolean;
   created_at?: string;
   is_read?: boolean;
+  read?: boolean;
   recipient_role?: string;
+  priority?: string | null;
+  recipient_user_id?: string | null;
+  recipient_email?: string | null;
+  sender_user_id?: string | null;
+  sender_name?: string | null;
+  related_table?: string | null;
+  related_record_id?: string | null;
+  action_url?: string | null;
+  is_archived?: boolean;
+  read_at?: string | null;
+  expires_at?: string | null;
 }
 
 export interface Equipment {

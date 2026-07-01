@@ -111,7 +111,7 @@ const generateQuotationPDF = (
 
   // Pre-split fields to calculate wrap height accurately
   const wrapCustName = doc.splitTextToSize(lead.customer_name || 'N/A', 50);
-  const wrapEmail = doc.splitTextToSize(lead.email || 'N/A', 50);
+  const wrapEmail = doc.splitTextToSize(lead.email || 'Not Provided', 50);
   const displayEventType = lead.event_type === 'Other' ? (lead.custom_event_name || lead.custom_event_type || 'Other') : (lead.event_type || 'N/A');
   const wrapEventType = doc.splitTextToSize(displayEventType, 50);
   const wrapLocation = doc.splitTextToSize(lead.event_location || 'N/A', 50);
@@ -158,6 +158,27 @@ const generateQuotationPDF = (
   const baseServices = services.filter(s => !s.isAdditional);
   const additionalServices = services.filter(s => s.isAdditional);
 
+  // Helper formatting and normalization routines for cleaning characters & detecting duplicate specifications
+  const normalizeForComparison = (str: string) => {
+    return str
+      .toLowerCase()
+      .replace(/[^\w\s]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  const cleanText = (text: string) => {
+    if (!text) return '';
+    let cleaned = text
+      .replace(/þÿ/g, '')
+      .replace(/ÿþ/g, '')
+      .replace(/\uFEFF/g, '')
+      .replace(/\uFFFE/g, '');
+    cleaned = cleaned.replace(/^[\s•\-\*\u2022\u0095\x95\x96\u2013\u2014\s]+/g, '');
+    cleaned = cleaned.replace(/[₹\u20B9\u20b9]/g, 'Rs.');
+    return cleaned.trim();
+  };
+
   // Prep Deliverables
   const allInclusions: { package: string; item: string }[] = [];
   const allDeliverables: { package: string; item: string }[] = [];
@@ -194,6 +215,18 @@ const generateQuotationPDF = (
   });
 
   const combinedList = [...allInclusions, ...allDeliverables];
+  
+  // Deduplicate: Compare deliverables listed in second section with those in Chosen Package Specifications (baseServices)
+  const cleanedBaseServicesNames = baseServices.map(s => normalizeForComparison(cleanText(s.name)));
+
+  const filteredCombinedList = combinedList
+    .map(item => ({ package: item.package, item: cleanText(item.item) }))
+    .filter(item => {
+      if (!item.item) return false;
+      const normItem = normalizeForComparison(item.item);
+      return !cleanedBaseServicesNames.includes(normItem);
+    });
+
   const custRemarks = lead.remarks_raw || lead.remarks || '';
   const teamRemarks = lead.notes || ''; 
 
@@ -201,7 +234,7 @@ const generateQuotationPDF = (
     'Payments are non-refundable.',
     'Crew food arrangements from client side.',
     '50% advance and remaining 50% before collecting the raw data.',
-    'If the duration extends, ₹3,000 per service per hour additional charges are applicable.',
+    'If the duration extends, Rs. 3,000 per service per hour additional charges are applicable.',
     'We expect 90% of the payment once the event is completed and the remaining 10% before the final deliverables are ready.',
     'Pendrive and Hard Disk are not included.',
     'Edited data will be shared via Google Drive link.'
@@ -234,7 +267,8 @@ const generateQuotationPDF = (
     const getTableSimHeight = (items: any[]) => {
       let h = 4 + 7.5; 
       items.forEach((item) => {
-        const wrappedName = doc.splitTextToSize(item.name || '', 172);
+        const cleanedName = cleanText(item.name || '');
+        const wrappedName = doc.splitTextToSize(cleanedName, 166);
         h += Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
       });
       return h;
@@ -248,7 +282,8 @@ const generateQuotationPDF = (
       } else {
         let currentTableY = simY + 4 + 7.5;
         baseServices.forEach((item) => {
-          const wrappedName = doc.splitTextToSize(item.name || '', 172);
+          const cleanedName = cleanText(item.name || '');
+          const wrappedName = doc.splitTextToSize(cleanedName, 166);
           const rowH = Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
           if (currentTableY + rowH > 250) {
             currentTableY = 52 + 7.5;
@@ -269,7 +304,8 @@ const generateQuotationPDF = (
       } else {
         let currentTableY = simY + 4 + 7.5;
         additionalServices.forEach((item) => {
-          const wrappedName = doc.splitTextToSize(item.name || '', 172);
+          const cleanedName = cleanText(item.name || '');
+          const wrappedName = doc.splitTextToSize(cleanedName, 166);
           const rowH = Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
           if (currentTableY + rowH > 250) {
             currentTableY = 52 + 7.5;
@@ -282,11 +318,11 @@ const generateQuotationPDF = (
       simY += cfg.tableSpacing;
     }
 
-    if (combinedList.length > 0) {
+    if (filteredCombinedList.length > 0) {
       let tableH = 4 + 7.5;
-      combinedList.forEach((item) => {
+      filteredCombinedList.forEach((item) => {
         const wrappedPkg = doc.splitTextToSize(item.package || '', 45);
-        const wrappedDetail = doc.splitTextToSize(item.item || '', 120);
+        const wrappedDetail = doc.splitTextToSize(item.item || '', 114);
         tableH += Math.max(7.5, Math.max(wrappedPkg.length, wrappedDetail.length) * cfg.rowTextHeight + cfg.rowPadding);
       });
 
@@ -295,9 +331,9 @@ const generateQuotationPDF = (
         simPageCount++;
       } else {
         let currentTableY = simY + 4 + 7.5;
-        combinedList.forEach((item) => {
+        filteredCombinedList.forEach((item) => {
           const wrappedPkg = doc.splitTextToSize(item.package || '', 45);
-          const wrappedDetail = doc.splitTextToSize(item.item || '', 120);
+          const wrappedDetail = doc.splitTextToSize(item.item || '', 114);
           const rowH = Math.max(7.5, Math.max(wrappedPkg.length, wrappedDetail.length) * cfg.rowTextHeight + cfg.rowPadding);
           if (currentTableY + rowH > 250) {
             currentTableY = 52 + 7.5;
@@ -384,12 +420,11 @@ const generateQuotationPDF = (
     }
 
     // 9. PHOTOCREW PICTURES FOOTER (Always Last, at footerY = 255)
-    // If the last content ending is past 250, the footer moves to the next page!
     if (simY > 250) {
       simY = 52;
       simPageCount++;
     }
-    simY = 275; // Since footer is drawn at 255 on the final page, last page height is 255 + 20 = 275.
+    simY = 275;
 
     return { pageCount: simPageCount, lastPageY: simY };
   };
@@ -506,7 +541,7 @@ const generateQuotationPDF = (
       pageDoc.setFont('helvetica', 'normal');
       pageDoc.setFontSize(7);
       pageDoc.setTextColor(148, 163, 184);
-      pageDoc.text(`Page ${pageNum} of ${totalPages}`, 195, footerY + 14, { align: 'right', wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+      pageDoc.text(`Page ${pageNum} of ${totalPages}`, 195, footerY + 14, { align: 'right' });
     }
 
     pageDoc.setFillColor(goldColor[0], goldColor[1], goldColor[2]);
@@ -521,26 +556,26 @@ const generateQuotationPDF = (
     pageDoc.setFont('helvetica', 'bold');
     pageDoc.setFontSize(8.5);
     pageDoc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-    pageDoc.text('PHOTOCREW PICTURES', 15, footerY + 5, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+    pageDoc.text('PHOTOCREW PICTURES', 15, footerY + 5);
     
     pageDoc.setFont('helvetica', 'normal');
     pageDoc.setFontSize(7.5);
     pageDoc.setTextColor(100, 116, 139);
-    pageDoc.text('Website : https://www.photocrewpictures.com/  |  Email: info@photocrewpictures.com  |  Phone: +91 9060144016', 15, footerY + 9, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+    pageDoc.text('Website : https://www.photocrewpictures.com/  |  Email: info@photocrewpictures.com  |  Phone: +91 9060144016', 15, footerY + 9);
 
     pageDoc.setFont('helvetica', 'bold');
     pageDoc.setFontSize(8);
     pageDoc.setTextColor(goldColor[0], goldColor[1], goldColor[2]); 
-    pageDoc.text('Thank You For Choosing Photocrew Pictures', 15, footerY + 14, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+    pageDoc.text('Thank You For Choosing Photocrew Pictures', 15, footerY + 14);
 
     pageDoc.setFont('helvetica', 'normal');
     pageDoc.setFontSize(7.5);
     pageDoc.setTextColor(100, 116, 139);
-    pageDoc.text('For Photocrew Pictures', 195, footerY + 5, { align: 'right', wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+    pageDoc.text('For Photocrew Pictures', 195, footerY + 5, { align: 'right' });
     pageDoc.setFont('helvetica', 'bold');
     pageDoc.setFontSize(8);
     pageDoc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-    pageDoc.text('Authorized Signatory', 195, footerY + 12, { align: 'right', wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+    pageDoc.text('Authorized Signatory', 195, footerY + 12, { align: 'right' });
   };
 
   const createNewPage = () => {
@@ -589,12 +624,12 @@ const generateQuotationPDF = (
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
   doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text('CUSTOMER DETAILS', 20, clientY + 6, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+  doc.text('CUSTOMER DETAILS', 20, clientY + 6);
   
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
   doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text('EVENT LOGISTICS', 110, clientY + 6, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+  doc.text('EVENT LOGISTICS', 110, clientY + 6);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
@@ -609,15 +644,15 @@ const generateQuotationPDF = (
   ];
 
   leftLabels.forEach((item) => {
-    doc.text(item.label, 20, curLeftY, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
-    doc.text(':', 41, curLeftY, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+    doc.text(item.label, 20, curLeftY);
+    doc.text(':', 41, curLeftY);
     if (item.isWrapped && Array.isArray(item.val)) {
       item.val.forEach((line: string, i: number) => {
-        doc.text(line, 43, curLeftY + (i * cfg.textPadding), { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+        doc.text(line, 43, curLeftY + (i * cfg.textPadding));
       });
       curLeftY += (item.val.length * cfg.textPadding);
     } else {
-      doc.text(String(item.val), 43, curLeftY, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+      doc.text(String(item.val), 43, curLeftY);
       curLeftY += cfg.textPadding;
     }
   });
@@ -631,15 +666,15 @@ const generateQuotationPDF = (
   ];
 
   rightLabels.forEach((item) => {
-    doc.text(item.label, 110, curRightY, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
-    doc.text(':', 131, curRightY, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+    doc.text(item.label, 110, curRightY);
+    doc.text(':', 131, curRightY);
     if (item.isWrapped && Array.isArray(item.val)) {
       item.val.forEach((line: string, i: number) => {
-        doc.text(line, 133, curRightY + (i * cfg.textPadding), { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+        doc.text(line, 133, curRightY + (i * cfg.textPadding));
       });
       curRightY += (item.val.length * cfg.textPadding);
     } else {
-      doc.text(String(item.val), 133, curRightY, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+      doc.text(String(item.val), 133, curRightY);
       curRightY += cfg.textPadding;
     }
   });
@@ -650,7 +685,8 @@ const generateQuotationPDF = (
   const drawTable = (title: string, items: { id: string; name: string; qty: number; price: number; isAdditional?: boolean }[]) => {
     let tableH = 4 + 7.5; 
     items.forEach((item) => {
-      const wrappedName = doc.splitTextToSize(item.name || '', 172);
+      const cleanedItemName = cleanText(item.name || '');
+      const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
       tableH += Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
     });
 
@@ -664,7 +700,7 @@ const generateQuotationPDF = (
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9.5);
     doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-    doc.text(title, 15, currentY, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+    doc.text(title, 15, currentY);
     currentY += 4;
 
     if (currentY + 7.5 > 250) {
@@ -676,7 +712,7 @@ const generateQuotationPDF = (
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
     doc.setTextColor(255, 255, 255);
-    doc.text('SERVICE / DELIVERABLES', 19, currentY + 4.8, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+    doc.text('SERVICE / DELIVERABLES', 19, currentY + 4.8);
 
     currentY += 7.5;
 
@@ -687,7 +723,7 @@ const generateQuotationPDF = (
       doc.setFont('helvetica', 'italic');
       doc.setFontSize(7.5);
       doc.setTextColor(148, 163, 184);
-      doc.text('No specified deliverables or customized service items.', 19, currentY + 5, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+      doc.text('No specified deliverables or customized service items.', 19, currentY + 5);
       doc.line(15, currentY, 15, currentY + 8);
       doc.line(195, currentY, 195, currentY + 8);
       doc.line(15, currentY + 8, 195, currentY + 8);
@@ -696,7 +732,8 @@ const generateQuotationPDF = (
     }
 
     items.forEach((item, index) => {
-      const wrappedName = doc.splitTextToSize(item.name || '', 172);
+      const cleanedItemName = cleanText(item.name || '');
+      const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
       const rowHeight = Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
 
       if (currentY + rowHeight > 250) {
@@ -708,7 +745,7 @@ const generateQuotationPDF = (
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(7.5);
         doc.setTextColor(255, 255, 255);
-        doc.text('SERVICE / DELIVERABLES (CONTINUED)', 19, currentY + 4.8, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+        doc.text('SERVICE / DELIVERABLES (CONTINUED)', 19, currentY + 4.8);
         currentY += 7.5;
       }
 
@@ -724,8 +761,12 @@ const generateQuotationPDF = (
       doc.setFontSize(7.5);
       doc.setTextColor(51, 65, 85);
 
+      // Draw a clean bullet point for the first line of the item
+      doc.setFillColor(51, 65, 85);
+      doc.circle(20, currentY + 4.3 - 0.9, 0.6, 'F');
+
       wrappedName.forEach((line: string, i: number) => {
-        doc.text(line, 19, currentY + 4.3 + (i * cfg.rowTextHeight), { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+        doc.text(line, 23, currentY + 4.3 + (i * cfg.rowTextHeight));
       });
 
       doc.line(15, currentY + rowHeight, 195, currentY + rowHeight);
@@ -741,7 +782,8 @@ const generateQuotationPDF = (
     let tableH = 4 + 7.5; 
     list.forEach((item) => {
       const wrappedPkg = doc.splitTextToSize(item.package || '', 45);
-      const wrappedDetail = doc.splitTextToSize(item.item || '', 120);
+      const cleanedDetailName = cleanText(item.item || '');
+      const wrappedDetail = doc.splitTextToSize(cleanedDetailName, 114);
       tableH += Math.max(7.5, Math.max(wrappedPkg.length, wrappedDetail.length) * cfg.rowTextHeight + cfg.rowPadding);
     });
 
@@ -755,7 +797,7 @@ const generateQuotationPDF = (
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9.5);
     doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-    doc.text(title, 15, currentY, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+    doc.text(title, 15, currentY);
     currentY += 4;
 
     if (currentY + 7.5 > 250) {
@@ -767,8 +809,8 @@ const generateQuotationPDF = (
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
     doc.setTextColor(255, 255, 255);
-    doc.text('PACKAGE / CATEGORY', 19, currentY + 4.8, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
-    doc.text('INCLUSION / DELIVERABLE DETAIL', 69, currentY + 4.8, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+    doc.text('PACKAGE / CATEGORY', 19, currentY + 4.8);
+    doc.text('INCLUSION / DELIVERABLE DETAIL', 69, currentY + 4.8);
 
     currentY += 7.5;
 
@@ -777,7 +819,8 @@ const generateQuotationPDF = (
 
     list.forEach((item, index) => {
       const wrappedPkg = doc.splitTextToSize(item.package || '', 45);
-      const wrappedDetail = doc.splitTextToSize(item.item || '', 120);
+      const cleanedDetailName = cleanText(item.item || '');
+      const wrappedDetail = doc.splitTextToSize(cleanedDetailName, 114);
       const rowHeight = Math.max(7.5, Math.max(wrappedPkg.length, wrappedDetail.length) * cfg.rowTextHeight + cfg.rowPadding);
 
       if (currentY + rowHeight > 250) {
@@ -789,8 +832,8 @@ const generateQuotationPDF = (
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(7.5);
         doc.setTextColor(255, 255, 255);
-        doc.text('PACKAGE / CATEGORY (CONTINUED)', 19, currentY + 4.8, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
-        doc.text('INCLUSION / DELIVERABLE DETAIL', 69, currentY + 4.8, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+        doc.text('PACKAGE / CATEGORY (CONTINUED)', 19, currentY + 4.8);
+        doc.text('INCLUSION / DELIVERABLE DETAIL', 69, currentY + 4.8);
         currentY += 7.5;
       }
 
@@ -808,11 +851,15 @@ const generateQuotationPDF = (
       doc.setTextColor(51, 65, 85);
 
       wrappedPkg.forEach((line: string, i: number) => {
-        doc.text(line, 19, currentY + 4.3 + (i * cfg.rowTextHeight), { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+        doc.text(line, 19, currentY + 4.3 + (i * cfg.rowTextHeight));
       });
 
+      // Draw a clean bullet point for the first line of the detail
+      doc.setFillColor(51, 65, 85);
+      doc.circle(70, currentY + 4.3 - 0.9, 0.6, 'F');
+
       wrappedDetail.forEach((line: string, i: number) => {
-        doc.text(line, 69, currentY + 4.3 + (i * cfg.rowTextHeight), { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+        doc.text(line, 73, currentY + 4.3 + (i * cfg.rowTextHeight));
       });
 
       doc.line(15, currentY + rowHeight, 195, currentY + rowHeight);
@@ -833,8 +880,8 @@ const generateQuotationPDF = (
   }
 
   // 4. Inclusions & Deliverables table
-  if (combinedList.length > 0) {
-    drawDeliverablesTable('PACKAGE INCLUSIONS & DELIVERABLES DETAILED LIST', combinedList);
+  if (filteredCombinedList.length > 0) {
+    drawDeliverablesTable('PACKAGE INCLUSIONS & DELIVERABLES DETAILED LIST', filteredCombinedList);
   }
 
   // 5. PRICING SUMMARY CARD
@@ -846,7 +893,7 @@ const generateQuotationPDF = (
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
   doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text('PRICING SUMMARY & ESTIMATES', 15, currentY, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+  doc.text('PRICING SUMMARY & ESTIMATES', 15, currentY);
   currentY += 4.5;
 
   doc.setFillColor(248, 250, 252);
@@ -869,23 +916,23 @@ const generateQuotationPDF = (
   doc.setFontSize(7.5);
   doc.setTextColor(71, 85, 105);
   
-  doc.text('Package Base Cost', 19, currentY + pricingRowH - 2, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
-  doc.text('Additional Services & Add-ons', 19, currentY + (pricingRowH * 2) - 2, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
-  doc.text('Quotation Discount (Applied)', 19, currentY + (pricingRowH * 3) - 2, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+  doc.text('Package Base Cost', 19, currentY + pricingRowH - 2);
+  doc.text('Additional Services & Add-ons', 19, currentY + (pricingRowH * 2) - 2);
+  doc.text('Quotation Discount (Applied)', 19, currentY + (pricingRowH * 3) - 2);
   
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(15, 23, 42);
-  doc.text('FINAL ESTIMATED COMMERCIAL AMOUNT', 19, currentY + (pricingRowH * 4) - 2, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+  doc.text('FINAL ESTIMATED COMMERCIAL AMOUNT', 19, currentY + (pricingRowH * 4) - 2);
 
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(51, 65, 85);
-  doc.text(baseSumVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + pricingRowH - 2, { align: 'right', wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
-  doc.text(addlSumVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 2) - 2, { align: 'right', wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
-  doc.text('- ' + discountValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 3) - 2, { align: 'right', wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+  doc.text(baseSumVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + pricingRowH - 2, { align: 'right' });
+  doc.text(addlSumVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 2) - 2, { align: 'right' });
+  doc.text('- ' + discountValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 3) - 2, { align: 'right' });
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
-  doc.text(finalAmountSum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 4) - 2, { align: 'right', wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+  doc.text(finalAmountSum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 4) - 2, { align: 'right' });
 
   currentY += cfg.pricingCardHeight + cfg.secSpacing;
 
@@ -897,7 +944,7 @@ const generateQuotationPDF = (
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
   doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text('PAYMENT DETAILS', 15, currentY, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+  doc.text('PAYMENT DETAILS', 15, currentY);
   currentY += 4.5;
   
   doc.setFillColor(bgLightGrid[0], bgLightGrid[1], bgLightGrid[2]);
@@ -926,12 +973,12 @@ const generateQuotationPDF = (
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(71, 85, 105);
-    doc.text(item.label, 20, itemY, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
-    doc.text(':', 45, itemY, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+    doc.text(item.label, 20, itemY);
+    doc.text(':', 45, itemY);
 
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(15, 23, 42);
-    doc.text(item.val, 48, itemY, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+    doc.text(item.val, 48, itemY);
   });
 
   // Draw Column 2
@@ -943,12 +990,12 @@ const generateQuotationPDF = (
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(71, 85, 105);
-    doc.text(item.label, 110, itemY, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
-    doc.text(':', 130, itemY, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+    doc.text(item.label, 110, itemY);
+    doc.text(':', 130, itemY);
 
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(15, 23, 42);
-    doc.text(item.val, 133, itemY, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+    doc.text(item.val, 133, itemY);
   });
   
   currentY += cfg.paymentCardHeight + cfg.secSpacing;
@@ -961,7 +1008,7 @@ const generateQuotationPDF = (
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
   doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text('TERMS & CONDITIONS', 15, currentY, { wordWrap: true, breakWords: true, overflow: 'wrap', autoHeight: true } as any);
+  doc.text('TERMS & CONDITIONS', 15, currentY);
   currentY += 4.5;
 
   let termsIndex = 0;
@@ -2229,8 +2276,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const missing: string[] = [];
     if (!leadObj.customer_name?.trim()) missing.push('Customer Name');
     if (!leadObj.mobile?.trim()) missing.push('Mobile Number');
-    if (!leadObj.email?.trim()) missing.push('Email Address');
-    if (!leadObj.client_residence_address?.trim() && !leadObj.address?.trim()) missing.push('Client Residence Address');
     if (!leadObj.city?.trim()) missing.push('City');
     if (!leadObj.state?.trim()) missing.push('State');
     if (!leadObj.pincode?.trim()) missing.push('Pincode');
@@ -5473,32 +5518,39 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           category: resolvedCategory
                         };
                         
-                        if (editingPackage) {
-                          await updatePackage(editingPackage.package_id, payload);
-                        } else {
-                          await addPackage(payload);
+                        try {
+                          setIsSaving(true);
+                          if (editingPackage) {
+                            await updatePackage(editingPackage.package_id, payload);
+                          } else {
+                            await addPackage(payload);
+                          }
+                          setIsAddFormOpen(false);
+                          setEditingPackage(null);
+                          setPkgForm({ 
+                            package_name: '', 
+                            category: 'Weddings', 
+                            price: 0, 
+                            status: 'Active', 
+                            deliverables: '', 
+                            team_members: '', 
+                            seasonal_offer: '',
+                            terms_conditions: '',
+                            event_type: '',
+                            duration: '',
+                            package_includes: ''
+                          });
+                          setCustomCategory('');
+                        } catch (err: any) {
+                          alert(`Failed to save package: ${err.message || err}`);
+                        } finally {
+                          setIsSaving(false);
                         }
-                        
-                        setIsAddFormOpen(false);
-                        setEditingPackage(null);
-                        setPkgForm({ 
-                          package_name: '', 
-                          category: 'Weddings', 
-                          price: 0, 
-                          status: 'Active', 
-                          deliverables: '', 
-                          team_members: '', 
-                          seasonal_offer: '',
-                          terms_conditions: '',
-                          event_type: '',
-                          duration: '',
-                          package_includes: ''
-                        });
-                        setCustomCategory('');
                       }}
-                      className="px-4 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition-all cursor-pointer border border-transparent"
+                      disabled={isSaving}
+                      className="px-4 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition-all cursor-pointer border border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Save Package
+                      {isSaving ? 'Saving...' : 'Save Package'}
                     </button>
                   </div>
                 </div>
@@ -5826,7 +5878,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     {/* Email */}
                     <div>
                       <label className="block text-xs font-semibold text-slate-404 mb-1.5">
-                        Email Address
+                        Email (Optional)
                       </label>
                       <input
                         type="email"
@@ -7270,7 +7322,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           />
                         </div>
                         <div>
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Email Address</label>
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Email (Optional)</label>
                           <input
                             type="email"
                             value={wizardLeadData.email || ''}
@@ -7548,7 +7600,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   <label className="block text-[11px] font-bold text-slate-455 mb-1.5 uppercase font-mono tracking-wider">Package Category</label>
                                   <input
                                     type="text"
-                                    value={selectedPkg.category || 'Wedding Packages'}
+                                    value={selectedPkg.category || 'Weddings'}
                                     disabled
                                     className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2 px-3 text-xs text-slate-400 font-medium cursor-not-allowed"
                                   />

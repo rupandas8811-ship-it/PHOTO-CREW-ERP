@@ -3,6 +3,7 @@ import { useRole } from './RoleContext';
 import { Menu, RefreshCw, LogOut } from 'lucide-react';
 import { UserRole } from '../types';
 import { AppLogo } from './AppLogo';
+import { NotificationBell } from './NotificationBell';
 
 interface RoleSwitcherProps {
   sidebarOpen?: boolean;
@@ -64,6 +65,8 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({ sidebarOpen, setSide
 
         {/* Right Side: Refresh & Logout Buttons (Always visible on all screen sizes) */}
         <div className="flex items-center gap-2">
+          <NotificationBell />
+
           <button
             onClick={handleRefresh}
             className="p-2 sm:px-3 sm:py-1.5 flex items-center gap-2 bg-emerald-500/5 hover:bg-emerald-500/15 text-emerald-400 hover:text-emerald-300 border border-emerald-500/15 hover:border-emerald-500/35 rounded-xl transition-all cursor-pointer shadow-md select-none touch-manipulation min-w-[38px] min-h-[38px] sm:min-w-0 sm:min-h-0"
