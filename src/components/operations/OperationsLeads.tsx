@@ -2151,6 +2151,16 @@ Please report on time and update status through the portal.`;
             <form onSubmit={async (e) => {
               e.preventDefault();
               if (isSaving) return;
+
+              const hasHardDisk = !!hardDiskReceived;
+              const hasMemoryCard = !!memoryCardReceived;
+              const hasCloudLink = !!(footageForm.footage_link && footageForm.footage_link.trim());
+
+              if (!hasHardDisk && !hasMemoryCard && !hasCloudLink) {
+                alert("Please provide at least one raw footage source: Hard Disk, Memory Card, or Cloud/Drive Link.");
+                return;
+              }
+
               try {
                 setIsSaving(true);
                 // Save equipment handovers/verifications to Supabase & state
@@ -2207,6 +2217,7 @@ Please report on time and update status through the portal.`;
                 alert("Failed to save and move raw footage. Error: " + (err.message || "Please try again."));
               } finally {
                 setIsSaving(false);
+                // Reset state to ensure next is clean
               }
             }} className="space-y-4 text-left">
               <div>
@@ -2215,7 +2226,6 @@ Please report on time and update status through the portal.`;
                 </label>
                 <input
                   type="url"
-                  required
                   value={footageForm.footage_link}
                   onChange={(e) => setFootageForm({ ...footageForm, footage_link: e.target.value })}
                   placeholder="e.g. https://drive.google.com/drive/folders/..."
