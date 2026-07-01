@@ -865,7 +865,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       cloned.mobile = cloned.mobile || cloned.phone;
     }
 
-    if (table === 'production_staff') {
+    if (table === 'operations_staff' || table === 'production_staff') {
       const existing = staff.find(s => s.staff_id === record.staff_id);
       const merged = existing ? { ...existing, ...cloned } : cloned;
       
@@ -876,18 +876,37 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           extra[k] = merged[k];
         }
       }
+
+      if (merged.role) {
+        extra.role = merged.role;
+      }
+      extra.notes = (merged.notes && !merged.notes.trim().startsWith('{')) ? merged.notes : (extra.notes || merged.notes || '');
+
+      const mapToDbStaffRole = (role: string): string => {
+        const r = (role || '').trim().toLowerCase();
+        if (r.includes('photographer')) return 'Photographer';
+        if (r.includes('videographer')) return 'Videographer';
+        if (r.includes('drone') || r.includes('aerial')) return 'Drone Operator';
+        if (r.includes('editor')) return 'Coordinator';
+        if (r.includes('assistant')) return 'Assistant';
+        if (r.includes('coordinator')) return 'Coordinator';
+        if (r.includes('manager')) return 'Manager';
+        return 'Photographer';
+      };
+
+      const dbRole = mapToDbStaffRole(merged.role || 'Production Assistant');
       
       cloned = {
         staff_id: merged.staff_id,
         name: merged.name,
         mobile: merged.mobile,
         email: merged.email,
-        role: merged.role || 'Production Editor',
-        department: merged.department || 'Post-Production',
+        role: dbRole,
+        department: merged.department || 'Operations',
         status: merged.status || 'Active',
         joining_date: merged.joining_date || new Date().toISOString().split('T')[0],
         profile_photo: merged.profile_photo || '',
-        notes: (merged.notes && !merged.notes.trim().startsWith('{')) ? merged.notes : (extra.notes || merged.notes || ''),
+        notes: JSON.stringify(extra),
         created_at: merged.created_at || new Date().toISOString()
       } as any;
 
@@ -2039,12 +2058,17 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         ];
         
-        const mappedSeed = initialStaffSeed.map(s => ({ ...s, staff_id: mapToDbStaffId(s.staff_id) }));
+        const mappedSeed = initialStaffSeed.map(s => {
+          const sanitized = stripClientOnlyFields('operations_staff', s);
+          sanitized.staff_id = mapToDbStaffId(s.staff_id);
+          return sanitized;
+        });
         await supabaseClient.from('operations_staff').upsert(mappedSeed).then(
           () => console.log('Successfully seeded operations_staff.'),
           (err) => console.warn('Failed seeding operations_staff:', err)
         );
-        finalStaff = initialStaffSeed;
+        // Map the initial seeded staff using the same logic as database parsing so that internal state is fully aligned and loaded right after seeding
+        finalStaff = mappedSeed;
       }
 
       if (finalStaff && finalStaff.length > 0) {
