@@ -344,3 +344,22 @@ export function triggerAutoScrollAndFocus(selector: string, delayMs: number = 10
   }, delayMs);
 }
 
+/**
+ * Normalizes package category strings to prevent duplicates in dropdown menus and lists.
+ * It maps variants like 'Weddings', 'Wedding Package', or 'Wedding Packages' to a clean 'Wedding' category.
+ */
+export function normalizeCategory(cat: string): string {
+  if (!cat) return '';
+  const trimmed = cat.trim();
+  const lower = trimmed.toLowerCase();
+  if (
+    lower === 'weddings' ||
+    lower === 'wedding package' ||
+    lower === 'wedding packages' ||
+    lower === 'wedding'
+  ) {
+    return 'Wedding';
+  }
+  return trimmed;
+}
+

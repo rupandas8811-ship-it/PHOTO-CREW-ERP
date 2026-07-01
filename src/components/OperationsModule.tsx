@@ -8,6 +8,7 @@ import { NotificationsModule } from './NotificationsModule';
 import { OperationsAnalytics } from './operations/OperationsAnalytics';
 import { OperationsCalendar } from './OperationsCalendar';
 import { useRole } from './RoleContext';
+import { normalizeCategory } from '../utils';
 import { 
   Briefcase, Sparkles, Calendar, BarChart3, Shield, Search, 
   Layers, Camera, Users, Clock, Bell
@@ -26,11 +27,11 @@ const PackageCatalogueView: React.FC = () => {
   const filtered = (packages || []).filter(p => {
     const matchesSearch = p.package_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           (p.deliverables && p.deliverables.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesCat = catFilter === 'All' || p.category === catFilter;
+    const matchesCat = catFilter === 'All' || normalizeCategory(p.category) === catFilter;
     return matchesSearch && matchesCat;
   });
 
-  const categories = ['All', ...Array.from(new Set((packages || []).map(p => p.category)))];
+  const categories = ['All', ...Array.from(new Set((packages || []).map(p => normalizeCategory(p.category))))];
 
   return (
     <div className="bg-zinc-950/20 border border-zinc-900 rounded-2xl p-6 space-y-6 text-left relative overflow-hidden font-sans">
@@ -87,7 +88,7 @@ const PackageCatalogueView: React.FC = () => {
                 <div className="flex justify-between items-start gap-2">
                   <div>
                     <span className="text-[9px] px-2 py-0.5 border border-zinc-800 text-zinc-500 uppercase font-mono font-bold rounded">
-                      {pkg.category}
+                      {normalizeCategory(pkg.category)}
                     </span>
                     <h4 className="text-zinc-200 text-sm font-bold mt-1.5 leading-snug">{pkg.package_name}</h4>
                   </div>

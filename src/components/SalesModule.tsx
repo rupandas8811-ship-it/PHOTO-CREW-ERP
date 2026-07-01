@@ -8,7 +8,7 @@ import {
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES } from '../types';
 import { StatusText } from './ui/StatusText';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
-import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus } from '../utils';
+import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory } from '../utils';
 import { SalesCalendar } from './SalesCalendar';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { jsPDF } from 'jspdf';
@@ -1364,14 +1364,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   // Group active packages directly loaded from Supabase!
   const categoriesList = React.useMemo(() => {
     const dbCats = Array.from(new Set((packages || []).map((p) => p.category))).filter(Boolean) as string[];
-    const customCats = dbCats.filter(c => !PACKAGE_CATEGORIES.includes(c)).sort();
-    return [...PACKAGE_CATEGORIES, ...customCats];
+    const normalizedDbCats = dbCats.map(normalizeCategory);
+    const normalizedPkgCats = PACKAGE_CATEGORIES.map(normalizeCategory);
+    const customCats = normalizedDbCats.filter(c => !normalizedPkgCats.includes(c)).sort();
+    return Array.from(new Set([...normalizedPkgCats, ...customCats]));
   }, [packages]);
 
   const PACKAGES_LIST = categoriesList.map((cat) => ({
     categoryName: cat,
     items: (packages || [])
-      .filter((p) => p.category === cat && p.status === 'Active')
+      .filter((p) => normalizeCategory(p.category) === cat && p.status === 'Active')
       .map((p) => ({
         id: p.package_id,
         name: p.package_name,
@@ -5619,7 +5621,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 if (categoryFilter !== 'All' && cat !== categoryFilter) return null;
 
                 const catPkgs = (packages || []).filter(
-                  p => p.category === cat && 
+                  p => normalizeCategory(p.category) === cat && 
                   p.package_name.toLowerCase().includes(catSearchQuery.toLowerCase()) &&
                   (statusFilter === 'All' || p.status === statusFilter)
                 );
@@ -6358,7 +6360,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 <div className="flex items-center gap-2">
                                   <span className="font-extrabold text-white text-[12px]">{pkgObj.package_name}</span>
                                   <span className="text-[9px] bg-slate-800/80 text-custom text-slate-400 px-1.5 py-0.5 rounded font-mono uppercase">
-                                    {pkgObj.category}
+                                    {normalizeCategory(pkgObj.category)}
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-2 text-[11px] text-slate-400">
@@ -7600,7 +7602,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   <label className="block text-[11px] font-bold text-slate-455 mb-1.5 uppercase font-mono tracking-wider">Package Category</label>
                                   <input
                                     type="text"
-                                    value={selectedPkg.category || 'Weddings'}
+                                    value={normalizeCategory(selectedPkg.category) || 'Wedding'}
                                     disabled
                                     className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2 px-3 text-xs text-slate-400 font-medium cursor-not-allowed"
                                   />
@@ -8394,7 +8396,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   <div className="grid grid-cols-2 gap-4 bg-slate-950/40 p-3 rounded-xl border border-slate-850">
                     <div>
                       <span className="text-slate-550 block font-bold text-[9px] uppercase font-mono mb-0.5">Category Group</span>
-                      <span className="text-indigo-400 font-bold text-xs">{viewingPkgDetails.category}</span>
+                      <span className="text-indigo-400 font-bold text-xs">{normalizeCategory(viewingPkgDetails.category)}</span>
                     </div>
                     <div className="text-right">
                       <span className="text-slate-550 block font-bold text-[9px] uppercase font-mono mb-0.5">Standard Package Rate</span>
@@ -8620,7 +8622,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         <th key={id} className="p-3 text-left font-bold text-slate-100 border-r border-slate-850/60 last:border-r-0">
                           <div className="space-y-1">
                             <span className="text-[9px] bg-emerald-950 text-emerald-400 px-1.5 py-0.5 rounded font-mono uppercase font-black border border-emerald-900/30">
-                              {pkg.category}
+                              {normalizeCategory(pkg.category)}
                             </span>
                             <h5 className="font-bold text-slate-100 mt-1 leading-tight">{pkg.package_name}</h5>
                             <span className="block font-mono text-emerald-400 font-extrabold text-[12px] pt-1">
@@ -8640,7 +8642,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       const pkg = packages.find(p => p.package_id === id);
                       return (
                         <td key={id} className="p-3 border-r border-slate-850/40 last:border-r-0 font-sans font-medium text-slate-200">
-                          {pkg?.category || 'General'}
+                          {pkg ? normalizeCategory(pkg.category) : 'General'}
                         </td>
                       );
                     })}
