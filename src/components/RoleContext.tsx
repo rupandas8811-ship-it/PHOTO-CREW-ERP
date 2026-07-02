@@ -2054,7 +2054,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             pdf_url: q.pdf_url || metadata.pdf_url || '',
             whatsapp_sent_status: q.whatsapp_sent_status !== undefined ? q.whatsapp_sent_status : (metadata.whatsapp_sent_status || false),
             viewed_status: q.viewed_status !== undefined ? q.viewed_status : (metadata.viewed_status || false),
-            generated_date: q.generated_date || metadata.generated_date || q.created_at?.split('T')[0] || new Date().toISOString().split('T')[0]
+            generated_date: q.generated_date || metadata.generated_date || q.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+            sales_staff_name: metadata.sales_staff_name || '',
+            sales_staff_mobile: metadata.sales_staff_mobile || '',
+            editableInclusions: metadata.editableInclusions || null,
+            editableDeliverables: metadata.editableDeliverables || null
           };
         });
         setQuotations(parsedQuotes);
@@ -4739,8 +4743,29 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deletePackage = async (packageId: string) => {
-    // In this ERP, we don't delete packages anymore, we deactivate them.
-    return updatePackage(packageId, { status: 'Inactive' });
+    try {
+      if (supabaseClient) {
+        const pkg = packages.find(p => p.package_id === packageId);
+        const pkgName = pkg ? pkg.package_name : packageId;
+
+        const { error } = await supabaseClient
+          .from('packages')
+          .delete()
+          .eq('package_id', packageId);
+
+        if (error) {
+          throw error;
+        }
+
+        setPackages((prev) => prev.filter((p) => p.package_id !== packageId));
+        logActivity(`Deleted Package: ${pkgName}`, 'Sales', packageId, 'Active', 'Deleted');
+      } else {
+        throw new Error('Supabase client is not initialized.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      throw err;
+    }
   };
 
   const addNotification = async (payload: Omit<Notification, 'notification_id' | 'created_at' | 'read_status'> & { notification_id?: string; read_status?: boolean }) => {
@@ -4978,7 +5003,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       pdf_url: newQuote.pdf_url,
       whatsapp_sent_status: newQuote.whatsapp_sent_status,
       viewed_status: newQuote.viewed_status,
-      generated_date: newQuote.generated_date
+      generated_date: newQuote.generated_date,
+      sales_staff_name: newQuote.sales_staff_name || '',
+      sales_staff_mobile: newQuote.sales_staff_mobile || '',
+      editableInclusions: newQuote.editableInclusions || null,
+      editableDeliverables: newQuote.editableDeliverables || null
     };
 
     const packedTerms = `${newQuote.terms_conditions || ''}\n\nMETADATA:${JSON.stringify(metadataObj)}`;
@@ -5046,7 +5075,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         pdf_url: updatedQuote.pdf_url,
         whatsapp_sent_status: updatedQuote.whatsapp_sent_status,
         viewed_status: updatedQuote.viewed_status,
-        generated_date: updatedQuote.generated_date
+        generated_date: updatedQuote.generated_date,
+        sales_staff_name: updatedQuote.sales_staff_name || '',
+        sales_staff_mobile: updatedQuote.sales_staff_mobile || '',
+        editableInclusions: updatedQuote.editableInclusions || null,
+        editableDeliverables: updatedQuote.editableDeliverables || null
       };
 
       let cleanTerms = updatedQuote.terms_conditions || '';
