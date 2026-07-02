@@ -128,6 +128,7 @@ export interface User {
 
 export interface LeadEvent {
   id: string;
+  event_type?: string;
   event_name: string;
   event_date: string;
   event_start_date: string;
@@ -136,6 +137,9 @@ export interface LeadEvent {
   event_shoot_type: string;
   guest_pax: number;
   staff_pax: number;
+  event_start_time?: string;
+  event_end_time?: string;
+  google_maps_link?: string;
 }
 
 export interface Lead {
@@ -188,6 +192,7 @@ export interface Lead {
   lead_value?: number;
   lead_score?: number;
   booking_status?: string;
+  google_maps_link?: string;
 }
 
 export interface LeadPackage {
