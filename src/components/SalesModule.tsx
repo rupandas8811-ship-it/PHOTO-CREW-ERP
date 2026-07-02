@@ -2457,6 +2457,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     .reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
   const dynamicFinalAmt = Math.max(0, dynamicBaseSum - quoteDiscount + dynamicAdditionalSum);
 
+  React.useEffect(() => {
+    setWizardLeadData(prev => {
+      if (prev.final_amount !== dynamicFinalAmt) {
+        return { ...prev, final_amount: dynamicFinalAmt };
+      }
+      return prev;
+    });
+  }, [dynamicFinalAmt]);
+
   const getLeadInfoForQuote = (isEdit: boolean) => {
     if (isEdit) {
       return {
@@ -2868,52 +2877,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         <div className="bg-slate-900/50 border border-slate-805/40 rounded-xl p-4.5 space-y-4 shadow-sm">
           {/* List of Deliverables in tabular grid */}
           <div className="space-y-4">
-            {/* List 1: Package Deliverables (Base) */}
-            <div className="space-y-2">
-              <h5 className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                Package Base Deliverables (Base Package Deliverables)
-              </h5>
-              {quoteServices.filter(s => !s.isAdditional).length === 0 ? (
-                <p className="text-[10px] text-slate-500 italic px-2 font-mono">No base package deliverables configured.</p>
-              ) : (
-                <div className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/40">
-                  <table className="w-full text-left text-xs min-w-[300px]">
-                    <thead>
-                      <tr className="bg-slate-900/80 text-slate-400 font-mono text-[10px] uppercase border-b border-slate-800">
-                        <th className="py-2.5 px-3">Service / Deliverables</th>
-                        <th className="py-2.5 px-3 text-center w-20">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/50">
-                      {quoteServices.filter(s => !s.isAdditional).map(item => (
-                        <tr key={item.id} className="hover:bg-slate-900/30 transition-colors">
-                          <td className="py-2 px-3">
-                            <input
-                              type="text"
-                              value={item.name}
-                              onChange={(e) => handleEditServiceItem(item.id, { name: e.target.value })}
-                              className="w-full bg-slate-950/80 border border-slate-800 focus:border-cyan-500 rounded px-2 py-1 text-xs text-slate-100 placeholder-slate-600 focus:outline-none"
-                              placeholder="Deliverable Name..."
-                            />
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveServiceItem(item.id)}
-                              className="text-red-400 hover:text-red-350 hover:bg-red-500/10 px-2 py-1 rounded text-[10px] font-mono transition-colors font-bold"
-                            >
-                              Remove
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
             {/* List 2: Additional Services & Add-ons */}
             <div className="space-y-2">
               <h5 className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
@@ -2962,144 +2925,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           </div>
 
           {/* Add Deliverable Form Control */}
-          <div className="bg-slate-950/80 border border-slate-800/60 rounded-xl p-3.5 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-slate-300 font-mono uppercase tracking-wider">➕ Add Custom Deliverable Node</span>
-              {!isAddingInline ? (
-                <button
-                  type="button"
-                  onClick={() => setIsAddingInline(true)}
-                  className="bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/25 rounded px-3 py-1 text-xs font-mono font-bold transition-all shadow-sm"
-                >
-                  + Add Deliverable
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setIsAddingInline(false)}
-                  className="text-slate-400 hover:text-slate-300 text-xs font-mono"
-                >
-                  Cancel Add
-                </button>
-              )}
-            </div>
-
-            {isAddingInline && (
-              <div className="space-y-4 border-t border-slate-800/50 pt-3">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Deliverable Name</label>
-                    <input
-                      type="text"
-                      value={newServiceName}
-                      onChange={(e) => setNewServiceName(e.target.value)}
-                      placeholder="e.g. Extra Album, Same Day Edit..."
-                      className="w-full bg-slate-900 border border-slate-800 focus:border-cyan-500 rounded px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Quantity</label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={newServiceQty}
-                        onChange={(e) => setNewServiceQty(Math.max(1, Number(e.target.value)))}
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-cyan-500 rounded px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none font-mono text-center"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Unit Price (₹)</label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={newServicePrice}
-                        onChange={(e) => setNewServicePrice(Math.max(0, Number(e.target.value)))}
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-cyan-500 rounded px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none font-mono text-right"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Scope Section</label>
-                    <div className="flex gap-2 h-8 items-center">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newService = {
-                            id: `add_base_${Date.now()}`,
-                            name: newServiceName.trim() || 'New Package Deliverable',
-                            qty: Math.max(1, newServiceQty),
-                            price: Math.max(0, newServicePrice),
-                            isAdditional: false
-                          };
-                          setQuoteServices(prev => [...prev, newService]);
-                          setNewServiceName('');
-                          setNewServiceQty(1);
-                          setNewServicePrice(0);
-                        }}
-                        className="flex-1 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/25 rounded py-1 px-2 text-[10px] font-mono font-bold transition-all text-center"
-                      >
-                        Add to Base Pkg
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newService = {
-                            id: `add_addl_${Date.now()}`,
-                            name: newServiceName.trim() || 'New Additional Service',
-                            qty: Math.max(1, newServiceQty),
-                            price: Math.max(0, newServicePrice),
-                            isAdditional: true
-                          };
-                          setQuoteServices(prev => [...prev, newService]);
-                          setNewServiceName('');
-                          setNewServiceQty(1);
-                          setNewServicePrice(0);
-                        }}
-                        className="flex-1 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/25 rounded py-1 px-2 text-[10px] font-mono font-bold transition-all text-center"
-                      >
-                        Add to Add-on
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Quick Add presets requested by user */}
-                <div className="pt-1.5 border-t border-slate-900 space-y-1">
-                  <span className="block text-[9px] uppercase tracking-wider text-slate-500 font-mono">⚡ Quick Suggest Presets</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {[
-                      { name: 'Extra Album', price: 8000, isAdd: true },
-                      { name: 'Additional Photographer', price: 15000, isAdd: true },
-                      { name: 'Same Day Edit', price: 12000, isAdd: true },
-                      { name: 'Live Streaming', price: 10000, isAdd: true },
-                      { name: 'Drone Coverage', price: 10000, isAdd: false },
-                      { name: 'LED Wall', price: 10050, isAdd: false }
-                    ].map((preset, idx) => (
-                      <button
-                        type="button"
-                        key={idx}
-                        onClick={() => {
-                          const id = `preset_${Date.now()}_${idx}`;
-                          const newService = {
-                            id,
-                            name: preset.name,
-                            qty: 1,
-                            price: preset.price,
-                            isAdditional: preset.isAdd
-                          };
-                          setQuoteServices(prev => [...prev, newService]);
-                        }}
-                        className="bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-slate-100 rounded px-2 py-1 text-[9px] font-mono transition-all"
-                      >
-                        + {preset.name} (₹{preset.price.toLocaleString('en-IN')})
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const newService = {
+                id: `add_addl_${Date.now()}_${Math.random()}`,
+                name: '',
+                qty: 1,
+                price: 0,
+                isAdditional: true
+              };
+              setQuoteServices(prev => [newService, ...prev]);
+            }}
+            className="bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/25 rounded px-3 py-1.5 text-xs font-mono font-bold transition-all shadow-sm w-fit mt-1"
+          >
+            + Add Deliverable
+          </button>
         </div>
 
         {/* Section 2: Quotation Details */}
@@ -8275,7 +8116,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                     disabled={isLeadLocked}
                                     onClick={() => {
                                       const currentList = [...(editableDeliverables[selectedPkgId] || [])];
-                                      currentList.push('');
+                                      currentList.unshift('');
                                       setEditableDeliverables({
                                         ...editableDeliverables,
                                         [selectedPkgId]: currentList
