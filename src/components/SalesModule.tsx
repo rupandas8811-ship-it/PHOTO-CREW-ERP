@@ -3389,6 +3389,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             return;
           }
 
+          if (eventForm.event_start_time && eventForm.event_end_time) {
+            if (isTimeEarlier(eventForm.event_start_time, eventForm.event_end_time)) {
+              showToastMsg("Event End Time cannot be earlier than Event Start Time.", "error");
+              setIsSaving(false);
+              return;
+            }
+          }
+
           const guestPaxVal = eventForm.guest_pax !== '' ? Math.max(0, parseInt(String(eventForm.guest_pax)) || 0) : 0;
           const staffPaxVal = eventForm.staff_pax !== '' ? Math.max(0, parseInt(String(eventForm.staff_pax)) || 0) : 0;
 
@@ -3721,6 +3729,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return;
     }
 
+    if (eventForm.event_start_time && eventForm.event_end_time) {
+      if (isTimeEarlier(eventForm.event_start_time, eventForm.event_end_time)) {
+        showToastMsg("Event End Time cannot be earlier than Event Start Time.", "error");
+        return;
+      }
+    }
+
     const guestPaxVal = eventForm.guest_pax !== '' ? Math.max(0, parseInt(String(eventForm.guest_pax)) || 0) : 0;
     const staffPaxVal = eventForm.staff_pax !== '' ? Math.max(0, parseInt(String(eventForm.staff_pax)) || 0) : 0;
 
@@ -3832,6 +3847,78 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setShowEventForm(true);
   };
 
+  const convertTo24Hour = (timeStr: string | undefined | null): string => {
+    if (!timeStr) return '';
+    const clean = timeStr.trim().toUpperCase();
+    if (!clean) return '';
+
+    // Match 12-hour AM/PM format (e.g., "08:00 AM", "8:00 AM", "12:30 PM", "01:00 PM")
+    const ampmMatch = clean.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+    if (ampmMatch) {
+      let hours = parseInt(ampmMatch[1], 10);
+      const minutes = ampmMatch[2];
+      const period = ampmMatch[3];
+
+      if (period === 'PM' && hours < 12) {
+        hours += 12;
+      } else if (period === 'AM' && hours === 12) {
+        hours = 0;
+      }
+
+      const hh = String(hours).padStart(2, '0');
+      return `${hh}:${minutes}`;
+    }
+
+    // Check if it's already in 24-hour format (e.g., "14:30")
+    const hhmmMatch = clean.match(/^(\d{2}):(\d{2})$/);
+    if (hhmmMatch) {
+      return clean;
+    }
+
+    // Check if it's a single digit hour (e.g. "8:30")
+    const looseMatch = clean.match(/^(\d{1}):(\d{2})$/);
+    if (looseMatch) {
+      return `0${looseMatch[1]}:${looseMatch[2]}`;
+    }
+
+    return '';
+  };
+
+  const convertTo12Hour = (timeStr: string | undefined | null): string => {
+    if (!timeStr) return '';
+    const clean = timeStr.trim();
+    if (!clean) return '';
+
+    const match = clean.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) {
+      // If it already has AM/PM, return it
+      if (clean.toUpperCase().includes('AM') || clean.toUpperCase().includes('PM')) {
+        return clean;
+      }
+      return clean;
+    }
+
+    let hours = parseInt(match[1], 10);
+    const minutes = match[2];
+    const period = hours >= 12 ? 'PM' : 'AM';
+
+    hours = hours % 12;
+    if (hours === 0) {
+      hours = 12;
+    }
+
+    const hh = String(hours).padStart(2, '0');
+    return `${hh}:${minutes} ${period}`;
+  };
+
+  const isTimeEarlier = (start: string | undefined | null, end: string | undefined | null): boolean => {
+    if (!start || !end) return false;
+    const start24 = convertTo24Hour(start);
+    const end24 = convertTo24Hour(end);
+    if (!start24 || !end24) return false;
+    return end24 < start24;
+  };
+
   const renderEventDetailsSection = (isCrm: boolean) => {
     const eventsList = isCrm ? crmEvents : createEvents;
     const isFormVisible = showEventForm || eventsList.length === 0;
@@ -3865,7 +3952,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             </span>
                           </div>
                           <p className="text-[11px] text-slate-400 mt-0.5 font-mono">
-                            {ev.event_date} {ev.event_start_time ? `• ${ev.event_start_time}` : ''}
+                            {ev.event_date} {ev.event_start_time ? `• ${convertTo12Hour(ev.event_start_time)}` : ''}
                           </p>
                         </div>
                       </div>
@@ -3907,7 +3994,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             <div>
                               <span className="text-slate-400">Timings:</span>
                               <span className="ml-1.5 font-mono text-slate-200">
-                                {ev.event_start_time} {ev.event_end_time ? `to ${ev.event_end_time}` : ''}
+                                {convertTo12Hour(ev.event_start_time)} {ev.event_end_time ? `to ${convertTo12Hour(ev.event_end_time)}` : ''}
                               </span>
                             </div>
                           )}
@@ -4056,11 +4143,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       Event Start Time
                     </label>
                     <input
-                      type="text"
-                      placeholder="e.g. 10:00 AM"
-                      value={eventForm.event_start_time}
-                      onChange={(e) => setEventForm({ ...eventForm, event_start_time: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-600 focus:outline-none"
+                      type="time"
+                      value={convertTo24Hour(eventForm.event_start_time)}
+                      onChange={(e) => {
+                        const val24 = e.target.value;
+                        const val12 = convertTo12Hour(val24);
+                        setEventForm({ ...eventForm, event_start_time: val12 });
+                      }}
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono cursor-pointer"
                     />
                   </div>
 
@@ -4070,12 +4160,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       Event End Time
                     </label>
                     <input
-                      type="text"
-                      placeholder="e.g. 4:00 PM"
-                      value={eventForm.event_end_time}
-                      onChange={(e) => setEventForm({ ...eventForm, event_end_time: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-600 focus:outline-none"
+                      type="time"
+                      value={convertTo24Hour(eventForm.event_end_time)}
+                      onChange={(e) => {
+                        const val24 = e.target.value;
+                        const val12 = convertTo12Hour(val24);
+                        setEventForm({ ...eventForm, event_end_time: val12 });
+                      }}
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono cursor-pointer"
                     />
+                    {eventForm.event_start_time && eventForm.event_end_time && isTimeEarlier(eventForm.event_start_time, eventForm.event_end_time) && (
+                      <p className="text-[11px] text-rose-400 mt-1 animate-fade-in font-medium">
+                        End Time cannot be earlier than Start Time.
+                      </p>
+                    )}
                   </div>
 
                   {/* Event Location - Multiline Address */}
@@ -4443,6 +4541,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         if (!eventForm.event_location || eventForm.event_location.trim() === '') {
           showToastMsg("Please enter Event Location.", "error");
           return;
+        }
+
+        if (eventForm.event_start_time && eventForm.event_end_time) {
+          if (isTimeEarlier(eventForm.event_start_time, eventForm.event_end_time)) {
+            showToastMsg("Event End Time cannot be earlier than Event Start Time.", "error");
+            return;
+          }
         }
 
         const guestPaxVal = eventForm.guest_pax !== '' ? Math.max(0, parseInt(String(eventForm.guest_pax)) || 0) : 0;
