@@ -2368,10 +2368,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const missing: string[] = [];
     if (!leadObj.customer_name?.trim()) missing.push('Customer Name');
     if (!leadObj.mobile?.trim()) missing.push('Mobile Number');
+    if (!leadObj.city?.trim()) missing.push('City');
+    if (!leadObj.state?.trim()) missing.push('State');
+    if (!leadObj.pincode?.trim()) missing.push('Pincode');
     if (!leadObj.event_type?.trim()) missing.push('Event Type');
     if (!leadObj.desired_event_shoot_type?.trim() && !leadObj.shoot_type?.trim()) missing.push('Desired Event Shoot Type');
     if (!leadObj.event_date?.trim()) missing.push('Event Date');
-    if (!leadObj.event_location?.trim() && !leadObj.address?.trim() && !leadObj.client_residence_address?.trim()) missing.push('Event Address');
+    if (!leadObj.event_location?.trim() && !leadObj.location?.trim()) missing.push('Event Location');
     if (activePkgs.length === 0) missing.push('At least one selected package');
     return missing;
   };
@@ -2578,68 +2581,42 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleSendWhatsAppQuote = (isEdit: boolean) => {
     try {
-      console.log(`[handleSendWhatsAppQuote] Starting for isEdit=${isEdit}`);
       const leadObj = getLeadInfoForQuote(isEdit);
       const activePkgs = getSelectedPkgsInfo(isEdit);
 
       const missingFields = validateLeadForQuotation(leadObj, activePkgs);
       if (missingFields.length > 0) {
-        console.warn(`[handleSendWhatsAppQuote] Missing fields for quotation:`, missingFields);
         showToastMsg(`Quotation Incomplete! Please enter the following fields: ${missingFields.join(', ')}`, "error");
         return;
       }
-
-      const phone = leadObj.whatsapp_number || leadObj.mobile || '';
-      if (!phone || phone.trim() === '') {
-         console.error("[handleSendWhatsAppQuote] Validation failed: WhatsApp/Mobile number is missing.");
-         showToastMsg("Client's mobile number is missing. Please provide a valid phone number.", "error");
-         return;
-      }
-
-      // Check format and extract digits
-      const cleanPhone = phone.replace(/[^0-9]/g, '');
-      if (cleanPhone.length < 10) {
-         console.error(`[handleSendWhatsAppQuote] Validation failed: Phone number is too short (${phone}) -> digits only: ${cleanPhone}`);
-         showToastMsg("Phone number is invalid. It must contain at least 10 digits.", "error");
-         return;
-      }
-
-      const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
 
       const basePkgSum = dynamicBaseSum;
       const finalAmt = dynamicFinalAmt;
       const quotNum = activeQuoteNum || `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
       
       const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
-      const eventAddress = leadObj.event_location || leadObj.address || leadObj.client_residence_address || 'N/A';
+      const phone = leadObj.whatsapp_number || leadObj.mobile || '';
       
       const message = `*Quotation Details*\n\n` +
         `Hello *${leadObj.customer_name || 'Client'}*,\n\n` +
         `Thank you for choosing us. Please find your quotation details below:\n\n` +
         `• Quotation No: ${quotNum}\n` +
-        `• Event Type: ${leadObj.event_type || 'Event'}\n` +
+        `• Event: ${leadObj.event_type || 'Event'}\n` +
         `• Event Date: ${leadObj.event_date || 'N/A'}\n` +
-        `📍 Event Address:\n${eventAddress}\n\n` +
-        `• Package Name: ${pkgNames}\n` +
+        `• Package: ${pkgNames}\n` +
         `• Package Amount: ₹${basePkgSum.toLocaleString('en-IN')}\n` +
         `• Discount: ₹${quoteDiscount.toLocaleString('en-IN')}\n` +
         `• Additional Charges: ₹${quoteAdditional.toLocaleString('en-IN')}\n` +
-        `• Final Quotation Amount: ₹${finalAmt.toLocaleString('en-IN')}\n\n` +
+        `• Final Amount: ₹${finalAmt.toLocaleString('en-IN')}\n\n` +
         `Please let us know if you have any questions. Thank you!`;
 
-      console.log(`[handleSendWhatsAppQuote] Generating WhatsApp link for ${formattedPhone}...`);
-      const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
-      
-      const windowRef = window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
-      if (windowRef) {
-         console.log(`[handleSendWhatsAppQuote] Successfully opened WhatsApp for ${formattedPhone}`);
-      } else {
-         console.error(`[handleSendWhatsAppQuote] Failed to open WhatsApp window (Popup blocker might be active). URL: ${whatsappUrl}`);
-         showToastMsg("Failed to open WhatsApp. Please check if pop-ups are blocked by your browser.", "error");
-      }
-    } catch (err: any) {
-      console.error("[handleSendWhatsAppQuote] Unexpected error occurred:", err);
-      showToastMsg(`Failed to send WhatsApp quote: ${err.message || 'Unknown error'}`, "error");
+      const cleanPhone = phone.replace(/[^0-9]/g, '');
+      const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+
+      window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
+    } catch (err) {
+      console.error("WhatsApp quote failed:", err);
+      alert("Failed to send WhatsApp quote.");
     }
   };
 
@@ -4418,13 +4395,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     return matchesSearch && matchesSource && matchesStatus && matchesSales && matchesDate && matchesDateRange;
   }).sort((a, b) => {
-    const getTime = (lead: any) => {
-      if (lead.created_at) return new Date(lead.created_at).getTime() || 0;
-      if (lead.updated_at) return new Date(lead.updated_at).getTime() || 0;
-      if (lead.created_date) return new Date(lead.created_date).getTime() || 0;
-      return 0;
-    };
-    return getTime(b) - getTime(a);
+    const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_date).getTime());
+    const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_date).getTime());
+    return timeB - timeA;
   });
 
   return (
@@ -4530,8 +4503,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       </div>
 
       {/* Main Sandbox Area */}
-      {selectedLead ? (
-        <div className="lg:grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      {false && selectedLead && (
+        <div className="hidden lg:grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
           {/* Column A: Lead Details & Meta */}
           <div className="lg:col-span-4 bg-slate-850 rounded-xl border border-slate-800 p-5 space-y-4">
@@ -4675,70 +4648,4015 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       <label className="block text-xs font-medium text-slate-400 mb-1">
                         Transition ERP Stage *
                       </label>
-                      <select>
+                      <select
+                        value={followUpForm.status}
+                        onChange={(e) => setFollowUpForm({ ...followUpForm, status: e.target.value as CurrentStage })}
+                        className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      >
+                        <option value="Follow Up">Follow Up</option>
+                        <option value="Quotation Sent">Quotation Sent</option>
+                        <option value="Negotiation">Negotiation</option>
+                        <option value="Order Confirmed">Order Confirmed</option>
                       </select>
                     </div>
                   </div>
+
+                  {followUpForm.status === 'Order Confirmed' ? (
+                    <div className="space-y-4 pt-2 border-t border-slate-800">
+                      <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Configure Confirmed Order Settings</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            Event Date * (Required)
+                          </label>
+                          <input
+                            type="date"
+                            required
+                            value={followUpForm.event_date}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, event_date: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            Event Time * (Required)
+                          </label>
+                          <input
+                            type="time"
+                            required
+                            value={followUpForm.event_time}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, event_time: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            Reporting Time * (Required)
+                          </label>
+                          <input
+                            type="time"
+                            required
+                            value={followUpForm.reporting_time}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, reporting_time: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            Final Amount (₹) *
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            value={followUpForm.quotation_amount}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, quotation_amount: Number(e.target.value) })}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            Advance Amount Received (₹)
+                          </label>
+                          <input
+                            type="number"
+                            value={followUpForm.advance_received}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, advance_received: Number(e.target.value) })}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            Payment Mode
+                          </label>
+                          <select
+                            value={followUpForm.payment_mode}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, payment_mode: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          >
+                            <option value="UPI">UPI (GPay/PhonePe)</option>
+                            <option value="Cash">Cash Handover</option>
+                            <option value="Bank Transfer">Bank NFT/RTGS/IMPS</option>
+                            <option value="Card">Credit/Debit Card</option>
+                            <option value="Cheque">Cheque Deposit</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Next Date */}
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            Next Follow-up Action Date *
+                          </label>
+                          <input
+                            type="date"
+                            required
+                            value={followUpForm.next_follow_up_date}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, next_follow_up_date: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                          />
+                        </div>
+
+                        {/* Proposed budget */}
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            Negotiated Quotation Amount (₹) *
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            value={followUpForm.quotation_amount}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, quotation_amount: Number(e.target.value) })}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Call reports */}
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">
+                          Call / Conversation Notes *
+                        </label>
+                        <textarea
+                          rows={4}
+                          required
+                          placeholder="Log exact customer concerns, desired outputs, specific package selections, or callbacks."
+                          value={followUpForm.call_notes}
+                          onChange={(e) => setFollowUpForm({ ...followUpForm, call_notes: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        ></textarea>
+                      </div>
+
+                      {/* Negotiation notes */}
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">
+                          Negotiation Notes (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Specific price offsets, discount justifications, extra features offered..."
+                          value={followUpForm.negotiation_notes}
+                          onChange={(e) => setFollowUpForm({ ...followUpForm, negotiation_notes: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+                    </>
+                  )}
                 </fieldset>
+
+                {/* Buttons */}
+                <div className="flex justify-end gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedLead(null)}
+                    className="px-4 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-lg transition-all cursor-pointer"
+                  >
+                    Discard Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLeadLocked || isSaving}
+                    className={`px-4 py-1.5 text-xs font-semibold rounded-lg shadow-sm transition-all border ${
+                      isLeadLocked || isSaving
+                      ? 'bg-slate-800/80 text-slate-500 border-slate-800/50 cursor-not-allowed opacity-50'
+                      : 'bg-indigo-650 hover:bg-indigo-550 text-white border-indigo-500/10 cursor-pointer text-shadow'
+                    }`}
+                  >
+                    {isSaving ? 'Saving...' : (isLeadLocked ? '🔒 Locked' : followUpForm.status === 'Order Confirmed' ? '💍 Confirm Order booking' : 'Save Follow-up Notes')}
+                  </button>
+                </div>
               </form>
-            ) : null}
-          </div>
-        </div>
-      ) : (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-950 text-slate-400 font-mono text-[10px] uppercase tracking-wider">
-                  <th className="p-3 border-b border-slate-800">Lead ID</th>
-                  <th className="p-3 border-b border-slate-800">Customer</th>
-                  <th className="p-3 border-b border-slate-800">Mobile</th>
-                  <th className="p-3 border-b border-slate-800">Event</th>
-                  <th className="p-3 border-b border-slate-800">Stage</th>
-                  <th className="p-3 border-b border-slate-800">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="text-xs">
-                {filteredLeads.length > 0 ? (
-                  filteredLeads.map((lead: any) => {
-                    try {
-                      return (
-                        <tr key={lead.lead_id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
-                          <td className="p-3 font-mono text-slate-300">{lead.lead_id}</td>
-                          <td className="p-3 font-bold text-slate-100">{lead.customer_name}</td>
-                          <td className="p-3 font-mono text-slate-300">{lead.mobile}</td>
-                          <td className="p-3 text-slate-300">{lead.event_type} - {lead.event_date}</td>
-                          <td className="p-3 text-slate-400">{lead.current_stage || 'Unknown'}</td>
-                          <td className="p-3">
-                            <button
-                              onClick={() => setSelectedLead(lead)}
-                              className="px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded font-bold transition-all cursor-pointer"
-                            >
-                              View Details
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    } catch (err) {
-                      return (
-                        <tr key={lead.lead_id || Math.random()} className="border-b border-slate-800/50 bg-red-900/10">
-                          <td colSpan={6} className="p-3 text-red-400 font-mono">Error rendering lead {lead.lead_id}</td>
-                        </tr>
-                      );
-                    }
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={6} className="p-8 text-center text-slate-500 font-mono text-[11px]">
-                      No leads found matching the current filters.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+            ) : (
+              <div className="p-12 text-center text-slate-500 border border-dashed border-slate-800 rounded-xl space-y-2">
+                <Ban className="w-10 h-10 text-slate-650 mx-auto" />
+                <h4 className="text-sm font-semibold text-slate-350">Access Restrictions Active</h4>
+                <p className="text-xs max-w-sm mx-auto">
+                  Only the **Sales Team** or the **Business Owner** possess authorized write clearances to log client interaction updates. Keep testing with another persona.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
+
+      {/* Main Sandbox Area & Mobile Base view */}
+      <div className="space-y-6">
+        {activeTab === 'calendar' ? (
+          <SalesCalendar />
+        ) : activeTab === 'profiles' ? (
+          /* NEW SCREEN: Customer Profiles & History Timeline sub-tab */
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Left Column: Accounts Directory / Ledger */}
+            <div className="lg:col-span-4 bg-slate-850 rounded-xl border border-slate-800 p-4 space-y-4 text-left">
+              <div className="border-b border-slate-800 pb-3">
+                <h3 className="text-sm font-bold text-slate-100 flex items-center gap-1.5 font-mono">
+                  <span>👥</span> CLIENT ACCOUNTS ({getCustomers(leads, orders, payments).length})
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Unified customer profiles compiled via CRM phone & email graphs.
+                </p>
+              </div>
+
+              {/* Search Customer Input */}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search by name, phone, email..."
+                  value={customerSearchQuery}
+                  onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 pl-8 pr-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-sans"
+                />
+                <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-500" />
+                {customerSearchQuery && (
+                  <button 
+                    onClick={() => setCustomerSearchQuery('')} 
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Roster List */}
+              <div className="space-y-2.5 max-h-[60vh] overflow-y-auto pr-1">
+                {(() => {
+                  const items = getCustomers(leads, orders, payments);
+                  const filtered = items.filter(c => 
+                    c.customer_name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+                    c.customer_id.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+                    c.email.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+                    c.mobile.includes(customerSearchQuery)
+                  );
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="p-8 text-center text-slate-500 text-xs">
+                        No clients match your query.
+                      </div>
+                    );
+                  }
+
+                  return filtered.map((cust) => {
+                    const isSelected = selectedCustomerProfileId === cust.customer_id;
+                    return (
+                      <div
+                        key={cust.customer_id}
+                        onClick={() => {
+                          setSelectedCustomerProfileId(cust.customer_id);
+                          setIsQuickReorderView(false);
+                        }}
+                        className={`p-3 rounded-xl border transition-all text-left cursor-pointer ${
+                          isSelected 
+                            ? 'bg-indigo-600/10 border-indigo-500/40 shadow-sm shadow-indigo-505/10' 
+                            : 'bg-slate-900 border-slate-800 hover:bg-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] bg-slate-800 border border-slate-700 text-amber-500/90 px-2 py-0.5 rounded font-mono font-bold">
+                            {cust.customer_id}
+                          </span>
+                          {cust.totalOrders >= 2 && (
+                            <span className="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-black uppercase">
+                              🔥 REPEAT ({cust.totalOrders})
+                            </span>
+                          )}
+                        </div>
+                        
+                        <h4 className="text-xs font-black text-slate-100 mt-2 font-sans break-words">
+                          {cust.customer_name}
+                        </h4>
+                        
+                        <div className="text-[10px] text-slate-400 font-mono mt-1 space-y-0.5">
+                          <div className="break-words">{cust.email}</div>
+                          <div>{formatIndianPhoneNumber(cust.mobile)}</div>
+                        </div>
+
+                        <div className="border-t border-slate-800/60 mt-2.5 pt-2 flex items-center justify-between text-[10px]">
+                          <span className="text-slate-500">Total CLV:</span>
+                          <strong className="text-emerald-450 font-bold font-mono">{formatINR(cust.totalRevenue)}</strong>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+
+            {/* Right Column: In-depth Timeline & Historiography Ledger */}
+            <div className="lg:col-span-8 bg-slate-850 rounded-xl border border-slate-800 p-5 space-y-6 text-left">
+              {(() => {
+                const list = getCustomers(leads, orders, payments);
+                // default to first customer if none is explicitly clicked
+                const currentProfileId = selectedCustomerProfileId || (list.length > 0 ? list[0].customer_id : null);
+                const cust = list.find(c => c.customer_id === currentProfileId);
+
+                if (!cust) {
+                  return (
+                    <div className="p-12 text-center text-slate-500 border border-dashed border-slate-800 rounded-xl space-y-2">
+                      <Users className="w-8 h-8 mx-auto text-slate-600 animate-pulse" />
+                      <h4 className="text-sm font-semibold text-slate-400">Select customer profile</h4>
+                      <p className="text-xs text-slate-505">Pick any client from the directory to review lifetime timeline history.</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-6 animate-fade-in text-slate-200">
+                    {/* Header profile details */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs bg-slate-900 border border-slate-750 font-mono text-amber-500 px-2.5 py-0.5 rounded font-black font-mono">
+                            {cust.customer_id}
+                          </span>
+                          {cust.totalOrders >= 2 && (
+                            <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-0.5 rounded-full font-black">
+                              LOYAL RETIRED BUYER COHORT
+                            </span>
+                          )}
+                        </div>
+                        <h2 className="text-lg font-black text-white mt-1.5">{cust.customer_name}</h2>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-400 font-mono text-[10px] mt-1.5">
+                          <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5 text-indigo-400" /> {cust.email}</span>
+                          <span className="text-slate-800">|</span>
+                          <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-indigo-400" /> {formatIndianPhoneNumber(cust.mobile)}</span>
+                          {cust.alternate_mobile && (
+                            <>
+                              <span className="text-slate-800">|</span>
+                              <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-zinc-500" /> Alt: {formatIndianPhoneNumber(cust.alternate_mobile)}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsQuickReorderView(!isQuickReorderView);
+                            // Set event date default to next month
+                            const defaultReorderDate = new Date();
+                            defaultReorderDate.setMonth(defaultReorderDate.getMonth() + 1);
+                            setReorderForm(prev => ({
+                              ...prev,
+                              event_date: defaultReorderDate.toISOString().split('T')[0]
+                            }));
+                          }}
+                          className="flex items-center gap-1.5 bg-gradient-to-r from-indigo-650 to-indigo-750 hover:from-indigo-600 hover:to-indigo-700 text-white font-black text-xs px-4 py-2 rounded-xl shadow-lg transition-all cursor-pointer font-sans"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>{isQuickReorderView ? "Close Reorder Desk" : "Create New Reorder"}</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Quick Reorder Config Section */}
+                    {isQuickReorderView && (
+                      <div className="bg-slate-900 border border-indigo-500/20 p-4 rounded-xl space-y-4 animate-fade-in-up">
+                        <div className="border-b border-slate-800 pb-2">
+                          <h4 className="text-xs font-black text-indigo-400 uppercase tracking-widest font-mono">
+                            ✍️ CONFIGURE REPEAT SHOOT CONTRACT
+                          </h4>
+                          <p className="text-[10px] text-slate-400">
+                            Book a new independent contract project. This generates a new Lead and verified Order ID, keeping customer ID intact.
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className={reorderForm.event_type === 'Other' ? "sm:col-span-2 space-y-2" : ""}>
+                            <label className="block text-[11px] font-medium text-slate-400 mb-1">Event Shoot Type</label>
+                            <select
+                              value={reorderForm.event_type}
+                              onChange={(e) => setReorderForm({ ...reorderForm, event_type: e.target.value })}
+                              className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100"
+                            >
+                              {EVENT_TYPES.map(type => (
+                                <option key={type} value={type}>{type}</option>
+                              ))}
+                            </select>
+
+                            {reorderForm.event_type === 'Other' && (
+                              <div className="animate-fade-in-down mt-2">
+                                <label className="block text-[11px] font-mono font-bold text-amber-500 mb-1.5">
+                                  Custom Event Type *
+                                </label>
+                                <input
+                                  type="text"
+                                  required
+                                  placeholder="Specify custom event type"
+                                  value={reorderForm.custom_event_name}
+                                  onChange={(e) => setReorderForm({ ...reorderForm, custom_event_name: e.target.value })}
+                                  className="w-full bg-slate-950 border border-amber-500/50 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all text-white"
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-medium text-slate-400 mb-1">Shoot Date *</label>
+                            <input
+                              type="date"
+                              required
+                              value={reorderForm.event_date}
+                              onChange={(e) => setReorderForm({ ...reorderForm, event_date: e.target.value })}
+                              className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-medium text-slate-400 mb-1">Execution Location</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Grand Hyatt, Goa"
+                              value={reorderForm.event_location}
+                              onChange={(e) => setReorderForm({ ...reorderForm, event_location: e.target.value })}
+                              className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-medium text-slate-400 mb-1">Package Designation</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Royal Gold Cinema"
+                              value={reorderForm.package_name}
+                              onChange={(e) => setReorderForm({ ...reorderForm, package_name: e.target.value })}
+                              className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-medium text-slate-440 mb-1">Quotation Contract Sum (₹)</label>
+                            <input
+                              type="number"
+                              value={reorderForm.quotation_amount}
+                              onChange={(e) => setReorderForm({ ...reorderForm, quotation_amount: Number(e.target.value), advance_received: Math.round(Number(e.target.value)/3) })}
+                              className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-medium text-slate-440 mb-1">Advance Deposited (₹)</label>
+                            <input
+                              type="number"
+                              value={reorderForm.advance_received}
+                              onChange={(e) => setReorderForm({ ...reorderForm, advance_received: Number(e.target.value) })}
+                              className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
+                          <button
+                            type="button"
+                            onClick={() => setIsQuickReorderView(false)}
+                            className="bg-slate-800 hover:bg-slate-750 px-4 py-1.5 text-xs rounded border border-slate-700 text-slate-350 cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleExecuteQuickReorder(cust)}
+                            className="bg-indigo-600 hover:bg-indigo-555 px-4 py-1.5 text-xs text-white rounded font-bold shadow shadow-indigo-650/30 cursor-pointer"
+                          >
+                            Issue Repeat Order Contract
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Stats Summary widgets */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center border border-zinc-750 text-indigo-400">
+                          <Calendar className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 font-mono block uppercase">Total Bookings</span>
+                          <span className="text-sm font-black text-slate-100 font-mono">{cust.totalOrders}</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center border border-zinc-750 text-emerald-400">
+                          <DollarSign className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 font-mono block uppercase">Lifetime Revenue</span>
+                          <span className="text-sm font-black text-emerald-400 font-mono">{formatINR(cust.totalRevenue)}</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center border border-zinc-750 text-amber-500">
+                          <Clock className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 font-mono block uppercase">Latest Event Date</span>
+                          <span className="text-sm font-bold text-slate-205 font-mono">{cust.lastEventDate || 'N/A'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Timelines history segments */}
+                    <div className="space-y-6">
+                      
+                      {/* Subsegment 1: Historical Inquiries Timeline */}
+                      <div>
+                        <h4 className="text-xs font-black text-slate-400 font-mono tracking-wider uppercase pb-2 border-b border-slate-800 mb-3 flex items-center gap-1.5">
+                          <span>Inquiries Timeline</span>
+                        </h4>
+                        <div className="space-y-3">
+                          {cust.leads.map((ld, i) => (
+                            <div key={ld.lead_id} className="relative pl-6 before:absolute before:left-2 before:top-2 before:bottom-0 before:w-0.5 before:bg-slate-800">
+                              <span className="absolute left-[3px] top-[5px] w-1.5 h-1.5 rounded-full bg-indigo-505 ring-4 ring-slate-850" />
+                              <div className="bg-slate-900 p-3 rounded-lg border border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs w-full">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-[10px] text-amber-400 font-bold">{ld.lead_id}</span>
+                                    <span className="text-slate-500">Scheduled:</span>
+                                    <span className="font-semibold text-slate-300 font-mono">{ld.event_date}</span>
+                                  </div>
+                                  <div className="text-[11px] text-slate-400 mt-1">
+                                    Shoot: <strong className="text-slate-100">{ld.event_type}</strong> | Source: {ld.lead_source}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <span className="bg-slate-800 px-2 py-0.5 rounded text-[9px] font-mono text-indigo-400 font-semibold uppercase">
+                                    {ld.status}
+                                  </span>
+                                  <span className="font-mono text-[11px] text-emerald-450 font-black">
+                                    {formatINR(ld.budget)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          {cust.leads.length === 0 && (
+                            <p className="text-[11px] text-slate-500 font-mono italic">No previous inquiries logged.</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Subsegment 2: Confirmed Orders History */}
+                      <div>
+                        <h4 className="text-xs font-black text-slate-400 font-mono tracking-wider uppercase pb-2 border-b border-slate-800 mb-3 flex items-center gap-1.5">
+                          <span>Verified Orders & Contracts History</span>
+                        </h4>
+                        <div className="space-y-3">
+                          {cust.orders.map((ord) => (
+                            <div key={ord.order_id} className="bg-slate-900 p-3 rounded-lg border border-slate-800 text-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-[10px] text-indigo-400 font-bold">{ord.order_id}</span>
+                                  <span className="text-slate-500">Event Date:</span>
+                                  <span className="font-semibold text-slate-300 font-mono">{ord.event_date}</span>
+                                </div>
+                                <div className="text-[11px] text-slate-400 mt-1">
+                                  Package: <strong className="text-slate-200">{ord.package_name}</strong> | Location: {ord.event_location}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-3">
+                                <div className="text-right">
+                                  <div className="text-slate-550 font-mono text-[10px] uppercase">Quotation</div>
+                                  <strong className="text-emerald-450 text-[11px] font-mono font-black">{formatINR(ord.quotation_amount)}</strong>
+                                </div>
+                                <span className="bg-slate-800 px-2 py-0.5 rounded text-[10px] font-mono text-amber-500 font-semibold uppercase">
+                                  {ord.order_status}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                          {cust.orders.length === 0 && (
+                            <p className="text-[11px] text-slate-500 font-mono italic">No confirmed order folders detected.</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Subsegment 3: Payment History Ledger */}
+                      <div>
+                        <h4 className="text-xs font-black text-slate-400 font-mono tracking-wider uppercase pb-2 border-b border-slate-800 mb-3 flex items-center gap-1.5">
+                          <span>Financial Ledger Payments History</span>
+                        </h4>
+                        <div className="space-y-3">
+                          {(() => {
+                            const customerOrdersIds = cust.orders.map(o => o.order_id);
+                            const customerPayments = payments.filter(p => customerOrdersIds.includes(p.order_id));
+                            
+                            if (customerPayments.length === 0) {
+                              return <p className="text-[11px] text-slate-550 font-mono italic">Awaiting payment ledger clearance logs...</p>;
+                            }
+
+                            return customerPayments.map(p => (
+                              <div key={p.payment_id} className="bg-slate-900 border border-slate-800 p-3 rounded-lg text-xs grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <div>
+                                  <span className="text-slate-500 text-[10px] block font-mono">Invoice Code</span>
+                                  <span className="font-mono text-indigo-400 font-bold">{p.payment_id} (Ref: {p.order_id})</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500 text-[10px] block font-mono">Deposited Cash</span>
+                                  <span className="font-mono text-emerald-445 font-bold">{formatINR(p.advance_received + p.final_payment_received)}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-505 text-[10px] block font-mono">Balance Due</span>
+                                  <span className={`font-mono font-black ${p.balance_due > 0 ? 'text-red-405 animate-pulse' : 'text-slate-405'}`}>{formatINR(p.balance_due)}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500 text-[10px] block font-mono">Clearance Status</span>
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold leading-none inline-block mt-0.5 uppercase ${
+                                    p.payment_status === 'Cleared' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-455 border border-rose-500/20'
+                                  }`}>
+                                    {p.payment_status}
+                                  </span>
+                                </div>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      </div>
+
+                      {/* Subsegment 4: Delivery History */}
+                      <div>
+                        <h4 className="text-xs font-black text-slate-400 font-mono tracking-wider uppercase pb-2 border-b border-slate-800 mb-3 flex items-center gap-1.5">
+                          <span>Operational Crews & Delivery History</span>
+                        </h4>
+                        <div className="space-y-3">
+                          {(() => {
+                            const customerOrdersIds = cust.orders.map(o => o.order_id);
+                            // Link production items
+                            const linkedProduction = production.filter(prod => customerOrdersIds.includes(prod.order_id));
+
+                            if (linkedProduction.length === 0) {
+                              return <p className="text-[11px] text-slate-550 font-mono italic">Roster operations not yet dispatched to editors...</p>;
+                            }
+
+                            return linkedProduction.map(prod => (
+                              <div key={prod.production_id} className="bg-slate-900 border border-slate-800 p-3 rounded-lg text-xs flex justify-between items-center text-zinc-300">
+                                <div>
+                                  <span className="font-mono text-[10px] text-indigo-400 font-black">PROD-{prod.production_id} / ORD-{prod.order_id}</span>
+                                  <div className="text-[11px] text-slate-450 mt-0.5">
+                                    Editor assigned: <strong className="text-slate-205">{prod.editor_assigned || 'Unassigned'}</strong>
+                                  </div>
+                                </div>
+
+                                <div className="text-right">
+                                  <div className="text-[10px] text-slate-550 font-mono uppercase">Delivery Stage</div>
+                                  <span className="text-amber-500 font-black font-mono text-[11px] uppercase">{prod.editing_status}</span>
+                                </div>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      </div>
+                      
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        ) : activeTab === 'packages' ? (
+          /* NEW SCREEN: Package Management Catalog */
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 text-left relative overflow-hidden font-sans">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                  <Package className="w-4 h-4 text-slate-400" />
+                  <span>Dynamic Package Catalog</span>
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Manage core service offerings, pricing rates, and category bindings synced directly with Supabase.
+                </p>
+              </div>
+              
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingPackage(null);
+                    setPkgForm({ 
+                      package_name: '', 
+                      category: 'Weddings', 
+                      price: 0, 
+                      status: 'Active', 
+                      deliverables: '', 
+                      team_members: '', 
+                      seasonal_offer: '',
+                      terms_conditions: '',
+                      event_type: '',
+                      duration: '',
+                      package_includes: ''
+                    });
+                    setCustomCategory('');
+                    setIsAddFormOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition-all cursor-pointer border border-transparent"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Create offering</span>
+                </button>
+              )}
+            </div>
+
+            {dbCategoryError && (
+              <div id="db_category_error_banner" className="bg-amber-950/20 border border-amber-500/20 rounded-xl p-4 text-xs text-amber-400 font-medium space-y-1">
+                <span className="font-bold flex items-center gap-1">⚠️ Database Schema Notice</span>
+                <p>{dbCategoryError}</p>
+              </div>
+            )}
+
+            {/* In-place Add / Edit Package Modal */}
+            {(isAddFormOpen || editingPackage) && (
+              <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-3 md:p-5 overflow-y-auto animate-fade-in text-left text-xs bg-black/70">
+                <div id="add_edit_package_modal" className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-5xl md:w-[90%] p-3.5 md:p-5 space-y-2.5 shadow-2xl relative text-slate-350">
+                  <h4 className="text-sm font-bold text-slate-100 font-mono tracking-wide border-b border-slate-800 pb-2 flex items-center gap-2">
+                    {editingPackage ? '✏️ Edit Service Package' : '✨ Define New Service Package'}
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-2.5 text-xs text-slate-300">
+                    {/* Row 1: Package Name | Package Category */}
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">Package Name</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Traditional Wedding Photography"
+                        value={pkgForm.package_name}
+                        onChange={(e) => setPkgForm({ ...pkgForm, package_name: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-855 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">Package Category</label>
+                      <select
+                        value={pkgForm.category}
+                        onChange={(e) => setPkgForm({ ...pkgForm, category: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-855 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
+                      >
+                        {categoriesList.filter(c => c !== 'CUSTOM_CATEGORY').map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                        <option value="CUSTOM_CATEGORY">➕ Create Custom Category...</option>
+                      </select>
+                      {pkgForm.category === 'CUSTOM_CATEGORY' && (
+                        <div className="animate-slide-down mt-1.5">
+                          <label className="block text-amber-450 font-semibold mb-1">New Custom Category Name</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Newborn Baby shoot"
+                            value={customCategory}
+                            onChange={(e) => setCustomCategory(e.target.value)}
+                            className="w-full bg-slate-950 border border-amber-500/40 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-amber-500 font-sans"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Row 2: Package Price | Status */}
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">Package Price (INR)</label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 25000"
+                        value={pkgForm.price}
+                        onChange={(e) => setPkgForm({ ...pkgForm, price: parseFloat(e.target.value) || 0 })}
+                        className="w-full bg-slate-950 border border-slate-855 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">Status</label>
+                      <select
+                        value={pkgForm.status}
+                        onChange={(e) => setPkgForm({ ...pkgForm, status: e.target.value as 'Active' | 'Inactive' })}
+                        className="w-full bg-slate-950 border border-slate-855 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
+                      >
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                      </select>
+                    </div>
+
+                    {/* Row 3: Package Duration */}
+
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">Package Duration</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 1 Day, 2 Days, 8 Hours"
+                        value={pkgForm.duration}
+                        onChange={(e) => setPkgForm({ ...pkgForm, duration: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-855 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
+                      />
+                    </div>
+
+                    {/* Row 4: Package Includes | Deliverables */}
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">Package Includes</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Photobook, Drone coverage, Raw shots drive copy"
+                        value={pkgForm.package_includes}
+                        onChange={(e) => setPkgForm({ ...pkgForm, package_includes: e.target.value })}
+                        className="w-full bg-slate-955 border border-slate-800 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">Deliverables</label>
+                      <textarea
+                        placeholder="e.g. 2 Candid Photographers, 1 Cinematic Videographer, Standard Album..."
+                        value={pkgForm.deliverables}
+                        onChange={(e) => setPkgForm({ ...pkgForm, deliverables: e.target.value })}
+                        rows={1}
+                        className="w-full bg-slate-955 border border-slate-800 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans resize-y"
+                      />
+                    </div>
+
+                    {/* Extra Fields: Team Members Included | Seasonal Offer */}
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">Team Members Included</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 3 Crew Members + Drone"
+                        value={pkgForm.team_members}
+                        onChange={(e) => setPkgForm({ ...pkgForm, team_members: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-855 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">Seasonal Offer</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Free 1-min pre-wedding teaser"
+                        value={pkgForm.seasonal_offer}
+                        onChange={(e) => setPkgForm({ ...pkgForm, seasonal_offer: e.target.value })}
+                        className="w-full bg-slate-955 border border-slate-800 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
+                      />
+                    </div>
+
+                    {/* Terms & Conditions (Spanning both cols) */}
+                    <div className="md:col-span-2">
+                      <label className="block text-slate-400 font-semibold mb-1">Terms & Conditions</label>
+                      <textarea
+                        placeholder="e.g. 55% advance for booking confirmation. Prices exclude travel outside city limits..."
+                        value={pkgForm.terms_conditions}
+                        onChange={(e) => setPkgForm({ ...pkgForm, terms_conditions: e.target.value })}
+                        rows={2}
+                        className="w-full bg-slate-955 border border-slate-800 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans resize-y"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddFormOpen(false);
+                        setEditingPackage(null);
+                        setPkgForm({ 
+                          package_name: '', 
+                          category: 'Weddings', 
+                          price: 0, 
+                          status: 'Active', 
+                          deliverables: '', 
+                          team_members: '', 
+                          seasonal_offer: '',
+                          terms_conditions: '',
+                          event_type: '',
+                          duration: '',
+                          package_includes: ''
+                        });
+                        setCustomCategory('');
+                      }}
+                      className="px-4 py-1.5 text-xs bg-slate-800 hover:bg-slate-755 text-slate-300 rounded-lg transition-all cursor-pointer font-medium border border-transparent"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!pkgForm.package_name.trim()) {
+                          alert('Please supply a package name.');
+                          return;
+                        }
+                        if (pkgForm.price <= 0) {
+                          alert('Please enter a valid price greater than zero.');
+                          return;
+                        }
+
+                        let resolvedCategory = pkgForm.category;
+                        if (resolvedCategory === 'CUSTOM_CATEGORY') {
+                          if (!customCategory.trim()) {
+                            alert('Please enter a valid custom category name.');
+                            return;
+                          }
+                          resolvedCategory = customCategory.trim();
+                        }
+                        
+                        const payload = {
+                          ...pkgForm,
+                          category: resolvedCategory
+                        };
+                        
+                        try {
+                          setIsSaving(true);
+                          if (editingPackage) {
+                            await updatePackage(editingPackage.package_id, payload);
+                          } else {
+                            await addPackage(payload);
+                          }
+                          setIsAddFormOpen(false);
+                          setEditingPackage(null);
+                          setPkgForm({ 
+                            package_name: '', 
+                            category: 'Weddings', 
+                            price: 0, 
+                            status: 'Active', 
+                            deliverables: '', 
+                            team_members: '', 
+                            seasonal_offer: '',
+                            terms_conditions: '',
+                            event_type: '',
+                            duration: '',
+                            package_includes: ''
+                          });
+                          setCustomCategory('');
+                        } catch (err: any) {
+                          alert(`Failed to save package: ${err.message || err}`);
+                        } finally {
+                          setIsSaving(false);
+                        }
+                      }}
+                      disabled={isSaving}
+                      className="px-4 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition-all cursor-pointer border border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSaving ? 'Saving...' : 'Save Package'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Custom Multi-Search & Filters Bar */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 items-center bg-slate-950/40 p-3.5 rounded-xl border border-slate-800">
+              {/* Search Package Field */}
+              <div className="relative w-full">
+                <label className="text-[10px] text-slate-400 font-bold block mb-1 uppercase tracking-tight">Search Package</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search package name..."
+                    value={catSearchQuery}
+                    onChange={(e) => setCatSearchQuery(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg py-1.5 pl-8 pr-4 text-xs text-slate-250 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                  <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
+                  {catSearchQuery && (
+                    <button
+                      onClick={() => setCatSearchQuery('')}
+                      className="absolute right-2.5 top-2 text-slate-400 hover:text-white"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Filter by Category selection */}
+              <div className="w-full">
+                <label className="text-[10px] text-slate-400 font-bold block mb-1 uppercase tracking-tight font-sans">Filter by Category</label>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg py-1.5 px-2.5 text-xs text-slate-250 focus:outline-none cursor-pointer"
+                >
+                  <option value="All">All Categories ({categoriesList.length})</option>
+                  {categoriesList.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Filter by Status selection */}
+              <div className="w-full">
+                <label className="text-[10px] text-slate-400 font-bold block mb-1 uppercase tracking-tight font-sans">Filter by Status</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg py-1.5 px-2.5 text-xs text-slate-250 focus:outline-none cursor-pointer"
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="Active">Active Packages Only</option>
+                  <option value="Inactive">Inactive Packages Only</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Category Listing Grid */}
+            <div className="space-y-6">
+              {categoriesList.map((cat) => {
+                // Respect category filter
+                if (categoryFilter !== 'All' && cat !== categoryFilter) return null;
+
+                const catPkgs = (packages || []).filter(
+                  p => normalizeCategory(p.category) === cat && 
+                  p.package_name.toLowerCase().includes(catSearchQuery.toLowerCase()) &&
+                  (statusFilter === 'All' || p.status === statusFilter)
+                );
+                
+                if (catPkgs.length === 0) return null;
+                
+                return (
+                  <div key={cat} className="space-y-2.5 text-left animate-fade-in">
+                    <h4 className="text-[10px] font-black font-mono tracking-wider text-slate-400 border-b border-slate-800 pb-1 uppercase flex justify-between items-center bg-slate-950/20 px-2 py-1 rounded">
+                      <span>{cat}</span>
+                      <span className="text-slate-500 font-mono">({catPkgs.length})</span>
+                    </h4>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                      {catPkgs.map((pkg) => (
+                        <div
+                          key={pkg.package_id}
+                          className="bg-slate-955 border border-slate-850 p-4 rounded-xl flex flex-col justify-between hover:border-slate-800 transition-all space-y-4 hover:shadow-lg relative group"
+                        >
+                          <div className="space-y-1.5 text-left">
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono text-[9px] text-slate-500 font-bold uppercase">{pkg.package_id}</span>
+                              <span className={`px-2 py-0.5 text-[9px] font-bold font-mono rounded ${
+                                pkg.status === 'Active'
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                  : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
+                              }`}>
+                                {pkg.status}
+                              </span>
+                            </div>
+                            <h5 className="text-xs font-bold text-slate-100 leading-tight">{pkg.package_name}</h5>
+                            <p className="text-[11px] text-slate-400 break-words leading-snug">
+                              {pkg.deliverables || 'No custom deliverables specified'}
+                            </p>
+                          </div>
+
+                          <div className="flex flex-col gap-3 pt-2.5 border-t border-slate-900/80">
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono text-xs font-bold text-emerald-400">₹{pkg.price.toLocaleString('en-IN')}</span>
+                              <button
+                                type="button"
+                                onClick={() => setViewingPkgDetails(pkg)}
+                                className="text-[10px] font-mono font-bold tracking-tight text-slate-405 hover:text-emerald-400 cursor-pointer flex items-center gap-1 transition-all"
+                              >
+                                🔍 View specifications
+                              </button>
+                            </div>
+                            
+                            {canEdit && (
+                              <div className="grid grid-cols-3 gap-1.5 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingPackage(pkg);
+                                    setPkgForm({
+                                      package_name: pkg.package_name,
+                                      category: pkg.category,
+                                      price: pkg.price,
+                                      status: pkg.status as 'Active' | 'Inactive',
+                                      deliverables: pkg.deliverables || '',
+                                      team_members: pkg.team_members || '',
+                                      seasonal_offer: pkg.seasonal_offer || '',
+                                      terms_conditions: pkg.terms_conditions || '',
+                                      event_type: pkg.event_type || '',
+                                      duration: pkg.duration || '',
+                                      package_includes: pkg.package_includes || ''
+                                    });
+                                    setCustomCategory('');
+                                    setIsAddFormOpen(true);
+                                  }}
+                                  className="col-span-2 py-1 px-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[10px] uppercase font-mono tracking-tight font-bold border border-slate-800 hover:border-slate-700 rounded transition-all cursor-pointer text-center"
+                                  title="Edit package details"
+                                >
+                                  Edit Details
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const nextStatus = pkg.status === 'Active' ? 'Inactive' : 'Active';
+                                    await updatePackage(pkg.package_id, { status: nextStatus });
+                                  }}
+                                  className={`py-1 px-1.5 text-center text-[10px] uppercase font-mono tracking-tight font-bold border rounded transition-all cursor-pointer ${
+                                    pkg.status === 'Active'
+                                      ? 'bg-amber-500/10 border-amber-550/20 text-amber-500 hover:bg-amber-500/20'
+                                      : 'bg-emerald-500/10 border-emerald-555/20 text-emerald-400 hover:bg-emerald-500/20'
+                                  }`}
+                                  title={pkg.status === 'Active' ? "Deactivate Package" : "Activate Package"}
+                                >
+                                  {pkg.status === 'Active' ? 'Deactivate' : 'Activate'}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : activeTab === 'create' ? (
+          /* SCREEN 2: Create Lead Layout as centered Popup Modal utilizing createPortal to escape parents with transform/will-change limits */
+          createPortal(
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[9999] flex items-center justify-center p-0 sm:p-4 overflow-hidden animate-fade-in text-left">
+              <div 
+                id="create_lead_form"
+                className="bg-slate-900 border-0 sm:border border-slate-800 rounded-none sm:rounded-2xl w-full sm:w-[95vw] lg:w-[85vw] lg:max-w-[1200px] h-[100vh] sm:h-[90vh] shadow-2xl relative flex flex-col text-left overflow-hidden bg-gradient-to-tr from-slate-900 via-slate-900 to-slate-950 text-slate-100 whitespace-normal"
+              >
+            {/* Header: Sticky */}
+            <div className="border-b border-slate-800/80 p-4 sm:p-5 flex items-center justify-between shrink-0 bg-slate-950/40 backdrop-blur-md">
+              <div className="space-y-0.5">
+                <h3 className="text-sm sm:text-base font-bold text-slate-100 flex items-center gap-2">
+                  <span className="text-emerald-400">✍️</span> Create New Inbound Lead
+                </h3>
+                <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium">
+                  Capture inbound photography and videography business queries.
+                </p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => { resetForm(); setActiveTab('list'); }}
+                className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-xl transition-all cursor-pointer inline-flex items-center justify-center border border-transparent hover:border-slate-700/50"
+                title="Close Modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {crmToast && (
+              <div className={`mx-4 mt-4 p-3 rounded-xl shadow-lg flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2 duration-200 shrink-0 ${
+                crmToast.type === 'success' 
+                  ? 'bg-emerald-950/90 border border-emerald-500/20 text-emerald-400' 
+                  : 'bg-red-950/90 border border-red-500/20 text-red-400'
+              }`}>
+                <span>{crmToast.type === 'success' ? '⚡' : '⚠️'}</span>
+                <span className="text-[11px] font-mono font-bold">{crmToast.message}</span>
+              </div>
+            )}
+
+            {/* Wizard Progress Bar */}
+            <div className="bg-slate-955/30 px-4 sm:px-6 py-3.5 border-b border-slate-800/50 shrink-0">
+              <div className="grid grid-cols-5 gap-1.5 sm:gap-3">
+                {[
+                  { step: 1, label: 'Customer' },
+                  { step: 2, label: 'Event Info' },
+                  { step: 3, label: 'Packages' },
+                  { step: 4, label: 'Budget/Notes' },
+                  { step: 5, label: 'Finalize' }
+                ].map((item) => {
+                  const isActive = wizardStep === item.step;
+                  const isCompleted = wizardStep > item.step;
+                  return (
+                    <div key={item.step} className="flex flex-col items-center sm:items-start text-center sm:text-left space-y-1">
+                      <div className="w-full flex items-center gap-1">
+                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black font-mono transition-all duration-300 ${
+                          isActive 
+                            ? 'bg-cyan-500 text-slate-950 ring-4 ring-cyan-500/10' 
+                            : isCompleted 
+                              ? 'bg-emerald-500 text-slate-955' 
+                              : 'bg-slate-800 text-slate-500'
+                        }`}>
+                          {isCompleted ? '✓' : item.step}
+                        </span>
+                        <div className={`hidden sm:block flex-1 h-0.5 rounded transition-all duration-300 ${
+                          isCompleted ? 'bg-emerald-500' : 'bg-slate-800'
+                        }`} />
+                      </div>
+                      <span className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-wider transition-colors duration-300 ${
+                        isActive ? 'text-cyan-400' : isCompleted ? 'text-emerald-400' : 'text-slate-500'
+                      }`}>
+                        {item.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Scrollable Body: Content Fields */}
+            <div className="p-3 sm:p-4 overflow-y-auto flex-1 space-y-3.5 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
+              
+              {/* STEP 1: CUSTOMER DETAILS */}
+              {wizardStep === 1 && (
+                <div className="bg-slate-950/30 border border-slate-800/60 rounded-xl p-4 space-y-4 shadow-sm animate-fade-in">
+                  <div className="flex items-center gap-2 border-b border-slate-800/50 pb-2 mb-1">
+                    <Users className="w-4 h-4 text-cyan-405" />
+                    <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">1. Customer Details</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Customer Name */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                        Customer Full Name (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Rahul Sharma"
+                        value={createForm.customer_name}
+                        onChange={(e) => setCreateForm({ ...createForm, customer_name: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-sans"
+                      />
+                    </div>
+
+                    {/* Mobile Number */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                        Mobile Number *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. 9876543210"
+                        value={createForm.mobile}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCreateForm({ ...createForm, mobile: val });
+                          const cleanNum = val.replace(/[^\d]/g, '').slice(-10);
+                          if (cleanNum.length === 10) {
+                            handleCheckExistingCustomer('phone', val);
+                          }
+                        }}
+                        onBlur={(e) => handleCheckExistingCustomer('phone', e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-mono"
+                      />
+                    </div>
+
+                    {/* WhatsApp Number */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-semibold text-slate-404">
+                          WhatsApp Number
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (createForm.mobile) {
+                              setCreateForm(prev => ({ ...prev, whatsapp_number: prev.mobile }));
+                            }
+                          }}
+                          className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold uppercase tracking-wider cursor-pointer hover:underline"
+                        >
+                          Copy Mobile
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="WhatsApp contact number"
+                        value={createForm.whatsapp_number}
+                        onChange={(e) => setCreateForm({ ...createForm, whatsapp_number: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-mono"
+                      />
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                        Email (Optional)
+                      </label>
+                      <input
+                        type="email"
+                        placeholder="customer@domain.com"
+                        value={createForm.email}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCreateForm({ ...createForm, email: val });
+                          if (val.includes('@') && val.length > 5 && (val.endsWith('.com') || val.endsWith('.in') || val.endsWith('.org'))) {
+                            handleCheckExistingCustomer('email', val);
+                          }
+                        }}
+                        onBlur={(e) => handleCheckExistingCustomer('email', e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-sans"
+                      />
+                    </div>
+
+                    {/* Lead Source */}
+                    <div className="space-y-2 text-left">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                          Inbound Lead Channel Source *
+                        </label>
+                        <select
+                          value={createForm.lead_source}
+                          required
+                          onChange={(e) => setCreateForm({ ...createForm, lead_source: e.target.value })}
+                          className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all cursor-pointer"
+                        >
+                          <option value="">Select Lead Source</option>
+                          {LEAD_SOURCES.map(source => (
+                            <option key={source} value={source}>{source}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {createForm.lead_source === 'Other' && (
+                        <div className="animate-fade-in-down">
+                          <label className="block text-xs font-mono font-bold text-amber-500 mb-1.5">
+                            Specify Custom Lead Source Name *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Billboard, Event Flyer"
+                            value={otherSource}
+                            onChange={(e) => setOtherSource(e.target.value)}
+                            className="w-full bg-slate-955 border border-amber-500/50 rounded-lg py-2 px-3 text-xs text-amber-200 focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 2: EVENT DETAILS */}
+              {wizardStep === 2 && (
+                <div className="bg-slate-950/30 border border-slate-800/60 rounded-xl p-4.5 space-y-4 shadow-sm animate-fade-in text-left">
+                  <div className="flex items-center gap-2 border-b border-slate-800/50 pb-2 mb-1 text-left">
+                    <Calendar className="w-4 h-4 text-cyan-405" />
+                    <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">2. Event Details</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Event Type */}
+                    <div className="space-y-2 text-left">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                          Event Type *
+                        </label>
+                        <select
+                          id="wizard_step2_first_field"
+                          value={createForm.event_type}
+                          onChange={(e) => setCreateForm({ ...createForm, event_type: e.target.value })}
+                          className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all cursor-pointer font-bold"
+                        >
+                          <option value="">Select Event Type</option>
+                          {EVENT_TYPES.map(type => (
+                            <option key={type} value={type}>{type}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {createForm.event_type === 'Other' && (
+                        <div className="animate-fade-in-down">
+                          <label className="block text-xs font-mono font-bold text-amber-500 mb-1.5">
+                            Custom Event Type *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Specify custom event type"
+                            value={createForm.custom_event_name}
+                            onChange={(e) => setCreateForm({ ...createForm, custom_event_name: e.target.value })}
+                            className="w-full bg-slate-950 border border-amber-500/50 rounded-lg py-2 px-3 text-xs text-amber-200 focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Desired Event Shoot Type */}
+                    <div className="text-left">
+                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                        Desired Event Shoot Type *
+                      </label>
+                      <select
+                        value={createForm.desired_event_shoot_type}
+                        onChange={(e) => setCreateForm({ ...createForm, desired_event_shoot_type: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all cursor-pointer"
+                      >
+                        <option value="">Select Shoot Type</option>
+                        <option value="Photography">Photography</option>
+                        <option value="Videography">Videography</option>
+                        <option value="Photography + Videography">Photography + Videography Combo</option>
+                        <option value="Drone Shoot">Drone Shoot</option>
+                        <option value="Cinematic Shoot">Cinematic Shoot</option>
+                        <option value="Live Streaming font-bold">Live Streaming</option>
+                        <option value="Album Design">Album Design</option>
+                        <option value="Custom Package">Custom Package</option>
+                      </select>
+                    </div>
+
+                    {/* Event Date */}
+                    <div className="text-left">
+                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                        Estimated Event Date *
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={createForm.event_date}
+                        onChange={(e) => setCreateForm({ ...createForm, event_date: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-505 rounded-lg py-2 px-3 text-xs text-slate-105 focus:outline-none focus:ring-1 focus:ring-cyan-503/20 transition-all font-mono"
+                      />
+                    </div>
+
+                    {/* Event Time */}
+                    <div className="text-left">
+                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                        Estimated Event Time *
+                      </label>
+                      <input
+                        type="time"
+                        required
+                        value={createForm.event_time}
+                        onChange={(e) => setCreateForm({ ...createForm, event_time: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-mono"
+                      />
+                    </div>
+
+                    {/* Reporting Time */}
+                    <div className="text-left">
+                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                        Reporting Time (Optional)
+                      </label>
+                      <input
+                        type="time"
+                        value={reportingTime}
+                        onChange={(e) => setReportingTime(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-mono"
+                      />
+                    </div>
+
+                    {/* Shoot Location */}
+                    <div className="sm:col-span-2 text-left">
+                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                        Shoot Location / Venue Details *
+                      </label>
+                      <div className="relative">
+                        <MapPin className="absolute left-3 top-2.5 w-4 h-4 text-slate-500 pointer-events-none" />
+                        <input
+                          type="text"
+                          required
+                          placeholder="Grand Hyatt Central Beach Lawn"
+                          value={createForm.event_location}
+                          onChange={(e) => setCreateForm({ ...createForm, event_location: e.target.value })}
+                          className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 pl-9 pr-3 text-xs text-slate-105 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3: PACKAGE SELECTION */}
+              {wizardStep === 3 && (
+                <div className="bg-slate-950/30 border border-slate-800/60 rounded-xl p-4.5 space-y-4 shadow-sm animate-fade-in text-left">
+                  <div className="flex items-center gap-2 border-b border-slate-800/50 pb-2 mb-1">
+                    <CheckSquare className="w-4 h-4 text-cyan-405" />
+                    <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">3. Package Selection</span>
+                  </div>
+
+                  <div className="relative">
+                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                      Packages Required
+                    </label>
+
+                    {/* Selected Packages Tags/Chips */}
+                    {selectedPkgIds.length > 0 && (
+                      <div id="pkg_selected_tags_chips" className="flex flex-wrap gap-1.5 mb-3 pt-0.5 animate-fade-in">
+                        {selectedPkgIds.map((id) => {
+                          const pkg = PACKAGES_LIST.flatMap(cat => cat.items).find(item => item.id === id);
+                          if (!pkg) return null;
+                          return (
+                            <span
+                              key={id}
+                              className="inline-flex items-center gap-1 bg-emerald-950/70 border border-emerald-500/30 text-emerald-300 text-[11px] font-medium px-2.5 py-1 rounded-full hover:bg-emerald-900/60 transition-all duration-150"
+                            >
+                              <span>{pkg.name} — ₹{pkg.cost.toLocaleString('en-IN')}</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedPkgIds(selectedPkgIds.filter(x => x !== id));
+                                }}
+                                className="hover:bg-emerald-850 rounded-full p-0.5 focus:outline-none cursor-pointer transition-colors inline-flex items-center justify-center ml-0.5"
+                                title="Remove Package"
+                              >
+                                <X className="w-3 h-3 text-emerald-450 stroke-[2.5px]" />
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <button
+                      id="wizard_step3_first_field"
+                      type="button"
+                      onClick={() => setIsPkgDropdownOpen(!isPkgDropdownOpen)}
+                      className={`w-full bg-[#0F172A] border rounded-lg py-2.5 px-3.5 text-xs flex items-center justify-between focus:outline-none transition-all cursor-pointer ${
+                        selectedPkgIds.length === 0
+                          ? 'border-rose-500/40 hover:border-rose-500 text-rose-300'
+                          : 'border-slate-800 hover:border-emerald-600 text-white'
+                      }`}
+                    >
+                      <span className="font-medium">
+                        {selectedPkgIds.length === 0
+                          ? 'Select Package...'
+                          : `${selectedPkgIds.length} Packages Selected (Total: ₹${finalTotal.toLocaleString('en-IN')})`}
+                      </span>
+                      <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isPkgDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {selectedPkgIds.length === 0 && (
+                      <p className="text-rose-450 font-bold text-xs mt-1.5 font-mono animate-pulse flex items-center gap-1.5">
+                        ⚠️ Please select a package before continuing.
+                      </p>
+                    )}
+
+                    {isPkgDropdownOpen && (
+                      <div id="pkg_multiselect_dropdown" className="absolute z-30 left-0 right-0 mt-1 max-h-72 overflow-y-auto bg-[#0F172A] border border-slate-800 rounded-xl shadow-2xl p-3.5 space-y-4">
+                        {/* Search Input Filter */}
+                        <div className="relative" onClick={(e) => e.stopPropagation()}>
+                          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-500 pointer-events-none" />
+                          <input
+                            type="text"
+                            placeholder="Search packages by name, category, or service..."
+                            value={pkgSearchQuery}
+                            onChange={(e) => setPkgSearchQuery(e.target.value)}
+                            className="w-full bg-[#1e293b] border border-slate-800 rounded-lg pl-8.5 pr-8 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition-all font-sans"
+                            autoFocus
+                          />
+                          {pkgSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setPkgSearchQuery('')}
+                              className="absolute right-2.5 top-2.5 hover:bg-slate-800 p-0.5 rounded cursor-pointer text-slate-400 hover:text-slate-200 transition-colors"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {(() => {
+                          if (PACKAGES_LIST.flatMap(cat => cat.items).length === 0) {
+                            return (
+                              <div className="text-center py-6 text-slate-400 space-y-3" onClick={(e) => e.stopPropagation()}>
+                                <div className="font-mono text-xs font-semibold">No Packages Available</div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsPkgDropdownOpen(false);
+                                    setActiveTab('packages');
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg text-xs transition-colors cursor-pointer border border-transparent"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  <span>Create Package</span>
+                                </button>
+                              </div>
+                            );
+                          }
+
+                          const searchLower = pkgSearchQuery.toLowerCase().trim();
+                          const filteredCategories = PACKAGES_LIST.map((category) => {
+                            const categoryMatch = category.categoryName.toLowerCase().includes(searchLower);
+                            const matchedItems = category.items.filter((item) => {
+                              return (
+                                item.name.toLowerCase().includes(searchLower) ||
+                                categoryMatch
+                              );
+                            });
+                            return {
+                              ...category,
+                              categoryMatch,
+                              items: matchedItems,
+                            };
+                          }).filter((cat) => cat.items.length > 0);
+
+                          if (filteredCategories.length === 0) {
+                            return (
+                              <div className="text-center py-5 text-xs text-slate-500 font-mono" onClick={(e) => e.stopPropagation()}>
+                                No matching packages found for "{pkgSearchQuery}"
+                              </div>
+                            );
+                          }
+
+                          return filteredCategories.map((category) => (
+                            <div key={category.categoryName} className="space-y-2" onClick={(e) => e.stopPropagation()}>
+                              <span className="text-[10px] font-black text-slate-500 font-mono tracking-wider block uppercase border-b border-slate-900/50 pb-1">
+                                {highlightText(category.categoryName, pkgSearchQuery)}
+                              </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+                                {category.items.map((pkg) => {
+                                  const isChecked = selectedPkgIds.includes(pkg.id);
+                                  return (
+                                    <button
+                                      key={pkg.id}
+                                      type="button"
+                                      onClick={() => {
+                                        if (isChecked) {
+                                          setSelectedPkgIds(selectedPkgIds.filter(id => id !== pkg.id));
+                                        } else {
+                                          setSelectedPkgIds([...selectedPkgIds, pkg.id]);
+                                        }
+                                      }}
+                                      className={`flex items-center justify-between text-left px-2.5 py-2 rounded-lg border text-xs cursor-pointer transition-all duration-150 ${
+                                        isChecked
+                                          ? 'bg-[#0c2d24] border-emerald-500 text-emerald-100 shadow-[0_0_12px_rgba(16,185,129,0.1)]'
+                                          : 'bg-[#1b2234] border-slate-850 text-slate-250 hover:border-slate-700 hover:bg-[#242d45]'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-2 overflow-hidden">
+                                        <div className={`w-3.5 h-3.5 flex items-center justify-center rounded border transition-all duration-150 shrink-0 ${isChecked ? 'bg-emerald-500 border-emerald-600' : 'border-slate-600'}`}>
+                                          {isChecked && <Check className="w-2.5 h-2.5 text-white stroke-[3.5px]" />}
+                                        </div>
+                                        <span className="font-medium break-words">{highlightText(pkg.name, pkgSearchQuery)}</span>
+                                      </div>
+                                      <span className="font-mono text-[10px] opacity-85 pl-2.5 shrink-0 text-emerald-400">₹{pkg.cost.toLocaleString('en-IN')}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ));
+                        })()}
+
+                        <div className="flex justify-end pt-1.5 border-t border-slate-900/55" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => setIsPkgDropdownOpen(false)}
+                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition-all cursor-pointer shadow-md"
+                          >
+                            Done Selecting
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Selected Package Summary Panel with viewer + compare workflows */}
+                  {selectedPkgIds.length > 0 && (
+                    <div id="create_lead_pkg_summary_panel" className="bg-[#0F172A] border border-slate-800 rounded-xl p-4.5 space-y-4 animate-fade-in text-xs text-left">
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-350">Selected Packages</span>
+                          <span className="bg-emerald-990/90 text-emerald-400 px-2 py-0.5 rounded-full font-mono text-[10px] font-bold border border-emerald-900/40">
+                            {selectedPkgIds.length} Packages
+                          </span>
+                        </div>
+                        
+                        {selectedPkgIds.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setIsComparingPkgs(true)}
+                            className="px-2.5 py-1 bg-indigo-600/10 hover:bg-indigo-600/25 text-indigo-400 border border-indigo-500/20 rounded-lg font-bold text-[10px] cursor-pointer transition-colors uppercase font-mono tracking-wider flex items-center gap-1"
+                          >
+                            ⚖️ Compare Specs ({selectedPkgIds.length})
+                          </button>
+                        )}
+                      </div>
+                      
+                      <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+                        {selectedPkgIds.map((id) => {
+                          const pkgObj = packages.find(p => p.package_id === id);
+                          if (!pkgObj) return null;
+                          return (
+                            <div key={id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950/60 border border-slate-850 p-3 rounded-lg hover:border-slate-800 transition-colors">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-extrabold text-white text-[12px]">{pkgObj.package_name}</span>
+                                  <span className="text-[9px] bg-slate-800/80 text-custom text-slate-400 px-1.5 py-0.5 rounded font-mono uppercase">
+                                    {normalizeCategory(pkgObj.category)}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                                  <span>Price:</span>
+                                  <span className="font-mono text-emerald-400 font-bold">₹{pkgObj.price.toLocaleString('en-IN')}</span>
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingPkgDetails(pkgObj)}
+                                  className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg border border-slate-800 hover:border-slate-700 font-semibold cursor-pointer transition-all flex items-center gap-1 text-[11px]"
+                                >
+                                  📋 View Specification
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedPkgIds(selectedPkgIds.filter(x => x !== id))}
+                                  className="px-2.5 py-1.5 bg-rose-950/20 hover:bg-rose-950/40 text-rose-400 border border-rose-900/30 hover:border-rose-900/50 rounded-lg font-semibold cursor-pointer transition-all flex items-center gap-1 text-[11px]"
+                                  title="Remove Package"
+                                >
+                                  🗑️ Remove
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      
+                      <div className="bg-slate-950/70 p-3 rounded-lg border border-slate-850 flex items-center justify-between">
+                        <span className="text-slate-400 font-medium">Combined Package Total</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-slate-500 font-mono text-[11px]">Total Amount =</span>
+                          <span className="font-mono text-emerald-400 font-black text-xs sm:text-sm">₹{subtotal.toLocaleString('en-IN')}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Display Package Pricing & Live Auto Calculation Output */}
+                  {selectedPkgIds.length > 0 && (
+                    <div id="pkg_pricing_calc_panel" className="bg-slate-950/70 p-4 rounded-xl border border-slate-800/80 space-y-3 animate-fade-in">
+                      <span className="text-[10px] font-bold text-slate-400 font-mono block border-b border-slate-800/65 pb-1.5 uppercase tracking-wider">
+                        Selected Packages & Price Estimate
+                      </span>
+                      <ul className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                        {selectedPkgIds.map((id) => {
+                          const pkg = PACKAGES_LIST.flatMap(cat => cat.items).find(item => item.id === id);
+                          if (!pkg) return null;
+                          return (
+                            <li key={id} className="flex justify-between items-center text-xs text-slate-300">
+                              <span className="flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                {pkg.name}
+                              </span>
+                              <span className="font-mono text-emerald-400">₹{pkg.cost.toLocaleString('en-IN')}</span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      
+                      <div className="border-t border-slate-800/80 pt-3 space-y-2.5 text-xs">
+                        <div className="flex justify-between text-slate-400">
+                          <span>Subtotal</span>
+                          <span className="font-mono text-slate-200">₹{subtotal.toLocaleString('en-IN')}</span>
+                        </div>
+                        
+                        <div className="flex justify-between items-center text-slate-400">
+                          <span>Discount (Optional)</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-slate-500">₹</span>
+                            <input
+                              type="number"
+                              min="0"
+                              max={subtotal}
+                              placeholder="0"
+                              value={leadDiscount || ''}
+                              onChange={(e) => {
+                                const val = Math.min(subtotal, Math.max(0, Number(e.target.value)));
+                                setLeadDiscount(val);
+                              }}
+                              className="w-24 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-right font-mono text-xs text-slate-100 focus:outline-none focus:border-emerald-600 transition-all"
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="flex justify-between items-center text-white font-extrabold border-t border-slate-800/80 pt-2.5">
+                          <span className="tracking-wide">Final Total Project Value</span>
+                          <span className="font-mono text-amber-400 text-sm">₹{finalTotal.toLocaleString('en-IN')}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* STEP 4: BUDGET & REMARKS */}
+              {wizardStep === 4 && (
+                <div className="bg-slate-950/30 border border-slate-800/60 rounded-xl p-4.5 space-y-4 shadow-sm pb-6 animate-fade-in text-left">
+                  <div className="flex items-center gap-2 border-b border-slate-800/50 pb-2 mb-1">
+                    <Edit className="w-4 h-4 text-cyan-410" />
+                    <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">4. Proposed Budget & Remarks</span>
+                  </div>
+
+                  {renderQuotationAndStep4Section(false)}
+                </div>
+              )}
+
+              {/* STEP 5: REVIEW & FINALIZE */}
+              {wizardStep === 5 && (
+                <div className="space-y-4 animate-fade-in text-left">
+                  {/* Summary Overview Panel */}
+                  <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4.5 space-y-4">
+                    <div className="flex items-center gap-2 border-b border-slate-800/50 pb-2 mb-1">
+                      <Check className="w-4 h-4 text-emerald-400 stroke-[3px]" />
+                      <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">5. Review & Finalize Lead</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                      {/* Customer Summary */}
+                      <div className="bg-slate-955/40 p-3 rounded-lg border border-slate-850/60 space-y-2">
+                        <span className="text-[10px] uppercase font-bold text-slate-450 tracking-wider font-mono block border-b border-slate-850 pb-1">👤 Customer Information</span>
+                        <div className="space-y-1">
+                          <p className="text-slate-300">Name: <strong className="text-white">{createForm.customer_name}</strong></p>
+                          <p className="text-slate-300">Mobile: <span className="font-mono text-cyan-400 font-semibold">{createForm.mobile}</span> {createForm.whatsapp_number && <span className="text-[10px] text-emerald-500 bg-emerald-950/40 px-1 py-0.5 rounded font-mono font-medium ml-1">WhatsApp synced</span>}</p>
+                          {createForm.email && <p className="text-slate-300">Email: <span className="text-slate-200">{createForm.email}</span></p>}
+                          {createForm.client_residence_address && (
+                            <p className="text-slate-300">Residence: <span className="text-slate-300">{createForm.client_residence_address}</span></p>
+                          )}
+                          {(createForm.address || createForm.city) && (
+                            <p className="text-slate-300">Event City/State: <span className="text-slate-300">{[createForm.city, createForm.state].filter(Boolean).join(', ')}</span></p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Event Summary */}
+                      <div className="bg-slate-955/40 p-3 rounded-lg border border-slate-850/60 space-y-2">
+                        <span className="text-[10px] uppercase font-bold text-slate-450 tracking-wider font-mono block border-b border-slate-850 pb-1">🗓️ Event Details</span>
+                        <div className="space-y-1">
+                          <p className="text-slate-300">Event: <strong className="text-amber-400">{createForm.event_type === 'Other' ? createForm.custom_event_name : createForm.event_type}</strong></p>
+                          <p className="text-slate-300">Shoot Type: <span className="text-white font-medium">{createForm.desired_event_shoot_type || createForm.shoot_type}</span></p>
+                          <p className="text-slate-300">Date/Time: <span className="font-mono text-slate-200">{createForm.event_date || 'TBD'} @ {createForm.event_time || 'TBD'}</span> {reportingTime && <span className="text-slate-400 font-mono text-[10px]">(Report: {reportingTime})</span>}</p>
+                          <p className="text-slate-300">Venue Address: <span className="text-slate-300">{createForm.event_location || createForm.address || 'TBD'}</span></p>
+                        </div>
+                      </div>
+
+                      {/* Packages & Financial Summary */}
+                      <div className="bg-slate-955/40 p-3 rounded-lg border border-slate-850/60 space-y-2 md:col-span-2">
+                        <span className="text-[10px] uppercase font-bold text-slate-450 tracking-wider font-mono block border-b border-slate-850 pb-1">💰 Configured Packages & Value</span>
+                        <div className="space-y-2">
+                          {selectedPkgIds.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {selectedPkgIds.map((id) => {
+                                const pkg = PACKAGES_LIST.flatMap(cat => cat.items).find(item => item.id === id);
+                                if (!pkg) return null;
+                                return (
+                                  <span key={id} className="bg-slate-900 border border-slate-800 text-slate-300 px-2.5 py-1 rounded text-[11px] font-medium flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                                    {pkg.name} (₹{pkg.cost.toLocaleString('en-IN')})
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-slate-400 italic">No custom packages selected.</p>
+                          )}
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-850/65 text-slate-300 font-mono text-[11px]">
+                            <div>Subtotal: <strong className="text-slate-200">₹{subtotal.toLocaleString('en-IN')}</strong></div>
+                            {leadDiscount > 0 && <div>Discount: <strong className="text-rose-455">₹{leadDiscount.toLocaleString('en-IN')}</strong></div>}
+                            <div className="text-amber-400 font-bold">Total Quote: ₹{finalTotal.toLocaleString('en-IN')}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Notes Summary */}
+                      {(createForm.remarks || internalNotes) && (
+                        <div className="bg-slate-955/40 p-3 rounded-lg border border-slate-850/60 space-y-2 md:col-span-2">
+                          <span className="text-[10px] uppercase font-bold text-slate-450 tracking-wider font-mono block border-b border-slate-850 pb-1">📝 Notes & Follow-ups</span>
+                          <div className="space-y-1">
+                            {createForm.remarks && <p className="text-slate-350"><strong className="text-slate-450">Inbound Scope:</strong> {createForm.remarks}</p>}
+                            {internalNotes && <p className="text-slate-350"><strong className="text-slate-450">Private Team Notes:</strong> {internalNotes}</p>}
+                            {followUpDate && <p className="text-cyan-405 font-mono">📅 Planned Next Call: {followUpDate}</p>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Stage Setup */}
+                  <div className="bg-slate-950/30 border border-slate-800/60 rounded-xl p-4.5 space-y-4">
+                    <label className="block text-xs font-extrabold text-slate-300 uppercase tracking-wider font-mono mb-1.5">
+                      Set CRM Sales Funnel Pipeline Stage *
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                      {[
+                        { id: 'New Lead', label: 'New Lead ✍️', style: 'border-amber-500/20 text-amber-300' },
+                        { id: 'Follow Up', label: 'Follow Up 📞', style: 'border-[#38bdf8]/20 text-[#38bdf8]' },
+                        { id: 'Quotation Sent', label: 'Quote Sent 📄', style: 'border-purple-500/20 text-purple-300' },
+                        { id: 'Negotiation', label: 'Negotiating 🤝', style: 'border-blue-500/20 text-blue-300' },
+                        { id: 'Order Confirmed', label: 'Confirmed 🎉', style: 'border-emerald-500/20 text-emerald-300' }
+                      ].map((stage) => {
+                        const isSel = salesStatus === stage.id;
+                        return (
+                          <button
+                            type="button"
+                            key={stage.id}
+                            onClick={() => {
+                              setSalesStatus(stage.id as CurrentStage);
+                            }}
+                            className={`px-3 py-2 text-center text-xs font-bold rounded-lg border cursor-pointer transition-all ${
+                              isSel 
+                                ? 'bg-slate-900 border-indigo-500 text-indigo-400 ring-1 ring-indigo-500/25 shadow-lg' 
+                                : `bg-[#131b2e]/60 ${stage.style} opacity-70 hover:opacity-100 hover:bg-[#1b253f]`
+                            }`}
+                          >
+                            {stage.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Conditional Fields: If Order Confirmed, request date, time, and advance receipt */}
+                    {salesStatus === 'Order Confirmed' && (
+                      <div className="mt-4 p-4 bg-emerald-990/10 border border-emerald-500/25 rounded-xl space-y-4 animate-fade-in text-left">
+                        <div className="flex items-center gap-2 border-b border-emerald-900/30 pb-2 mb-2">
+                          <Package className="w-4 h-4 text-emerald-450" />
+                          <span className="text-[11px] font-black font-mono text-emerald-400 uppercase tracking-wider">🔒 Mandatory Operations Order Configuration</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-350 mb-1.5">Confirmed Event Date *</label>
+                            <input
+                              type="date"
+                              required
+                              value={confirmedEventDate}
+                              onChange={(e) => setConfirmedEventDate(e.target.value)}
+                              className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg py-2 px-3 text-xs text-slate-100 font-mono focus:outline-none transition-all"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-350 mb-1.5">Confirmed Event Starts At *</label>
+                            <input
+                              type="time"
+                              required
+                              value={confirmedEventTime}
+                              onChange={(e) => setConfirmedEventTime(e.target.value)}
+                              className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg py-2 px-3 text-xs text-slate-100 font-mono focus:outline-none transition-all"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-350 mb-1.5">Final Settled Value (₹) *</label>
+                            <input
+                              type="number"
+                              required
+                              min="1"
+                              value={finalPackageAmount}
+                              onChange={(e) => setFinalPackageAmount(Number(e.target.value))}
+                              className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg py-2 px-3 text-xs text-slate-100 font-mono focus:outline-none transition-all"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-350 mb-1.5">Advance Deposit Received (₹) *</label>
+                            <input
+                              type="number"
+                              required
+                              min="0"
+                              value={advanceReceived}
+                              onChange={(e) => setAdvanceReceived(Number(e.target.value))}
+                              className="w-full bg-slate-955 border border-slate-800 focus:border-emerald-500 rounded-lg py-2 px-3 text-xs text-slate-100 font-mono focus:outline-none transition-all"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Sticky Footer */}
+            <div className="flex justify-between items-center gap-3 border-t border-slate-800/80 p-4 sm:p-5 bg-slate-950/40 backdrop-blur-md shrink-0">
+              {/* Back or Cancel */}
+              {wizardStep > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(wizardStep - 1)}
+                  className="px-4.5 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer border border-slate-850 hover:border-slate-700 transition-colors"
+                >
+                  ← Back Step
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => { resetForm(); setActiveTab('list'); }}
+                  className="px-4.5 py-2 text-xs font-semibold bg-slate-805 hover:bg-slate-800 text-slate-300 rounded-xl cursor-pointer border border-slate-800 hover:border-slate-700/50 transition-colors"
+                >
+                  Cancel
+                </button>
+              )}
+
+              {/* Next or Save */}
+              {wizardStep < 5 ? (
+                <button
+                  type="button"
+                  onClick={handleWizardNext}
+                  disabled={isSaving || (wizardStep === 3 && selectedPkgIds.length === 0)}
+                  className={`px-5.5 py-2 text-xs font-bold text-white rounded-xl shadow-lg border border-transparent transition-colors flex items-center gap-1.5 ${
+                    wizardStep === 3 && selectedPkgIds.length === 0
+                      ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
+                      : 'bg-cyan-600 hover:bg-cyan-500 shadow-cyan-500/10 cursor-pointer'
+                  }`}
+                >
+                  {isSaving ? 'Processing...' : 'Save & Continue →'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    if (salesStatus === 'Order Confirmed') {
+                      handleOrderConfirmedSubmit(e);
+                    } else {
+                      handleStatusSave();
+                    }
+                  }}
+                  disabled={isSaving}
+                  className="px-5.5 py-2 text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl shadow-lg shadow-emerald-500/10 cursor-pointer border border-transparent transition-colors flex items-center gap-1.5"
+                >
+                  {isSaving ? 'Saving...' : salesStatus === 'Order Confirmed' ? '🎉 Confirm Order & Transition' : '✍️ Create Lead'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )
+    ) : (
+        /* SCREEN 1: Lead List datagrid */
+        <div className="space-y-4">
+
+          {/* Sales Performance Dashboard Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5 mt-2">
+            {[
+              { label: 'New Leads', val: statNewLeads, theme: 'gold' as CameraLensTheme, filterValue: 'New Lead', chartPoints: [10, 18, 14, 25, 20, 31, 35], trendText: 'Inbound' },
+              { label: "Today's Follow-ups", val: statTodayFollowups, theme: 'green' as CameraLensTheme, filterValue: 'Follow Up', chartPoints: [5, 12, 8, 15, 10, 19, 14], trendText: 'Pending Call' },
+              { label: 'Overdue Follow-ups', val: statOverdueFollowups, theme: 'red' as CameraLensTheme, filterValue: 'Overdue', chartPoints: [2, 6, 3, 8, 4, 10, 6], trendText: 'Urgent CRM' },
+              { label: 'Quotations Sent', val: statQuotesSent, theme: 'purple' as CameraLensTheme, filterValue: 'Quotation Sent', chartPoints: [12, 14, 18, 15, 21, 25, 22], trendText: 'Proposals Out' },
+              { label: 'Negotiations', val: statNegotiations, theme: 'blue' as CameraLensTheme, filterValue: 'Negotiation', chartPoints: [4, 9, 7, 12, 11, 15, 13], trendText: 'Contract Discussions' },
+              { label: 'Confirmed Orders', val: statConfirmedOrders, theme: 'cyan' as CameraLensTheme, filterValue: 'Order Confirmed', chartPoints: [8, 15, 12, 20, 16, 25, 24], trendText: 'Signed Reels' },
+            ].map((card, idx) => (
+              <CameraLensStatsCard
+                key={idx}
+                label={card.label}
+                val={card.val}
+                theme={card.theme}
+                trendText={card.trendText}
+                subText="CRM STATUS"
+                chartPoints={card.chartPoints}
+                activeFilterValue={filterStatus}
+                currentFilterValue={card.filterValue}
+                onClick={() => setFilterStatus(filterStatus === card.filterValue ? '' : card.filterValue)}
+                lensLabel={card.label.slice(0, 10).toUpperCase()}
+              />
+            ))}
+          </div>
+          
+          {/* Leads Directory Title & Export Utility Panel */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-900/60 p-4 rounded-2xl border border-zinc-850 shadow-xl">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">📁</span>
+              <div>
+                <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">Leads Directory</h3>
+                <p className="text-[10px] text-zinc-400">Export active pipeline registers using start and end filters</p>
+              </div>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handlePrintReport}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                title="Print lead report to paper"
+              >
+                <span>🖨️</span> Print Report
+              </button>
+              
+              <button
+                onClick={handlePrintReport}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-rose-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                title="Download report as PDF format"
+              >
+                <span>📄</span> Download PDF
+              </button>
+              
+              <button
+                onClick={handleDownloadExcel}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-emerald-450 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                title="Download report as Excel spreadsheet"
+              >
+                <span>📊</span> Excel (.xlsx)
+              </button>
+
+              <button
+                onClick={handleDownloadCSV}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-indigo-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                title="Download report as CSV file"
+              >
+                <span>📝</span> CSV
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Filters Panel */}
+          <div className="bg-zinc-900/40 p-4 rounded-2xl border border-zinc-850 shadow-xl grid grid-cols-1 md:grid-cols-12 gap-3 items-end relative overflow-hidden">
+            {/* Corner calibration tick marks */}
+            <div className="absolute top-2 left-2 w-1.5 h-1.5 border-t border-l border-emerald-500/40" />
+            <div className="absolute top-2 right-2 w-1.5 h-1.5 border-t border-r border-emerald-500/40" />
+            <div className="absolute bottom-2 left-2 w-1.5 h-1.5 border-b border-l border-emerald-500/40" />
+            <div className="absolute bottom-2 right-2 w-1.5 h-1.5 border-b border-r border-emerald-500/40" />
+
+            {/* Search query */}
+            <div className="md:col-span-3">
+              <label className="block text-[10px] uppercase font-mono font-bold text-zinc-400 mb-1">
+                Search Lead / Customer Name
+              </label>
+              <div className="relative">
+                <Search className="w-4 h-4 text-emerald-505 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  placeholder="ID, name, or phone..."
+                  value={filterQuery}
+                  onChange={(e) => setFilterQuery(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-850 rounded-xl pl-9 pr-3 py-2 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans"
+                />
+              </div>
+            </div>
+
+            {/* Source */}
+            <div className="md:col-span-2">
+              <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
+                Lead Source
+              </label>
+              <select
+                value={filterSource}
+                onChange={(e) => setFilterSource(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100/90"
+              >
+                <option value="">All Sources</option>
+                {LEAD_SOURCES.map(source => (
+                  <option key={source} value={source}>{source}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Status (Stage) */}
+            <div className="md:col-span-2">
+              <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
+                Active Stage
+              </label>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100/90 font-sans cursor-pointer focus:outline-none focus:border-emerald-500"
+              >
+                <option value="">All Stages</option>
+                <option value="Overdue">⚠️ Overdue Follow-ups</option>
+                
+                <optgroup label="Sales Statuses" className="bg-slate-950 text-emerald-400 font-bold">
+                  <option value="New Lead" className="text-white font-normal">New Lead</option>
+                  <option value="Contacted" className="text-white font-normal">Contacted</option>
+                  <option value="Follow Up" className="text-white font-normal">Follow-up</option>
+                  <option value="Quotation Sent" className="text-white font-normal">Quotation Sent</option>
+                  <option value="Negotiation" className="text-white font-normal">Negotiation</option>
+                  <option value="Order Confirmed" className="text-white font-normal">Order Confirmed</option>
+                  <option value="Lost Lead" className="text-white font-normal">Lost Lead</option>
+                </optgroup>
+
+                <optgroup label="Operations Statuses" className="bg-slate-950 text-amber-400 font-bold">
+                  <option value="Event Scheduled" className="text-white font-normal">Event Scheduled</option>
+                  <option value="Event Completed" className="text-white font-normal">Event Completed</option>
+                  <option value="Event Cancelled" className="text-white font-normal">Event Cancelled</option>
+                  <option value="Raw Footage Received" className="text-white font-normal">Raw Footage Received</option>
+                </optgroup>
+
+                <optgroup label="Production Statuses" className="bg-slate-950 text-indigo-400 font-bold">
+                  <option value="New Project Received" className="text-white font-normal">New Project Received</option>
+                  <option value="Editor Assigned" className="text-white font-normal">Editor Assigned</option>
+                  <option value="Editing Started" className="text-white font-normal">Editing Started</option>
+                  <option value="Editing In Progress" className="text-white font-normal">Editing In Progress</option>
+                  <option value="Customer Review" className="text-white font-normal">Client Review</option>
+                  <option value="Revision Required" className="text-white font-normal">Revision Required</option>
+                  <option value="Approved" className="text-white font-normal">Client Approved</option>
+                  <option value="Final Approval" className="text-white font-normal">Final Approval</option>
+                  <option value="Project Delivered" className="text-white font-normal">Project Delivered</option>
+                  <option value="Project Closed" className="text-white font-normal">Project Closed</option>
+                  <option value="Project On Hold" className="text-white font-normal">Project On Hold</option>
+                  <option value="Project Cancelled" className="text-white font-normal">Project Cancelled</option>
+                </optgroup>
+              </select>
+            </div>
+
+            {/* Start Date */}
+            <div className="md:col-span-2">
+              <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
+                Start Date (Created)
+              </label>
+              <input
+                type="date"
+                value={dateRangeStart}
+                onChange={(e) => setDateRangeStart(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono focus:outline-none"
+              />
+            </div>
+
+            {/* End Date */}
+            <div className="md:col-span-2">
+              <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
+                End Date (Created)
+              </label>
+              <input
+                type="date"
+                value={dateRangeEnd}
+                onChange={(e) => setDateRangeEnd(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono focus:outline-none"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="md:col-span-1 flex flex-col gap-1.5">
+              <button
+                onClick={() => {
+                  setAppliedStartDate(dateRangeStart);
+                  setAppliedEndDate(dateRangeEnd);
+                }}
+                className="w-full flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-500 py-1 py-1.5 text-[10px] font-bold text-white rounded transition-all cursor-pointer"
+                title="Apply Date Filter"
+              >
+                Apply
+              </button>
+              <button
+                onClick={() => {
+                  setFilterQuery('');
+                  setFilterSource('');
+                  setFilterStatus('');
+                  setFilterSalesPerson('');
+                  setFilterDate('');
+                  setDateRangeStart('');
+                  setDateRangeEnd('');
+                  setAppliedStartDate('');
+                  setAppliedEndDate('');
+                }}
+                className="w-full flex items-center justify-center gap-0.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 py-1 px-1.5 text-[10px] text-zinc-300 rounded transition-all cursor-pointer animate-none"
+                title="Reset all filters"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+
+          {/* Table view */}
+          <div className="bg-zinc-900/20 rounded-2xl border border-zinc-850 overflow-hidden shadow-2xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse min-w-[1220px]">
+                <thead>
+                  <tr className="bg-zinc-950/70 text-zinc-405 font-bold border-b border-zinc-850 text-[10px] uppercase font-mono tracking-wider">
+                    <th className="p-3.5 pl-5">Lead ID</th>
+                    <th className="p-3.5">Order ID</th>
+                    <th className="p-3.5">Customer Name</th>
+                    <th className="p-3.5">Mobile Number</th>
+                    <th className="p-3.5">Event Type</th>
+                    <th className="p-3.5">Event Date</th>
+                    <th className="p-3.5">Current Stage</th>
+                    <th className="p-3.5">Current Status</th>
+                    <th className="p-3.5">Payment Status</th>
+                    <th className="p-3.5">Created Date</th>
+                    <th className="p-3.5 text-right pr-5">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-900/60">
+                  {filteredLeads.length > 0 ? (
+                    filteredLeads.map((lead) => {
+                      const leadStatus = getLeadCurrentStatus(lead);
+                      const currentStage = getLeadCurrentStage(lead);
+                      const isActiveInSales = currentStage === 'Sales';
+                      const linkedOrder = orders.find((o) => o.lead_id === lead.lead_id);
+                      const paymentRecord = linkedOrder ? payments.find((p) => p.order_id === linkedOrder.order_id) : null;
+                      const paymentLabel = paymentRecord ? paymentRecord.payment_status : 'N/A';
+
+                      return (
+                        <tr 
+                          key={lead.lead_id} 
+                          className="hover:bg-zinc-900/30 text-zinc-300 transition-all"
+                        >
+                          <td className="p-3.5 pl-5 font-mono text-[11px] font-bold text-indigo-400">
+                            {lead.lead_id}
+                          </td>
+                          <td className="p-3.5 font-mono text-[11px] text-violet-400 font-bold">
+                            {linkedOrder ? linkedOrder.order_id : 'N/A'}
+                          </td>
+                          <td className="p-3.5 font-bold text-white">
+                            {lead.customer_name}
+                          </td>
+                          <td className="p-3.5 font-mono text-zinc-400">
+                            {formatIndianPhoneNumber(lead.mobile)}
+                          </td>
+                          <td className="p-3.5 text-zinc-300 font-sans">
+                            {lead.event_type === 'Other' ? (lead.custom_event_name || lead.custom_event_type || 'Other') : lead.event_type}
+                          </td>
+                          <td className="p-3.5 font-mono text-zinc-350">
+                            {lead.event_date}
+                          </td>
+                          <td className="p-3.5">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
+                              currentStage === 'Sales' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
+                              currentStage === 'Operations' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' :
+                              currentStage === 'Production' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
+                              'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                            }`}>
+                              {currentStage}
+                            </span>
+                          </td>
+                          <td className="p-3.5">
+                            <StatusText status={leadStatus} />
+                          </td>
+                          <td className="p-3.5">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              paymentLabel === 'Fully Paid' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' :
+                              paymentLabel === 'Partially Paid' ? 'bg-amber-555/15 text-amber-400 border-amber-505/20' :
+                              paymentLabel === 'Pending' ? 'bg-rose-500/10 text-rose-455 border border-rose-500/20' :
+                              'bg-zinc-900 text-zinc-400 border-zinc-800'
+                            }`}>
+                              {paymentLabel}
+                            </span>
+                          </td>
+                          <td className="p-3.5 font-mono text-zinc-400">
+                            {lead.created_date ? lead.created_date.split('T')[0] : 'N/A'}
+                          </td>
+                          <td className="p-3.5 text-right pr-5">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                id={`btn_followup_${lead.lead_id}`}
+                                onClick={() => handleSelectLead(lead)}
+                                className="px-3.5 py-1.5 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white rounded-xl border border-zinc-850 transition-all cursor-pointer inline-flex items-center gap-1.5 shadow"
+                              >
+                                <Edit className="w-3 h-3" />
+                                <span>{isActiveInSales && canEdit ? 'Manage CRM' : 'View CRM'}</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={11} className="p-12 text-center text-slate-500">
+                        <Filter className="w-8 h-8 text-neutral-500 mx-auto mb-2" />
+                        <span className="text-xs font-mono text-zinc-500">No matching records in the directory grid. Try resetting filters.</span>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        )}
+      </div>
+
+      {/* Confirmation Modal to Officially Log and Book Contract */}
+      {showConfirmModal && selectedLead && (
+        <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-4 backdrop-blur-md">
+          <div id="confirm_booking_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4">
+            
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
+                <span>💍</span> Booking Confirmation & Contract Form
+              </h4>
+              <button 
+                onClick={() => setShowConfirmModal(false)}
+                className="text-slate-500 hover:text-slate-350 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 text-[11px] space-y-1">
+              <p className="text-slate-400">Client: <strong className="text-slate-200">{selectedLead.customer_name}</strong></p>
+              <p className="text-slate-400">Type: <strong className="text-slate-200">{selectedLead.event_type === 'Other' ? (selectedLead.custom_event_name || selectedLead.custom_event_type || 'Other') : selectedLead.event_type}</strong></p>
+              <p className="text-slate-400">Address: <strong className="text-slate-200">{selectedLead.event_location}</strong></p>
+            </div>
+
+            <form onSubmit={handleConfirmOrderSubmit} className="space-y-2.5 text-xs">
+              
+              {/* Product package */}
+              <div>
+                <label className="block font-medium text-slate-400 mb-1">
+                  Product Package Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Royal Destination Platinum"
+                  value={confirmForm.package_name}
+                  onChange={(e) => setConfirmForm({ ...confirmForm, package_name: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1 px-2.5 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+              </div>
+
+              {/* Event Date & Time Block */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-medium text-slate-400 mb-1">
+                    Event Date * (Required)
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={confirmForm.event_date}
+                    onChange={(e) => setConfirmForm({ ...confirmForm, event_date: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1 px-2.5 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-medium text-slate-400 mb-1">
+                    Event Time
+                  </label>
+                  <input
+                    type="time"
+                    value={confirmForm.event_time}
+                    onChange={(e) => setConfirmForm({ ...confirmForm, event_time: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Package cost and advance */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-medium text-slate-400 mb-1">
+                    Final Package Amount (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={confirmForm.quotation_amount}
+                    onChange={(e) => setConfirmForm({ ...confirmForm, quotation_amount: Number(e.target.value) })}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-medium text-slate-400 mb-1">
+                    Advance Collected (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={confirmForm.advance_received}
+                    onChange={(e) => setConfirmForm({ ...confirmForm, advance_received: Number(e.target.value) })}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Payment Mode */}
+              <div>
+                <label className="block font-medium text-slate-400 mb-1">
+                  Payment Mode
+                </label>
+                <select
+                  value={confirmForm.payment_mode}
+                  onChange={(e) => setConfirmForm({ ...confirmForm, payment_mode: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                >
+                  <option value="UPI">UPI (GPay/PhonePe)</option>
+                  <option value="Cash">Cash Handover</option>
+                  <option value="Bank Transfer">Bank NFT/RTGS/IMPS</option>
+                  <option value="Card">Credit/Debit Card</option>
+                  <option value="Cheque">Cheque Deposit</option>
+                </select>
+              </div>
+
+              {/* Transaction ID (Optional) */}
+              {confirmForm.advance_received > 0 && (
+                <div>
+                  <label className="block font-medium text-slate-400 mb-1">
+                    Transaction ID (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="UPI ID, Bank Ref, IMPS reference etc."
+                    value={confirmForm.transaction_id || ''}
+                    onChange={(e) => setConfirmForm({ ...confirmForm, transaction_id: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
+                  />
+                </div>
+              )}
+
+              {/* Notes */}
+              <div>
+                <label className="block font-medium text-slate-400 mb-1">
+                  Notes / Contract Clauses
+                </label>
+                <textarea
+                  placeholder="Add payment timelines, custom requests, shoot clauses..."
+                  value={confirmForm.notes}
+                  onChange={(e) => setConfirmForm({ ...confirmForm, notes: e.target.value })}
+                  rows={2}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs"
+                />
+              </div>
+
+              {/* Balance due readout */}
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center justify-between">
+                <span className="text-slate-350">Remaining Balance Due:</span>
+                <strong className="text-emerald-400 font-mono font-black text-sm">
+                  {formatINR(Math.max(0, confirmForm.quotation_amount - confirmForm.advance_received))}
+                </strong>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmModal(false)}
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  id="btn_confirm_submit"
+                  disabled={isSaving}
+                  className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-950/20 text-xs"
+                >
+                  <span>{isSaving ? 'Processing...' : 'Approve & Book Contract'}</span>
+                  {!isSaving && <ArrowRight className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+            {/* Mobile/Tablet Popup Modal for Lead Follow-up Details */}
+      {selectedLead && (
+        <div id="lead_details_mobile_modal" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-0 sm:p-4 overflow-hidden animate-fade-in">
+          <div className="bg-slate-900 border border-slate-850 rounded-none sm:rounded-2xl w-full sm:w-[95vw] lg:w-[85vw] xl:w-[75vw] xl:max-w-[1000px] h-screen sm:h-[85vh] shadow-2xl relative flex flex-col overflow-hidden text-left bg-gradient-to-tr from-slate-900 via-slate-900 to-slate-950">
+            {/* Header: Sticky */}
+            <div className="p-4 sm:p-5 border-b border-slate-850 flex items-center justify-between bg-slate-950/40 sticky top-0 z-10 backdrop-blur-md shrink-0">
+              <div className="flex flex-col text-left">
+                <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5 font-mono uppercase tracking-wider">
+                  <span>💍</span> Digital Lead CRM Workspace — Client Board
+                </h3>
+                <span className="text-[10px] text-zinc-400 font-mono font-bold">Lead Code: {selectedLead.lead_id}</span>
+              </div>
+              <button 
+                onClick={() => setSelectedLead(null)}
+                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs rounded-xl transition-all cursor-pointer border border-slate-750 font-bold uppercase tracking-wider"
+              >
+                Close Desk
+              </button>
+            </div>
+
+            {/* Custom Toast Alert */}
+            {crmToast && (
+              <div className={`mx-4 mt-4 p-3 rounded-xl shadow-lg flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2 duration-200 shrink-0 ${
+                crmToast.type === 'success' 
+                  ? 'bg-emerald-950 border border-emerald-500/20 text-emerald-400' 
+                  : 'bg-red-950 border border-red-500/20 text-red-400'
+              }`}>
+                <span>{crmToast.type === 'success' ? '⚡' : '⚠️'}</span>
+                <span className="text-[11px] font-mono font-bold">{crmToast.message}</span>
+              </div>
+            )}
+
+            {/* Progress Bar & Indicators */}
+            <div className="w-full bg-slate-950/20 border-b border-slate-850 p-4 shrink-0 justify-start text-left">
+              <div className="max-w-4xl mx-auto">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-mono font-bold text-indigo-400 uppercase tracking-widest text-left">
+                    CRM Workspace — Step {crmWizardStep} of 5
+                  </span>
+                  <span className="text-xs font-semibold text-slate-300 bg-slate-800 py-0.5 px-2 rounded-lg border border-slate-750">
+                    {crmWizardStep === 1 ? 'Customer Details' :
+                     crmWizardStep === 2 ? 'Event Details' :
+                     crmWizardStep === 3 ? 'Package Selection' :
+                     crmWizardStep === 4 ? 'Proposed Budget & Remarks' :
+                     'Status Update'}
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-indigo-500 transition-all duration-300"
+                    style={{ width: `${(crmWizardStep / 5) * 100}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* If locked, display banner */}
+            {isLeadLocked && (
+              <div className="mx-4 sm:mx-5 mt-4 bg-amber-950/25 border border-amber-500/20 p-4 rounded-xl flex items-start gap-4 text-left shadow-lg">
+                <span className="text-amber-500 text-lg mt-0.5">🔒</span>
+                <div>
+                  <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wide">Record Lock Active (CRM Closed)</h4>
+                  <p className="text-[10px] text-zinc-400 leading-relaxed mt-0.5">
+                    This lead status is currently <span className="text-amber-400 font-extrabold">{selectedLead.status}</span>. 
+                    It has been fully transitioned from Sales CRM into an active Booking Contract under production. 
+                    Follow-up and budget editing are locked. Only Operations can modify live states.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Content container with horizontal padding */}
+            <div id="crm-wizard-scroll-container" className="flex-1 overflow-y-auto p-4 sm:p-5">
+              <div className="max-w-3xl mx-auto">
+                <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
+                  {crmWizardStep === 1 && (
+                    <div className="space-y-6 animate-fade-in text-left">
+                      <div className="border-b border-slate-800 pb-3">
+                        <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                          <span className="p-1 px-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg text-xs font-mono">1</span>
+                          <span>Customer Details</span>
+                        </h3>
+                        <p className="text-[11px] text-zinc-400 mt-1">Manage client contact identity, email correspondence, and location parameters.</p>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Customer Name (Optional)</label>
+                          <input
+                            type="text"
+                            value={wizardLeadData.customer_name || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, customer_name: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Mobile Number *</label>
+                          <input
+                            type="text"
+                            value={wizardLeadData.mobile || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, mobile: e.target.value })}
+                            className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">WhatsApp Number</label>
+                          <input
+                            type="text"
+                            value={wizardLeadData.whatsapp_number || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, whatsapp_number: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Email (Optional)</label>
+                          <input
+                            type="email"
+                            value={wizardLeadData.email || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, email: e.target.value })}
+                            className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Inbound Lead Channel Source *</label>
+                          <select
+                            value={wizardLeadData.lead_source || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, lead_source: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white cursor-pointer select-element"
+                            required
+                          >
+                            <option value="">── Choose Lead Source ──</option>
+                            {LEAD_SOURCES.map(source => (
+                              <option key={source} value={source}>{source}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {crmWizardStep === 2 && (
+                    <div className="space-y-6 animate-fade-in text-left">
+                      <div className="border-b border-slate-800 pb-3">
+                        <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                          <span className="p-1 px-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg text-xs font-mono">2</span>
+                          <span>Event Details</span>
+                        </h3>
+                        <p className="text-[11px] text-zinc-400 mt-1">Configure event metadata, starting schedules, reporting times, shoot types, and lead origins.</p>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider flex items-center gap-1.5">
+                            <span>Event Type *</span>
+                          </label>
+                          <select
+                            value={wizardLeadData.event_type || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, event_type: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white cursor-pointer font-bold"
+                          >
+                            <option value="">Select Event Type</option>
+                            {EVENT_TYPES.map(type => (
+                              <option key={type} value={type}>{type}</option>
+                            ))}
+                          </select>
+                        </div>
+                        {wizardLeadData.event_type === 'Other' && (
+                          <div className="animate-fade-in-down">
+                            <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Custom Event Type *</label>
+                            <input
+                              type="text"
+                              value={wizardLeadData.custom_event_name || ''}
+                              disabled={isLeadLocked}
+                              onChange={(e) => setWizardLeadData({ ...wizardLeadData, custom_event_name: e.target.value })}
+                              className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
+                              placeholder="e.g. Mehendi ceremony, Reception party"
+                              required
+                            />
+                          </div>
+                        )}
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Event Date *</label>
+                          <input
+                            type="date"
+                            value={wizardLeadData.event_date || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, event_date: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Event Time *</label>
+                          <input
+                            type="time"
+                            value={wizardLeadData.event_time || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, event_time: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Reporting Time *</label>
+                          <input
+                            type="time"
+                            value={wizardLeadData.reporting_time || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, reporting_time: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
+                            required
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Event Location (Venue Address) *</label>
+                          <input
+                            type="text"
+                            value={wizardLeadData.event_location || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, event_location: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
+                            placeholder="Resort name, marriage hall, city or outdoor location..."
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Desired Event Shoot Type</label>
+                          <select
+                            value={wizardLeadData.desired_event_shoot_type || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, desired_event_shoot_type: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white cursor-pointer"
+                          >
+                            <option value="">── Select Shoot Type ──</option>
+                            <option value="Traditional">Traditional</option>
+                            <option value="Candid">Candid</option>
+                            <option value="Cinematic">Cinematic Film</option>
+                            <option value="Candid + Cinematic">Candid + Cinematic</option>
+                            <option value="Candid + Traditional">Candid + Traditional</option>
+                            <option value="All Inclusive">All Inclusive (Candid+Trad+Cinematic)</option>
+                            <option value="Live Streaming">Live Streaming</option>
+                            <option value="Drone Only">Drone Only</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider font-mono">Total Pax (Guests Expected)</label>
+                          <input
+                            type="number"
+                            value={wizardLeadData.total_pax || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, total_pax: parseInt(e.target.value) || 0 })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
+                            placeholder="e.g. 500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {crmWizardStep === 3 && (
+                    <div className="space-y-6 animate-fade-in text-left">
+                      <div className="border-b border-slate-800 pb-3">
+                        <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                          <span className="p-1 px-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg text-xs font-mono">3</span>
+                          <span>Package Selection</span>
+                        </h3>
+                        <p className="text-[11px] text-zinc-400 mt-1">Select from standard configured packages, adjust final quote figures, and adjust deliverables list.</p>
+                      </div>
+                      <div className="space-y-5 text-left">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Select Package Option *</label>
+                          <select
+                            value={wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => handlePackageChange(e.target.value)}
+                            className={`w-full bg-slate-950 border focus:outline-none rounded-xl py-2.5 px-4 text-xs cursor-pointer ${
+                              !(wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id) || (wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id).trim() === ''
+                                ? 'border-rose-500/40 focus:border-rose-500 text-rose-200'
+                                : 'border-slate-800 focus:border-indigo-500 text-white'
+                            }`}
+                          >
+                            <option value="">── Choose configuration package ──</option>
+                            {packages.filter(p => p.status === 'Active').map((pkg) => (
+                              <option key={pkg.package_id} value={pkg.package_id}>
+                                {pkg.package_name} (₹{Number(pkg.price).toLocaleString('en-IN')})
+                              </option>
+                            ))}
+                          </select>
+                          {!(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option) && (
+                            <p className="text-rose-450 font-bold text-xs mt-1.5 font-mono animate-pulse flex items-center gap-1.5">
+                              ⚠️ Please select a package before continuing.
+                            </p>
+                          )}
+                        </div>
+
+                        {(() => {
+                          const selectedPkg = packages.find(p => p.package_id === (wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option));
+                          if (!selectedPkg) return null;
+                          return (
+                            <div className="space-y-4 animate-fade-in">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-450 mb-1.5 uppercase font-mono tracking-wider">Package Name</label>
+                                  <input
+                                    type="text"
+                                    value={selectedPkg.package_name || ''}
+                                    disabled
+                                    className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2 px-3 text-xs text-slate-400 font-medium cursor-not-allowed"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-455 mb-1.5 uppercase font-mono tracking-wider">Package Category</label>
+                                  <input
+                                    type="text"
+                                    value={normalizeCategory(selectedPkg.category) || 'Wedding'}
+                                    disabled
+                                    className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2 px-3 text-xs text-slate-400 font-medium cursor-not-allowed"
+                                  />
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Package Price (Editable) *</label>
+                                <input
+                                  type="number"
+                                  value={wizardLeadData.package_cost !== undefined ? wizardLeadData.package_cost : selectedPkg.price}
+                                  disabled={isLeadLocked}
+                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, package_cost: Math.max(0, parseInt(e.target.value) || 0) })}
+                                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-amber-400 font-mono font-bold"
+                                  required
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-455 mb-1.5 uppercase font-mono tracking-wider">Deliverables Description / Base Package Deliverables (Auto-filled)</label>
+                                <textarea
+                                  rows={3}
+                                  value={selectedPkg.deliverables || ''}
+                                  disabled
+                                  className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 px-4 text-xs text-slate-400 cursor-not-allowed font-mono"
+                                  placeholder="Package deliverables description..."
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-455 mb-1.5 uppercase font-mono tracking-wider">Package Inclusions / Included Services (Auto-filled)</label>
+                                <textarea
+                                  rows={2}
+                                  value={selectedPkg.package_includes || selectedPkg.team_members || ''}
+                                  disabled
+                                  className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 px-4 text-xs text-slate-400 cursor-not-allowed font-mono"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-455 mb-1.5 uppercase font-mono tracking-wider">Package Notes & Customizations (Auto-filled)</label>
+                                <textarea
+                                  rows={2}
+                                  value={selectedPkg.seasonal_offer || 'None'}
+                                  disabled
+                                  className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 px-4 text-xs text-slate-400 cursor-not-allowed font-mono"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Notes & Special Customizations</label>
+                                <textarea
+                                  rows={2}
+                                  value={wizardLeadData.notes || ''}
+                                  disabled={isLeadLocked}
+                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, notes: e.target.value })}
+                                  className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-slate-200"
+                                  placeholder="Special client requirements, location adjustments..."
+                                />
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
+                  {crmWizardStep === 4 && (
+                    <div className="space-y-6 animate-fade-in text-left">
+                      <div className="border-b border-slate-800 pb-3">
+                        <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                          <span className="p-1 px-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg text-xs font-mono">4</span>
+                          <span>Proposed Budget & Remarks</span>
+                        </h3>
+                        <p className="text-[11px] text-zinc-400 mt-1">Review target budget metrics, lock final commercial quotes, log internal notes and set next action deadlines.</p>
+                      </div>
+
+                      {renderQuotationAndStep4Section(true)}
+                    </div>
+                  )}
+
+                  {crmWizardStep === 5 && (
+                    <div className="space-y-6 animate-fade-in text-left">
+                      <div className="border-b border-slate-800 pb-3">
+                        <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                          <span className="p-1 px-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg text-xs font-mono">5</span>
+                          <span>Status Update</span>
+                        </h3>
+                        <p className="text-[11px] text-zinc-400 mt-1">Determine final CRM pipeline stages or transition the contract to Operations.</p>
+                      </div>
+                      <div className="space-y-5 text-left">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider text-xs font-black">Select Sales Pipeline Status *</label>
+                          <select
+                            value={wizardLeadData.status || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, status: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-bold cursor-pointer"
+                          >
+                            <option value="New Lead">New Lead</option>
+                            <option value="Contacted">Contacted</option>
+                            <option value="Follow Up">Follow Up</option>
+                            <option value="Quotation Sent">Quotation Sent</option>
+                            <option value="Negotiation">Negotiation</option>
+                            <option value="Order Confirmed">Order Confirmed (Moves to Operations & Locks CRM)</option>
+                            <option value="Lost Lead">Lost Lead</option>
+                          </select>
+                        </div>
+
+                        {wizardLeadData.status === 'Order Confirmed' && (
+                          <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                            <div className="border-b border-emerald-500/20 pb-2">
+                              <h4 className="text-xs font-black text-emerald-400 uppercase tracking-widest font-mono">💍 Configure Confirmed Order & Booking Contract</h4>
+                              <p className="text-[10px] text-zinc-400 mt-1">Confirming this order locks the CRM profile and creates a real-time production entry. Only payment configurations remain editable.</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left">
+                              <div>
+                                <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Confirmed Event Date *</label>
+                                <input
+                                  type="date"
+                                  value={wizardLeadData.confirmed_event_date || ''}
+                                  disabled={isLeadLocked}
+                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, confirmed_event_date: e.target.value })}
+                                  className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2 px-3 text-xs text-white font-mono"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Confirmed Event Time *</label>
+                                <input
+                                  type="time"
+                                  value={wizardLeadData.confirmed_event_time || ''}
+                                  disabled={isLeadLocked}
+                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, confirmed_event_time: e.target.value })}
+                                  className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2 px-3 text-xs text-white font-mono"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Contract Final Amount (₹) *</label>
+                                <input
+                                  type="number"
+                                  value={wizardLeadData.final_amount || 0}
+                                  disabled={isLeadLocked}
+                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, final_amount: Math.max(0, parseInt(e.target.value) || 0) })}
+                                  className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2 px-3 text-xs text-amber-400 font-mono font-bold"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Advance Payment Received (₹) *</label>
+                                <input
+                                  type="number"
+                                  value={wizardLeadData.advance_received || 0}
+                                  disabled={isLeadLocked}
+                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, advance_received: Math.max(0, parseInt(e.target.value) || 0) })}
+                                  className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2 px-3 text-xs text-emerald-400 font-mono font-bold"
+                                  required
+                                />
+                              </div>
+                            </div>
+
+                            <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 flex items-center justify-between text-xs">
+                              <div>
+                                <span className="text-[10px] text-zinc-550 uppercase font-bold font-mono">Calculated Pending Amount</span>
+                                <strong className="block text-red-500 text-sm font-mono mt-0.5">₹{((wizardLeadData.final_amount || 0) - (wizardLeadData.advance_received || 0)).toLocaleString('en-IN')}</strong>
+                              </div>
+                              <span className="text-[9px] bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Payment Pending</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </form>
+              </div>
+            </div>
+
+            {/* Footer Buttons: Sticky */}
+            <div className="p-4 sm:p-5 border-t border-slate-850 flex items-center justify-between bg-slate-950/20 sticky bottom-0 z-10 shrink-0">
+              {crmWizardStep > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => setCrmWizardStep(crmWizardStep - 1)}
+                  className="px-5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded-xl transition-all cursor-pointer border border-slate-705"
+                >
+                  Back
+                </button>
+              ) : (
+                <div />
+              )}
+
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setSelectedLead(null)}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-850 text-slate-400 hover:text-slate-205 text-xs font-semibold rounded-xl border border-slate-800 transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveStep(crmWizardStep)}
+                  disabled={isSaving || (crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === ''))}
+                  className={`px-5 py-2 text-xs font-mono font-bold uppercase rounded-xl transition-all shadow-md flex items-center gap-1.5 ${
+                    crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')
+                      ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
+                      : 'bg-indigo-650 hover:bg-indigo-600 text-white cursor-pointer'
+                  }`}
+                >
+                  {isSaving ? (
+                    <span className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
+                  ) : null}
+                  <span>{isSaving ? 'Saving...' : crmWizardStep === 5 ? 'Save & Close' : 'Save & Next'}</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+{/* MODAL: Existing Customer Detection Pop-up */}
+      {showDetectionPopup && detectedCustomer && (
+        <div id="modal_existing_customer_detection" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-4 animate-fade-in text-left">
+          <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-indigo-500/30 rounded-2xl w-full max-w-lg shadow-2xl relative p-6 space-y-5">
+            {/* Ambient light ring */}
+            <div className="absolute top-0 left-12 w-48 h-48 bg-indigo-500/[0.03] rounded-full blur-[60px] pointer-events-none" />
+
+            <div className="flex items-start justify-between border-b border-slate-800 pb-3 relative z-10">
+              <div>
+                <h3 className="text-sm font-bold text-white tracking-widest font-mono flex items-center gap-1.5">
+                  <span className="p-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[9px] rounded font-black font-mono">DUPLICATION WARNING</span>
+                  <span>EXISTING CUSTOMER DETECTED</span>
+                </h3>
+                <p className="text-[11px] text-indigo-300 mt-0.5 font-sans">
+                  The phone index or email graph entered already maps to an active account.
+                </p>
+              </div>
+              <button 
+                onClick={() => { setShowDetectionPopup(false); setDetectedCustomer(null); }}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 relative z-10 text-slate-300">
+              {/* Profile Card Summary */}
+              <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800/80 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono text-amber-500 bg-slate-850 px-2 py-0.5 border border-slate-750 rounded font-black">
+                    {detectedCustomer.customer_id}
+                  </span>
+                  <span className="text-[9px] bg-slate-850 text-slate-400 px-2 py-0.5 rounded border border-slate-750 font-mono">
+                    Last Event: {detectedCustomer.lastEventDate || 'N/A'}
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  <h4 className="text-sm font-black text-white">{detectedCustomer.customer_name}</h4>
+                  <div className="text-[10px] text-slate-400 font-mono flex items-center gap-x-3 gap-y-1 flex-wrap">
+                    <span>{detectedCustomer.email}</span>
+                    <span>•</span>
+                    <span>{formatIndianPhoneNumber(detectedCustomer.mobile)}</span>
+                  </div>
+                </div>
+
+                {/* Key Retention KPIs */}
+                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-800/50 text-xs text-left">
+                  <div>
+                    <span className="text-[10px] text-slate-500 block font-mono">PREVIOUS ORDERS</span>
+                    <strong className="text-slate-200 font-black font-mono">{detectedCustomer.totalOrders} Contracts</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block font-mono">TOTAL REVENUE (CLV)</span>
+                    <strong className="text-emerald-455 font-black font-mono">{formatINR(detectedCustomer.totalRevenue)}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Packages badge roster */}
+              {detectedCustomer.previousPackages.length > 0 && (
+                <div className="space-y-1.5 text-left">
+                  <span className="text-[9px] text-slate-550 uppercase font-bold tracking-wider font-mono">PREVIOUS PACKAGES UNDERTAKINGS:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {detectedCustomer.previousPackages.map((pkg: string, i: number) => (
+                      <span key={pkg + i} className="bg-slate-900 border border-slate-800 px-2 py-0.5 text-[9px] font-mono rounded text-slate-400">
+                        {pkg}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* REORDER MODE TOGGLE SEGMENT */}
+              {isQuickReorderView ? (
+                <div className="bg-slate-900 border border-indigo-500/25 p-3 rounded-xl space-y-3 animate-fade-in-up text-left">
+                  <span className="text-[9px] font-black text-indigo-400 tracking-widest font-mono block">CONFIGURE QUICK REORDER PACKAGE</span>
+                  
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className={reorderForm.event_type === 'Other' ? "col-span-2 space-y-1.5" : ""}>
+                      <label className="text-[10px] text-slate-400 block mb-1">Shoot Category</label>
+                      <select
+                        value={reorderForm.event_type}
+                        onChange={(e) => setReorderForm({ ...reorderForm, event_type: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                      >
+                        {EVENT_TYPES.map(type => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
+                      </select>
+
+                      {reorderForm.event_type === 'Other' && (
+                        <div className="animate-fade-in-down mt-1.5">
+                          <label className="text-[9px] font-mono font-bold text-amber-500 block mb-1">
+                            Custom Event Type *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Specify custom event type"
+                            value={reorderForm.custom_event_name}
+                            onChange={(e) => setReorderForm({ ...reorderForm, custom_event_name: e.target.value })}
+                            className="w-full bg-slate-950 border border-amber-500/50 rounded px-2 py-1 text-slate-100 text-xs focus:outline-none text-white"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">Event Plan Date *</label>
+                      <input
+                        type="date"
+                        required
+                        value={reorderForm.event_date}
+                        onChange={(e) => setReorderForm({ ...reorderForm, event_date: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">Contract Amount (₹)</label>
+                      <input
+                        type="number"
+                        value={reorderForm.quotation_amount}
+                        onChange={(e) => setReorderForm({ ...reorderForm, quotation_amount: Number(e.target.value), advance_received: Math.round(Number(e.target.value)/3) })}
+                        className="w-full bg-slate-950 border border-slate-805 rounded px-2 py-1 text-slate-200 font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">Advance Received (₹)</label>
+                      <input
+                        type="number"
+                        value={reorderForm.advance_received}
+                        onChange={(e) => setReorderForm({ ...reorderForm, advance_received: Number(e.target.value) })}
+                        className="w-full bg-slate-950 border border-slate-805 rounded px-2 py-1 text-slate-205 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 border-t border-slate-800 pt-2 text-[11px]">
+                    <button 
+                      type="button" 
+                      onClick={() => setIsQuickReorderView(false)} 
+                      className="px-3 py-1 bg-slate-800 text-slate-400 rounded hover:text-slate-200 cursor-pointer"
+                    >
+                      Refuse
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => handleExecuteQuickReorder(detectedCustomer)} 
+                      className="px-3 py-1 bg-indigo-650 text-white rounded font-bold cursor-pointer"
+                    >
+                      Finalize Reorder Project
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-[11px] text-slate-500 italic text-left">
+                  Tip: Bypassing manual typing and booking a new event will keep the legacy events intact in client timeline record history.
+                </div>
+              )}
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex flex-col sm:flex-row justify-end gap-2 p-1 border-t border-slate-800">
+              {!isQuickReorderView && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Autofill name and other details back to the createForm
+                      setCreateForm(prev => ({
+                        ...prev,
+                        customer_name: detectedCustomer.customer_name,
+                        email: detectedCustomer.email,
+                        alternate_mobile: detectedCustomer.alternate_mobile || '',
+                      }));
+                      setShowDetectionPopup(false);
+                      setDetectedCustomer(null);
+                    }}
+                    className="px-4 py-2 text-xs bg-slate-800 hover:bg-slate-755 text-slate-200 border border-slate-700 rounded-lg cursor-pointer transition-all font-bold"
+                  >
+                    Auto-Fill Contact Info
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsQuickReorderView(true);
+                      // Set default reorder date
+                      const tomorrowStr = new Date();
+                      tomorrowStr.setDate(tomorrowStr.getDate() + 30);
+                      setReorderForm(prev => ({
+                        ...prev,
+                        event_date: tomorrowStr.toISOString().split('T')[0]
+                      }));
+                    }}
+                    className="px-4 py-2 text-xs bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-505 hover:to-indigo-605 text-white rounded-lg shadow-md cursor-pointer transition-all font-bold flex items-center justify-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Quick Repeat Reorder</span>
+                  </button>
+                </>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Business Owner Unlock Reason Prompt */}
+      {unlockingRecordId && (
+        <div id="modal_sales_record_unlock" className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[200] flex items-center justify-center p-4 animate-fade-in text-left">
+          <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-amber-500/30 rounded-2xl w-full max-w-md shadow-2xl relative p-6 space-y-4">
+            <div className="absolute top-0 left-12 w-48 h-48 bg-amber-500/[0.03] rounded-full blur-[60px] pointer-events-none" />
+            
+            <div className="flex items-start justify-between border-b border-slate-800 pb-3 relative z-10 font-sans">
+              <div>
+                <h3 className="text-sm font-bold text-white tracking-widest font-mono flex items-center gap-1.5">
+                  <span className="p-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[9px] rounded font-black font-mono">OWNER OVERRIDE</span>
+                  <span>UNLOCK REASON REQUIRED</span>
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5 font-sans">
+                  Provide a justification to unlock this protected sales record.
+                </p>
+              </div>
+              <button 
+                onClick={() => { setUnlockingRecordId(''); setUnlockReason('Data Correction'); setUnlockCustomReason(''); }}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const finalReason = unlockReason === 'Other' ? unlockCustomReason : unlockReason;
+              if (!finalReason.trim()) {
+                alert('A valid unlock reason is required.');
+                return;
+              }
+              unlockRecord(unlockingRecordId, 'Sales', finalReason);
+              setUnlockingRecordId('');
+              setUnlockCustomReason('');
+              setUnlockReason('Data Correction');
+              alert('Record unlocked successfully for editing!');
+            }} className="space-y-4 relative z-10 font-sans">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">
+                  Select Override Reason *
+                </label>
+                <select
+                  value={unlockReason}
+                  onChange={(e) => setUnlockReason(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2 px-3 text-xs text-slate-205 focus:outline-none focus:border-slate-700"
+                >
+                  <option value="Data Correction">Data Correction</option>
+                  <option value="Customer Request">Customer Request</option>
+                  <option value="Admin Override">Admin Override</option>
+                  <option value="Other">Other (Type custom reason)</option>
+                </select>
+              </div>
+
+              {unlockReason === 'Other' && (
+                <div className="animate-fade-in">
+                  <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">
+                    Custom justification *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Enter unlock justification..."
+                    value={unlockCustomReason}
+                    onChange={(e) => setUnlockCustomReason(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-850 rounded-lg py-2 px-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-slate-700"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-800 font-bold">
+                <button
+                  type="button"
+                  onClick={() => { setUnlockingRecordId(''); setUnlockReason('Data Correction'); setUnlockCustomReason(''); }}
+                  className="px-4 py-2 text-xs bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-lg cursor-pointer border border-slate-700 font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs bg-amber-600 hover:bg-amber-500 text-white rounded-lg shadow-sm cursor-pointer font-extrabold uppercase tracking-wide font-mono border border-amber-500/20"
+                >
+                  🔓 Confirm Unlock
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* GLOBAL MODALS ACCESSIBLE CROSS-TAB */}
+      
+      {/* 1. Global Read-Only View Details Modal wrapped in createPortal to overlay on top of any active portals (like Screen 2 Create Lead) */}
+      {viewingPkgDetails && createPortal(
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[20000] flex items-center justify-center p-4 overflow-y-auto animate-fade-in text-left text-xs bg-black/60">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl p-6 space-y-5 shadow-2xl relative text-slate-300">
+            
+            {!viewingPkgDetails.package_name ? (
+              <div className="flex flex-col items-center justify-center py-10 space-y-4 text-center">
+                <span className="text-3xl text-rose-550">⚠️</span>
+                <h4 className="text-sm font-bold text-slate-100">Package details not available.</h4>
+                <p className="text-xs text-slate-400">The requested package specifications could not be resolved or found.</p>
+                <button
+                  type="button"
+                  onClick={() => setViewingPkgDetails(null)}
+                  className="px-4 py-2 bg-emerald-605 hover:bg-emerald-505 text-white font-bold rounded-lg text-xs cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            ) : (() => {
+              // Internal parser helpers
+              const getDeliverableValue = (pkg: any, key: string) => {
+                const text = (pkg.deliverables || '').toLowerCase();
+                const name = (pkg.package_name || '').toLowerCase();
+                
+                if (key === 'photos') {
+                  const matches = pkg.deliverables?.match(/(\d+\s+edited\s+photos|\d+\+?\s+photos|unlimited\s+photos)/i);
+                  if (matches) return matches[0];
+                  if (text.includes('photographer') || text.includes('photos')) {
+                    const sentences = pkg.deliverables.split(',').map((s: string) => s.trim());
+                    const match = sentences.find((s: string) => s.toLowerCase().includes('photographer') || s.toLowerCase().includes('photo') || s.toLowerCase().includes('candid'));
+                    if (match) return match;
+                  }
+                  return 'Standard High-Res Edited Digital Photos';
+                }
+
+                if (key === 'videos') {
+                  if (text.includes('video') || text.includes('videographer') || text.includes('cinematic') || text.includes('teaser')) {
+                    const sentences = pkg.deliverables.split(',').map((s: string) => s.trim());
+                    const match = sentences.find((s: string) => s.toLowerCase().includes('video') || s.toLowerCase().includes('videographer') || s.toLowerCase().includes('cinematic') || s.toLowerCase().includes('teaser'));
+                    if (match) return match;
+                    return '4K Cinematic Highlight Video';
+                  }
+                  return 'Not Included';
+                }
+
+                if (key === 'reels') {
+                  if (text.includes('reels') || text.includes('reel') || text.includes('short')) {
+                    const sentences = pkg.deliverables.split(',').map((s: string) => s.trim());
+                    const match = sentences.find((s: string) => s.toLowerCase().includes('reel') || s.toLowerCase().includes('short'));
+                    if (match) return match;
+                    return 'Reels Package Included';
+                  }
+                  if (name.includes('platinum') || name.includes('diamond')) {
+                    return 'Complimentary social reels package included';
+                  }
+                  return 'Not Included';
+                }
+
+                if (key === 'album') {
+                  if (text.includes('album') || text.includes('book') || text.includes('print')) {
+                    const sentences = pkg.deliverables.split(',').map((s: string) => s.trim());
+                    const match = sentences.find((s: string) => s.toLowerCase().includes('album') || s.toLowerCase().includes('book') || s.toLowerCase().includes('print'));
+                    if (match) return match;
+                    return 'Standard Hardcover Photo Album';
+                  }
+                  return 'Not Included';
+                }
+
+                if (key === 'frames') {
+                  if (text.includes('frame') || text.includes('canvas')) {
+                    const sentences = pkg.deliverables.split(',').map((s: string) => s.trim());
+                    const match = sentences.find((s: string) => s.toLowerCase().includes('frame') || s.toLowerCase().includes('canvas'));
+                    if (match) return match;
+                    return '1 Wall Frame / Canvas Print';
+                  }
+                  if (name.includes('platinum') || name.includes('diamond')) {
+                    return '1 Large Dynamic Acrylic Wall Frame';
+                  }
+                  return 'Not Included';
+                }
+
+                return 'N/A';
+              };
+
+              const getTeamValue = (pkg: any, key: string) => {
+                const text = ((pkg.team_members || '') + ' ' + (pkg.deliverables || '')).toLowerCase();
+                
+                if (key === 'photographer') {
+                  if (text.includes('candid photographer') && text.includes('traditional photographer')) {
+                    return '2 Photographers (1 Candid, 1 Traditional)';
+                  }
+                  if (text.includes('candid photographer') || text.includes('candid')) {
+                    return '1 Professional Candid Photographer';
+                  }
+                  if (text.includes('traditional photographer')) {
+                    return '1 Traditional Photographer';
+                  }
+                  if (text.includes('photographer')) {
+                    const matches = text.match(/(\d+)\s+photographer/i);
+                    return matches ? `${matches[1]} Lead Photographer(s)` : '1 Professional Photographer';
+                  }
+                  return '1 Professional Photographer';
+                }
+
+                if (key === 'videographer') {
+                  if (text.includes('cinematographer') && text.includes('traditional videographer')) {
+                    return '2 Videographers (1 Cinema, 1 Traditional)';
+                  }
+                  if (text.includes('cinematographer') || text.includes('cinematic videographer') || text.includes('cinematic')) {
+                    return '1 Cinematic Videographer (4K Cinematic)';
+                  }
+                  if (text.includes('traditional videographer') || text.includes('videographer')) {
+                    return '1 Traditional Videographer';
+                  }
+                  if (pkg.category?.toLowerCase().includes('photo') && !text.includes('video')) {
+                    return '0 (Photography Only Package)';
+                  }
+                  return '1 Professional Videographer';
+                }
+
+                if (key === 'drone') {
+                  if (text.includes('drone') || text.includes('aerial')) {
+                    return '1 Certified Drone Pilot (Cinematic 4K Aerials)';
+                  }
+                  return '0 (Available as Premium Add-on)';
+                }
+
+                if (key === 'assistant') {
+                  if (text.includes('assistant') || text.includes('lights') || text.includes('production manager')) {
+                    return '1 Technical Field Assistant';
+                  }
+                  const crewMatch = text.match(/(\d+)\s+crew/i);
+                  if (crewMatch) {
+                    const total = parseInt(crewMatch[1], 10);
+                    if (total > 3) return '1/2 Setup & Lights Assistants';
+                  }
+                  return '0 (Standard Crew Allocation)';
+                }
+
+                return 'N/A';
+              };
+
+              const getCoverageValue = (pkg: any, key: string) => {
+                const cat = (pkg.category || '').toLowerCase();
+                const name = (pkg.package_name || '').toLowerCase();
+
+                if (key === 'hours') {
+                  if (name.includes('pre-wedding') || name.includes('shoot') || name.includes('interior') || name.includes('product')) {
+                    return '3 to 5 Event Shoot Hours';
+                  }
+                  if (name.includes('platinum') || name.includes('diamond')) {
+                    return 'Continuous Coverage (Up to 12 Hours)';
+                  }
+                  return 'Full Day (8 to 10 Hours)';
+                }
+
+                if (key === 'events') {
+                  if (name.includes('platinum') || name.includes('diamond')) {
+                    return 'Multi-event Coverage (Pre-wedding + Wedding covered)';
+                  }
+                  return '1 Main Day Event Coverage';
+                }
+
+                if (key === 'type') {
+                  if (cat.includes('outdoor') || name.includes('outdoor')) {
+                    return 'Exclusively Outdoor Locations';
+                  }
+                  if (cat.includes('interior') || name.includes('indoor') || name.includes('interior')) {
+                    return 'Fully Indoor / Controlled Studio / Residential';
+                  }
+                  return 'Hybrid (Both Indoor Banquet & Outdoor Garden/Mandap)';
+                }
+
+                return 'N/A';
+              };
+
+              const getOffersValue = (pkg: any, key: string) => {
+                const offer = pkg.seasonal_offer || '';
+                
+                if (key === 'seasonal') {
+                  if (offer && offer !== 'None') return offer;
+                  return 'No seasonal discount currently active';
+                }
+
+                if (key === 'complimentary') {
+                  if (offer.toLowerCase().includes('complimentary') || offer.toLowerCase().includes('free')) {
+                    return offer;
+                  }
+                  const price = pkg.price || 0;
+                  if (price > 120000) {
+                    return 'Complimentary Pre-Wedding Teaser videography & 1 Framed Canvas Print';
+                  }
+                  if (price > 80000) {
+                    return 'Complimentary Wedding Film Teaser (1-min Reels Cut)';
+                  }
+                  return 'Standard Package Deliverables Apply';
+                }
+
+                return 'N/A';
+              };
+
+              const photosVal = getDeliverableValue(viewingPkgDetails, 'photos');
+              const videosVal = getDeliverableValue(viewingPkgDetails, 'videos');
+              const reelsVal = getDeliverableValue(viewingPkgDetails, 'reels');
+              const albumVal = getDeliverableValue(viewingPkgDetails, 'album');
+              const framesVal = getDeliverableValue(viewingPkgDetails, 'frames');
+
+              const photographerVal = getTeamValue(viewingPkgDetails, 'photographer');
+              const videographerVal = getTeamValue(viewingPkgDetails, 'videographer');
+              const droneVal = getTeamValue(viewingPkgDetails, 'drone');
+              const assistantVal = getTeamValue(viewingPkgDetails, 'assistant');
+
+              const hoursVal = getCoverageValue(viewingPkgDetails, 'hours');
+              const eventsVal = getCoverageValue(viewingPkgDetails, 'events');
+              const typeVal = getCoverageValue(viewingPkgDetails, 'type');
+
+              const seasonalVal = getOffersValue(viewingPkgDetails, 'seasonal');
+              const complimentaryVal = getOffersValue(viewingPkgDetails, 'complimentary');
+
+              return (
+                <>
+                  {/* Header */}
+                  <div className="flex justify-between items-start border-b border-slate-800 pb-3.5">
+                    <div>
+                      <span className="font-mono text-[10px] text-zinc-500 font-bold uppercase block mb-0.5">
+                        ID: {viewingPkgDetails.package_id || 'Dynamic Link'}
+                      </span>
+                      <h4 className="text-sm sm:text-base font-extrabold text-slate-100 font-sans tracking-tight">
+                        📋 {viewingPkgDetails.package_name || 'Package Specifications'}
+                      </h4>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 text-[10px] font-bold font-mono rounded ${
+                        viewingPkgDetails.status === 'Active'
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
+                      }`}>
+                        {viewingPkgDetails.status || 'Active'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setViewingPkgDetails(null)}
+                        className="p-1 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-lg cursor-pointer"
+                        title="Close Modal"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Pricing and Category Banner */}
+                  <div className="grid grid-cols-2 gap-4 bg-slate-950/40 p-3 rounded-xl border border-slate-850">
+                    <div>
+                      <span className="text-slate-550 block font-bold text-[9px] uppercase font-mono mb-0.5">Category Group</span>
+                      <span className="text-indigo-400 font-bold text-xs">{normalizeCategory(viewingPkgDetails.category)}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-slate-550 block font-bold text-[9px] uppercase font-mono mb-0.5">Standard Package Rate</span>
+                      <span className="text-emerald-400 font-mono font-black text-sm">
+                        ₹{viewingPkgDetails.price ? viewingPkgDetails.price.toLocaleString('en-IN') : 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Dynamic Custom Info Banner */}
+                  {(viewingPkgDetails.event_type || viewingPkgDetails.duration || viewingPkgDetails.package_includes) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-950/40 p-3 rounded-xl border border-slate-850 text-xs">
+                      {viewingPkgDetails.event_type && (
+                        <div>
+                          <span className="text-slate-500 block text-[9px] uppercase font-mono font-semibold mb-0.5">Event Type</span>
+                          <span className="text-slate-200 font-medium">{viewingPkgDetails.event_type}</span>
+                        </div>
+                      )}
+                      {viewingPkgDetails.duration && (
+                        <div>
+                          <span className="text-slate-500 block text-[9px] uppercase font-mono font-semibold mb-0.5">Duration</span>
+                          <span className="text-slate-200 font-medium">{viewingPkgDetails.duration}</span>
+                        </div>
+                      )}
+                      {viewingPkgDetails.package_includes && (
+                        <div>
+                          <span className="text-slate-500 block text-[9px] uppercase font-mono font-semibold mb-0.5">Key Focus</span>
+                          <span className="text-slate-200 font-medium">{viewingPkgDetails.package_includes}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4.5 max-h-[50vh] overflow-y-auto pr-1">
+                    {/* Deliverables Panel */}
+                    <div className="bg-slate-950/20 border border-slate-850 p-3.5 rounded-xl space-y-2.5">
+                      <span className="text-[10px] font-bold text-slate-400 font-mono tracking-wider uppercase block border-b border-slate-850 pb-1.5 flex items-center gap-1.5">
+                        📦 Key Deliverables Included
+                      </span>
+                      <div className="space-y-2 text-xs">
+                        <div className="flex flex-col bg-slate-900/40 p-1.5 rounded border border-transparent hover:border-slate-800/60">
+                          <span className="text-slate-500 text-[10px] font-bold font-mono">Photos Included</span>
+                          <span className="text-slate-200 font-semibold">{photosVal}</span>
+                        </div>
+                        <div className="flex flex-col bg-slate-900/40 p-1.5 rounded border border-transparent hover:border-slate-800/60">
+                          <span className="text-slate-500 text-[10px] font-bold font-mono">Videos Included</span>
+                          <span className="text-slate-205 font-medium">{videosVal}</span>
+                        </div>
+                        <div className="flex flex-col bg-slate-900/40 p-1.5 rounded border border-transparent hover:border-slate-800/60">
+                          <span className="text-slate-500 text-[10px] font-bold font-mono font-mono">Reels Included</span>
+                          <span className="text-slate-205 font-medium">{reelsVal}</span>
+                        </div>
+                        <div className="flex flex-col bg-slate-900/40 p-1.5 rounded border border-transparent hover:border-slate-800/60">
+                          <span className="text-slate-500 text-[10px] font-bold font-mono">Album Included</span>
+                          <span className="text-slate-205 font-medium">{albumVal}</span>
+                        </div>
+                        <div className="flex flex-col bg-slate-900/40 p-1.5 rounded border border-transparent hover:border-slate-800/60">
+                          <span className="text-slate-500 text-[10px] font-bold font-mono">Frames Included</span>
+                          <span className="text-slate-205 font-medium">{framesVal}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right column: Crew & Coverage */}
+                    <div className="space-y-4">
+                      {/* Crew Members */}
+                      <div className="bg-slate-950/20 border border-slate-850 p-3.5 rounded-xl space-y-2.5">
+                        <span className="text-[10px] font-bold text-slate-400 font-mono tracking-wider uppercase block border-b border-slate-850 pb-1.5 flex items-center gap-1.5">
+                          👥 Team Members Included
+                        </span>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="bg-slate-900/40 p-1.5 rounded">
+                            <span className="text-slate-500 text-[9px] font-bold uppercase block mb-0.5">Photographer Count</span>
+                            <span className="text-slate-250 font-medium">{photographerVal}</span>
+                          </div>
+                          <div className="bg-slate-900/40 p-1.5 rounded">
+                            <span className="text-slate-500 text-[9px] font-bold uppercase block mb-0.5">Videographer Count</span>
+                            <span className="text-slate-250 font-medium">{videographerVal}</span>
+                          </div>
+                          <div className="bg-slate-900/40 p-1.5 rounded">
+                            <span className="text-slate-500 text-[9px] font-bold uppercase block mb-0.5">Drone Operator Count</span>
+                            <span className="text-slate-250 font-medium">{droneVal}</span>
+                          </div>
+                          <div className="bg-slate-900/40 p-1.5 rounded">
+                            <span className="text-slate-500 text-[9px] font-bold uppercase block mb-0.5">Assistant Count</span>
+                            <span className="text-slate-250 font-medium">{assistantVal}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Coverage details */}
+                      <div className="bg-slate-950/20 border border-slate-850 p-3.5 rounded-xl space-y-2.5">
+                        <span className="text-[10px] font-bold text-slate-400 font-mono tracking-wider uppercase block border-b border-slate-850 pb-1.5 flex items-center gap-1.5">
+                          📸 Coverage Details
+                        </span>
+                        <div className="space-y-2 text-xs">
+                          <div className="flex justify-between items-center bg-slate-900/40 p-2 rounded">
+                            <span className="text-slate-450 font-medium">Event Coverage Hours</span>
+                            <span className="text-slate-200 font-bold">{hoursVal}</span>
+                          </div>
+                          <div className="flex justify-between items-center bg-slate-900/40 p-2 rounded">
+                            <span className="text-slate-450 font-medium">Number of Events Covered</span>
+                            <span className="text-slate-200 font-bold">{eventsVal}</span>
+                          </div>
+                          <div className="flex justify-between items-center bg-slate-900/40 p-2 rounded">
+                            <span className="text-slate-450 font-medium">Outdoor/Indoor Coverage</span>
+                            <span className="text-slate-200 font-bold">{typeVal}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Offers & Perks */}
+                  <div className="bg-indigo-950/15 border border-indigo-900/40 p-3.5 rounded-xl space-y-2 text-xs">
+                    <span className="text-[10px] font-bold text-indigo-400 font-mono tracking-wider uppercase block border-b border-indigo-950 pb-1">
+                      🎁 Package Offers & complimentary Items
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+                      <div>
+                        <span className="text-slate-500 text-[9px] font-bold uppercase block">Seasonal Offer</span>
+                        <span className="text-indigo-300 font-semibold">{seasonalVal}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 text-[9px] font-bold uppercase block">Complimentary Items</span>
+                        <span className="text-amber-400 font-semibold">{complimentaryVal}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Terms & Conditions */}
+                  <div className="bg-slate-950/30 border border-slate-850 rounded-xl p-3.5 space-y-1.5 text-xs">
+                    <span className="text-slate-505 block font-bold text-[9px] uppercase font-mono tracking-wider">
+                      📑 Contractual Terms & conditions
+                    </span>
+                    <div className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-850 max-h-24 overflow-y-auto leading-relaxed text-slate-350">
+                      {viewingPkgDetails.terms_conditions || (
+                        <p className="italic text-slate-500 font-sans">
+                          Standard photo studio service guidelines apply: 50% advance for confirmation, 35% on event day, and 15% during delivery. Extra coverage hours chargeable.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Modal Footer Controls */}
+                  <div className="flex items-center justify-end gap-2.5 pt-3.5 border-t border-slate-800">
+                    {canEdit && activeTab === 'packages' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const pkg = viewingPkgDetails;
+                          setEditingPackage(pkg);
+                          setPkgForm({
+                            package_name: pkg.package_name,
+                            category: pkg.category,
+                            price: pkg.price,
+                            status: pkg.status,
+                            deliverables: pkg.deliverables || '',
+                            team_members: pkg.team_members || '',
+                            seasonal_offer: pkg.seasonal_offer || '',
+                            terms_conditions: pkg.terms_conditions || '',
+                            event_type: pkg.event_type || '',
+                            duration: pkg.duration || '',
+                            package_includes: pkg.package_includes || ''
+                          });
+                          setIsAddFormOpen(false);
+                          setViewingPkgDetails(null);
+                        }}
+                        className="px-4 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 font-semibold rounded-lg border border-slate-700 cursor-pointer transition-all text-xs"
+                      >
+                        Edit Details
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setViewingPkgDetails(null)}
+                      className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg cursor-pointer transition-all shadow-md text-xs"
+                    >
+                      Close Specs
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* 2. Side-by-Side Comparison Modal */}
+      {isComparingPkgs && createPortal(
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[20000] flex items-center justify-center p-4 overflow-y-auto animate-fade-in text-left text-xs bg-black/60">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-5xl p-6 space-y-5 shadow-2xl relative text-slate-300">
+            
+            {/* Header */}
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div>
+                <span className="font-mono text-[10px] text-zinc-500 font-bold uppercase block mb-0.5">Dynamic comparison checklist</span>
+                <h4 className="text-sm font-extrabold text-slate-100 font-sans tracking-tight">
+                  ⚖️ Side-by-Side Specifications Comparison ({selectedPkgIds.length} packages selected)
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsComparingPkgs(false)}
+                className="text-slate-450 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Comparison Grid Table */}
+            <div className="overflow-x-auto border border-slate-800/85 rounded-xl bg-slate-950/40">
+              <table className="w-full min-w-[700px] border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 bg-[#0F172A]">
+                    <th className="p-3 text-left font-bold text-slate-400 font-mono text-[10px] uppercase w-48 border-r border-slate-800/60">Specification Parameter</th>
+                    {selectedPkgIds.map((id) => {
+                      const pkg = packages.find(p => p.package_id === id);
+                      if (!pkg) return null;
+                      return (
+                        <th key={id} className="p-3 text-left font-bold text-slate-100 border-r border-slate-850/60 last:border-r-0">
+                          <div className="space-y-1">
+                            <span className="text-[9px] bg-emerald-950 text-emerald-400 px-1.5 py-0.5 rounded font-mono uppercase font-black border border-emerald-900/30">
+                              {normalizeCategory(pkg.category)}
+                            </span>
+                            <h5 className="font-bold text-slate-100 mt-1 leading-tight">{pkg.package_name}</h5>
+                            <span className="block font-mono text-emerald-400 font-extrabold text-[12px] pt-1">
+                              ₹{pkg.price ? pkg.price.toLocaleString('en-IN') : 'N/A'}
+                            </span>
+                          </div>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* Category Row */}
+                  <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">🏷️ Category</td>
+                    {selectedPkgIds.map((id) => {
+                      const pkg = packages.find(p => p.package_id === id);
+                      return (
+                        <td key={id} className="p-3 border-r border-slate-850/40 last:border-r-0 font-sans font-medium text-slate-200">
+                          {pkg ? normalizeCategory(pkg.category) : 'General'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+
+                  {/* Pricing Row */}
+                  <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">💰 Price Rate</td>
+                    {selectedPkgIds.map((id) => {
+                      const pkg = packages.find(p => p.package_id === id);
+                      return (
+                        <td key={id} className="p-3 border-r border-slate-850/40 last:border-r-0 font-mono text-emerald-400 font-extrabold">
+                          ₹{pkg?.price ? pkg.price.toLocaleString('en-IN') : 'N/A'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+
+                  {/* Row: Deliverables */}
+                  <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">📦 Core Deliverables</td>
+                    {selectedPkgIds.map((id) => {
+                      const pkg = packages.find(p => p.package_id === id);
+                      return (
+                        <td key={id} className="p-3 border-r border-slate-850/40 last:border-r-0 font-sans leading-relaxed text-slate-300">
+                          <div className="max-h-24 overflow-y-auto pr-1 whitespace-pre-line text-xs font-sans">
+                            {pkg?.deliverables || <span className="italic text-slate-500">Not configured</span>}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+
+                  {/* Row: Team Members */}
+                  <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">👥 Crew Required</td>
+                    {selectedPkgIds.map((id) => {
+                      const pkg = packages.find(p => p.package_id === id);
+                      return (
+                        <td key={id} className="p-3 border-r border-slate-850/40 last:border-r-0 font-sans text-slate-300">
+                          {pkg?.team_members || <span className="italic text-slate-500">Standard team allocation</span>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+
+                  {/* Row: Seasonal Offers */}
+                  <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">🎁 Seasonal offers</td>
+                    {selectedPkgIds.map((id) => {
+                      const pkg = packages.find(p => p.package_id === id);
+                      return (
+                        <td key={id} className="p-3 border-r border-slate-850/40 last:border-r-0 font-sans text-amber-400">
+                          {pkg?.seasonal_offer && pkg.seasonal_offer !== 'None' ? pkg.seasonal_offer : <span className="italic text-slate-505">None active</span>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+
+                  {/* Row: Event Duration */}
+                  <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">⏱️ Duration Limit</td>
+                    {selectedPkgIds.map((id) => {
+                      const pkg = packages.find(p => p.package_id === id);
+                      return (
+                        <td key={id} className="p-3 border-r border-slate-850/40 last:border-r-0 font-sans text-slate-300">
+                          {pkg?.category === 'Pre-Wedding' || pkg?.category === 'Outdoor' || pkg?.package_name?.toLowerCase().includes('shoot')
+                            ? '3 to 5 Hours' 
+                            : 'Full Day (8-10 Hours)'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+
+                  {/* Row: Scope Condition */}
+                  <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">📷 Shoot Scope</td>
+                    {selectedPkgIds.map((id) => {
+                      const pkg = packages.find(p => p.package_id === id);
+                      return (
+                        <td key={id} className="p-3 border-r border-slate-850/40 last:border-r-0 font-sans text-slate-300">
+                          {pkg?.category?.includes('Video') || pkg?.package_name?.toLowerCase().includes('video') || pkg?.package_name?.toLowerCase().includes('reel')
+                            ? 'Cinematic Video' 
+                            : 'Standard Multi-Crew (Photo/Video)'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+
+                  {/* Row: Terms & Conditions */}
+                  <tr className="hover:bg-slate-950/20 text-[11px]">
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">📑 Terms & Conditions</td>
+                    {selectedPkgIds.map((id) => {
+                      const pkg = packages.find(p => p.package_id === id);
+                      return (
+                        <td key={id} className="p-3 border-r border-slate-850/40 last:border-r-0 font-sans leading-relaxed text-slate-305">
+                          <div className="max-h-24 overflow-y-auto bg-slate-950/20 p-2 rounded border border-slate-900/65 text-slate-300 whitespace-pre-line text-[11px]">
+                            {pkg?.terms_conditions || <span className="italic text-slate-500 font-sans">Standard contract rules apply</span>}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Comparison Total Summary */}
+            <div className="bg-[#0f172a] border border-slate-800 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="text-left font-sans">
+                <span className="text-slate-400 text-xs block font-mono font-bold">COMPARISON CUMULATIVE SUM</span>
+                <span className="text-slate-200 text-[11px] leading-relaxed">Both packages are computed dynamically. Total discount is managed directly in the main lead profile session editor.</span>
+              </div>
+              <div className="text-right shrink-0">
+                <span className="text-slate-505 font-mono text-xs block">Combined Proposal Value:</span>
+                <span className="font-mono text-emerald-400 font-black text-xl">₹{subtotal.toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setIsComparingPkgs(false)}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-md transition-all cursor-pointer border border-transparent text-xs"
+              >
+                Close Comparison
+              </button>
+            </div>
+
+          </div>
+        </div>,
+        document.body
+      )}
+
     </div>
   );
-}
+};
