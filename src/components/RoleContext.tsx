@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
-import { User, Lead, LeadPackage, Order, Operation, RawFootage, Production, Payment, ActivityLog, UserRole, CurrentStage, EditingStatus, Staff, Notification, Equipment, Package, StaffAssignment, LeadStaffAssignmentHistory, LeadEquipmentHistory, ProductionSpeciality, EditorAssignment, PaymentStatus, EquipmentHandover, UnlockOverride, DEPARTMENT_STAGES, ROLE_DEPARTMENT_MAP, Department } from '../types';
+import { User, Lead, LeadPackage, Order, Operation, RawFootage, Production, Payment, ActivityLog, UserRole, CurrentStage, EditingStatus, Staff, Notification, Equipment, Package, StaffAssignment, LeadStaffAssignmentHistory, LeadEquipmentHistory, ProductionSpeciality, EditorAssignment, PaymentStatus, EquipmentHandover, UnlockOverride, DEPARTMENT_STAGES, ROLE_DEPARTMENT_MAP, Department, LeadEvent } from '../types';
 import { INITIAL_USERS, INITIAL_LEADS, INITIAL_ORDERS, INITIAL_OPERATIONS, INITIAL_RAW_FOOTAGE, INITIAL_PRODUCTION, INITIAL_PAYMENTS, INITIAL_LOGS, INITIAL_EQUIPMENT } from '../data';
 
 import { supabaseClient, updateDiagnosticMetric } from '../supabaseClient';
@@ -5334,9 +5334,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 2. Delete removed events
       const idsToDelete = existingIds.filter(id => !incomingIds.includes(id));
       if (idsToDelete.length > 0) {
-        const { error: delErr } = await supabaseClient.from('lead_events').delete().in('id', idsToDelete);
-        if (delErr) {
-          throw new Error(`Failed to delete removed events: ${delErr.message}`);
+        for (const idToDelete of idsToDelete) {
+          const delRes = await pushDelete('lead_events', 'id', idToDelete);
+          if (!delRes.success) {
+            throw new Error(`Failed to delete removed event: ${delRes.error}`);
+          }
         }
       }
 
@@ -5359,11 +5361,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
 
         if (isNew) {
-          const { error: insErr } = await supabaseClient.from('lead_events').insert([eventPayload]);
-          if (insErr) throw new Error(`Failed to insert new event: ${insErr.message}`);
+          const insRes = await pushInsert('lead_events', eventPayload);
+          if (!insRes.success) throw new Error(`Failed to insert new event: ${insRes.error}`);
         } else {
-          const { error: updErr } = await supabaseClient.from('lead_events').update(eventPayload).eq('id', ev.id);
-          if (updErr) throw new Error(`Failed to update existing event: ${updErr.message}`);
+          const updRes = await pushUpdate('lead_events', 'id', ev.id, eventPayload);
+          if (!updRes.success) throw new Error(`Failed to update existing event: ${updRes.error}`);
         }
       }
     }
@@ -5631,7 +5633,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!supabaseClient) return false;
     try {
       // 1. Delete child tables in Supabase first to prevent constraint issues
-      await supabaseClient.from('lead_events').delete().eq('lead_id', leadId);
+      await pushDelete('lead_events', 'lead_id', leadId);
       await supabaseClient.from('lead_packages').delete().eq('lead_id', leadId);
       await supabaseClient.from('quotations').delete().eq('lead_id', leadId);
       await supabaseClient.from('follow_ups').delete().eq('lead_id', leadId);
