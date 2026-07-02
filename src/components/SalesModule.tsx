@@ -2382,6 +2382,39 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
   }, [selectedLead, leadPackages, packages]);
 
+  // Auto-load package details into Step 3 if a package is selected but inclusions/deliverables are empty
+  React.useEffect(() => {
+    const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
+    if (pkgId && packages && packages.length > 0) {
+      const pkg = packages.find((p) => p.package_id === pkgId);
+      if (pkg) {
+        setEditableInclusions(prev => {
+          if (!prev[pkgId] || prev[pkgId].length === 0) {
+            const incList = parseTeamMembers(pkg.team_members);
+            return {
+              ...prev,
+              [pkgId]: incList.length > 0 ? incList : ['1 Professional Photographer']
+            };
+          }
+          return prev;
+        });
+
+        setEditableDeliverables(prev => {
+          if (!prev[pkgId] || prev[pkgId].length === 0) {
+            const delList = pkg.deliverables
+              ? pkg.deliverables.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
+              : [];
+            return {
+              ...prev,
+              [pkgId]: delList.length > 0 ? delList : ['High Resolution Edited Photos']
+            };
+          }
+          return prev;
+        });
+      }
+    }
+  }, [wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, packages]);
+
   // Auto-scroll and focus transitions for Sales Popups & Forms
   React.useEffect(() => {
     if (activeTab === 'create') {
