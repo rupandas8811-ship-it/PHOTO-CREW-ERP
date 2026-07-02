@@ -7759,21 +7759,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </select>
                         </div>
 
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider text-xs font-black">Booking Status</label>
-                          <select
-                            value={wizardLeadData.booking_status || 'Pending'}
-                            disabled={isLeadLocked}
-                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, booking_status: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-amber-400 font-bold cursor-pointer"
-                          >
-                            <option value="Pending">Pending</option>
-                            <option value="Confirmed">Confirmed</option>
-                            <option value="Cancelled">Cancelled</option>
-                            <option value="Completed">Completed</option>
-                          </select>
-                        </div>
-
                         {wizardLeadData.status === 'Order Confirmed' && (
                           <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
                             <div className="border-b border-emerald-500/20 pb-2">

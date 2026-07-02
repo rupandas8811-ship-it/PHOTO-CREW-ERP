@@ -789,17 +789,6 @@ export const OperationsLeads: React.FC = () => {
                       </td>
                       <td className="p-3 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {ord.current_stage === 'Order Confirmed' && (
-                            <button
-                              onClick={() => {
-                                updateOrderStage(ord.order_id, 'New Order Received');
-                                alert(`Order ${ord.order_id} Acknowledged & marked as "New Order Received".`);
-                              }}
-                              className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold rounded cursor-pointer transition-all uppercase"
-                            >
-                              Acknowledge
-                            </button>
-                          )}
                           {(ord.current_stage === 'Order Confirmed' || ord.current_stage === 'New Order Received') && (
                             <button
                               onClick={() => startAssigning(ord)}
