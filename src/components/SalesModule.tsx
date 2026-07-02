@@ -2614,6 +2614,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const quotNum = activeQuoteNum || `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
       
       const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
+      const eventAddress = leadObj.event_location || leadObj.address || leadObj.client_residence_address || 'N/A';
       
       const message = `*Quotation Details*\n\n` +
         `Hello *${leadObj.customer_name || 'Client'}*,\n\n` +
@@ -2621,6 +2622,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         `• Quotation No: ${quotNum}\n` +
         `• Event Type: ${leadObj.event_type || 'Event'}\n` +
         `• Event Date: ${leadObj.event_date || 'N/A'}\n` +
+        `📍 Event Address:\n${eventAddress}\n\n` +
         `• Package Name: ${pkgNames}\n` +
         `• Package Amount: ₹${basePkgSum.toLocaleString('en-IN')}\n` +
         `• Discount: ₹${quoteDiscount.toLocaleString('en-IN')}\n` +
