@@ -1466,15 +1466,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     event_type: '',
     custom_event_name: '',
     event_name: '',
-    event_shoot_type: 'Photography',
+    event_shoot_type: '',
     event_date: '',
     event_start_date: '',
     event_end_date: '',
     event_time: '',
     reporting_time: '',
     event_location: '',
-    guest_pax: 100,
-    staff_pax: 2,
+    guest_pax: "" as any,
+    staff_pax: "" as any,
     lead_source: '',
     shoot_type: '',
     // Step 3
@@ -1677,14 +1677,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     event_type: '',
     custom_event_name: '',
     event_name: '',
-    event_shoot_type: 'Photography',
+    event_shoot_type: '',
     event_date: '',
     event_start_date: '',
     event_end_date: '',
     event_time: '',
     event_location: '',
-    guest_pax: 100,
-    staff_pax: 2,
+    guest_pax: "" as any,
+    staff_pax: "" as any,
     budget: '',
     remarks: '',
     whatsapp_number: '',
@@ -1709,14 +1709,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [eventForm, setEventForm] = useState<Omit<LeadEvent, 'id'>>({
     event_type: '',
     event_name: '',
-    event_shoot_type: 'Photography',
+    event_shoot_type: '',
     event_date: '',
     event_start_time: '',
     event_end_time: '',
     event_location: '',
     google_maps_link: '',
-    guest_pax: 100,
-    staff_pax: 2,
+    guest_pax: "" as any,
+    staff_pax: "" as any,
     event_start_date: '',
     event_end_date: ''
   });
@@ -1751,14 +1751,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       event_type: '',
       custom_event_name: '',
       event_name: '',
-      event_shoot_type: 'Photography',
+      event_shoot_type: '',
       event_date: '',
       event_start_date: '',
       event_end_date: '',
       event_time: '',
       event_location: '',
-      guest_pax: 100,
-      staff_pax: 2,
+      guest_pax: "" as any,
+      staff_pax: "" as any,
       budget: '',
       remarks: '',
       whatsapp_number: '',
@@ -1790,15 +1790,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       event_type: '',
       custom_event_name: '',
       event_name: '',
-      event_shoot_type: 'Photography',
+      event_shoot_type: '',
       event_date: '',
       event_start_date: '',
       event_end_date: '',
       event_time: '',
       reporting_time: '',
       event_location: '',
-      guest_pax: 100,
-      staff_pax: 2,
+      guest_pax: "" as any,
+      staff_pax: "" as any,
       lead_source: '',
       shoot_type: '',
       selected_package_id: '',
@@ -1864,14 +1864,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setEventForm({
       event_type: '',
       event_name: '',
-      event_shoot_type: 'Photography',
+      event_shoot_type: '',
       event_date: '',
       event_start_time: '',
       event_end_time: '',
       event_location: '',
       google_maps_link: '',
-      guest_pax: 100,
-      staff_pax: 2,
+      guest_pax: "" as any,
+      staff_pax: "" as any,
       event_start_date: '',
       event_end_date: ''
     });
@@ -2255,16 +2255,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     localStorage.setItem(`erp_quote_services_${leadId}`, JSON.stringify(quoteServices));
   }, [quoteServices, selectedLead, createdLeadId, crmWizardStep, wizardStep]);
 
-  const dynamicBaseSum = quoteServices
-    .filter(s => !s.isAdditional)
-    .reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
-
-  const dynamicAdditionalSum = quoteServices
-    .filter(s => s.isAdditional)
-    .reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
-
-  const dynamicFinalAmt = Math.max(0, dynamicBaseSum - quoteDiscount + dynamicAdditionalSum);
-
   const handleEditInclusion = (pkgKey: string, index: number, value: string) => {
     setEditableInclusions(prev => {
       const list = prev[pkgKey] ? [...prev[pkgKey]] : [];
@@ -2425,6 +2415,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   }, [wizardStep, crmWizardStep, activeQuoteNum]);
 
   const getSelectedPkgsInfo = (isEdit: boolean) => {
+  // ... inserted dynamically ...
+
     if (isEdit) {
       const finalPkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead?.Select_Package_Option || '';
       const primaryPkg = packages.find(p => p.package_id === finalPkgId);
@@ -2458,6 +2450,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }));
     }
   };
+
+  const dynamicBaseSum = getSelectedPkgsInfo(crmWizardStep > 0).reduce((sum, p) => sum + Number(p.package_cost || 0), 0);
+  const dynamicAdditionalSum = quoteServices
+    .filter(s => s.isAdditional)
+    .reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
+  const dynamicFinalAmt = Math.max(0, dynamicBaseSum - quoteDiscount + dynamicAdditionalSum);
 
   const getLeadInfoForQuote = (isEdit: boolean) => {
     if (isEdit) {
@@ -2866,43 +2864,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     return (
       <div className="space-y-6">
-        {/* Section 1: Proposed Client Budget */}
-        <div className="bg-slate-900/50 border border-slate-805/40 rounded-xl p-4.5 space-y-3.5 shadow-sm">
-          <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-2">
-            <span>💰</span> Section 1: Proposed Client Budget
-          </h4>
-          <div className="grid grid-cols-1 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Proposed Client Budget (₹) *
-              </label>
-              <input
-                id={isEdit ? "wizard_edit_step4_first_field" : "wizard_create_step4_first_field"}
-                type="number"
-                required
-                value={budgetValue === 0 ? '' : budgetValue}
-                onChange={(e) => setBudget(e.target.value === '' ? '' : Number(e.target.value))}
-                placeholder="E.g., 50000"
-                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 font-mono transition-all"
-              />
-            </div>
-          </div>
-          <p className="text-[10px] text-slate-500 mt-1 font-mono">
-            Auto-filled with package price (₹{basePkgSum.toLocaleString('en-IN')}) but remains fully editable.
-          </p>
-        </div>
-
         {/* Deliverables Section with Add / Edit / Remove functionality */}
         <div className="bg-slate-900/50 border border-slate-805/40 rounded-xl p-4.5 space-y-4 shadow-sm">
-          <div className="flex flex-col gap-1 border-b border-slate-800 pb-3">
-            <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wide font-mono flex items-center gap-1.5">
-              <span>📦</span> Section 1.5: Deliverables & Specifications Management
-            </h4>
-            <p className="text-[10px] text-slate-400">
-              Review and customize package inclusions and deliverables. Changes automatically update the final pricing amounts.
-            </p>
-          </div>
-
           {/* List of Deliverables in tabular grid */}
           <div className="space-y-4">
             {/* List 1: Package Deliverables (Base) */}
@@ -3947,14 +3910,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setEventForm({
         event_type: savedEventType,
         event_name: '',
-        event_shoot_type: 'Photography',
+        event_shoot_type: '',
         event_date: '',
         event_start_time: '',
         event_end_time: '',
         event_location: '',
         google_maps_link: '',
-        guest_pax: 100,
-        staff_pax: 2,
+        guest_pax: "" as any,
+        staff_pax: "" as any,
         event_start_date: '',
         event_end_date: ''
       });
@@ -3999,14 +3962,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setEventForm({
       event_type: lastEventType || '',
       event_name: '',
-      event_shoot_type: 'Photography',
+      event_shoot_type: '',
       event_date: '',
       event_start_time: '',
       event_end_time: '',
       event_location: '',
       google_maps_link: '',
-      guest_pax: 100,
-      staff_pax: 2,
+      guest_pax: "" as any,
+      staff_pax: "" as any,
       event_start_date: '',
       event_end_date: ''
     });
@@ -8251,7 +8214,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                     disabled={isLeadLocked}
                                     onClick={() => {
                                       const currentList = [...(editableInclusions[selectedPkgId] || [])];
-                                      currentList.push('New Team Member');
+                                      currentList.push('');
                                       setEditableInclusions({
                                         ...editableInclusions,
                                         [selectedPkgId]: currentList
@@ -8312,7 +8275,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                     disabled={isLeadLocked}
                                     onClick={() => {
                                       const currentList = [...(editableDeliverables[selectedPkgId] || [])];
-                                      currentList.push('New Deliverable');
+                                      currentList.push('');
                                       setEditableDeliverables({
                                         ...editableDeliverables,
                                         [selectedPkgId]: currentList
