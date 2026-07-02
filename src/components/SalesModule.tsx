@@ -2579,33 +2579,88 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
   };
 
-  const handleSendWhatsAppQuote = (isEdit: boolean) => {
-    const leadObj = getLeadInfoForQuote(isEdit);
-    const activePkgs = getSelectedPkgsInfo(isEdit);
-    const basePkgSum = dynamicBaseSum;
-    const finalAmt = dynamicFinalAmt;
-    const quotNum = activeQuoteNum || `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-    
-    const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
-    const phone = leadObj.whatsapp_number || leadObj.mobile || '';
-    
-    const message = `*PHOTOCREW PICTURES* 📸\n\n` +
-      `Hi *${leadObj.customer_name || 'Client'}*,\n` +
-      `Thank you for choosing Photocrew Pictures! We have generated your custom quote *${quotNum}* for your upcoming *${leadObj.event_type || 'Event'}* shoot.\n\n` +
-      `*Quote Details:*\n` +
-      `• Selected Package: ${pkgNames}\n` +
-      `• Package Amount: ₹${basePkgSum.toLocaleString('en-IN')}\n` +
-      `• Discount Applied: ₹${quoteDiscount.toLocaleString('en-IN')}\n` +
-      `• Additional Services: ₹${quoteAdditional.toLocaleString('en-IN')}\n` +
-      `• *Final Quotation Amount: ₹${finalAmt.toLocaleString('en-IN')}*\n\n` +
-      `Kindly review the quotation details. Feel free to contact us for any edits/adjustments!\n\n` +
-      `Warm Regards,\n` +
-      `*Photocrew Sales Team*`;
-    
-    const cleanPhone = phone.replace(/[^0-9]/g, '');
-    const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    
-    window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
+  const handleSendWhatsAppQuote = async (isEdit: boolean) => {
+    try {
+      const leadObj = getLeadInfoForQuote(isEdit);
+      const activePkgs = getSelectedPkgsInfo(isEdit);
+
+      const missingFields = validateLeadForQuotation(leadObj, activePkgs);
+      if (missingFields.length > 0) {
+        showToastMsg(`Quotation Incomplete! Please enter the following fields: ${missingFields.join(', ')}`, "error");
+        return;
+      }
+
+      const basePkgSum = dynamicBaseSum;
+      const finalAmt = dynamicFinalAmt;
+      const quotNum = activeQuoteNum || `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+      
+      const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
+      const phone = leadObj.whatsapp_number || leadObj.mobile || '';
+      
+      const message = `*PHOTOCREW PICTURES* 📸\n\n` +
+        `Hi *${leadObj.customer_name || 'Client'}*,\n` +
+        `Thank you for choosing Photocrew Pictures! We have generated your custom quote *${quotNum}* for your upcoming *${leadObj.event_type || 'Event'}* shoot.\n\n` +
+        `*Quote Details:*\n` +
+        `• Selected Package: ${pkgNames}\n` +
+        `• Package Amount: ₹${basePkgSum.toLocaleString('en-IN')}\n` +
+        `• Discount Applied: ₹${quoteDiscount.toLocaleString('en-IN')}\n` +
+        `• Additional Services: ₹${quoteAdditional.toLocaleString('en-IN')}\n` +
+        `• *Final Quotation Amount: ₹${finalAmt.toLocaleString('en-IN')}*\n\n` +
+        `Kindly review the quotation details. Feel free to contact us for any edits/adjustments!\n\n` +
+        `Warm Regards,\n` +
+        `*Photocrew Sales Team*`;
+
+      let currentLogo = logoBase64;
+      let currentAspect = logoAspectRatio;
+      try {
+        const logoUrl = 'https://aqifyxsimhqayfjwzzwj.supabase.co/storage/v1/object/public/img/logo.png';
+        const result = await getLogoBase64FromUrl(logoUrl);
+        currentLogo = result.base64;
+        currentAspect = result.aspect;
+      } catch (e) {
+        console.warn("Failed to wait-load logo for download, using preloaded:", e);
+      }
+
+      const doc = generateQuotationPDF(
+        leadObj,
+        activePkgs,
+        quotNum,
+        quotationTerms,
+        currentLogo,
+        currentAspect,
+        editableInclusions,
+        editableDeliverables,
+        quoteDiscount,
+        quoteAdditional,
+        quoteServices
+      );
+      
+      const pdfBlob = doc.output('blob');
+      const file = new File([pdfBlob], `Quotation_${quotNum}.pdf`, { type: 'application/pdf' });
+      
+      const cleanPhone = phone.replace(/[^0-9]/g, '');
+      const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: `Quotation ${quotNum}`,
+            text: message,
+          });
+          return;
+        } catch (e) {
+          console.error("Share failed", e);
+        }
+      }
+
+      // Fallback
+      doc.save(`Quotation_${quotNum}.pdf`);
+      window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
+    } catch (err) {
+      console.error("WhatsApp quote failed:", err);
+      alert("Failed to send WhatsApp quote.");
+    }
   };
 
   const handleSendEmailQuote = (isEdit: boolean) => {
@@ -3101,24 +3156,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           </h4>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {/* Generate Quotation & Lock in CRM */}
-            <button
-              type="button"
-              onClick={() => handleGenerateQuote(isEdit)}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg transition-all shadow-md active:scale-[0.98] cursor-pointer"
-            >
-              <span>⚡</span> Generate Quotation (Sync CRM)
-            </button>
-
-            {/* Preview PDF */}
-            <button
-              type="button"
-              onClick={() => handlePreviewQuotePDF(isEdit)}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded-lg transition-all border border-zinc-700 active:scale-[0.98] cursor-pointer"
-            >
-              <span>👁️</span> Preview PDF
-            </button>
-
             {/* Download PDF */}
             <button
               type="button"
@@ -3135,15 +3172,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 rounded-lg transition-all border border-emerald-900/40 active:scale-[0.98] cursor-pointer"
             >
               <span>💬</span> Send Quotation via WhatsApp
-            </button>
-
-            {/* Send Email */}
-            <button
-              type="button"
-              onClick={() => handleSendEmailQuote(isEdit)}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-cyan-950/40 hover:bg-cyan-900/50 text-cyan-300 rounded-lg transition-all border border-cyan-900/40 sm:col-span-2 active:scale-[0.98] cursor-pointer"
-            >
-              <span>✉️</span> Send Proposals via Email
             </button>
           </div>
         </div>
@@ -5991,83 +6019,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       )}
                     </div>
 
-                    {/* Address */}
-                    <div className="sm:col-span-2">
-                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
-                        Client Residence Address
-                      </label>
-                      <AddressAutocomplete
-                        value={createForm.client_residence_address || ''}
-                        onChange={(val) => setCreateForm({ ...createForm, client_residence_address: val })}
-                        onSelectAddress={(data) => {
-                          setCreateForm({
-                            ...createForm,
-                            client_residence_address: data.client_residence_address,
-                            city: data.city || createForm.city,
-                            state: data.state || createForm.state,
-                            pincode: data.pincode || createForm.pincode,
-                          });
-                        }}
-                        placeholder="House details / Residence location"
-                        className="bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-sans"
-                      />
-                    </div>
-
-                    {/* Venue/Event Location */}
-                    <div className="sm:col-span-2">
-                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
-                        Venue / Event Location Address
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Street address / Venue details"
-                        value={createForm.address}
-                        onChange={(e) => setCreateForm({ ...createForm, address: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-sans"
-                      />
-                    </div>
-
-                    {/* City */}
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
-                        City
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Mumbai"
-                        value={createForm.city}
-                        onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-sans"
-                      />
-                    </div>
-
-                    {/* State */}
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
-                        State
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Maharashtra"
-                        value={createForm.state}
-                        onChange={(e) => setCreateForm({ ...createForm, state: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-sans"
-                      />
-                    </div>
-
-                    {/* Pincode */}
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
-                        Pincode
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. 400001"
-                        value={createForm.pincode}
-                        onChange={(e) => setCreateForm({ ...createForm, pincode: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-sans"
-                      />
-                    </div>
                   </div>
                 </div>
               )}
@@ -7405,71 +7356,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               <option key={source} value={source}>{source}</option>
                             ))}
                           </select>
-                        </div>
-                        <div className="md:col-span-2">
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Client Residence Address</label>
-                          <AddressAutocomplete
-                            isTextArea={true}
-                            rows={2}
-                            value={wizardLeadData.client_residence_address || ''}
-                            disabled={isLeadLocked}
-                            onChange={(val) => setWizardLeadData({ ...wizardLeadData, client_residence_address: val })}
-                            onSelectAddress={(data) => {
-                              setWizardLeadData({
-                                ...wizardLeadData,
-                                client_residence_address: data.client_residence_address,
-                                city: data.city || wizardLeadData.city,
-                                state: data.state || wizardLeadData.state,
-                                pincode: data.pincode || wizardLeadData.pincode,
-                              });
-                            }}
-                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
-                            placeholder="Complete residential address..."
-                          />
-                        </div>
-                        <div className="md:col-span-2">
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Venue Address</label>
-                          <textarea
-                            rows={2}
-                            value={wizardLeadData.address || ''}
-                            disabled={isLeadLocked}
-                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, address: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
-                            placeholder="Marriage hall, resort or location details..."
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">City</label>
-                          <input
-                            type="text"
-                            value={wizardLeadData.city || ''}
-                            disabled={isLeadLocked}
-                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, city: e.target.value })}
-                            className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
-                            placeholder="e.g. Bangalore"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">State</label>
-                          <input
-                            type="text"
-                            value={wizardLeadData.state || ''}
-                            disabled={isLeadLocked}
-                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, state: e.target.value })}
-                            className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
-                            placeholder="e.g. Karnataka"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Pincode</label>
-                          <input
-                            type="text"
-                            value={wizardLeadData.pincode || ''}
-                            disabled={isLeadLocked}
-                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, pincode: e.target.value })}
-                            className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
-                            placeholder="e.g. 560001"
-                          />
                         </div>
                       </div>
                     </div>

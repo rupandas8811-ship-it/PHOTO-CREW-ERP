@@ -34,7 +34,8 @@ export const OperationsLeads: React.FC = () => {
     updateEquipment,
     refreshData,
     addLeadEquipmentHistory,
-    getLeadCurrentStatus
+    getLeadCurrentStatus,
+    packages
   } = useRole();
 
   useEffect(() => {
@@ -128,20 +129,16 @@ export const OperationsLeads: React.FC = () => {
       : 'No packages listed';
   }, [selectedLeadPkgs]);
 
-  const { financeTotal, financeAdvance, financePending } = useMemo(() => {
-    if (!activeOrderInstance) return { financeTotal: 0, financeAdvance: 0, financePending: 0 };
-    const totalPaidPayments = payments 
-      ? payments.filter((p) => p.order_id === activeOrderInstance.order_id || p.lead_id === activeOrderInstance.lead_id).reduce((sum, p) => sum + (p.amount_paid || 0), 0)
-      : 0;
-    const authAdvance = activeOrderInstance.advance_received || totalPaidPayments || 0;
-    const authTotal = activeOrderInstance.quotation_amount || (parentLeadInstance ? parentLeadInstance.budget : 0) || 0;
-    const authPending = Math.max(0, authTotal - authAdvance);
-    return {
-      financeTotal: authTotal,
-      financeAdvance: authAdvance,
-      financePending: authPending
-    };
-  }, [activeOrderInstance, parentLeadInstance, payments]);
+  const teamMembersIncluded = useMemo(() => {
+    if (!selectedLeadPkgs || selectedLeadPkgs.length === 0 || !packages) return 'No team members specified in package.';
+    const teamMembersList = selectedLeadPkgs.map(lp => {
+      const pkg = packages.find(p => p.package_id === lp.package_id);
+      return pkg?.team_members ? `${pkg.package_name}: ${pkg.team_members}` : null;
+    }).filter(Boolean);
+    
+    if (teamMembersList.length === 0) return 'No team members specified in package.';
+    return teamMembersList.join('\n');
+  }, [selectedLeadPkgs, packages]);
 
   // State for completing shoot
   const [closingOrderId, setClosingOrderId] = useState<string | null>(null);
@@ -1413,27 +1410,16 @@ export const OperationsLeads: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Financial Information Card */}
+                  {/* Team Members Included Card */}
                   <div className="bg-zinc-950/45 border border-zinc-850 p-4 rounded-2xl space-y-3 relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-3 text-[10px] text-zinc-655 select-none">
-                      💰 FINANCE
+                      👥 TEAM INCLUDED
                     </div>
-                    <h4 className="text-[11px] font-mono font-bold uppercase text-emerald-400 tracking-wider">
-                      Financial Summary (View-Only)
+                    <h4 className="text-[11px] font-mono font-bold uppercase text-sky-400 tracking-wider">
+                      Team Members Included
                     </h4>
-                    <div className="grid grid-cols-3 gap-2.5 text-center leading-normal">
-                      <div className="bg-zinc-950 p-2.5 rounded-xl border border-zinc-900">
-                        <span className="text-[9px] text-zinc-505 block uppercase font-mono">Total Quote</span>
-                        <span className="font-black text-white text-xs font-mono block mt-0.5">₹{financeTotal.toLocaleString('en-IN')}</span>
-                      </div>
-                      <div className="bg-zinc-950 p-2.5 rounded-xl border border-zinc-900">
-                        <span className="text-[9px] text-zinc-550 block uppercase font-mono">Advance Paid</span>
-                        <span className="font-black text-emerald-400 text-xs font-mono block mt-0.5">₹{financeAdvance.toLocaleString('en-IN')}</span>
-                      </div>
-                      <div className="bg-zinc-950 p-2.5 rounded-xl border border-zinc-900">
-                        <span className="text-[9px] text-zinc-550 block uppercase font-mono">Pending Bal</span>
-                        <span className="font-black text-amber-500 text-xs font-mono block mt-0.5">₹{financePending.toLocaleString('en-IN')}</span>
-                      </div>
+                    <div className="text-zinc-350 italic font-sans text-xs bg-zinc-950/40 p-2.5 rounded-xl border border-zinc-900 leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto">
+                      {teamMembersIncluded}
                     </div>
                   </div>
                 </div>
