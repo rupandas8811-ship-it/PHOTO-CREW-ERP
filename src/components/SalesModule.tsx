@@ -1399,10 +1399,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     // Step 2
     event_type: '',
     custom_event_name: '',
+    event_name: '',
+    event_shoot_type: 'Photography',
     event_date: '',
+    event_start_date: '',
+    event_end_date: '',
     event_time: '',
     reporting_time: '',
     event_location: '',
+    guest_pax: 100,
+    staff_pax: 2,
     lead_source: '',
     shoot_type: '',
     // Step 3
@@ -1572,10 +1578,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     lead_source: string;
     event_type: string;
     custom_event_name: string;
-    shoot_type: string;
+    event_name: string;
+    event_shoot_type: string;
     event_date: string;
+    event_start_date: string;
+    event_end_date: string;
     event_time: string;
     event_location: string;
+    guest_pax: number | '';
+    staff_pax: number | '';
     budget: number | '';
     remarks: string;
     whatsapp_number: string;
@@ -1599,10 +1610,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     lead_source: '',
     event_type: '',
     custom_event_name: '',
-    shoot_type: '',
+    event_name: '',
+    event_shoot_type: 'Photography',
     event_date: '',
+    event_start_date: '',
+    event_end_date: '',
     event_time: '',
     event_location: '',
+    guest_pax: 100,
+    staff_pax: 2,
     budget: '',
     remarks: '',
     whatsapp_number: '',
@@ -1662,10 +1678,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       lead_source: '',
       event_type: '',
       custom_event_name: '',
-      shoot_type: '',
+      event_name: '',
+      event_shoot_type: 'Photography',
       event_date: '',
+      event_start_date: '',
+      event_end_date: '',
       event_time: '',
       event_location: '',
+      guest_pax: 100,
+      staff_pax: 2,
       budget: '',
       remarks: '',
       whatsapp_number: '',
@@ -1696,10 +1717,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       desired_event_shoot_type: '',
       event_type: '',
       custom_event_name: '',
+      event_name: '',
+      event_shoot_type: 'Photography',
       event_date: '',
+      event_start_date: '',
+      event_end_date: '',
       event_time: '',
       reporting_time: '',
       event_location: '',
+      guest_pax: 100,
+      staff_pax: 2,
       lead_source: '',
       shoot_type: '',
       selected_package_id: '',
@@ -3179,6 +3206,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const matchedPkgId = latestQuote?.package_id || primaryLP?.package_id || lead.Select_Package_Option || '';
     const matchedPkg = (packages || []).find(p => p.package_id === matchedPkgId);
 
+    const firstEvent = lead.events && lead.events.length > 0 ? lead.events[0] : null;
+    const evName = firstEvent?.event_name || lead.custom_event_name || lead.event_type || '';
+    const evShootType = firstEvent?.event_shoot_type || lead.desired_event_shoot_type || lead.shoot_type || 'Photography';
+    const evDate = firstEvent?.event_date || lead.event_date || '';
+    const evStartDate = firstEvent?.event_start_date || lead.event_date || '';
+    const evEndDate = firstEvent?.event_end_date || lead.event_date || '';
+    const evLocation = firstEvent?.event_location || lead.event_location || '';
+    const evGuestPax = firstEvent?.guest_pax || lead.total_pax || 100;
+    const evStaffPax = firstEvent?.staff_pax || 2;
+
     setWizardLeadData({
       customer_name: lead.customer_name || '',
       mobile: lead.mobile || '',
@@ -3194,12 +3231,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       // Step 2
       event_type: lead.event_type || '',
       custom_event_name: lead.custom_event_name || '',
-      event_date: lead.event_date || '',
+      event_name: evName,
+      event_shoot_type: evShootType,
+      event_date: evDate,
+      event_start_date: evStartDate,
+      event_end_date: evEndDate,
       event_time: lead.event_time || '',
       reporting_time: lead.reporting_time || '08:00',
-      event_location: lead.event_location || '',
+      event_location: evLocation,
+      guest_pax: evGuestPax,
+      staff_pax: evStaffPax,
       lead_source: lead.lead_source || 'Reference',
-      shoot_type: lead.shoot_type || '',
+      shoot_type: evShootType,
       // Step 3
       selected_package_id: latestQuote?.package_id || primaryLP?.package_id || lead.Select_Package_Option || '',
       package_cost: lead.package_price || latestQuote?.package_price || (primaryLP ? Number(primaryLP.package_cost) : (matchedPkg ? Number(matchedPkg.price) : 0)),
@@ -3310,34 +3353,66 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         });
         showToastMsg("CRM Updated Successfully.", "success");
       } else if (step === 2) {
-        if (!wizardLeadData.event_type) {
+        if (!wizardLeadData.event_type || wizardLeadData.event_type === '') {
           showToastMsg("Please select Event Type.", "error");
           setIsSaving(false);
           return;
         }
-        if (wizardLeadData.event_type === 'Other' && (!wizardLeadData.custom_event_name || wizardLeadData.custom_event_name.trim() === '')) {
-          showToastMsg("Please enter a Custom Event Name.", "error");
+        if (!wizardLeadData.event_name || wizardLeadData.event_name.trim() === '') {
+          showToastMsg("Please enter Event Name.", "error");
           setIsSaving(false);
           return;
         }
+        if (!wizardLeadData.event_shoot_type || wizardLeadData.event_shoot_type === '') {
+          showToastMsg("Please select Event Shoot Type.", "error");
+          setIsSaving(false);
+          return;
+        }
+        if (!wizardLeadData.event_date || wizardLeadData.event_date === '') {
+          showToastMsg("Please select Event Date.", "error");
+          setIsSaving(false);
+          return;
+        }
+        if (!wizardLeadData.event_location || wizardLeadData.event_location.trim() === '') {
+          showToastMsg("Please enter Event Location.", "error");
+          setIsSaving(false);
+          return;
+        }
+
+        const guestPaxVal = wizardLeadData.guest_pax !== '' ? Math.max(0, parseInt(String(wizardLeadData.guest_pax)) || 0) : 0;
+        const staffPaxVal = wizardLeadData.staff_pax !== '' ? Math.max(0, parseInt(String(wizardLeadData.staff_pax)) || 0) : 0;
+
+        const finalEvents = [{
+          id: selectedLead.events?.[0]?.id || `EV-${Math.floor(1000 + Math.random() * 9000)}`,
+          event_name: wizardLeadData.event_name,
+          event_date: wizardLeadData.event_date,
+          event_start_date: wizardLeadData.event_start_date || wizardLeadData.event_date,
+          event_end_date: wizardLeadData.event_end_date || wizardLeadData.event_date,
+          event_location: wizardLeadData.event_location,
+          event_shoot_type: wizardLeadData.event_shoot_type,
+          guest_pax: guestPaxVal,
+          staff_pax: staffPaxVal
+        }];
+
         await updateLead(selectedLead.lead_id, {
-          event_type: wizardLeadData.event_type,
-          custom_event_name: wizardLeadData.custom_event_name,
-          custom_event_type: wizardLeadData.event_type === 'Other' ? wizardLeadData.custom_event_name : undefined,
+          event_type: wizardLeadData.event_type === 'Other' ? 'Other' : wizardLeadData.event_type,
+          custom_event_name: wizardLeadData.event_name,
+          custom_event_type: wizardLeadData.event_type === 'Other' ? wizardLeadData.event_name : undefined,
           event_date: wizardLeadData.event_date,
           event_time: wizardLeadData.event_time,
           reporting_time: wizardLeadData.reporting_time,
           event_location: wizardLeadData.event_location,
           lead_source: wizardLeadData.lead_source,
-          shoot_type: wizardLeadData.shoot_type,
-          desired_event_shoot_type: wizardLeadData.desired_event_shoot_type,
+          shoot_type: wizardLeadData.event_shoot_type,
+          desired_event_shoot_type: wizardLeadData.event_shoot_type,
           client_residence_address: wizardLeadData.client_residence_address,
           city: wizardLeadData.city,
           state: wizardLeadData.state,
           pincode: wizardLeadData.pincode,
-          total_pax: wizardLeadData.total_pax !== '' && wizardLeadData.total_pax !== undefined ? Number(wizardLeadData.total_pax) : 0,
+          total_pax: guestPaxVal,
           reference_source: wizardLeadData.reference_source || '',
-          Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || ''
+          Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || '',
+          events: finalEvents
         });
         showToastMsg("CRM Updated Successfully.", "success");
       } else if (step === 3) {
@@ -3881,56 +3956,64 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         showToastMsg("Please select Event Type.", "error");
         return;
       }
-      if (createForm.event_type === 'Other' && (!createForm.custom_event_name || createForm.custom_event_name.trim() === '')) {
-        showToastMsg("Please enter a Custom Event Name.", "error");
+      if (!createForm.event_name || createForm.event_name.trim() === '') {
+        showToastMsg("Please enter Event Name.", "error");
         return;
       }
-      if (!createForm.desired_event_shoot_type || createForm.desired_event_shoot_type === '') {
-        showToastMsg("Please select a Desired Event Shoot Type.", "error");
+      if (!createForm.event_shoot_type || createForm.event_shoot_type === '') {
+        showToastMsg("Please select Event Shoot Type.", "error");
         return;
       }
+      if (!createForm.event_date || createForm.event_date === '') {
+        showToastMsg("Please select Event Date.", "error");
+        return;
+      }
+      if (!createForm.event_location || createForm.event_location.trim() === '') {
+        showToastMsg("Please enter Event Location.", "error");
+        return;
+      }
+
+      const guestPaxVal = createForm.guest_pax !== '' ? Math.max(0, parseInt(String(createForm.guest_pax)) || 0) : 0;
+      const staffPaxVal = createForm.staff_pax !== '' ? Math.max(0, parseInt(String(createForm.staff_pax)) || 0) : 0;
 
       try {
         setIsSaving(true);
         const finalSource = createForm.lead_source === 'Other' ? (otherSource ? `Other: ${otherSource}` : 'Other') : createForm.lead_source;
         const finalEventType = createForm.event_type === 'Other' ? 'Other' : createForm.event_type;
-        const finalCustomEventName = createForm.event_type === 'Other' ? createForm.custom_event_name : undefined;
-        const finalCustomEventType = createForm.event_type === 'Other' ? createForm.custom_event_name : undefined;
+        const finalCustomEventName = createForm.event_name;
+        const finalCustomEventType = createForm.event_type === 'Other' ? createForm.event_name : undefined;
 
-        let finalEvents = [...createEvents];
-        if (finalEvents.length === 0) {
-          finalEvents = [{
-            id: `EV-${Math.floor(1000 + Math.random() * 9000)}`,
-            event_name: finalEventType === 'Other' ? (createForm.custom_event_name || 'Main Event') : finalEventType,
-            event_date: createForm.event_date || new Date().toISOString().split('T')[0],
-            event_start_date: createForm.event_date || new Date().toISOString().split('T')[0],
-            event_end_date: createForm.event_date || new Date().toISOString().split('T')[0],
-            event_location: createForm.event_location || 'TBD',
-            event_shoot_type: createForm.desired_event_shoot_type || 'Photography',
-            guest_pax: createForm.total_pax !== '' ? Number(createForm.total_pax) : 100,
-            staff_pax: 2
-          }];
-          setCreateEvents(finalEvents);
-        }
+        const finalEvents = [{
+          id: `EV-${Math.floor(1000 + Math.random() * 9000)}`,
+          event_name: createForm.event_name,
+          event_date: createForm.event_date,
+          event_start_date: createForm.event_start_date || createForm.event_date,
+          event_end_date: createForm.event_end_date || createForm.event_date,
+          event_location: createForm.event_location,
+          event_shoot_type: createForm.event_shoot_type,
+          guest_pax: guestPaxVal,
+          staff_pax: staffPaxVal
+        }];
+        setCreateEvents(finalEvents);
 
         await updateLead(createdLeadId!, {
           event_type: finalEventType,
           custom_event_name: finalCustomEventName,
           custom_event_type: finalCustomEventType,
-          event_date: createForm.event_date || new Date().toISOString().split('T')[0],
+          event_date: createForm.event_date,
           event_time: createForm.event_time || '12:00',
           reporting_time: reportingTime,
-          event_location: createForm.event_location || 'TBD',
+          event_location: createForm.event_location,
           lead_source: finalSource || 'Walk-in',
-          shoot_type: createForm.desired_event_shoot_type || createForm.shoot_type || '',
-          desired_event_shoot_type: createForm.desired_event_shoot_type,
+          shoot_type: createForm.event_shoot_type,
+          desired_event_shoot_type: createForm.event_shoot_type,
           whatsapp_number: createForm.whatsapp_number,
           address: createForm.address,
           city: createForm.city,
           state: createForm.state,
           pincode: createForm.pincode,
           client_residence_address: createForm.client_residence_address,
-          total_pax: createForm.total_pax !== '' && createForm.total_pax !== undefined ? Number(createForm.total_pax) : 0,
+          total_pax: guestPaxVal,
           reference_source: createForm.reference_source || '',
           remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
           Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || '',
@@ -6027,7 +6110,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Event Type */}
-                    <div className="space-y-2 text-left">
+                    <div className="sm:col-span-2 space-y-2 text-left">
                       <div>
                         <label className="block text-xs font-semibold text-slate-404 mb-1.5">
                           Event Type *
@@ -6035,7 +6118,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         <select
                           id="wizard_step2_first_field"
                           value={createForm.event_type}
-                          onChange={(e) => setCreateForm({ ...createForm, event_type: e.target.value })}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCreateForm(prev => ({
+                              ...prev,
+                              event_type: val,
+                              event_name: prev.event_name || (val === 'Other' ? '' : val)
+                            }));
+                          }}
                           className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all cursor-pointer font-bold"
                         >
                           <option value="">Select Event Type</option>
@@ -6044,333 +6134,143 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           ))}
                         </select>
                       </div>
-                      {createForm.event_type === 'Other' && (
-                        <div className="animate-fade-in-down">
-                          <label className="block text-xs font-mono font-bold text-amber-500 mb-1.5">
-                            Custom Event Type *
+                    </div>
+
+                    {/* Conditional Fields shown only after Event Type is selected */}
+                    {createForm.event_type && createForm.event_type !== '' && (
+                      <>
+                        {/* Event Name */}
+                        <div className="sm:col-span-2 text-left animate-fade-in">
+                          <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                            Event Name *
                           </label>
                           <input
                             type="text"
                             required
-                            placeholder="Specify custom event type"
-                            value={createForm.custom_event_name}
-                            onChange={(e) => setCreateForm({ ...createForm, custom_event_name: e.target.value })}
-                            className="w-full bg-slate-950 border border-amber-500/50 rounded-lg py-2 px-3 text-xs text-amber-200 focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all"
+                            placeholder="e.g. Sangeet, Haldi, Reception"
+                            value={createForm.event_name}
+                            onChange={(e) => setCreateForm({ ...createForm, event_name: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none"
                           />
                         </div>
-                      )}
-                    </div>
 
-                    {/* Desired Event Shoot Type */}
-                    <div className="text-left">
-                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
-                        Desired Event Shoot Type *
-                      </label>
-                      <select
-                        value={createForm.desired_event_shoot_type}
-                        onChange={(e) => setCreateForm({ ...createForm, desired_event_shoot_type: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all cursor-pointer"
-                      >
-                        <option value="">Select Shoot Type</option>
-                        <option value="Photography">Photography</option>
-                        <option value="Videography">Videography</option>
-                        <option value="Photography + Videography">Photography + Videography Combo</option>
-                        <option value="Drone Shoot">Drone Shoot</option>
-                        <option value="Cinematic Shoot">Cinematic Shoot</option>
-                        <option value="Live Streaming font-bold">Live Streaming</option>
-                        <option value="Album Design">Album Design</option>
-                        <option value="Custom Package">Custom Package</option>
-                      </select>
-                    </div>
-
-                    {/* Event Date */}
-                    <div className="text-left">
-                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
-                        Estimated Event Date *
-                      </label>
-                      <input
-                        type="date"
-                        required
-                        value={createForm.event_date}
-                        onChange={(e) => setCreateForm({ ...createForm, event_date: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-505 rounded-lg py-2 px-3 text-xs text-slate-105 focus:outline-none focus:ring-1 focus:ring-cyan-503/20 transition-all font-mono"
-                      />
-                    </div>
-
-                    {/* Event Time */}
-                    <div className="text-left">
-                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
-                        Estimated Event Time *
-                      </label>
-                      <input
-                        type="time"
-                        required
-                        value={createForm.event_time}
-                        onChange={(e) => setCreateForm({ ...createForm, event_time: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-mono"
-                      />
-                    </div>
-
-                    {/* Reporting Time */}
-                    <div className="text-left">
-                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
-                        Reporting Time (Optional)
-                      </label>
-                      <input
-                        type="time"
-                        value={reportingTime}
-                        onChange={(e) => setReportingTime(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-mono"
-                      />
-                    </div>
-
-                    {/* Shoot Location */}
-                    <div className="sm:col-span-2 text-left">
-                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
-                        Shoot Location / Venue Details *
-                      </label>
-                      <div className="relative">
-                        <MapPin className="absolute left-3 top-2.5 w-4 h-4 text-slate-500 pointer-events-none" />
-                        <input
-                          type="text"
-                          required
-                          placeholder="Grand Hyatt Central Beach Lawn"
-                          value={createForm.event_location}
-                          onChange={(e) => setCreateForm({ ...createForm, event_location: e.target.value })}
-                          className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 pl-9 pr-3 text-xs text-slate-105 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all"
-                        />
-                      </div>
-                    </div>
-
-                    {/* NEW EVENT DETAILS MULTIPLE EVENTS SECTION */}
-                    {createForm.event_type && (
-                      <div className="sm:col-span-2 border-t border-slate-800/60 pt-4 mt-2 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">
-                            Event Details ({createEvents.length} Event{createEvents.length !== 1 ? 's' : ''})
-                          </h4>
-                          {!showEventForm && (
-                            <button
-                              type="button"
-                              onClick={handleAddNewEventClick}
-                              className="inline-flex items-center gap-1 bg-cyan-600 hover:bg-cyan-500 text-slate-900 text-[11px] font-bold px-3 py-1.5 rounded-lg transition-all"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              Add Another Event
-                            </button>
-                          )}
+                        {/* Event Shoot Type */}
+                        <div className="text-left animate-fade-in">
+                          <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                            Event Shoot Type *
+                          </label>
+                          <select
+                            value={createForm.event_shoot_type}
+                            onChange={(e) => setCreateForm({ ...createForm, event_shoot_type: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none cursor-pointer"
+                          >
+                            <option value="Photography">Photography</option>
+                            <option value="Videography">Videography</option>
+                            <option value="Photography + Videography">Photography + Videography Combo</option>
+                            <option value="Drone Shoot">Drone Shoot</option>
+                            <option value="Cinematic Shoot">Cinematic Shoot</option>
+                            <option value="Live Streaming">Live Streaming</option>
+                            <option value="Album Design">Album Design</option>
+                            <option value="Custom Package">Custom Package</option>
+                          </select>
                         </div>
 
-                        {/* Event list of cards */}
-                        {createEvents.length > 0 && (
-                          <div className="grid grid-cols-1 gap-3">
-                            {createEvents.map((ev, idx) => (
-                              <div
-                                key={ev.id || idx}
-                                className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md hover:border-slate-700 transition-all text-left"
-                              >
-                                <div className="space-y-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs font-bold text-cyan-400">{ev.event_name}</span>
-                                    <span className="bg-slate-800 text-slate-300 text-[10px] font-semibold px-2 py-0.5 rounded font-mono">
-                                      {ev.event_shoot_type}
-                                    </span>
-                                  </div>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-slate-404">
-                                    <div>
-                                      <span className="font-semibold text-slate-300">Date:</span> {ev.event_date}
-                                    </div>
-                                    <div>
-                                      <span className="font-semibold text-slate-300">Duration:</span> {ev.event_start_date} to {ev.event_end_date}
-                                    </div>
-                                    <div className="sm:col-span-2">
-                                      <span className="font-semibold text-slate-300">Location:</span> {ev.event_location || 'TBD'}
-                                    </div>
-                                    <div>
-                                      <span className="font-semibold text-slate-300">Guests:</span> {ev.guest_pax} pax
-                                    </div>
-                                    <div>
-                                      <span className="font-semibold text-slate-300">Staff Crew:</span> {ev.staff_pax} required
-                                    </div>
-                                  </div>
-                                </div>
+                        {/* Event Date */}
+                        <div className="text-left animate-fade-in">
+                          <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                            Event Date *
+                          </label>
+                          <input
+                            type="date"
+                            required
+                            value={createForm.event_date}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setCreateForm(prev => ({
+                                ...prev,
+                                event_date: val,
+                                event_start_date: prev.event_start_date || val,
+                                event_end_date: prev.event_end_date || val
+                              }));
+                            }}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-505 rounded-lg py-2 px-3 text-xs text-slate-105 focus:outline-none focus:ring-1 focus:ring-cyan-503/20 transition-all font-mono"
+                          />
+                        </div>
 
-                                <div className="flex items-center gap-2 self-end sm:self-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleEditEvent(ev)}
-                                    className="p-1.5 text-slate-400 hover:text-cyan-400 bg-slate-850 hover:bg-slate-800 rounded-lg transition-all"
-                                    title="Edit Event"
-                                  >
-                                    <Edit className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteEvent(ev.id)}
-                                    className="p-1.5 text-slate-400 hover:text-red-400 bg-slate-850 hover:bg-slate-800 rounded-lg transition-all"
-                                    title="Delete Event"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
+                        {/* Event Start Date */}
+                        <div className="text-left animate-fade-in">
+                          <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                            Event Start Date (Optional)
+                          </label>
+                          <input
+                            type="date"
+                            value={createForm.event_start_date}
+                            onChange={(e) => setCreateForm({ ...createForm, event_start_date: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-505 rounded-lg py-2 px-3 text-xs text-slate-105 focus:outline-none focus:ring-1 focus:ring-cyan-503/20 transition-all font-mono"
+                          />
+                        </div>
+
+                        {/* Event End Date */}
+                        <div className="text-left animate-fade-in">
+                          <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                            Event End Date (Optional)
+                          </label>
+                          <input
+                            type="date"
+                            value={createForm.event_end_date}
+                            onChange={(e) => setCreateForm({ ...createForm, event_end_date: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-505 rounded-lg py-2 px-3 text-xs text-slate-105 focus:outline-none focus:ring-1 focus:ring-cyan-503/20 transition-all font-mono"
+                          />
+                        </div>
+
+                        {/* Event Location */}
+                        <div className="sm:col-span-2 text-left animate-fade-in">
+                          <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                            Event Location *
+                          </label>
+                          <div className="relative">
+                            <MapPin className="absolute left-3 top-2.5 w-4 h-4 text-slate-500 pointer-events-none" />
+                            <input
+                              type="text"
+                              required
+                              placeholder="e.g. Grand Hyatt Central Beach Lawn"
+                              value={createForm.event_location}
+                              onChange={(e) => setCreateForm({ ...createForm, event_location: e.target.value })}
+                              className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 pl-9 pr-3 text-xs text-slate-105 placeholder-slate-650 focus:outline-none"
+                            />
                           </div>
-                        )}
+                        </div>
 
-                        {/* Inline form for Adding / Editing Event */}
-                        {showEventForm && (
-                          <div className="bg-slate-900 border border-slate-850 rounded-xl p-4 space-y-4 animate-fade-in text-left">
-                            <h5 className="text-[11px] font-bold text-cyan-405 uppercase tracking-wider font-mono">
-                              {editingEventId ? 'Edit Event Details' : 'Add New Event'}
-                            </h5>
+                        {/* Guest Pax */}
+                        <div className="text-left animate-fade-in">
+                          <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                            Guest Pax
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="e.g. 150"
+                            value={createForm.guest_pax}
+                            onChange={(e) => setCreateForm({ ...createForm, guest_pax: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0) })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono"
+                          />
+                        </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                              {/* Event Name */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                                  Event Name *
-                                </label>
-                                <input
-                                  type="text"
-                                  required
-                                  placeholder="e.g. Sangeet, Haldi, Reception"
-                                  value={eventForm.event_name}
-                                  onChange={(e) => setEventForm({ ...eventForm, event_name: e.target.value })}
-                                  className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-1.5 px-3 text-xs text-slate-100 placeholder-slate-600 focus:outline-none"
-                                />
-                              </div>
-
-                              {/* Shoot Type */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                                  Shoot Type *
-                                </label>
-                                <select
-                                  value={eventForm.event_shoot_type}
-                                  onChange={(e) => setEventForm({ ...eventForm, event_shoot_type: e.target.value })}
-                                  className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none cursor-pointer"
-                                >
-                                  <option value="Photography">Photography</option>
-                                  <option value="Videography">Videography</option>
-                                  <option value="Photography + Videography">Photography + Videography Combo</option>
-                                  <option value="Drone Shoot">Drone Shoot</option>
-                                  <option value="Cinematic Shoot">Cinematic Shoot</option>
-                                  <option value="Live Streaming">Live Streaming</option>
-                                  <option value="Album Design">Album Design</option>
-                                  <option value="Custom Package">Custom Package</option>
-                                </select>
-                              </div>
-
-                              {/* Event Date */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                                  Event Date *
-                                </label>
-                                <input
-                                  type="date"
-                                  required
-                                  value={eventForm.event_date}
-                                  onChange={(e) => setEventForm({ ...eventForm, event_date: e.target.value })}
-                                  className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none font-mono"
-                                />
-                              </div>
-
-                              {/* Location */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                                  Venue / Location *
-                                </label>
-                                <input
-                                  type="text"
-                                  required
-                                  placeholder="e.g. Grand Hyatt Ballroom"
-                                  value={eventForm.event_location}
-                                  onChange={(e) => setEventForm({ ...eventForm, event_location: e.target.value })}
-                                  className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-1.5 px-3 text-xs text-slate-100 placeholder-slate-600 focus:outline-none"
-                                />
-                              </div>
-
-                              {/* Start Date */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                                  Start Date *
-                                </label>
-                                <input
-                                  type="date"
-                                  required
-                                  value={eventForm.event_start_date}
-                                  onChange={(e) => setEventForm({ ...eventForm, event_start_date: e.target.value })}
-                                  className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none font-mono"
-                                />
-                              </div>
-
-                              {/* End Date */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                                  End Date *
-                                </label>
-                                <input
-                                  type="date"
-                                  required
-                                  value={eventForm.event_end_date}
-                                  onChange={(e) => setEventForm({ ...eventForm, event_end_date: e.target.value })}
-                                  className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none font-mono"
-                                />
-                              </div>
-
-                              {/* Expected Guests */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                                  Guest Pax (Expected Guests) *
-                                </label>
-                                <input
-                                  type="number"
-                                  required
-                                  min="0"
-                                  placeholder="e.g. 150"
-                                  value={eventForm.guest_pax === 0 ? '' : eventForm.guest_pax}
-                                  onChange={(e) => setEventForm({ ...eventForm, guest_pax: Number(e.target.value) || 0 })}
-                                  className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-1.5 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none font-mono"
-                                />
-                              </div>
-
-                              {/* Crew Required */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                                  Staff Pax (Crew Required) *
-                                </label>
-                                <input
-                                  type="number"
-                                  required
-                                  min="0"
-                                  placeholder="e.g. 3"
-                                  value={eventForm.staff_pax === 0 ? '' : eventForm.staff_pax}
-                                  onChange={(e) => setEventForm({ ...eventForm, staff_pax: Number(e.target.value) || 0 })}
-                                  className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-1.5 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none font-mono"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-end gap-2.5 pt-1.5">
-                              <button
-                                type="button"
-                                onClick={() => setShowEventForm(false)}
-                                className="bg-slate-850 hover:bg-slate-800 text-slate-300 text-xs font-semibold px-4 py-1.5 rounded-lg transition-all"
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                type="button"
-                                onClick={handleSaveEventForm}
-                                className="bg-cyan-600 hover:bg-cyan-500 text-slate-900 text-xs font-bold px-4 py-1.5 rounded-lg transition-all"
-                              >
-                                {editingEventId ? 'Update Event' : 'Add Event'}
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                        {/* Staff Pax */}
+                        <div className="text-left animate-fade-in">
+                          <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                            Staff Pax
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="e.g. 3"
+                            value={createForm.staff_pax}
+                            onChange={(e) => setCreateForm({ ...createForm, staff_pax: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0) })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono"
+                          />
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
@@ -7599,14 +7499,21 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         <p className="text-[11px] text-zinc-400 mt-1">Configure event metadata, starting schedules, reporting times, shoot types, and lead origins.</p>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left">
-                        <div>
+                        <div className="md:col-span-2">
                           <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider flex items-center gap-1.5">
                             <span>Event Type *</span>
                           </label>
                           <select
                             value={wizardLeadData.event_type || ''}
                             disabled={isLeadLocked}
-                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, event_type: e.target.value })}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setWizardLeadData(prev => ({
+                                ...prev,
+                                event_type: val,
+                                event_name: prev.event_name || (val === 'Other' ? '' : val)
+                              }));
+                            }}
                             className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white cursor-pointer font-bold"
                           >
                             <option value="">Select Event Type</option>
@@ -7615,95 +7522,131 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             ))}
                           </select>
                         </div>
-                        {wizardLeadData.event_type === 'Other' && (
-                          <div className="animate-fade-in-down">
-                            <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Custom Event Type *</label>
-                            <input
-                              type="text"
-                              value={wizardLeadData.custom_event_name || ''}
-                              disabled={isLeadLocked}
-                              onChange={(e) => setWizardLeadData({ ...wizardLeadData, custom_event_name: e.target.value })}
-                              className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
-                              placeholder="e.g. Mehendi ceremony, Reception party"
-                              required
-                            />
-                          </div>
+
+                        {wizardLeadData.event_type && wizardLeadData.event_type !== '' && (
+                          <>
+                            {/* Event Name */}
+                            <div className="md:col-span-2 animate-fade-in">
+                              <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Event Name *</label>
+                              <input
+                                type="text"
+                                value={wizardLeadData.event_name || ''}
+                                disabled={isLeadLocked}
+                                onChange={(e) => setWizardLeadData({ ...wizardLeadData, event_name: e.target.value })}
+                                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
+                                placeholder="e.g. Sangeet, Haldi, Reception"
+                                required
+                              />
+                            </div>
+
+                            {/* Event Shoot Type */}
+                            <div className="animate-fade-in">
+                              <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Event Shoot Type *</label>
+                              <select
+                                value={wizardLeadData.event_shoot_type || ''}
+                                disabled={isLeadLocked}
+                                onChange={(e) => setWizardLeadData({ ...wizardLeadData, event_shoot_type: e.target.value })}
+                                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white cursor-pointer"
+                              >
+                                <option value="Photography">Photography</option>
+                                <option value="Videography">Videography</option>
+                                <option value="Photography + Videography">Photography + Videography Combo</option>
+                                <option value="Drone Shoot">Drone Shoot</option>
+                                <option value="Cinematic Shoot">Cinematic Shoot</option>
+                                <option value="Live Streaming">Live Streaming</option>
+                                <option value="Album Design">Album Design</option>
+                                <option value="Custom Package">Custom Package</option>
+                              </select>
+                            </div>
+
+                            {/* Event Date */}
+                            <div className="animate-fade-in">
+                              <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Event Date *</label>
+                              <input
+                                type="date"
+                                value={wizardLeadData.event_date || ''}
+                                disabled={isLeadLocked}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setWizardLeadData(prev => ({
+                                    ...prev,
+                                    event_date: val,
+                                    event_start_date: prev.event_start_date || val,
+                                    event_end_date: prev.event_end_date || val
+                                  }));
+                                }}
+                                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
+                                required
+                              />
+                            </div>
+
+                            {/* Event Start Date */}
+                            <div className="animate-fade-in">
+                              <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Event Start Date</label>
+                              <input
+                                type="date"
+                                value={wizardLeadData.event_start_date || ''}
+                                disabled={isLeadLocked}
+                                onChange={(e) => setWizardLeadData({ ...wizardLeadData, event_start_date: e.target.value })}
+                                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
+                              />
+                            </div>
+
+                            {/* Event End Date */}
+                            <div className="animate-fade-in">
+                              <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Event End Date</label>
+                              <input
+                                type="date"
+                                value={wizardLeadData.event_end_date || ''}
+                                disabled={isLeadLocked}
+                                onChange={(e) => setWizardLeadData({ ...wizardLeadData, event_end_date: e.target.value })}
+                                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
+                              />
+                            </div>
+
+                            {/* Event Location */}
+                            <div className="md:col-span-2 animate-fade-in">
+                              <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Event Location *</label>
+                              <input
+                                type="text"
+                                value={wizardLeadData.event_location || ''}
+                                disabled={isLeadLocked}
+                                onChange={(e) => setWizardLeadData({ ...wizardLeadData, event_location: e.target.value })}
+                                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
+                                placeholder="Resort name, marriage hall, city or outdoor location..."
+                                required
+                              />
+                            </div>
+
+                            {/* Guest Pax */}
+                            <div className="animate-fade-in">
+                              <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Guest Pax</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={wizardLeadData.guest_pax || ''}
+                                disabled={isLeadLocked}
+                                onChange={(e) => setWizardLeadData({ ...wizardLeadData, guest_pax: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0) })}
+                                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
+                                placeholder="e.g. 150"
+                              />
+                            </div>
+
+                            {/* Staff Pax */}
+                            <div className="animate-fade-in">
+                              <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Staff Pax</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={wizardLeadData.staff_pax || ''}
+                                disabled={isLeadLocked}
+                                onChange={(e) => setWizardLeadData({ ...wizardLeadData, staff_pax: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0) })}
+                                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
+                                placeholder="e.g. 3"
+                              />
+                            </div>
+                          </>
                         )}
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Event Date *</label>
-                          <input
-                            type="date"
-                            value={wizardLeadData.event_date || ''}
-                            disabled={isLeadLocked}
-                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, event_date: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Event Time *</label>
-                          <input
-                            type="time"
-                            value={wizardLeadData.event_time || ''}
-                            disabled={isLeadLocked}
-                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, event_time: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Reporting Time *</label>
-                          <input
-                            type="time"
-                            value={wizardLeadData.reporting_time || ''}
-                            disabled={isLeadLocked}
-                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, reporting_time: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
-                            required
-                          />
-                        </div>
-                        <div className="md:col-span-2">
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Event Location (Venue Address) *</label>
-                          <input
-                            type="text"
-                            value={wizardLeadData.event_location || ''}
-                            disabled={isLeadLocked}
-                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, event_location: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
-                            placeholder="Resort name, marriage hall, city or outdoor location..."
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Desired Event Shoot Type</label>
-                          <select
-                            value={wizardLeadData.desired_event_shoot_type || ''}
-                            disabled={isLeadLocked}
-                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, desired_event_shoot_type: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white cursor-pointer"
-                          >
-                            <option value="">── Select Shoot Type ──</option>
-                            <option value="Traditional">Traditional</option>
-                            <option value="Candid">Candid</option>
-                            <option value="Cinematic">Cinematic Film</option>
-                            <option value="Candid + Cinematic">Candid + Cinematic</option>
-                            <option value="Candid + Traditional">Candid + Traditional</option>
-                            <option value="All Inclusive">All Inclusive (Candid+Trad+Cinematic)</option>
-                            <option value="Live Streaming">Live Streaming</option>
-                            <option value="Drone Only">Drone Only</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider font-mono">Total Pax (Guests Expected)</label>
-                          <input
-                            type="number"
-                            value={wizardLeadData.total_pax || ''}
-                            disabled={isLeadLocked}
-                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, total_pax: parseInt(e.target.value) || 0 })}
-                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
-                            placeholder="e.g. 500"
-                          />
-                        </div>
                       </div>
                     </div>
                   )}
