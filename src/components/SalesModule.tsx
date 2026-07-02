@@ -8,10 +8,59 @@ import {
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, LeadEvent } from '../types';
 import { StatusText } from './ui/StatusText';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
-import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory } from '../utils';
+import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers } from '../utils';
 import { SalesCalendar } from './SalesCalendar';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { jsPDF } from 'jspdf';
+
+const validateAndFormatTime = (timeStr: any, fieldLabel: string): string | null => {
+  if (timeStr === undefined || timeStr === null) return null;
+  const str = String(timeStr).trim();
+  if (str === '' || str === 'null' || str === 'undefined' || str === 'Invalid Date') {
+    return null;
+  }
+  const normalized = str.replace(/\s+/g, ' ');
+  const ampmMatch = normalized.toUpperCase().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+  const hhmmMatch = normalized.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  
+  if (!ampmMatch && !hhmmMatch) {
+    throw new Error(`${fieldLabel} is invalid.`);
+  }
+
+  if (ampmMatch) {
+    let hours = parseInt(ampmMatch[1], 10);
+    const minutes = ampmMatch[2];
+    const period = ampmMatch[3];
+
+    if (hours < 1 || hours > 12 || parseInt(minutes, 10) < 0 || parseInt(minutes, 10) > 59) {
+      throw new Error(`${fieldLabel} is invalid.`);
+    }
+
+    if (period === 'PM' && hours < 12) {
+      hours += 12;
+    } else if (period === 'AM' && hours === 12) {
+      hours = 0;
+    }
+
+    const hh = String(hours).padStart(2, '0');
+    return `${hh}:${minutes}:00`;
+  }
+
+  if (hhmmMatch) {
+    const hours = parseInt(hhmmMatch[1], 10);
+    const minutes = hhmmMatch[2];
+    const seconds = hhmmMatch[3] || '00';
+
+    if (hours < 0 || hours > 23 || parseInt(minutes, 10) < 0 || parseInt(minutes, 10) > 59 || parseInt(seconds, 10) < 0 || parseInt(seconds, 10) > 59) {
+      throw new Error(`${fieldLabel} is invalid.`);
+    }
+
+    const hh = String(hours).padStart(2, '0');
+    return `${hh}:${minutes}:${seconds}`;
+  }
+
+  throw new Error(`${fieldLabel} is invalid.`);
+};
 
 const getLogoBase64FromUrl = (url: string): Promise<{ base64: string; aspect: number }> => {
   return new Promise((resolve, reject) => {
@@ -1356,6 +1405,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     duration: '',
     package_includes: ''
   });
+  const [pkgTeamMembers, setPkgTeamMembers] = useState<string[]>(['']);
   const [customCategory, setCustomCategory] = useState('');
   const [isComparingPkgs, setIsComparingPkgs] = useState(false);
   const [dbCategoryError, setDbCategoryError] = useState<string | null>(null);
@@ -1811,6 +1861,23 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       event_date: '',
       event_time: ''
     });
+    setEventForm({
+      event_type: '',
+      event_name: '',
+      event_shoot_type: 'Photography',
+      event_date: '',
+      event_start_time: '',
+      event_end_time: '',
+      event_location: '',
+      google_maps_link: '',
+      guest_pax: 100,
+      staff_pax: 2,
+      event_start_date: '',
+      event_end_date: ''
+    });
+    setShowEventForm(false);
+    setEditingEventId(null);
+    setCollapsedEventIds({});
     setShowConfirmModal(false);
     setGeneratedPDFBlobUrl('');
     setActiveQuoteNum('');
@@ -2046,9 +2113,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const incStr = pObj?.team_members || '';
       const delStr = pObj?.deliverables || '';
 
-      const inclusionsList = incStr
-        ? incStr.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
-        : [];
+      const inclusionsList = parseTeamMembers(incStr);
       const deliverablesList = delStr
         ? delStr.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
         : [];
@@ -2114,9 +2179,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const incStr = pObj?.team_members || '';
       const delStr = pObj?.deliverables || '';
 
-      const inclusionsList = incStr
-        ? incStr.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
-        : [];
+      const inclusionsList = parseTeamMembers(incStr);
       const deliverablesList = delStr
         ? delStr.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
         : [];
@@ -2295,8 +2358,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           const incStr = pObj?.team_members || lp.team_members || '';
           const delStr = pObj?.deliverables || lp.deliverables || '';
 
-          newInclusions[pkgKey] = incStr
-            ? incStr.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
+          const parsedInc = parseTeamMembers(incStr);
+          newInclusions[pkgKey] = parsedInc.length > 0
+            ? parsedInc
             : [
                 '1 Candid Photographer',
                 '1 Cinematographer',
@@ -3370,9 +3434,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         final_quoted_amount: Number(pkg.price),
       }));
       
-      const incList = pkg.team_members
-        ? pkg.team_members.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
-        : [];
+      const incList = parseTeamMembers(pkg.team_members);
       const delList = pkg.deliverables
         ? pkg.deliverables.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
         : [];
@@ -3500,15 +3562,36 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           return;
         }
 
+        // Pre-validate and format all events in the finalEventsList
+        for (const ev of finalEventsList) {
+          try {
+            ev.event_start_time = validateAndFormatTime(ev.event_start_time, "Event Start Time") || '';
+          } catch (err: any) {
+            showToastMsg(err.message, "error");
+            setIsSaving(false);
+            return;
+          }
+          try {
+            ev.event_end_time = validateAndFormatTime(ev.event_end_time, "Event End Time") || '';
+          } catch (err: any) {
+            showToastMsg(err.message, "error");
+            setIsSaving(false);
+            return;
+          }
+        }
+
         const firstEvent = finalEventsList[0];
+
+        const formattedEventTime = validateAndFormatTime(firstEvent.event_start_time, "Event Start Time");
+        const formattedReportingTime = validateAndFormatTime(wizardLeadData.reporting_time, "Reporting Time");
 
         await updateLead(selectedLead.lead_id, {
           event_type: firstEvent.event_type === 'Other' ? 'Other' : firstEvent.event_type,
           custom_event_name: firstEvent.event_name,
           custom_event_type: firstEvent.event_type === 'Other' ? firstEvent.event_name : undefined,
           event_date: firstEvent.event_date,
-          event_time: firstEvent.event_start_time || '12:00',
-          reporting_time: wizardLeadData.reporting_time,
+          event_time: formattedEventTime || null,
+          reporting_time: formattedReportingTime || null,
           event_location: firstEvent.event_location,
           google_maps_link: firstEvent.google_maps_link || '',
           lead_source: wizardLeadData.lead_source,
@@ -4663,6 +4746,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         return;
       }
 
+      // Pre-validate and format all events in the finalEventsList
+      for (const ev of finalEventsList) {
+        try {
+          ev.event_start_time = validateAndFormatTime(ev.event_start_time, "Event Start Time") || '';
+        } catch (err: any) {
+          showToastMsg(err.message, "error");
+          return;
+        }
+        try {
+          ev.event_end_time = validateAndFormatTime(ev.event_end_time, "Event End Time") || '';
+        } catch (err: any) {
+          showToastMsg(err.message, "error");
+          return;
+        }
+      }
+
       const firstEvent = finalEventsList[0];
 
       try {
@@ -4672,13 +4771,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         const finalCustomEventName = firstEvent.event_name;
         const finalCustomEventType = firstEvent.event_type === 'Other' ? firstEvent.event_name : undefined;
 
+        const formattedEventTime = validateAndFormatTime(firstEvent.event_start_time, "Event Start Time");
+        const formattedReportingTime = validateAndFormatTime(reportingTime, "Reporting Time");
+
         await updateLead(createdLeadId!, {
           event_type: finalEventType || '',
           custom_event_name: finalCustomEventName || '',
           custom_event_type: finalCustomEventType,
           event_date: firstEvent.event_date || '',
-          event_time: firstEvent.event_start_time || '12:00',
-          reporting_time: reportingTime,
+          event_time: formattedEventTime || null,
+          reporting_time: formattedReportingTime || null,
           event_location: firstEvent.event_location || '',
           google_maps_link: firstEvent.google_maps_link || '',
           lead_source: finalSource || 'Walk-in',
@@ -4838,7 +4940,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
         Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
       });
-      alert("Lead Saved Successfully.");
+      showToastMsg("Lead created successfully.", "success");
       resetForm();
       setActiveTab('list');
     } catch (err: any) {
@@ -4912,7 +5014,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         reportingTime
       );
       
-      alert("Order Confirmed Successfully.");
+      showToastMsg("Lead created successfully.", "success");
       resetForm();
       setActiveTab('list');
     } catch (err: any) {
@@ -6209,6 +6311,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       duration: '',
                       package_includes: ''
                     });
+                    setPkgTeamMembers(['']);
                     setCustomCategory('');
                     setIsAddFormOpen(true);
                   }}
@@ -6288,13 +6391,42 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                     <div>
                       <label className="block text-slate-400 font-semibold mb-1">Team Members Included</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. 3 Crew Members + Drone"
-                        value={pkgForm.team_members}
-                        onChange={(e) => setPkgForm({ ...pkgForm, team_members: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-855 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans"
-                      />
+                      <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
+                        {pkgTeamMembers.map((member, index) => (
+                          <div key={index} className="flex items-center gap-1.5 animate-slide-down">
+                            <input
+                              type="text"
+                              placeholder="e.g. 2 Candid Photographers"
+                              value={member}
+                              onChange={(e) => {
+                                const newList = [...pkgTeamMembers];
+                                newList[index] = e.target.value;
+                                setPkgTeamMembers(newList);
+                              }}
+                              className="flex-1 bg-slate-950 border border-slate-855 rounded-lg py-1 px-2.5 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans text-xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newList = pkgTeamMembers.filter((_, idx) => idx !== index);
+                                setPkgTeamMembers(newList.length > 0 ? newList : ['']);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-rose-450 bg-slate-950 hover:bg-slate-900 border border-slate-855 hover:border-rose-900/30 rounded-lg transition-all cursor-pointer flex-shrink-0 animate-fade-in"
+                              title="Remove item"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPkgTeamMembers([...pkgTeamMembers, ''])}
+                        className="text-[10px] text-emerald-400 hover:text-emerald-350 font-semibold flex items-center gap-1 cursor-pointer transition-all hover:underline mt-1"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Add More</span>
+                      </button>
                     </div>
 
                     {/* Deliverables (Spanning both cols) */}
@@ -6329,6 +6461,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           duration: '',
                           package_includes: ''
                         });
+                        setPkgTeamMembers(['']);
                         setCustomCategory('');
                       }}
                       className="px-4 py-1.5 text-xs bg-slate-800 hover:bg-slate-755 text-slate-300 rounded-lg transition-all cursor-pointer font-medium border border-transparent"
@@ -6339,7 +6472,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       type="button"
                       onClick={async () => {
                         if (!pkgForm.package_name.trim()) {
-                          alert('Please supply a package name.');
+                           alert('Please supply a package name.');
                           return;
                         }
                         if (pkgForm.price <= 0) {
@@ -6356,8 +6489,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           resolvedCategory = customCategory.trim();
                         }
                         
+                        const filteredMembers = pkgTeamMembers.map(item => item.trim()).filter(Boolean);
+                        const teamMembersStr = filteredMembers.length > 0 ? JSON.stringify(filteredMembers) : '';
+
                         const payload = {
                           ...pkgForm,
+                          team_members: teamMembersStr,
                           category: resolvedCategory
                         };
                         
@@ -6383,6 +6520,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             duration: '',
                             package_includes: ''
                           });
+                          setPkgTeamMembers(['']);
                           setCustomCategory('');
                         } catch (err: any) {
                           alert(`Failed to save package: ${err.message || err}`);
@@ -6530,6 +6668,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       duration: pkg.duration || '',
                                       package_includes: pkg.package_includes || ''
                                     });
+                                    const parsed = parseTeamMembers(pkg.team_members);
+                                    setPkgTeamMembers(parsed.length > 0 ? parsed : ['']);
                                     setCustomCategory('');
                                     setIsAddFormOpen(true);
                                   }}
@@ -9145,6 +9285,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             duration: pkg.duration || '',
                             package_includes: pkg.package_includes || ''
                           });
+                          const parsed = parseTeamMembers(pkg.team_members);
+                          setPkgTeamMembers(parsed.length > 0 ? parsed : ['']);
                           setIsAddFormOpen(false);
                           setViewingPkgDetails(null);
                         }}

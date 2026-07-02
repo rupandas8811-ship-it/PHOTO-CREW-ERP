@@ -398,3 +398,28 @@ export function deserializeLeadEvents(textNotes: string | undefined): { events: 
   return { events: [], notes: textNotes };
 }
 
+/**
+ * Parses team members field from JSON string array or falls back to older text formats
+ */
+export function parseTeamMembers(teamMembersStr: string | undefined | null): string[] {
+  if (!teamMembersStr) return [];
+  const trimmed = teamMembersStr.trim();
+  if (trimmed === '' || trimmed === 'null' || trimmed === 'undefined') return [];
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map(item => String(item).trim()).filter(Boolean);
+      }
+    } catch (e) {
+      // Fallback
+    }
+  }
+  // Fallback for older formats (split by newline or comma)
+  if (trimmed.includes('\n')) {
+    return trimmed.split('\n').map(item => item.trim()).filter(Boolean);
+  }
+  return trimmed.split(',').map(item => item.trim()).filter(Boolean);
+}
+
+

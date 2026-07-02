@@ -1062,6 +1062,48 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
+  const sanitizeTimeFieldsForDb = (record: any) => {
+    if (!record || typeof record !== 'object') return record;
+    const clone = { ...record };
+    const timeFields = ['event_time', 'reporting_time', 'confirmed_event_time'];
+    for (const field of timeFields) {
+      if (field in clone) {
+        const val = clone[field];
+        if (val === undefined || val === null) {
+          clone[field] = null;
+        } else {
+          const str = String(val).trim();
+          if (str === '' || str === 'null' || str === 'undefined' || str === 'Invalid Date') {
+            clone[field] = null;
+          } else {
+            try {
+              const ampmMatch = str.replace(/\s+/g, ' ').toUpperCase().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+              const hhmmMatch = str.replace(/\s+/g, ' ').match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+              if (ampmMatch) {
+                let hours = parseInt(ampmMatch[1], 10);
+                const minutes = ampmMatch[2];
+                const period = ampmMatch[3];
+                if (period === 'PM' && hours < 12) hours += 12;
+                else if (period === 'AM' && hours === 12) hours = 0;
+                clone[field] = `${String(hours).padStart(2, '0')}:${minutes}:00`;
+              } else if (hhmmMatch) {
+                const hours = parseInt(hhmmMatch[1], 10);
+                const minutes = hhmmMatch[2];
+                const seconds = hhmmMatch[3] || '00';
+                clone[field] = `${String(hours).padStart(2, '0')}:${minutes}:${seconds}`;
+              } else {
+                clone[field] = null;
+              }
+            } catch (e) {
+              clone[field] = null;
+            }
+          }
+        }
+      }
+    }
+    return clone;
+  };
+
   // Synchronous CRUD wrappers for updating Supabase in backgrounds
   const pushInsert = async (table: string, record: any): Promise<{ success: boolean; error?: string; localFallback?: boolean }> => {
     if (!supabaseClient) return { success: true };
@@ -1074,7 +1116,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           record.reference_source = '';
         }
       }
-      const sanitized = stripClientOnlyFields(table, record);
+      const sanitized = sanitizeTimeFieldsForDb(stripClientOnlyFields(table, record));
       if (table === 'operations_staff' && sanitized.staff_id) {
         sanitized.staff_id = mapToDbStaffId(sanitized.staff_id);
       }
@@ -1176,7 +1218,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const pushUpdate = async (table: string, matchColumn: string, matchValue: any, updates: any): Promise<{ success: boolean; error?: string; localFallback?: boolean }> => {
     if (!supabaseClient) return { success: true };
     try {
-      const sanitized = stripClientOnlyFields(table, updates);
+      const sanitized = sanitizeTimeFieldsForDb(stripClientOnlyFields(table, updates));
       let finalMatchValue = matchValue;
       if (table === 'operations_staff') {
         if (matchColumn === 'staff_id' && matchValue) {
@@ -1679,6 +1721,14 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       );
 
+      const dbLeadEventsPromise = supabaseClient.from('lead_events').select('*').order('created_at', { ascending: true }).then(
+        (res) => res,
+        (err) => {
+          console.warn('Could not read lead_events from Supabase:', err);
+          return { data: [], error: null };
+        }
+      );
+
       const [
         { data: dbUsers, error: uErr },
         { data: dbLeads, error: ldErr },
@@ -1697,7 +1747,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         quotationsRes,
         statusHistoryRes,
         leadStaffAssignmentHistoryRes,
-        leadEquipmentHistoryRes
+        leadEquipmentHistoryRes,
+        leadEventsRes
       ] = await Promise.all([
         supabaseClient.from('users').select('*'),
         supabaseClient.from('leads').select('*').order('created_at', { ascending: false }),
@@ -1716,7 +1767,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         dbQuotationsPromise,
         dbStatusHistoryPromise,
         dbLeadStaffAssignmentHistoryPromise,
-        dbLeadEquipmentHistoryPromise
+        dbLeadEquipmentHistoryPromise,
+        dbLeadEventsPromise
       ]);
 
       if (uErr || ldErr || ordErr || opErr || rfErr || prodErr || payErr || logErr) {
@@ -1881,6 +1933,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setStatusHistory(resolvedStatusHistory);
 
+      let resolvedLeadEvents = leadEventsRes?.data;
+      if (leadEventsRes?.error || !leadEventsRes?.data) {
+        resolvedLeadEvents = [];
+      }
+
       if (resolvedLeads) {
         const dbStatusHist = resolvedStatusHistory || [];
         const mappedLeads = resolvedLeads.map(ld => {
@@ -1896,11 +1953,14 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const finalStatus = latestHistoryStatus || ld.current_status || rawStatus;
           const parsed = deserializeLeadEvents(ld.notes_special_customizations);
           
+          // Use DB events if they exist, otherwise fallback to parsed notes for backward compatibility
+          const dbEventsForLead = resolvedLeadEvents.filter((ev: any) => ev.lead_id === ld.lead_id);
+          
           return {
             ...ld,
             status: finalStatus as CurrentStage,
             current_status: finalStatus,
-            events: parsed.events
+            events: dbEventsForLead.length > 0 ? dbEventsForLead : parsed.events
           };
         });
         setLeads(prev => {
@@ -2379,7 +2439,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     }
                   }
                   const parsed = deserializeLeadEvents(mappedItem.notes_special_customizations);
-                  mappedItem = { ...mappedItem, status: finalStatus as CurrentStage, current_status: finalStatus, events: parsed.events };
+                  const existingLead = prev.find(l => l.lead_id === mappedItem.lead_id);
+                  mappedItem = { ...mappedItem, status: finalStatus as CurrentStage, current_status: finalStatus, events: existingLead?.events || parsed.events };
                 }
                 if (table === 'orders') {
                   mappedItem = { ...mappedItem, current_stage: mappedItem.current_stage || mappedItem.order_status };
@@ -2434,7 +2495,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     }
                   }
                   const parsed = deserializeLeadEvents(mappedItem.notes_special_customizations);
-                  mappedItem = { ...mappedItem, status: finalStatus as CurrentStage, current_status: finalStatus, events: parsed.events };
+                  const existingLead = prev.find(l => l.lead_id === mappedItem.lead_id);
+                  mappedItem = { ...mappedItem, status: finalStatus as CurrentStage, current_status: finalStatus, events: existingLead?.events || parsed.events };
                 }
                 if (table === 'orders') {
                   mappedItem = { ...mappedItem, current_stage: mappedItem.current_stage || mappedItem.order_status };
@@ -2484,6 +2546,19 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
     });
 
+    const leadEventsChannel = supabaseClient.channel('rt-lead_events')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lead_events' }, (payload) => {
+        updateDiagnosticMetric('realtime', 'ok');
+        fetchFromDb(false).catch(e => console.warn('fetchFromDb failed:', e?.message || e));
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          updateDiagnosticMetric('realtime', 'ok');
+        } else {
+          updateDiagnosticMetric('realtime', 'fail');
+        }
+      });
+
     // Handle window focus and document visibility to fetch fresh data when user returns to app
     const handleFocusOrVisible = () => {
       console.log("[SYNC] App focused/visible, pulling fresh database records...");
@@ -2502,6 +2577,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Realtime subscriptions handle granular updates. No global sync needed.
     return () => {
       channels.forEach(ch => supabaseClient.removeChannel(ch));
+      supabaseClient.removeChannel(leadEventsChannel);
       window.removeEventListener('focus', handleFocusOrVisible);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
@@ -2934,7 +3010,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const leadId = `LD-${Math.floor(9012 + Math.random() * 988)}`;
-    const serializedNotes = serializeLeadEvents(leadDetails.events || [], leadDetails.notes_special_customizations || '');
+    // We still keep notes_special_customizations plain without serialized events, 
+    // or we can keep it as is for backward compatibility but save events to table anyway
+    const serializedNotes = leadDetails.notes_special_customizations || '';
     const newLead: Lead = {
       ...leadDetails,
       email: leadDetails.email || '',
@@ -2959,6 +3037,29 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     if (!res?.success) {
       throw new Error(res?.error || "Failed to save lead in database.");
+    }
+
+    if (leadDetails.events && leadDetails.events.length > 0) {
+      for (const ev of leadDetails.events) {
+        const { id, ...eventWithoutId } = ev;
+        const newEventRecord = {
+          lead_id: leadId,
+          event_type: ev.event_type || '',
+          event_name: ev.event_name || '',
+          event_shoot_type: ev.event_shoot_type || '',
+          event_date: ev.event_date || '',
+          event_start_time: ev.event_start_time || ev.event_start_date || '',
+          event_end_time: ev.event_end_time || ev.event_end_date || '',
+          event_location: ev.event_location || '',
+          google_maps_link: ev.google_maps_link || '',
+          guest_pax: Number(ev.guest_pax) || 0,
+          staff_pax: Number(ev.staff_pax) || 0
+        };
+        const evRes = await pushInsert('lead_events', newEventRecord);
+        if (!evRes?.success) {
+          throw new Error(`Failed to save event to lead_events table: ${evRes?.error || "Unknown error"}`);
+        }
+      }
     }
 
     if (packages && packages.length > 0) {
@@ -5181,11 +5282,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const timestamp = new Date().toISOString();
     const finalUpdates = { ...updates };
     
+    let updatedEvents: LeadEvent[] | undefined;
     if ('events' in finalUpdates) {
+      updatedEvents = finalUpdates.events;
       const notesToUse = finalUpdates.notes_special_customizations !== undefined 
         ? finalUpdates.notes_special_customizations 
         : (prevLead?.notes_special_customizations || '');
-      finalUpdates.notes_special_customizations = serializeLeadEvents(finalUpdates.events || [], notesToUse);
+      finalUpdates.notes_special_customizations = notesToUse;
       delete finalUpdates.events;
     }
     
@@ -5216,6 +5319,53 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const res = await pushUpdate('leads', 'lead_id', leadId, { ...finalUpdates, updated_at: timestamp });
     if (!res?.success) {
       throw new Error(res?.error || "Failed to update lead in database.");
+    }
+
+    if (updatedEvents) {
+      // 1. Load existing events from DB
+      const { data: existingEvents, error: fetchErr } = await supabaseClient.from('lead_events').select('id').eq('lead_id', leadId);
+      if (fetchErr) {
+        throw new Error(`Failed to fetch existing events: ${fetchErr.message}`);
+      }
+      
+      const existingIds = existingEvents?.map(e => String(e.id)) || [];
+      const incomingIds = updatedEvents.map(e => e.id).filter(id => id && !id.startsWith('EV-'));
+
+      // 2. Delete removed events
+      const idsToDelete = existingIds.filter(id => !incomingIds.includes(id));
+      if (idsToDelete.length > 0) {
+        const { error: delErr } = await supabaseClient.from('lead_events').delete().in('id', idsToDelete);
+        if (delErr) {
+          throw new Error(`Failed to delete removed events: ${delErr.message}`);
+        }
+      }
+
+      // 3. Upsert (Insert new, Update existing)
+      for (const ev of updatedEvents) {
+        const isNew = !ev.id || ev.id.startsWith('EV-');
+        
+        const eventPayload = {
+          lead_id: leadId,
+          event_type: ev.event_type || '',
+          event_name: ev.event_name || '',
+          event_shoot_type: ev.event_shoot_type || '',
+          event_date: ev.event_date || '',
+          event_start_time: ev.event_start_time || ev.event_start_date || '',
+          event_end_time: ev.event_end_time || ev.event_end_date || '',
+          event_location: ev.event_location || '',
+          google_maps_link: ev.google_maps_link || '',
+          guest_pax: Number(ev.guest_pax) || 0,
+          staff_pax: Number(ev.staff_pax) || 0
+        };
+
+        if (isNew) {
+          const { error: insErr } = await supabaseClient.from('lead_events').insert([eventPayload]);
+          if (insErr) throw new Error(`Failed to insert new event: ${insErr.message}`);
+        } else {
+          const { error: updErr } = await supabaseClient.from('lead_events').update(eventPayload).eq('id', ev.id);
+          if (updErr) throw new Error(`Failed to update existing event: ${updErr.message}`);
+        }
+      }
     }
     
     setLeads((prev) =>
@@ -5481,6 +5631,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!supabaseClient) return false;
     try {
       // 1. Delete child tables in Supabase first to prevent constraint issues
+      await supabaseClient.from('lead_events').delete().eq('lead_id', leadId);
       await supabaseClient.from('lead_packages').delete().eq('lead_id', leadId);
       await supabaseClient.from('quotations').delete().eq('lead_id', leadId);
       await supabaseClient.from('follow_ups').delete().eq('lead_id', leadId);

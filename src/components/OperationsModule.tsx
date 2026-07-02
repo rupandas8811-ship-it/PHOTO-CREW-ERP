@@ -8,7 +8,7 @@ import { NotificationsModule } from './NotificationsModule';
 import { OperationsAnalytics } from './operations/OperationsAnalytics';
 import { OperationsCalendar } from './OperationsCalendar';
 import { useRole } from './RoleContext';
-import { normalizeCategory } from '../utils';
+import { normalizeCategory, parseTeamMembers } from '../utils';
 import { 
   Briefcase, Sparkles, Calendar, BarChart3, Shield, Search, 
   Layers, Camera, Users, Clock, Bell
@@ -108,9 +108,9 @@ const PackageCatalogueView: React.FC = () => {
                     </div>
                   )}
                   {pkg.team_members && (
-                    <div className="flex justify-between text-zinc-400">
-                      <span className="text-zinc-500 font-mono text-[10px]">CREW PROFILE:</span>
-                      <span className="text-right break-words max-w-[150px]">{pkg.team_members}</span>
+                    <div className="flex justify-between text-zinc-400 gap-2">
+                      <span className="text-zinc-500 font-mono text-[10px] shrink-0">CREW PROFILE:</span>
+                      <span className="text-right break-words max-w-[150px]">{parseTeamMembers(pkg.team_members).join(', ')}</span>
                     </div>
                   )}
                 </div>
