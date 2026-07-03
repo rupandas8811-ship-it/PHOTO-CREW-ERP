@@ -1634,7 +1634,15 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const parsedLeads = dbLeads.map((l: any) => {
           let evts = [];
           if (dbLeadEvents) {
-            evts = dbLeadEvents.filter((e: any) => e.lead_id === l.lead_id);
+            evts = dbLeadEvents
+              .filter((e: any) => e.lead_id === l.lead_id)
+              .map((e: any) => ({
+                ...e,
+                event_start_date: e.event_start_time || e.event_date || '',
+                event_end_date: e.event_end_time || e.event_date || '',
+                event_start_time: e.event_start_time || '',
+                event_end_time: e.event_end_time || ''
+              }));
           }
           if (evts.length === 0 && l.notes_special_customizations) {
             evts = deserializeLeadEvents(l.notes_special_customizations).events || [];
@@ -1883,11 +1891,16 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   let mappedItem = table === 'users' ? { ...item, id: mapFromDbUserId(item.id) } : item;
   if (table === 'notifications') mappedItem = mapNotificationFromDb(item);
   if (table === 'leads') {
+    const existingLead = prev.find((l: any) => l.lead_id === mappedItem.lead_id);
+    let finalEvents = existingLead?.events || [];
+    if (finalEvents.length === 0) {
+      finalEvents = deserializeLeadEvents(mappedItem.notes_special_customizations).events || [];
+    }
     mappedItem = { 
       ...mappedItem, 
       status: mappedItem.current_status || mappedItem.status || 'New Lead', 
       current_status: mappedItem.current_status || mappedItem.status || 'New Lead',
-      events: deserializeLeadEvents(mappedItem.notes_special_customizations).events || []
+      events: finalEvents
     };
   }
   if (table === 'orders') mappedItem = { ...mappedItem, current_stage: mappedItem.current_stage || mappedItem.order_status };
