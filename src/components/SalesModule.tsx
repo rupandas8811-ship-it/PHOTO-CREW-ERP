@@ -2588,9 +2588,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const missing: string[] = [];
     if (!leadObj.customer_name?.trim()) missing.push('Customer Name');
     if (!leadObj.mobile?.trim()) missing.push('Mobile Number');
-    if (!leadObj.city?.trim()) missing.push('City');
-    if (!leadObj.state?.trim()) missing.push('State');
-    if (!leadObj.pincode?.trim()) missing.push('Pincode');
     if (!leadObj.event_type?.trim()) missing.push('Event Type');
     if (!leadObj.desired_event_shoot_type?.trim() && !leadObj.shoot_type?.trim()) missing.push('Desired Event Shoot Type');
     if (!leadObj.event_date?.trim()) missing.push('Event Date');
@@ -2599,20 +2596,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     return missing;
   };
 
-  const handleGenerateQuote = async (isEdit: boolean): Promise<boolean> => {
+  const handleGenerateQuote = async (isEdit: boolean): Promise<string | null> => {
     setIsSaving(true);
+    console.log("✔ Starting quotation generation...");
     try {
       if (!salesStaffName || !salesStaffName.trim()) {
         showToastMsg("Quotation Incomplete! Please enter Sales Staff Name.", "error");
         setIsSaving(false);
-        return false;
+        return null;
       }
       if (!salesStaffMobile || !salesStaffMobile.trim() || salesStaffMobile.trim().length !== 10 || !/^\d+$/.test(salesStaffMobile.trim())) {
         showToastMsg("Please enter a valid 10-digit mobile number.", "error");
         setIsSaving(false);
-        return false;
+        return null;
       }
 
+      console.log("✔ Validating form...");
       const leadObj = getLeadInfoForQuote(isEdit);
       const activePkgs = getSelectedPkgsInfo(isEdit);
 
@@ -2620,17 +2619,23 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       if (missingFields.length > 0) {
         showToastMsg(`Quotation Incomplete! Please enter the following fields: ${missingFields.join(', ')}`, "error");
         setIsSaving(false);
-        return false;
+        return null;
       }
 
       const basePkgSum = dynamicBaseSum;
       const finalAmt = dynamicFinalAmt;
-      const quotNum = activeQuoteNum || `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+      
+      const d = new Date();
+      const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+      const randomFour = String(Math.floor(1 + Math.random() * 9999)).padStart(4, '0');
+      const generatedQuotNum = `QT-${dateStr}-${randomFour}`;
+      const quotNum = activeQuoteNum || generatedQuotNum;
       
       if (!activeQuoteNum) {
         setActiveQuoteNum(quotNum);
       }
 
+      console.log(`✔ Creating quotation ${quotNum}...`);
       const qId = 'QT-' + Math.random().toString(36).substring(2, 9).toUpperCase();
       
       const standardQuotation = {
@@ -2642,12 +2647,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         order_id: '',
         package_name: activePkgs.map(p => p.package_name).join(' + '),
         package_price: basePkgSum,
+        quotation_amount: basePkgSum + quoteAdditional,
         discount: quoteDiscount,
+        discount_amount: quoteDiscount,
         additional_services_cost: quoteAdditional,
         final_quotation_amount: finalAmt,
+        final_amount: finalAmt,
+        tax_amount: 0,
         quotation_status: 'Sent',
         pdf_url: '',
         generated_date: new Date().toISOString().split('T')[0],
+        created_at: new Date().toISOString(),
+        created_by: salesStaffName || 'System',
         whatsapp_sent_status: false,
         viewed_status: false,
         terms_conditions: quotationTerms,
@@ -2664,7 +2675,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         editableDeliverables: editableDeliverables
       };
 
+      console.log("✔ Saving to Supabase...");
       await addQuotation(standardQuotation);
+      console.log("✔ Quotation saved successfully");
 
       if (isEdit) {
         if (wizardLeadData.selected_package_id) {
@@ -2741,11 +2754,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         });
       }
 
-      return true;
+      console.log("✔ Process completed");
+      return quotNum;
     } catch (err: any) {
       console.error("Failed to save quotation data:", err);
       showToastMsg(err.message || "Failed to save quotation data.", "error");
-      return false;
+      return null;
     } finally {
       setIsSaving(false);
     }
@@ -2809,17 +2823,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleDownloadQuotePDF = async (isEdit: boolean) => {
     try {
-      const success = await handleGenerateQuote(isEdit);
-      if (!success) return;
+      const generatedQuotNum = await handleGenerateQuote(isEdit);
+      if (!generatedQuotNum) return;
 
+      console.log("✔ Generating PDF...");
       const leadObj = getLeadInfoForQuote(isEdit);
       const activePkgs = getSelectedPkgsInfo(isEdit);
-      const quotNum = activeQuoteNum || `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
       
       const doc = generateQuotationPDF(
         leadObj,
         activePkgs,
-        quotNum,
+        generatedQuotNum,
         quotationTerms,
         logoBase64,
         logoAspectRatio,
@@ -2830,7 +2844,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         quoteServices
       );
       
-      doc.save(`Quotation_${quotNum}.pdf`);
+      console.log("✔ PDF generated");
+      doc.save(`Quotation_${generatedQuotNum}.pdf`);
       showToastMsg("Quotation successfully generated and saved to CRM!", "success");
     } catch (err: any) {
       console.error("PDF download failed:", err);
@@ -2840,19 +2855,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleSendWhatsAppQuote = async (isEdit: boolean) => {
     try {
-      const success = await handleGenerateQuote(isEdit);
-      if (!success) return;
+      const generatedQuotNum = await handleGenerateQuote(isEdit);
+      if (!generatedQuotNum) return;
 
+      console.log("✔ Generating PDF...");
       const leadObj = getLeadInfoForQuote(isEdit);
       const activePkgs = getSelectedPkgsInfo(isEdit);
       const basePkgSum = dynamicBaseSum;
       const finalAmt = dynamicFinalAmt;
-      const quotNum = activeQuoteNum || `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
 
       const doc = generateQuotationPDF(
         leadObj,
         activePkgs,
-        quotNum,
+        generatedQuotNum,
         quotationTerms,
         logoBase64,
         logoAspectRatio,
@@ -2863,20 +2878,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         quoteServices
       );
       
+      console.log("✔ PDF generated");
       const pdfBlob = doc.output('blob');
       const blobUrl = URL.createObjectURL(pdfBlob);
       setGeneratedPDFBlobUrl(blobUrl);
 
       // Download the PDF automatically as requested
-      doc.save(`Quotation_${quotNum}.pdf`);
+      doc.save(`Quotation_${generatedQuotNum}.pdf`);
 
+      console.log("✔ Opening WhatsApp...");
       const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
       const phone = leadObj.whatsapp_number || leadObj.mobile || '';
       
       const message = `Hello *${leadObj.customer_name || 'Client'}*,\n\n` +
         `Thank you for choosing *PhotoCrew Pictures*.\n\n` +
         `Please find your quotation details below:\n\n` +
-        `📄 Quotation No: ${quotNum}\n` +
+        `📄 Quotation No: ${generatedQuotNum}\n` +
         `🎉 Event: ${leadObj.event_type || 'Event'}\n` +
         `📅 Event Date: ${leadObj.event_date || 'N/A'}\n` +
         `📍 Event Address: ${leadObj.event_location || leadObj.location || 'N/A'}\n` +
@@ -2886,12 +2903,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const cleanPhone = phone.replace(/[^0-9]/g, '');
       const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
 
-      // We use a small timeout to let the PDF download trigger before opening the popup
-      setTimeout(() => {
-        window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
-      }, 100);
+      window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
 
       showToastMsg("Quotation downloaded and WhatsApp prepared!", "success");
+      console.log("✔ Process completed");
     } catch (err: any) {
       console.error("WhatsApp quote failed:", err);
       showToastMsg(err.message || "Failed to send WhatsApp quote.", "error");
@@ -3072,18 +3087,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             <button
               type="button"
               onClick={() => handleDownloadQuotePDF(isEdit)}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-red-950/40 hover:bg-red-900/50 text-red-300 rounded-lg transition-all border border-red-900/40 active:scale-[0.98] cursor-pointer"
+              disabled={isSaving}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-red-950/40 hover:bg-red-900/50 text-red-300 rounded-lg transition-all border border-red-900/40 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span>📄</span> Download PDF Document
+              <span>📄</span> {isSaving ? 'Processing...' : 'Download PDF Document'}
             </button>
 
             {/* Send WhatsApp */}
             <button
               type="button"
               onClick={() => handleSendWhatsAppQuote(isEdit)}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 rounded-lg transition-all border border-emerald-900/40 active:scale-[0.98] cursor-pointer"
+              disabled={isSaving}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 rounded-lg transition-all border border-emerald-900/40 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span>💬</span> Send Quotation via WhatsApp
+              <span>💬</span> {isSaving ? 'Processing...' : 'Send Quotation via WhatsApp'}
             </button>
           </div>
         </div>

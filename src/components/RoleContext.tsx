@@ -4528,11 +4528,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { error } = await supabaseClient.from('quotations').insert(standardPayload);
       if (error) {
         console.warn('Could not insert quotation into Supabase with standard fields:', error.message);
+        throw new Error(`Failed to save quotation to database: ${error.message}`);
       } else {
         // fetchFromDb().catch(console.error); // Disabled to prevent full reload
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Supabase exception on inserting quotation:', err);
+      throw new Error(err.message || 'Failed to save quotation to database.');
     }
   };
 
