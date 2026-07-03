@@ -94,20 +94,13 @@ export const OperationsLeads: React.FC = () => {
   // Inline edit state for assignment
   const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [assignForm, setAssignForm] = useState({
-    photographer_assigned: '',
-    videographer_assigned: '',
-    drone_operator_assigned: '',
-    assistant_assigned: '',
-    equipment_kit: '',
-    reporting_time: '08:00',
-    remarks: '',
-    event_status: 'Assigned' as 'Assigned' | 'Completed' | 'Event Scheduled' | 'Event Completed' | 'Raw Footage Received' | string,
-    current_stage: 'Order Confirmed' as CurrentStage,
-    raw_footage_link: '',
-    event_date: '',
-    event_time: '10:00'
-  });
+  const [eventAllocations, setEventAllocations] = useState<Record<string, {
+    reporting_date: string;
+    reporting_time: string;
+    event_start_time: string;
+    event_end_time: string;
+    staff: { staff_role: string, staff_id: string, staff_name: string }[];
+  }>>({});
 
   // Find order and lead for assigning modal
   const activeOrderInstance = useMemo(() => {
@@ -1293,7 +1286,7 @@ export const OperationsLeads: React.FC = () => {
       {/* Slide-over or Inline modal for Crew and Equipment Assignment */}
       {assigningOrderId && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div id="assign_staff_modal" className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-5xl shadow-2xl relative animate-in zoom-in duration-200 overflow-hidden">
+          <div id="assign_staff_modal" className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-4xl shadow-2xl relative animate-in zoom-in duration-200 overflow-hidden">
             <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/40">
               <div className="flex items-center gap-2">
                 <span className="p-1 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-500 text-xs font-bold font-mono">Operations</span>
@@ -1310,818 +1303,293 @@ export const OperationsLeads: React.FC = () => {
               </button>
             </div>
             <form onSubmit={handleAssignSubmit} className="flex flex-col">
-              <div className="p-5 overflow-y-auto max-h-[75vh] grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="p-5 overflow-y-auto max-h-[75vh] space-y-6">
                 
-                {/* LEFT SIDE: Sales Handover Dossier (Locked / Read-Only) */}
-                <div className="lg:col-span-5 space-y-4">
-                  <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest text-zinc-400 border-b border-zinc-800 pb-2">
-                    <span className="text-amber-500 font-bold block">🔒</span>
-                    <span>Sales Handover Dossier (Locked)</span>
+                {/* 1. Customer Information */}
+                <div className="bg-zinc-950/45 border border-zinc-850 p-4 rounded-2xl space-y-3 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-3 text-[10px] text-zinc-655 select-none">
+                    👤 CUSTOMER
                   </div>
-
-                  {/* Customer Information Card */}
-                  <div className="bg-zinc-950/45 border border-zinc-850 p-4 rounded-2xl space-y-3 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-3 text-[10px] text-zinc-655 select-none">
-                      👤 CUSTOMER
+                  <h4 className="text-[11px] font-mono font-bold uppercase text-amber-500 tracking-wider">
+                    Customer Information
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                    <div>
+                      <span className="text-[10px] text-zinc-500 block uppercase font-mono">Customer Name</span>
+                      <span className="font-bold text-white font-sans text-xs block">
+                        {activeOrderInstance?.customer_name || parentLeadInstance?.customer_name || 'N/A'}
+                      </span>
                     </div>
-                    <h4 className="text-[11px] font-mono font-bold uppercase text-amber-500 tracking-wider">
-                      Customer Information
-                    </h4>
-                    <div className="space-y-2.5 text-xs">
-                      <div>
-                        <span className="text-[10px] text-zinc-500 block uppercase font-mono">Customer Name</span>
-                        <span className="font-bold text-white font-sans text-xs block">
-                          {activeOrderInstance?.customer_name || parentLeadInstance?.customer_name || 'N/A'}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <span className="text-[10px] text-zinc-500 block uppercase font-mono">Mobile Number</span>
-                          <span className="font-mono text-zinc-200 font-medium block">
-                            {activeOrderInstance?.mobile || parentLeadInstance?.mobile || 'N/A'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-zinc-505 block uppercase font-mono">Alternate Mobile Number</span>
-                          <span className="font-mono text-zinc-200 font-medium flex items-center gap-1">
-                            {parentLeadInstance?.alternate_mobile || 'N/A'}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 gap-2">
-                        <div>
-                          <span className="text-[10px] text-zinc-505 block uppercase font-mono">Event Address</span>
-                          <span className="text-zinc-200 font-sans text-[11px] block leading-tight">
-                            {parentLeadInstance?.event_location || activeOrderInstance?.event_location || parentLeadInstance?.address || 'N/A'}
-                          </span>
-                        </div>
-                      </div>
-                      {parentLeadInstance?.google_maps_link && (
-                        <div>
-                          <span className="text-[10px] text-zinc-505 block uppercase font-mono">Google Maps Link</span>
-                          <a 
-                            href={parentLeadInstance.google_maps_link} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300 font-sans text-[11px] break-all block underline"
-                          >
-                            {parentLeadInstance.google_maps_link}
-                          </a>
-                        </div>
-                      )}
+                    <div>
+                      <span className="text-[10px] text-zinc-500 block uppercase font-mono">Mobile Number</span>
+                      <span className="font-mono text-zinc-200 font-medium block">
+                        {activeOrderInstance?.mobile || parentLeadInstance?.mobile || 'N/A'}
+                      </span>
                     </div>
-                  </div>
-                  {/* Event Information Card */}        {/* Event Information Card */}
-                  <div className="bg-zinc-950/45 border border-zinc-850 p-4 rounded-2xl space-y-3 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-3 text-[10px] text-zinc-655 select-none">
-                      🎥 EVENT
+                    <div>
+                      <span className="text-[10px] text-zinc-505 block uppercase font-mono">Alt / WhatsApp</span>
+                      <span className="font-mono text-zinc-200 font-medium flex items-center gap-1">
+                        {parentLeadInstance?.alternate_mobile || 'N/A'}
+                      </span>
                     </div>
-                    <h4 className="text-[11px] font-mono font-bold uppercase text-amber-500 tracking-wider">
-                      Event & Package Coordinates
-                    </h4>
-                    <div className="space-y-2.5 text-xs">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <span className="text-[10px] text-zinc-505 block uppercase font-mono">Event Type</span>
-                          <span className="font-semibold text-white uppercase text-[11px] block">
-                            {(() => {
-                              const et = activeOrderInstance?.event_type || parentLeadInstance?.event_type;
-                              if (et === 'Other') {
-                                return activeOrderInstance?.custom_event_name || activeOrderInstance?.custom_event_type || parentLeadInstance?.custom_event_name || parentLeadInstance?.custom_event_type || 'Other';
-                              }
-                              return et || 'N/A';
-                            })()}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-zinc-505 block uppercase font-mono">Shoot Type</span>
-                          <span className="text-zinc-350 font-medium uppercase text-[11px] block">
-                            {activeOrderInstance?.shoot_type || parentLeadInstance?.shoot_type || 'N/A'}
-                          </span>
-                        </div>
+                    <div>
+                      <span className="text-[10px] text-zinc-505 block uppercase font-mono">Email</span>
+                      <span className="font-sans text-zinc-200 font-medium block">
+                        {parentLeadInstance?.email || 'N/A'}
+                      </span>
+                    </div>
+                    <div className="col-span-2 md:col-span-4">
+                      <span className="text-[10px] text-zinc-505 block uppercase font-mono">Event Address</span>
+                      <span className="text-zinc-200 font-sans text-[11px] block leading-tight">
+                        {parentLeadInstance?.event_location || activeOrderInstance?.event_location || parentLeadInstance?.address || 'N/A'}
+                      </span>
+                    </div>
+                    {parentLeadInstance?.google_maps_link && (
+                      <div className="col-span-2 md:col-span-4">
+                        <span className="text-[10px] text-zinc-505 block uppercase font-mono">Google Maps Link</span>
+                        <a 
+                          href={parentLeadInstance.google_maps_link} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:text-blue-300 font-sans text-[11px] break-all block underline"
+                        >
+                          {parentLeadInstance.google_maps_link}
+                        </a>
                       </div>
-                      <div className="grid grid-cols-3 gap-2 border-t border-b border-zinc-900 py-2">
-                        <div>
-                          <span className="text-[10px] text-zinc-505 block uppercase font-mono">Event Date</span>
-                          <span className="font-mono text-white font-bold block">{activeOrderInstance?.event_date || parentLeadInstance?.event_date || 'N/A'}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-zinc-505 block uppercase font-mono">Event Timing</span>
-                          <span className="font-mono text-zinc-300 block">{activeOrderInstance?.event_time || parentLeadInstance?.event_time || 'N/A'}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-zinc-505 block uppercase font-mono">Reporting</span>
-                          <span className="font-mono text-amber-400 font-extrabold block">{activeOrderInstance?.reporting_time || parentLeadInstance?.reporting_time || '08:00 AM'}</span>
-                        </div>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-zinc-505 block uppercase font-mono">Package Composition & Line Items</span>
-                        <div className="text-zinc-300 bg-zinc-950/80 px-2.5 py-1.5 rounded-xl border border-zinc-900 font-mono text-[10.5px] whitespace-pre-wrap leading-relaxed max-h-24 overflow-y-auto">
-                          {packageDetailsString}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Team Members Included Card */}
-                  <div className="bg-zinc-950/45 border border-zinc-850 p-4 rounded-2xl space-y-3 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-3 text-[10px] text-zinc-655 select-none">
-                      👥 TEAM INCLUDED
-                    </div>
-                    <h4 className="text-[11px] font-mono font-bold uppercase text-sky-400 tracking-wider">
-                      Team Members Included
-                    </h4>
-                    <div className="text-zinc-350 italic font-sans text-xs bg-zinc-950/40 p-2.5 rounded-xl border border-zinc-900 leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto">
-                      {teamMembersIncluded}
-                    </div>
+                    )}
                   </div>
                 </div>
 
-                {/* RIGHT SIDE: Operations Allocations (Active Input) */}
-                <div className="lg:col-span-7 space-y-4">
-                  <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest text-zinc-400 border-b border-zinc-800 pb-2">
-                    <span className="text-sky-400 font-bold block">🛠️</span>
-                    <span>Staff Crew & Equipment Assignments</span>
-                  </div>
-
-                  {/* Crew Assignment Section */}
-                  <div className="bg-zinc-950/60 p-4 rounded-2xl border border-zinc-850 space-y-3">
-                    <h4 className="text-[11px] font-mono font-bold uppercase text-amber-500 tracking-wider">
-                      Crew Allocation (Multi-Role Assignment)
-                    </h4>
-                    
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <div className="flex-1">
-                        <label className="block text-[10px] font-mono text-zinc-400 mb-1">Select Role</label>
-                        <select
-                          value={selectedRole}
-                          onChange={(e) => {
-                            const role = e.target.value;
-                            setSelectedRole(role);
-                            const available = getStaffForRole(role);
-                            if (available.length > 0) {
-                              setSelectedStaff(available[0].name);
-                            } else {
-                              setSelectedStaff('');
-                            }
-                          }}
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-100 focus:outline-none focus:border-amber-500"
-                        >
-                          <option value="Lead Photographer">Lead Photographer</option>
-                          <option value="Associate Photographer">Associate Photographer</option>
-                          <option value="Lead Videographer">Lead Videographer</option>
-                          <option value="Drone & Aerial Operator">Drone & Aerial Operator</option>
-                          <option value="Production Assistant">Production Assistant</option>
-                          <option value="Post-Production Editor">Post-Production Editor</option>
-                        </select>
+                {/* Multiple Events Iteration */}
+                {parentLeadInstance?.events && parentLeadInstance.events.map((ev, index) => {
+                  const evId = ev.id || `EV-N/A-${index}`;
+                  const allocation = eventAllocations[evId] || { staff: [] };
+                  const allocStaff = allocation.staff || [];
+                  
+                  return (
+                    <div key={evId} className="bg-zinc-950/60 border border-zinc-850 p-5 rounded-2xl space-y-6 relative overflow-hidden">
+                      <div className="absolute top-0 right-0 p-3 text-[10px] text-zinc-655 select-none uppercase">
+                        🎥 EVENT {index + 1}
                       </div>
-                      <div className="flex-1">
-                        <label className="block text-[10px] font-mono text-zinc-400 mb-1">Select Member</label>
-                        <select
-                          value={selectedStaff}
-                          onChange={(e) => setSelectedStaff(e.target.value)}
-                          className="w-full bg-zinc-900 border border-zinc-805 rounded-lg p-2 text-xs text-zinc-100 focus:outline-none focus:border-amber-500"
-                        >
-                          <option value="">-- Choose Staff member --</option>
-                          {getStaffForRole(selectedRole).map(st => (
-                            <option key={st.staff_id} value={st.name}>{st.name}</option>
-                          ))}
-                        </select>
+                      
+                      {/* 2. Event & Package Coordinates */}
+                      <div className="space-y-3">
+                        <h4 className="text-[11px] font-mono font-bold uppercase text-amber-500 tracking-wider">
+                          Event & Package Coordinates
+                        </h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                          <div>
+                            <span className="text-[10px] text-zinc-505 block uppercase font-mono">Event Type</span>
+                            <span className="font-semibold text-white uppercase text-[11px] block">
+                              {ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A')}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-zinc-505 block uppercase font-mono">Shoot Type</span>
+                            <span className="text-zinc-350 font-medium uppercase text-[11px] block">
+                              {ev.event_shoot_type || 'N/A'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-zinc-505 block uppercase font-mono">Guest Pax</span>
+                            <span className="font-mono text-zinc-300 block">{ev.guest_pax || 0}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-zinc-505 block uppercase font-mono">Staff Pax</span>
+                            <span className="font-mono text-zinc-300 block">{ev.staff_pax || 0}</span>
+                          </div>
+                          
+                          {/* 8. Reporting Information (editable) */}
+                          <div className="col-span-2 md:col-span-4 grid grid-cols-2 md:grid-cols-4 gap-4 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800">
+                            <div>
+                              <span className="text-[10px] text-zinc-505 block uppercase font-mono">Reporting Date</span>
+                              <input 
+                                type="date" 
+                                value={allocation.reporting_date || ''}
+                                onChange={e => setEventAllocations(prev => ({
+                                  ...prev, [evId]: { ...prev[evId], reporting_date: e.target.value }
+                                }))}
+                                className="w-full bg-zinc-900 border border-zinc-700 rounded p-1.5 text-xs text-white"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-zinc-505 block uppercase font-mono">Reporting Time</span>
+                              <input 
+                                type="time" 
+                                value={allocation.reporting_time || ''}
+                                onChange={e => setEventAllocations(prev => ({
+                                  ...prev, [evId]: { ...prev[evId], reporting_time: e.target.value }
+                                }))}
+                                className="w-full bg-zinc-900 border border-zinc-700 rounded p-1.5 text-xs text-white"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-zinc-505 block uppercase font-mono">Event Start</span>
+                              <input 
+                                type="time" 
+                                value={allocation.event_start_time || ''}
+                                onChange={e => setEventAllocations(prev => ({
+                                  ...prev, [evId]: { ...prev[evId], event_start_time: e.target.value }
+                                }))}
+                                className="w-full bg-zinc-900 border border-zinc-700 rounded p-1.5 text-xs text-white"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-zinc-505 block uppercase font-mono">Event End</span>
+                              <input 
+                                type="time" 
+                                value={allocation.event_end_time || ''}
+                                onChange={e => setEventAllocations(prev => ({
+                                  ...prev, [evId]: { ...prev[evId], event_end_time: e.target.value }
+                                }))}
+                                className="w-full bg-zinc-900 border border-zinc-700 rounded p-1.5 text-xs text-white"
+                              />
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!selectedStaff) {
-                            alert('Please select a staff member first.');
-                            return;
-                          }
-                          const memberInfo = getStaffForRole(selectedRole).find(st => st.name === selectedStaff);
-                          const staffId = memberInfo?.staff_id || 'MOCK-' + Math.random().toString(36).substr(2, 4).toUpperCase();
-                          
-                          const dupe = activeAssignments.some(a => a.staff_role === selectedRole && a.staff_name === selectedStaff);
-                          if (dupe) {
-                            alert('This member is already assigned to this role.');
-                            return;
-                          }
-                          
-                          setActiveAssignments([...activeAssignments, {
-                            staff_role: selectedRole,
-                            staff_id: staffId,
-                            staff_name: selectedStaff
-                          }]);
-                        }}
-                        className="sm:mt-5 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-black rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1 h-[36px]"
-                      >
-                        <span>+</span>
-                        <span>Assign</span>
-                      </button>
-                    </div>
 
-                    <div className="space-y-1.5 pt-2 border-t border-zinc-850/60">
-                      <label className="block text-[10px] font-mono text-zinc-400 font-bold uppercase">
-                        Current Allocation Summary:
-                      </label>
-                      {activeAssignments.length > 0 ? (
-                        <div className="flex flex-wrap gap-1.5">
-                          {activeAssignments.map((a, idx) => (
-                            <div 
-                              key={idx} 
-                              className="bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-[11px] text-zinc-300 flex items-center gap-1.5"
-                            >
-                              <span className="font-mono text-[10px] text-zinc-500">{a.staff_role}:</span>
-                              <span className="font-semibold text-amber-400">{a.staff_name}</span>
+                      {/* 3. Staff Assignment */}
+                      <div className="space-y-3 pt-2">
+                        <h4 className="text-[11px] font-mono font-bold uppercase text-sky-400 tracking-wider">
+                          Staff Assignments
+                        </h4>
+                        <div className="flex flex-col sm:flex-row gap-2 items-end">
+                           <div className="flex-1">
+                             <label className="block text-[10px] font-mono text-zinc-400 mb-1">Select Role</label>
+                             <select
+                               value={selectedRole}
+                               onChange={(e) => {
+                                 const role = e.target.value;
+                                 setSelectedRole(role);
+                                 const available = staff ? staff.filter(s => s.role === role && s.status === 'Active') : [];
+                                 setSelectedStaff(available.length > 0 ? available[0].name : '');
+                               }}
+                               className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-100"
+                             >
+                               <option value="Lead Photographer">Lead Photographer</option>
+                               <option value="Associate Photographer">Associate Photographer</option>
+                               <option value="Lead Videographer">Lead Videographer</option>
+                               <option value="Drone & Aerial Operator">Drone & Aerial Operator</option>
+                               <option value="Production Assistant">Production Assistant</option>
+                               <option value="Post-Production Editor">Post-Production Editor</option>
+                             </select>
+                           </div>
+                           <div className="flex-1">
+                             <label className="block text-[10px] font-mono text-zinc-400 mb-1">Select Member</label>
+                             <select
+                               value={selectedStaff}
+                               onChange={(e) => setSelectedStaff(e.target.value)}
+                               className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-100"
+                             >
+                               <option value="">-- Choose Staff member --</option>
+                               {staff && staff.filter(s => s.role === selectedRole && s.status === 'Active').map(st => (
+                                 <option key={st.staff_id} value={st.name}>{st.name}</option>
+                               ))}
+                             </select>
+                           </div>
+                           <button
+                             type="button"
+                             onClick={() => {
+                               if (!selectedStaff) return;
+                               const memberInfo = staff.find(st => st.name === selectedStaff);
+                               const staffId = memberInfo?.staff_id || 'MOCK-' + Math.random().toString(36).substr(2, 4);
+                               
+                               setEventAllocations(prev => {
+                                 const existingAlloc = prev[evId] || { staff: [] };
+                                 return {
+                                   ...prev,
+                                   [evId]: {
+                                     ...existingAlloc,
+                                     staff: [...(existingAlloc.staff || []), { staff_role: selectedRole, staff_id: staffId, staff_name: selectedStaff }]
+                                   }
+                                 };
+                               });
+                             }}
+                             className="px-3 py-2 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 text-xs font-mono font-bold rounded-lg border border-sky-500/30 transition-all uppercase"
+                           >
+                             + Add
+                           </button>
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          {allocStaff.length > 0 ? allocStaff.map((st, i) => (
+                            <div key={i} className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-750 px-2 py-1 rounded-md">
+                              <div className="text-[10px] text-zinc-400 font-mono">{st.staff_role}</div>
+                              <div className="text-xs font-bold text-white font-sans">{st.staff_name}</div>
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setActiveAssignments(activeAssignments.filter((_, i) => i !== idx));
+                                  setEventAllocations(prev => {
+                                    const existingAlloc = prev[evId];
+                                    return {
+                                      ...prev,
+                                      [evId]: {
+                                        ...existingAlloc,
+                                        staff: existingAlloc.staff.filter((_, idx) => idx !== i)
+                                      }
+                                    };
+                                  });
                                 }}
-                                className="text-zinc-500 hover:text-rose-400 font-bold ml-1 text-[10px] cursor-pointer"
+                                className="text-red-400 hover:text-red-300 ml-1 font-bold text-[10px]"
                               >
                                 ✕
                               </button>
                             </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-[10px] text-zinc-500 italic">No personnel assigned to this project yet. Please assign staff above.</div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Equipment Allocation */}
-                  <div className="bg-zinc-950/60 p-4 rounded-2xl border border-zinc-850 space-y-3 relative">
-                    <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-400">
-                      Assign Equipment Kits & Assemblies
-                    </label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <input
-                          type="text"
-                          placeholder="Type to search equipment (e.g. Drone, Camera...)"
-                          value={equipmentSearchQuery}
-                          onFocus={() => setIsEquipmentDropdownOpen(true)}
-                          onChange={(e) => setEquipmentSearchQuery(e.target.value)}
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-400"
-                        />
-                        {equipmentSearchQuery && (
-                          <button
-                            type="button"
-                            onClick={() => setEquipmentSearchQuery('')}
-                            className="absolute right-2.5 top-2.5 text-zinc-500 hover:text-zinc-300"
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setIsEquipmentDropdownOpen(!isEquipmentDropdownOpen)}
-                        className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-bold font-mono border border-zinc-750"
-                      >
-                        {isEquipmentDropdownOpen ? 'Close ▴' : 'Browse ▾'}
-                      </button>
-                    </div>
-
-                     {isEquipmentDropdownOpen && (() => {
-                      const filteredGearOptions = availableGearOptions.filter(opt =>
-                        opt.toLowerCase().includes(equipmentSearchQuery.toLowerCase())
-                      );
-                      
-                      return (
-                        <div className="absolute left-4 right-4 z-50 mt-1 max-h-56 overflow-y-auto bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl divide-y divide-zinc-900">
-                          {filteredGearOptions.length > 0 ? (
-                            filteredGearOptions.map((opt, i) => {
-                              const eqItem = equipment ? equipment.find(eq => eq.equipment_name === opt) : null;
-                              
-                              const isSelected = selectedKits.includes(opt);
-                              
-                              const displayName = opt;
-                              const category = eqItem ? eqItem.equipment_type : 'Kit Preset';
-                              const status = eqItem ? eqItem.status : 'Available';
-                              
-                              const statusColor = 
-                                status === 'Available' ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' :
-                                status === 'Assigned' ? 'text-blue-400 bg-blue-500/10 border-blue-500/20' :
-                                'text-zinc-500 bg-zinc-800 border-zinc-700';
-
-                              return (
-                                <button
-                                  key={i}
-                                  type="button"
-                                  onClick={() => {
-                                    if (isSelected) {
-                                      const updated = selectedKits.filter(k => k !== opt);
-                                      setSelectedKits(updated);
-                                      setAssignForm(prev => ({ ...prev, equipment_kit: updated.join(', ') }));
-                                    } else {
-                                      const updated = [...selectedKits, opt];
-                                      setSelectedKits(updated);
-                                      setAssignForm(prev => ({ ...prev, equipment_kit: updated.join(', ') }));
-                                    }
-                                  }}
-                                  className={`w-full text-left px-4 py-3 text-xs transition-colors cursor-pointer flex items-center justify-between gap-4 ${
-                                    isSelected 
-                                      ? 'bg-amber-400/10 text-amber-300 font-bold' 
-                                      : 'hover:bg-zinc-900 text-zinc-300'
-                                  }`}
-                                >
-                                  <div className="flex flex-col gap-1">
-                                    <span className="font-sans text-white text-xs font-semibold">{displayName}</span>
-                                    <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider">Category: {category}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase font-mono border ${statusColor}`}>
-                                      {status}
-                                    </span>
-                                    {isSelected ? (
-                                      <span className="text-amber-500 text-[10px] font-mono">✓ Selected</span>
-                                    ) : (
-                                      <span className="text-zinc-600 text-[10px] font-mono">+ Add</span>
-                                    )}
-                                  </div>
-                                </button>
-                              );
-                            })
-                          ) : (
-                            <div className="p-4 text-xs italic text-center text-zinc-500">
-                              No equipment matching "{equipmentSearchQuery}"
-                            </div>
+                          )) : (
+                            <span className="text-[10px] italic text-zinc-500 font-mono">No staff assigned to this event yet.</span>
                           )}
                         </div>
-                      );
-                    })()}
-
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {selectedKits.length > 0 ? (
-                        selectedKits.map((kit, index) => (
-                          <span 
-                            key={index} 
-                            className="bg-amber-400/15 text-amber-300 px-2.5 py-1 rounded-lg text-[10.5px] font-mono font-medium flex items-center gap-1.5 border border-amber-400/20"
+                      </div>
+                      
+                      {/* 4. WhatsApp Sharing */}
+                      {allocStaff.length > 0 && (
+                        <div className="pt-3 mt-4 border-t border-zinc-800">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const text = `*Event Schedule & Assignment*\n\n`
+                                + `Customer: ${activeOrderInstance?.customer_name}\n`
+                                + `Event: ${ev.event_type === 'Other' ? ev.event_name : ev.event_type}\n`
+                                + `Location: ${parentLeadInstance?.event_location}\n`
+                                + `Reporting: ${allocation.reporting_date} at ${allocation.reporting_time}\n\n`
+                                + `*Team:*\n` + allocStaff.map(s => `- ${s.staff_role}: ${s.staff_name}`).join('\n');
+                                
+                              const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+                              window.open(url, '_blank');
+                            }}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/30 text-[#25D366] text-[10px] font-mono font-bold rounded cursor-pointer transition-all uppercase"
                           >
-                            <span>{kit}</span>
-                            <button 
-                              type="button" 
-                              onClick={() => {
-                                const updated = selectedKits.filter(k => k !== kit);
-                                setSelectedKits(updated);
-                                setAssignForm(prev => ({ ...prev, equipment_kit: updated.join(', ') }));
-                              }} 
-                              className="text-amber-500 hover:text-rose-400 font-bold text-xs"
-                            >
-                              ✕
-                            </button>
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-[10px] text-zinc-550 italic">No equipment kits or assemblies assigned. Please select.</span>
+                            <span>📱</span> Share via WhatsApp
+                          </button>
+                        </div>
                       )}
                     </div>
-                  </div>
-
-                  {/* Read-Only Prefilled Timings */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-zinc-950/40 p-4 rounded-2xl border border-zinc-850">
-                    <div>
-                      <label className="block text-[11px] font-mono font-extrabold uppercase mb-1 text-zinc-500 flex items-center gap-1 select-none">
-                        <span>🔒</span> <span>Event Date</span>
-                      </label>
-                      <input
-                        type="text"
-                        disabled
-                        readOnly
-                        value={assignForm.event_date}
-                        className="w-full bg-zinc-950/80 border border-zinc-900 text-zinc-400 rounded-xl px-3 py-2 text-xs font-mono cursor-not-allowed select-none animate-pulse"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-mono font-extrabold uppercase mb-1 text-zinc-500 flex items-center gap-1 select-none">
-                        <span>🔒</span> <span>Event Time</span>
-                      </label>
-                      <input
-                        type="text"
-                        disabled
-                        readOnly
-                        value={assignForm.event_time}
-                        className="w-full bg-zinc-950/80 border border-zinc-900 text-zinc-400 rounded-xl px-3 py-2 text-xs font-mono cursor-not-allowed select-none animate-pulse"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-mono font-extrabold uppercase mb-1 text-zinc-500 flex items-center gap-1 select-none">
-                        <span>🔒</span> <span>Reporting Time</span>
-                      </label>
-                      <input
-                        type="text"
-                        disabled
-                        readOnly
-                        value={assignForm.reporting_time || '08:00'}
-                        className="w-full bg-zinc-950/80 border border-zinc-900 text-zinc-400 rounded-xl px-3 py-2 text-xs font-mono cursor-not-allowed select-none animate-pulse"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Operational Notes Remarks */}
-                  <div>
-                    <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-400 mb-1">
-                      Operations Remarks & Staff Instructions (Safety/Site clearance notes)
-                    </label>
-                    <textarea
-                      rows={2.5}
-                      value={assignForm.remarks}
-                      onChange={(e) => setAssignForm({ ...assignForm, remarks: e.target.value })}
-                      className="w-full bg-zinc-950 border border-zinc-850 rounded-xl p-2.5 text-xs text-zinc-100 placeholder-zinc-550 focus:outline-none focus:border-amber-400"
-                      placeholder="Enter specific team alerts, logistics, backup setup coordinates, or instructions for assigned staff..."
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    {/* Workflow Dashboard Status */}
-                    <div>
-                      <label className="block text-[11px] font-mono font-extrabold uppercase text-amber-500 mb-1">
-                        Workflow Stage Selection
-                      </label>
-                      <select
-                        value={assignForm.current_stage}
-                        onChange={(e) => setAssignForm({ ...assignForm, current_stage: e.target.value as CurrentStage })}
-                        className="w-full bg-zinc-950 border border-amber-500/20 rounded-xl px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-amber-500"
-                      >
-                        <option value="Order Confirmed">Order Confirmed</option>
-                        <option value="Operations Assigned">Operations Assigned</option>
-                        <option value="Event Scheduled">Event Scheduled</option>
-                        <option value="Event Completed">Event Completed</option>
-                        <option value="Raw Footage Received">Raw Footage Received</option>
-                      </select>
-                    </div>
-
-                    {/* Operational Event In progress Status */}
-                    <div>
-                      <label className="block text-[11px] font-zinc-400 font-mono font-extrabold uppercase mb-1 text-sky-400">
-                        Operational Status
-                      </label>
-                      <select
-                        value={assignForm.event_status}
-                        onChange={(e) => setAssignForm({ ...assignForm, event_status: e.target.value as 'Assigned' | 'Completed' })}
-                        className="w-full bg-zinc-950 border border-sky-500/20 rounded-xl px-3 py-2 text-xs text-zinc-100 focus:outline-none"
-                      >
-                        <option value="Assigned">Assigned / In Progress</option>
-                        <option value="Completed">Completed</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* S3 or Drive folder link */}
-                  <div>
-                    <label className="block text-[11px] font-mono font-extrabold uppercase text-purple-400 mb-1">
-                      Raw Footage Vault link (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={assignForm.raw_footage_link}
-                      onChange={(e) => setAssignForm({ ...assignForm, raw_footage_link: e.target.value })}
-                      className="w-full bg-zinc-950 border border-purple-500/20 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none font-medium"
-                      placeholder="s3://vault-studio-production/ORD-.../raw/"
-                    />
-                  </div>
-                </div>
-
+                  );
+                })}
+                
               </div>
-
-              {/* Form Actions Footer */}
-              <div className="flex justify-end gap-2 border-t border-zinc-800 p-4 bg-zinc-950/40">
+              
+              <div className="p-4 border-t border-zinc-800 flex justify-end gap-3 bg-zinc-950/40">
                 <button
                   type="button"
                   onClick={() => setAssigningOrderId(null)}
-                  className="px-5 py-2 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 text-xs rounded-xl cursor-pointer duration-150 font-mono uppercase tracking-wider text-[11px]"
+                  className="px-4 py-2 text-xs font-mono font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-6 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-black font-black text-xs rounded-xl cursor-pointer flex items-center gap-1.5 duration-150 font-mono uppercase tracking-wider text-[11px]"
+                  className="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-black text-xs font-mono font-bold uppercase rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  {isSaving ? 'Synchronizing...' : 'Save Allocation'}
+                  {isSaving ? 'Saving Assignments...' : 'Save All Assignments'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-
-      {/* Mark Completed Modal */}
-      {closingOrderId && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-850 rounded-2xl w-full max-w-lg shadow-2xl relative p-5 space-y-4">
-            <h3 className="text-xs font-mono font-black uppercase text-amber-500 flex items-center gap-1.5">
-              <span>🎬</span> Close event shoot ~ {closingOrderId}
-            </h3>
-            <p className="text-xs text-zinc-400">
-              By confirming, this switches status to **Event Completed** and initializes raw footage ingest for editors.
-            </p>
-            <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold text-zinc-450 uppercase font-mono">
-                Ingest Storage directory bucket path:
-              </label>
-              <input
-                type="text"
-                value={serverPath}
-                onChange={(e) => setServerPath(e.target.value)}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-100 font-mono"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
-              <button
-                onClick={() => setClosingOrderId(null)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded-xl cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmCompletion}
-                className="px-4 py-2 bg-gradient-to-r from-sky-600 to-blue-600 text-white font-semibold text-xs rounded-xl cursor-pointer"
-              >
-                Mark Shoot Completed
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Event Scheduling Modal (Step 2) */}
-      {schedulingOrderId && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-805 rounded-2xl w-full max-w-sm shadow-2xl relative p-5 space-y-4">
-            <h3 className="text-sm font-bold text-sky-400 font-mono uppercase flex items-center gap-1.5 border-b border-zinc-800 pb-2">
-              <span>📅</span> Schedule Event ~ {schedulingOrderId}
-            </h3>
-            
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              try {
-                const op = getOpDetails(schedulingOrderId);
-                await assignOperations(schedulingOrderId, {
-                  photographer_assigned: op?.photographer_assigned || '',
-                  videographer_assigned: op?.videographer_assigned || '',
-                  drone_operator_assigned: op?.drone_operator_assigned || '',
-                  assistant_assigned: op?.assistant_assigned || '',
-                  equipment_kit: op?.equipment_kit || '',
-                  reporting_time: scheduleEventForm.reporting_time,
-                  remarks: scheduleEventForm.remarks || op?.remarks || '',
-                  event_date: scheduleEventForm.event_date,
-                  event_time: scheduleEventForm.event_time,
-                  event_status: 'Event Scheduled',
-                  current_stage: 'Event Scheduled'
-                });
-                setSchedulingOrderId(null);
-                alert(`Event successfully scheduled and locked!`);
-              } catch (err: any) {
-                alert(`Error scheduling event: ${err.message}`);
-              }
-            }} className="space-y-4 text-left">
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
-                  Event Date *
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={scheduleEventForm.event_date}
-                  onChange={(e) => setScheduleEventForm({ ...scheduleEventForm, event_date: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
-                  Event Time *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. 10:00 AM - 6:00 PM"
-                  value={scheduleEventForm.event_time}
-                  onChange={(e) => setScheduleEventForm({ ...scheduleEventForm, event_time: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
-                  Reporting Time *
-                </label>
-                <input
-                  type="time"
-                  required
-                  value={scheduleEventForm.reporting_time}
-                  onChange={(e) => setScheduleEventForm({ ...scheduleEventForm, reporting_time: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
-                  Notes / Site Instructions
-                </label>
-                <textarea
-                  value={scheduleEventForm.remarks}
-                  onChange={(e) => setScheduleEventForm({ ...scheduleEventForm, remarks: e.target.value })}
-                  placeholder="e.g. Traditional wedding wear, early arrival..."
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-100 font-sans"
-                  rows={2}
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
-                <button
-                  type="button"
-                  onClick={() => setSchedulingOrderId(null)}
-                  className="px-4 py-2 bg-zinc-800 text-zinc-300 text-xs rounded-xl cursor-pointer hover:bg-zinc-700 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs rounded-xl cursor-pointer"
-                >
-                  Save Schedule
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Detailed Dossier Modal */}
-      <ProjectDetailModal 
-        isOpen={projectDossierId !== null} 
-        onClose={() => setProjectDossierId(null)} 
-        orderId={projectDossierId} 
-      />
-
-      {/* 4. Staff Assignment Success Modal / WhatsApp Share Popup */}
-      {successModalData && (() => {
-        const getOpDetails = (orderId: string) => {
-          return operations.find(o => o.order_id === orderId);
-        };
-
-        const generateWhatsAppLink = (role: string, name: string) => {
-          const order = successModalData.order;
-          const op = getOpDetails(order.order_id);
-          const reportingTime = op?.reporting_time || '08:00';
-          const specialNotes = op?.remarks || 'Please report on time with fully charged gears.';
-          
-          const kits = op?.equipment_kit ? op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
-          const equipmentLines = kits.map(kitName => {
-            const eq = equipment?.find(e => e.equipment_name === kitName);
-            if (eq) {
-              const codeStr = eq.equipment_id ? ` [Code: ${eq.equipment_id}]` : '';
-              const qtyStr = eq.quantity !== undefined && eq.quantity !== null && eq.quantity > 0 ? ` [Qty: ${eq.quantity}]` : '';
-              return `* ${eq.equipment_name}${codeStr}${qtyStr}`;
-            }
-            return `* ${kitName}`;
-          });
-          const assignedEquipmentList = equipmentLines.length > 0 ? equipmentLines.join('\n') : '* None assigned';
-
-          const textMessage = `Event Assignment Notification
-
-Event ID / Order ID: ${order.order_id}
-Customer Name: ${order.customer_name}
-Event Type: ${order.event_type}
-Event Date: ${order.event_date}
-Event Time: ${order.event_time}
-Event Location: ${order.event_location}
-Reporting Time: ${reportingTime}
-Assigned Staff Name: ${name}
-Assigned Staff Role: ${role}
-
-Assigned Equipment:
-${assignedEquipmentList}
-
-Contact Number: ${order.mobile || 'N/A'}
-Special Instructions: ${specialNotes}
-
-Please report on time and update status through the portal.`;
-
-          return `https://api.whatsapp.com/send?text=${encodeURIComponent(textMessage)}`;
-        };
-
-        const generateGroupWhatsAppLink = () => {
-          const order = successModalData.order;
-          const op = getOpDetails(order.order_id);
-          const reportingTime = op?.reporting_time || '08:00';
-          const specialNotes = op?.remarks || 'Please check gear checklists.';
-          
-          const crewSummary = successModalData.assignments
-            .map(a => `- ${a.staff_role}: ${a.staff_name}`)
-            .join('\n');
-            
-          const kits = op?.equipment_kit ? op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
-          const equipmentLines = kits.map(kitName => {
-            const eq = equipment?.find(e => e.equipment_name === kitName);
-            if (eq) {
-              const codeStr = eq.equipment_id ? ` [Code: ${eq.equipment_id}]` : '';
-              const qtyStr = eq.quantity !== undefined && eq.quantity !== null && eq.quantity > 0 ? ` [Qty: ${eq.quantity}]` : '';
-              return `* ${eq.equipment_name}${codeStr}${qtyStr}`;
-            }
-            return `* ${kitName}`;
-          });
-          const assignedEquipmentList = equipmentLines.length > 0 ? equipmentLines.join('\n') : '* None assigned';
-
-          const textMessage = `Event Assignment Notification (Complete Crew)
-
-Event ID / Order ID: ${order.order_id}
-Customer Name: ${order.customer_name}
-Event Type: ${order.event_type}
-Event Date: ${order.event_date}
-Event Time: ${order.event_time}
-Event Location: ${order.event_location}
-Reporting Time: ${reportingTime}
-Crew Lineup:
-${crewSummary}
-
-Assigned Equipment:
-${assignedEquipmentList}
-
-Contact Number: ${order.mobile || 'N/A'}
-Special Instructions: ${specialNotes}
-
-Please report on time and update status through the portal.`;
-
-          return `https://api.whatsapp.com/send?text=${encodeURIComponent(textMessage)}`;
-        };
-
-        return (
-          <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-            <div className="bg-zinc-900 border border-zinc-750 p-6 rounded-2xl w-full max-w-lg shadow-2xl relative overflow-hidden">
-              {/* Tech accents */}
-              <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-600" />
-              
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-400">
-                  <CheckCircle className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-white">Staff Assigned Successfully</h3>
-                  <p className="text-xs text-zinc-400">Order Ref: {successModalData.orderId}</p>
-                </div>
-              </div>
-
-              <div className="bg-zinc-950/60 rounded-xl p-3.5 border border-zinc-850 mb-5 text-xs space-y-2">
-                <div className="grid grid-cols-2 gap-2 text-zinc-400">
-                  <div><span className="text-zinc-550 font-mono">CUSTOMER:</span> <strong className="text-zinc-250 font-sans">{successModalData.customerName}</strong></div>
-                  <div><span className="text-zinc-550 font-mono">EVENT:</span> <strong className="text-zinc-250 font-sans">{successModalData.order.event_type === 'Other' ? (successModalData.order.custom_event_name || successModalData.order.custom_event_type || 'Other') : successModalData.order.event_type}</strong></div>
-                  <div><span className="text-zinc-550 font-mono">DATE:</span> <strong className="text-emerald-400 font-mono">{successModalData.order.event_date}</strong></div>
-                  <div><span className="text-zinc-550 font-mono">TIME:</span> <strong className="text-zinc-300 font-mono">{successModalData.order.event_time}</strong></div>
-                  <div className="col-span-2"><span className="text-zinc-550 font-mono">LOCATION:</span> <strong className="text-zinc-350">{successModalData.order.event_location}</strong></div>
-                </div>
-              </div>
-
-              <h4 className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 mb-2.5 font-bold">Crew Roster & WhatsApp Share Links</h4>
-              <div className="space-y-2 mb-6 max-h-[180px] overflow-y-auto pr-1">
-                {successModalData.assignments.length === 0 ? (
-                  <p className="text-xs text-zinc-500 italic">No custom staff assignments saved.</p>
-                ) : (
-                  successModalData.assignments.map((assignment, index) => {
-                    const indLink = generateWhatsAppLink(assignment.staff_role, assignment.staff_name);
-                    return (
-                      <div key={index} className="flex items-center justify-between p-2.5 bg-zinc-950/40 rounded-xl border border-zinc-850 hover:bg-zinc-950/80 transition-colors">
-                        <div className="flex flex-col text-left">
-                          <span className="text-[10px] uppercase font-mono text-zinc-400 font-bold">{assignment.staff_role}</span>
-                          <span className="text-xs text-white font-semibold">{assignment.staff_name}</span>
-                        </div>
-                        <a
-                          href={indLink}
-                          target="_blank"
-                          referrerPolicy="no-referrer"
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-505 text-white font-mono font-bold text-[10px] rounded-lg tracking-wider transition-all shadow-md active:scale-95 cursor-pointer"
-                        >
-                          💬 SHARE DETAILS
-                        </a>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              <div className="flex flex-col gap-2 pt-2 border-t border-zinc-850">
-                <a
-                  href={generateGroupWhatsAppLink()}
-                  target="_blank"
-                  referrerPolicy="no-referrer"
-                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-550 text-white font-bold text-xs rounded-xl tracking-wide transition-all shadow-lg text-center cursor-pointer"
-                >
-                  💬 Share Complete Crew Lineup on WhatsApp
-                </a>
-                <button
-                  onClick={() => setSuccessModalData(null)}
-                  className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-350 font-bold text-xs rounded-xl transition-all cursor-pointer border border-transparent"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Raw Footage Received Modal */}
       {receivingFootageOrderId && (

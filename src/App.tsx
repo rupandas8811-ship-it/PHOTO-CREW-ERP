@@ -352,9 +352,7 @@ const MainAppContent: React.FC = () => {
               { id: 'operations_leads', label: 'Operations Leads', icon: Briefcase },
               { id: 'operations_calendar', label: 'Operations Calendar', icon: Calendar },
               { id: 'equipment_management', label: 'Equipment Kits', icon: Camera },
-              { id: 'operations_staff', label: 'Staff Directory', icon: Users },
-              { id: 'event_scheduling', label: 'Event Reports', icon: Clock },
-              { id: 'operations_notifications', label: 'Notifications', icon: Bell }
+              { id: 'operations_staff', label: 'Staff Directory', icon: Users }
             ].map((tab) => {
               const IconComponent = tab.icon;
               const isSelected = activeOpSubTab === tab.id;

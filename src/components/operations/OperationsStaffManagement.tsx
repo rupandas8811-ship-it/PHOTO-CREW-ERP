@@ -12,11 +12,14 @@ export const OperationsStaffManagement: React.FC = () => {
   // Modal / Form state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [skills, setSkills] = useState<string[]>([]);
+  const [newSkill, setNewSkill] = useState('');
   const [form, setForm] = useState({
     name: '',
     role: 'Lead Photographer',
     email: '',
     mobile: '',
+    whatsapp_number: '',
     department: 'Operations',
     status: 'Active' as Staff['status'],
     joining_date: new Date().toISOString().split('T')[0],
@@ -31,12 +34,15 @@ export const OperationsStaffManagement: React.FC = () => {
       role: st.role,
       email: st.email || '',
       mobile: st.mobile || '',
+      whatsapp_number: st.whatsapp_number || '',
       department: st.department || 'Operations',
       status: st.status,
       joining_date: st.joining_date || new Date().toISOString().split('T')[0],
       profile_photo: st.profile_photo || '',
       notes: st.notes || ''
     });
+    const loadedSkills = st.notes ? st.notes.split(',').map(s => s.trim()).filter(Boolean) : [];
+    setSkills(loadedSkills);
   };
 
   const handleCancel = () => {
@@ -46,24 +52,33 @@ export const OperationsStaffManagement: React.FC = () => {
       role: 'Lead Photographer',
       email: '',
       mobile: '',
+      whatsapp_number: '',
       department: 'Operations',
       status: 'Active',
       joining_date: new Date().toISOString().split('T')[0],
       profile_photo: '',
       notes: ''
     });
+    setSkills([]);
+    setNewSkill('');
+  };
+
+  const handleAddSkill = () => {
+    const trimmed = newSkill.trim();
+    if (trimmed && !skills.includes(trimmed)) {
+      setSkills([...skills, trimmed]);
+      setNewSkill('');
+    }
+  };
+
+  const handleRemoveSkill = (skillToRemove: string) => {
+    setSkills(skills.filter(s => s !== skillToRemove));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || !form.email || !form.mobile) {
-      alert('Please fill out the name, email, and mobile fields.');
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(form.email)) {
-      alert('Please enter a valid email address.');
+    if (!form.name || !form.mobile) {
+      alert('Please fill out the name and mobile fields.');
       return;
     }
 
@@ -73,14 +88,24 @@ export const OperationsStaffManagement: React.FC = () => {
       return;
     }
 
+    // Auto-generate email and set notes to comma-separated skills
+    const finalEmail = form.email || `${form.name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'staff'}@photocrew.com`;
+    const finalNotes = skills.join(', ');
+
+    const submissionPayload = {
+      ...form,
+      email: finalEmail,
+      notes: finalNotes
+    };
+
     try {
       setIsSaving(true);
       if (editingId) {
-        await updateStaff(editingId, form);
+        await updateStaff(editingId, submissionPayload);
         alert('Staff profile updated.');
         handleCancel();
       } else {
-        await addStaff(form);
+        await addStaff(submissionPayload);
         alert('New staff member registered.');
         handleCancel();
       }
@@ -125,7 +150,7 @@ export const OperationsStaffManagement: React.FC = () => {
           <fieldset disabled={!canEdit} className="space-y-4">
             <div>
               <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
-                Full Legal Name *
+                Staff Full Name *
               </label>
               <input
                 type="text"
@@ -133,127 +158,85 @@ export const OperationsStaffManagement: React.FC = () => {
                 placeholder="e.g. Jack Richards"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none"
+                className="w-full bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
               />
             </div>
 
             <div>
               <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
-                Primary Specialty Role
-              </label>
-              <select
-                value={form.role}
-                onChange={(e) => setForm({ ...form, role: e.target.value })}
-                className="w-full bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white"
-              >
-                <option value="Lead Photographer">Lead Photographer</option>
-                <option value="Associate Photographer">Associate Photographer</option>
-                <option value="Lead Videographer">Lead Videographer</option>
-                <option value="Drone & Aerial Operator">Drone & Aerial Operator</option>
-                <option value="Production Assistant">Production Assistant</option>
-                <option value="Post-Production Editor">Post-Production Editor</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
-                Department
-              </label>
-              <select
-                value={form.department}
-                onChange={(e) => setForm({ ...form, department: e.target.value })}
-                className="w-full bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white"
-              >
-                <option value="Operations">Operations</option>
-                <option value="Sales">Sales</option>
-                <option value="Production">Production</option>
-                <option value="Post-Production">Post-Production</option>
-                <option value="Management">Management</option>
-              </select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-455 mb-1">
-                  Email Address *
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder="name@photocrew.com"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-455 mb-1">
-                  Mobile Number *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="+1 (555) 0192"
-                  value={form.mobile}
-                  onChange={(e) => setForm({ ...form, mobile: e.target.value })}
-                  className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-455 mb-1">
-                Joining Date
+                Mobile Number *
               </label>
               <input
-                type="date"
-                value={form.joining_date}
-                onChange={(e) => setForm({ ...form, joining_date: e.target.value })}
-                className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none"
+                type="text"
+                required
+                placeholder="e.g. +91 9876543210"
+                value={form.mobile}
+                onChange={(e) => setForm({ ...form, mobile: e.target.value })}
+                className="w-full bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
               />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-455 mb-1">
-                  Roster Status
-                </label>
-                <select
-                  value={form.status}
-                  onChange={(e) => setForm({ ...form, status: e.target.value as Staff['status'] })}
-                  className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white"
-                >
-                  <option value="Active">Active (On Call)</option>
-                  <option value="Inactive">Inactive (Suspended)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-455 mb-1">
-                  Profile Photo URL
-                </label>
-                <input
-                  type="text"
-                  placeholder="https://example.com/photo.jpg"
-                  value={form.profile_photo}
-                  onChange={(e) => setForm({ ...form, profile_photo: e.target.value })}
-                  className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none"
-                />
-              </div>
             </div>
 
             <div>
-              <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-455 mb-1">
-                Notes / Bio
+              <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
+                WhatsApp Number
               </label>
-              <textarea
-                rows={3}
-                placeholder="List qualified camera systems, certified Part 107 licensing details, active shoot preferences..."
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                className="w-full bg-zinc-955 border border-zinc-850 rounded-xl p-2.5 text-white focus:outline-none"
+              <input
+                type="text"
+                placeholder="e.g. +91 9876543210"
+                value={form.whatsapp_number}
+                onChange={(e) => setForm({ ...form, whatsapp_number: e.target.value })}
+                className="w-full bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
               />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
+                Skills
+              </label>
+              <div className="flex flex-wrap gap-2 mb-2 min-h-[40px] p-2 bg-zinc-950 border border-zinc-850 rounded-xl items-center">
+                {skills.length === 0 ? (
+                  <span className="text-zinc-550 italic font-mono text-[10px] pl-1">No skills added yet</span>
+                ) : (
+                  skills.map((skill) => (
+                    <div 
+                      key={skill} 
+                      className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono text-[10px] rounded-lg"
+                    >
+                      <span>{skill}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveSkill(skill)}
+                        className="text-zinc-500 hover:text-rose-400 focus:outline-none transition-colors ml-1 font-bold cursor-pointer"
+                        title={`Remove ${skill}`}
+                      >
+                        ✖
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Type a skill..."
+                  value={newSkill}
+                  onChange={(e) => setNewSkill(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddSkill();
+                    }
+                  }}
+                  className="flex-1 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-amber-500/50 text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddSkill}
+                  className="px-3 py-1.5 bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white rounded-xl text-xs transition-all font-mono font-bold cursor-pointer"
+                >
+                  + Add Skill
+                </button>
+              </div>
             </div>
           </fieldset>
 
