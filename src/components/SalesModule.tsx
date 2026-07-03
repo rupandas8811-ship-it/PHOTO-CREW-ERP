@@ -1597,6 +1597,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [unlockReason, setUnlockReason] = useState('Data Correction');
   const [unlockCustomReason, setUnlockCustomReason] = useState('');
 
+  // Step 2 Follow-up and Lost Lead states
+  const [showStep2Popup, setShowStep2Popup] = useState(false);
+  const [step2FollowUpDate, setStep2FollowUpDate] = useState('');
+  const [step2FollowUpNotes, setStep2FollowUpNotes] = useState('');
+
+  const [showLostModal, setShowLostModal] = useState(false);
+  const [lostReason, setLostReason] = useState('Price too high');
+  const [lostNotes, setLostNotes] = useState('');
+  const [otherLostReason, setOtherLostReason] = useState('');
+
   const isLeadLocked = selectedLead ? isRecordLocked(selectedLead.lead_id, 'Sales') : false;
 
   // Repeat Customer / Reorder System states
@@ -2642,6 +2652,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           remarks: getRemarksPayload(wizardLeadData.remarks, wizardLeadData.notes || '', wizardLeadData.next_follow_up_date, wizardLeadData.whatsapp_number, wizardLeadData.address, wizardLeadData.city),
           Select_Package_Option: leadObj.Select_Package_Option || ''
         });
+        setSelectedLead(null); // Close CRM Workspace
       } else {
         setCreateForm(prev => ({
           ...prev,
@@ -2776,14 +2787,27 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
   };
 
-  const handleSendWhatsAppQuote = (isEdit: boolean) => {
+  const handleSendWhatsAppQuote = async (isEdit: boolean) => {
+    setIsSaving(true);
     try {
+      if (!salesStaffName || !salesStaffName.trim()) {
+        showToastMsg("Quotation Incomplete! Please enter Sales Staff Name.", "error");
+        setIsSaving(false);
+        return;
+      }
+      if (!salesStaffMobile || !salesStaffMobile.trim() || salesStaffMobile.trim().length !== 10 || !/^\d+$/.test(salesStaffMobile.trim())) {
+        showToastMsg("Please enter a valid 10-digit mobile number.", "error");
+        setIsSaving(false);
+        return;
+      }
+
       const leadObj = getLeadInfoForQuote(isEdit);
       const activePkgs = getSelectedPkgsInfo(isEdit);
 
       const missingFields = validateLeadForQuotation(leadObj, activePkgs);
       if (missingFields.length > 0) {
         showToastMsg(`Quotation Incomplete! Please enter the following fields: ${missingFields.join(', ')}`, "error");
+        setIsSaving(false);
         return;
       }
 
@@ -2791,6 +2815,93 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const finalAmt = dynamicFinalAmt;
       const quotNum = activeQuoteNum || `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
       
+      if (!activeQuoteNum) {
+        setActiveQuoteNum(quotNum);
+      }
+
+      const qId = 'QT-' + Math.random().toString(36).substring(2, 9).toUpperCase();
+      
+      const standardQuotation = {
+        quotation_id: qId,
+        quotation_number: quotNum,
+        lead_id: leadObj.lead_id || 'DRAFT-LEAD',
+        customer_id: leadObj.customer_name || 'Customer',
+        customer_name: leadObj.customer_name || 'Customer',
+        order_id: '',
+        package_name: activePkgs.map(p => p.package_name).join(' + '),
+        package_price: basePkgSum,
+        discount: quoteDiscount,
+        additional_services_cost: quoteAdditional,
+        final_quotation_amount: finalAmt,
+        quotation_status: 'Sent',
+        pdf_url: '',
+        generated_date: new Date().toISOString().split('T')[0],
+        whatsapp_sent_status: true,
+        viewed_status: false,
+        terms_conditions: quotationTerms,
+        deliverables_description: leadObj.deliverables_description,
+        notes_special_customizations: leadObj.notes_special_customizations,
+        client_residence_address: leadObj.client_residence_address,
+        city: leadObj.city,
+        state: leadObj.state,
+        pincode: leadObj.pincode,
+        desired_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
+        sales_staff_name: salesStaffName,
+        sales_staff_mobile: salesStaffMobile,
+        editableInclusions: editableInclusions,
+        editableDeliverables: editableDeliverables
+      };
+
+      await addQuotation(standardQuotation);
+
+      if (isEdit) {
+        setWizardLeadData(prev => ({
+          ...prev,
+          budget: finalAmt,
+          final_quoted_amount: finalAmt,
+          status: 'Quotation Sent' as CurrentStage
+        }));
+        await updateLead(leadObj.lead_id, {
+          budget: finalAmt,
+          status: 'Quotation Sent' as CurrentStage,
+          package_price: basePkgSum,
+          deliverables_description: leadObj.deliverables_description,
+          notes_special_customizations: leadObj.notes_special_customizations,
+          quotation_discount: quoteDiscount,
+          additional_services_cost: quoteAdditional,
+          client_residence_address: leadObj.client_residence_address,
+          city: leadObj.city,
+          state: leadObj.state,
+          pincode: leadObj.pincode,
+          desired_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
+          remarks: getRemarksPayload(wizardLeadData.remarks, wizardLeadData.notes || '', wizardLeadData.next_follow_up_date, wizardLeadData.whatsapp_number, wizardLeadData.address, wizardLeadData.city),
+          Select_Package_Option: leadObj.Select_Package_Option || ''
+        });
+        setSelectedLead(null); // Close CRM Workspace
+      } else {
+        setCreateForm(prev => ({
+          ...prev,
+          budget: finalAmt
+        }));
+        setSalesStatus('Quotation Sent');
+        await updateLead(createdLeadId!, {
+          budget: finalAmt,
+          status: 'Quotation Sent' as CurrentStage,
+          package_price: basePkgSum,
+          deliverables_description: leadObj.deliverables_description,
+          notes_special_customizations: leadObj.notes_special_customizations,
+          quotation_discount: quoteDiscount,
+          additional_services_cost: quoteAdditional,
+          client_residence_address: leadObj.client_residence_address,
+          city: leadObj.city,
+          state: leadObj.state,
+          pincode: leadObj.pincode,
+          desired_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
+          remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city),
+          Select_Package_Option: leadObj.Select_Package_Option || ''
+        });
+      }
+
       const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
       const phone = leadObj.whatsapp_number || leadObj.mobile || '';
       
@@ -2811,9 +2922,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
 
       window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
-    } catch (err) {
+      showToastMsg("Quotation sent via WhatsApp and updated to CRM!", "success");
+    } catch (err: any) {
       console.error("WhatsApp quote failed:", err);
-      alert("Failed to send WhatsApp quote.");
+      alert("Failed to send WhatsApp quote: " + (err.message || String(err)));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -3207,9 +3321,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           lead_source: wizardLeadData.lead_source,
           total_pax: wizardLeadData.total_pax,
           reference_source: wizardLeadData.reference_source,
-          Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || ''
+          Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || '',
+          status: 'New Lead' // Automatically set to New Lead
         });
-        showToastMsg("CRM Updated Successfully.", "success");
+        showToastMsg("CRM Updated Successfully. Status set to New Lead.", "success");
       } else if (step === 2) {
         let finalEventsList = [...crmEvents];
 
@@ -3297,33 +3412,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           }
         }
 
-        const firstEvent = finalEventsList[0];
-
-        const formattedEventTime = validateAndFormatTime(firstEvent.event_start_time, "Event Start Time");
-        const formattedReportingTime = validateAndFormatTime(wizardLeadData.reporting_time, "Reporting Time");
-
-        await updateLead(selectedLead.lead_id, {
-          event_type: firstEvent.event_type === 'Other' ? 'Other' : firstEvent.event_type,
-          custom_event_name: firstEvent.event_name,
-          custom_event_type: firstEvent.event_type === 'Other' ? firstEvent.event_name : undefined,
-          event_date: firstEvent.event_date,
-          event_time: formattedEventTime || null,
-          reporting_time: formattedReportingTime || null,
-          event_location: firstEvent.event_location,
-          google_maps_link: firstEvent.google_maps_link || '',
-          lead_source: wizardLeadData.lead_source,
-          shoot_type: firstEvent.event_shoot_type || 'Photography',
-          desired_event_shoot_type: firstEvent.event_shoot_type || 'Photography',
-          client_residence_address: wizardLeadData.client_residence_address,
-          city: wizardLeadData.city,
-          state: wizardLeadData.state,
-          pincode: wizardLeadData.pincode,
-          total_pax: firstEvent.guest_pax,
-          reference_source: wizardLeadData.reference_source || '',
-          Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || '',
-          events: finalEventsList
-        });
-        showToastMsg("CRM Updated Successfully.", "success");
+        // Open Step 2 Follow-up details modal before moving to Step 3
+        setStep2FollowUpDate('');
+        setStep2FollowUpNotes('');
+        setShowStep2Popup(true);
+        setIsSaving(false);
+        return; // Halt here. The rest of the Step 2 saving is handled in handleSaveStep2FollowUp
       } else if (step === 3) {
         if (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '') {
           showToastMsg("Please select a package before continuing.", "error");
@@ -3355,80 +3449,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           client_residence_address: wizardLeadData.client_residence_address,
           city: wizardLeadData.city,
           state: wizardLeadData.state,
-          pincode: wizardLeadData.pincode
-        });
-        showToastMsg("CRM Updated Successfully.", "success");
-      } else if (step === 4) {
-        await updateLead(selectedLead.lead_id, {
-          budget: Number(wizardLeadData.budget),
-          remarks: wizardLeadData.remarks,
-          client_residence_address: wizardLeadData.client_residence_address,
-          city: wizardLeadData.city,
-          state: wizardLeadData.state,
           pincode: wizardLeadData.pincode,
-          Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || ''
+          status: 'Negotiation' // Automatically update status to Negotiation
         });
-        showToastMsg("CRM Updated Successfully.", "success");
-      } else if (step === 5) {
-        if (wizardLeadData.status === 'Order Confirmed') {
-          if (!salesStaffName || !salesStaffName.trim()) {
-            showToastMsg("Quotation Incomplete! Please enter Sales Staff Name.", "error");
-            setIsSaving(false);
-            return;
-          }
-          if (!salesStaffMobile || !salesStaffMobile.trim() || salesStaffMobile.trim().length !== 10 || !/^\d+$/.test(salesStaffMobile.trim())) {
-            showToastMsg("Please enter a valid 10-digit mobile number.", "error");
-            setIsSaving(false);
-            return;
-          }
-          if (!wizardLeadData.confirmed_event_date) {
-            showToastMsg("Please select Confirmed Event Date.", "error");
-            setIsSaving(false);
-            return;
-          }
-          if (!wizardLeadData.confirmed_event_time) {
-            showToastMsg("Please select Confirmed Event Time.", "error");
-            setIsSaving(false);
-            return;
-          }
-          if (wizardLeadData.final_amount === undefined || wizardLeadData.final_amount === 0 || isNaN(wizardLeadData.final_amount)) {
-            showToastMsg("Please enter Final Amount.", "error");
-            setIsSaving(false);
-            return;
-          }
-          if (wizardLeadData.advance_received === undefined || isNaN(wizardLeadData.advance_received)) {
-            showToastMsg("Please enter Advance Paid Amount.", "error");
-            setIsSaving(false);
-            return;
-          }
-          await confirmOrder(
-            selectedLead.lead_id,
-            selectedLead.event_type + ' Premium Package',
-            Number(wizardLeadData.final_amount),
-            Number(wizardLeadData.advance_received),
-            wizardLeadData.confirmed_event_date,
-            wizardLeadData.confirmed_event_time,
-            'UPI',
-            wizardLeadData.remarks || 'Confirmed from CRM activity logger',
-            wizardLeadData.reporting_time || '08:00'
-          );
-          setSelectedLead(null);
-          showToastMsg("Order Confirmed Successfully.", "success");
-        } else {
-          await updateLeadFollowUp(
-            selectedLead.lead_id,
-            wizardLeadData.status,
-            wizardLeadData.remarks || 'Status updated from CRM Multi-step Desk',
-            wizardLeadData.next_follow_up_date || '',
-            Number(wizardLeadData.final_quoted_amount || wizardLeadData.budget),
-            wizardLeadData.remarks
-          );
-          showToastMsg("CRM Updated Successfully.", "success");
-        }
+        showToastMsg("CRM Updated Successfully. Status set to Negotiation.", "success");
       }
 
-      if (step < 5) {
-        const nextStep = step === 3 ? 5 : step + 1;
+      if (step < 3) {
+        const nextStep = step + 1;
         setCrmWizardStep(nextStep);
         setTimeout(() => {
           document.getElementById('crm-wizard-scroll-container')?.scrollTo({ top: 0, behavior: 'smooth' });
@@ -3466,6 +3494,116 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         suggestedFix: parsed.suggestedFix
       });
       showToastMsg(parsed.reason, "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveStep2FollowUp = async () => {
+    if (!selectedLead) return;
+    if (!step2FollowUpDate) {
+      showToastMsg("Next Follow-up Date is mandatory.", "error");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const finalEventsList = [...crmEvents];
+      if (finalEventsList.length === 0) {
+        showToastMsg("No events found to save.", "error");
+        setIsSaving(false);
+        return;
+      }
+      const firstEvent = finalEventsList[0];
+
+      const formattedEventTime = validateAndFormatTime(firstEvent.event_start_time, "Event Start Time");
+      const formattedReportingTime = validateAndFormatTime(wizardLeadData.reporting_time, "Reporting Time");
+
+      // Save event details first
+      await updateLead(selectedLead.lead_id, {
+        event_type: firstEvent.event_type === 'Other' ? 'Other' : firstEvent.event_type,
+        custom_event_name: firstEvent.event_name,
+        custom_event_type: firstEvent.event_type === 'Other' ? firstEvent.event_name : undefined,
+        event_date: firstEvent.event_date,
+        event_time: formattedEventTime || null,
+        reporting_time: formattedReportingTime || null,
+        event_location: firstEvent.event_location,
+        google_maps_link: firstEvent.google_maps_link || '',
+        lead_source: wizardLeadData.lead_source,
+        shoot_type: firstEvent.event_shoot_type || 'Photography',
+        desired_event_shoot_type: firstEvent.event_shoot_type || 'Photography',
+        client_residence_address: wizardLeadData.client_residence_address,
+        city: wizardLeadData.city,
+        state: wizardLeadData.state,
+        pincode: wizardLeadData.pincode,
+        total_pax: firstEvent.guest_pax,
+        reference_source: wizardLeadData.reference_source || '',
+        Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || '',
+        events: finalEventsList
+      });
+
+      // Update lead follow up and set status to Follow-up
+      await updateLeadFollowUp(
+        selectedLead.lead_id,
+        'Follow-up',
+        step2FollowUpNotes || 'Saved event details',
+        step2FollowUpDate,
+        Number(wizardLeadData.package_cost || selectedLead.budget || 0),
+        step2FollowUpNotes || 'Saved event details'
+      );
+
+      // Locally update the status
+      setSelectedLead(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          status: 'Follow-up'
+        };
+      });
+
+      showToastMsg("Event details and follow-up saved successfully. Status set to Follow-up.", "success");
+      setShowStep2Popup(false);
+      setCrmWizardStep(3); // Advance to Step 3 automatically
+    } catch (err: any) {
+      console.error("Step 2 Follow-up save failed:", err);
+      showToastMsg(err.message || String(err), "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveLostLead = async () => {
+    if (!selectedLead) return;
+    const finalReason = lostReason === 'Other' ? otherLostReason : lostReason;
+    if (!finalReason || finalReason.trim() === '') {
+      showToastMsg("Lost Reason is mandatory.", "error");
+      return;
+    }
+    if (!lostNotes || lostNotes.trim() === '') {
+      showToastMsg("Lost Notes are mandatory.", "error");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await updateLead(selectedLead.lead_id, {
+        status: 'Lost Lead',
+        remarks: `Lost Reason: ${finalReason}. Notes: ${lostNotes}`
+      });
+
+      await updateLeadFollowUp(
+        selectedLead.lead_id,
+        'Lost Lead',
+        `Lost Reason: ${finalReason}. Notes: ${lostNotes}`,
+        '',
+        Number(selectedLead.package_price || selectedLead.budget || 0),
+        `Lost Reason: ${finalReason}. Notes: ${lostNotes}`
+      );
+
+      showToastMsg("Lead status set to Lost successfully.", "success");
+      setShowLostModal(false);
+      setSelectedLead(null);
+    } catch (err: any) {
+      console.error("Failed to set lead as lost:", err);
+      showToastMsg(err.message || String(err), "error");
     } finally {
       setIsSaving(false);
     }
@@ -4183,6 +4321,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const handleWizardNext = async () => {
     if (isSaving) return;
 
+    let finalUser: any = null;
+
     if (wizardStep === 1) {
       if (!createForm.mobile) {
         showToastMsg("Phone Number is required.", "error");
@@ -4259,7 +4399,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             }
           }
 
-          let finalUser = currentUser;
+          finalUser = currentUser;
           if (dbUser) {
             finalUser = mapUserFieldsFromDb(dbUser);
           }
@@ -4297,6 +4437,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           showToastMsg("Please login again.", "error");
           return;
         }
+        finalUser = currentUser;
         if (currentUser.role !== 'Sales Team' && currentUser.role !== 'Business Owner') {
           showToastMsg("User does not have permission to create leads.", "error");
           return;
@@ -4319,6 +4460,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       try {
         setIsSaving(true);
         const finalSource = createForm.lead_source === 'Other' ? (otherSource ? `Other: ${otherSource}` : 'Other') : createForm.lead_source;
+        let finalId = createdLeadId;
         if (!createdLeadId) {
           const newId = await addLead({
             customer_name: createForm.customer_name || 'Inbound Prospect',
@@ -4346,6 +4488,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
           });
           setCreatedLeadId(newId);
+          finalId = newId;
           console.log(`Created lead with ID: ${newId}`);
         } else {
           await updateLead(createdLeadId, {
@@ -4368,12 +4511,46 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
           });
         }
-        setWizardStep(2);
-        showToastMsg("Customer details saved successfully.", "success");
-        setTimeout(() => {
-          autoScrollToFormHeader();
-          document.getElementById('wizard_step2_first_field')?.focus();
-        }, 100);
+        const isEdit = !!createdLeadId;
+
+        const newLeadObj: Lead = {
+          lead_id: finalId,
+          customer_name: createForm.customer_name || 'Inbound Prospect',
+          mobile: createForm.mobile,
+          alternate_mobile: (createForm.alternate_mobile && createForm.alternate_mobile.trim() !== '' && createForm.alternate_mobile.trim() !== '+91') ? createForm.alternate_mobile : undefined,
+          email: createForm.email,
+          lead_source: finalSource,
+          whatsapp_number: createForm.whatsapp_number,
+          address: createForm.address,
+          city: createForm.city,
+          state: createForm.state,
+          pincode: createForm.pincode,
+          client_residence_address: createForm.client_residence_address,
+          shoot_type: createForm.shoot_type,
+          desired_event_shoot_type: createForm.desired_event_shoot_type,
+          total_pax: createForm.total_pax !== '' ? Number(createForm.total_pax) : undefined,
+          reference_source: createForm.reference_source,
+          booking_status: createForm.booking_status || 'Pending',
+          event_type: createForm.event_type || 'Other',
+          event_date: createForm.event_date || new Date().toISOString().split('T')[0],
+          event_time: createForm.event_time || '12:00',
+          event_location: createForm.event_location || 'TBD',
+          budget: Number(createForm.budget) || 0,
+          remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
+          Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || '',
+          status: 'New Lead',
+          created_date: new Date().toISOString().split('T')[0],
+          sales_person: finalUser?.name || currentUser?.name || 'Sales Team',
+          created_by: finalUser?.name || currentUser?.name || 'Sales Team'
+        };
+
+        // Reset Create Lead modal and open CRM Workspace directly at Step 2 for the new lead
+        resetForm();
+        setActiveTab('list');
+        handleSelectLead(newLeadObj);
+        setCrmWizardStep(2);
+
+        showToastMsg("Inbound lead created successfully! CRM Workspace opened.", "success");
       } catch (err: any) {
         console.error("Step 1 saving failed:", err);
         const errMsg = err.message || String(err);
@@ -7522,6 +7699,44 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 <Edit className="w-3 h-3" />
                                 <span>{isActiveInSales && canEdit ? 'Manage CRM' : 'View CRM'}</span>
                               </button>
+                              {isActiveInSales && canEdit && leadStatus !== 'Lost Lead' && leadStatus !== 'Order Confirmed' && (
+                                <>
+                                  <button
+                                    id={`btn_confirm_order_direct_${lead.lead_id}`}
+                                    onClick={() => {
+                                      setConfirmForm({
+                                        package_name: lead.event_type === 'Other' ? (lead.custom_event_name || 'Premium Package') : `${lead.event_type} Premium Package`,
+                                        quotation_amount: lead.package_price || lead.budget || 0,
+                                        advance_received: 0,
+                                        event_date: lead.event_date || '',
+                                        event_time: lead.event_time || '12:00',
+                                        payment_mode: 'UPI',
+                                        notes: lead.remarks || '',
+                                      });
+                                      setSelectedLead(lead);
+                                      setShowConfirmModal(true);
+                                    }}
+                                    className="px-3 py-1.5 text-xs font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-white rounded-xl border border-emerald-900/30 transition-all cursor-pointer inline-flex items-center gap-1.5 shadow"
+                                  >
+                                    <CheckSquare className="w-3 h-3" />
+                                    <span>Confirm Order</span>
+                                  </button>
+                                  <button
+                                    id={`btn_lost_lead_direct_${lead.lead_id}`}
+                                    onClick={() => {
+                                      setSelectedLead(lead);
+                                      setLostReason('');
+                                      setOtherLostReason('');
+                                      setLostNotes('');
+                                      setShowLostModal(true);
+                                    }}
+                                    className="px-3 py-1.5 text-xs font-bold bg-rose-950 hover:bg-rose-900 text-rose-400 hover:text-white rounded-xl border border-rose-900/30 transition-all cursor-pointer inline-flex items-center gap-1.5 shadow"
+                                  >
+                                    <X className="w-3 h-3" />
+                                    <span>Lost Lead</span>
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -7718,12 +7933,178 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         </div>
       )}
 
+      {/* Step 2 Mandatory Follow-up Popup Modal */}
+      {showStep2Popup && selectedLead && (
+        <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-4 backdrop-blur-md">
+          <div id="step2_followup_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
+                <span>📅</span> Log Mandatory Follow-up Details
+              </h4>
+              <button 
+                onClick={() => setShowStep2Popup(false)}
+                className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg text-xs text-amber-200">
+              Please schedule the next follow-up and add notes to progress the lead to <strong>Follow-up</strong> status.
+            </div>
+
+            <div className="space-y-3.5 text-xs text-slate-300">
+              <div>
+                <label className="block font-medium text-slate-400 mb-1">
+                  Next Follow-up Date * (Required)
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={step2FollowUpDate}
+                  min={new Date().toISOString().split('T')[0]}
+                  onChange={(e) => setStep2FollowUpDate(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-medium text-slate-400 mb-1">
+                  Follow-up Notes * (Required)
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="Summarize the event discussion, client's vibe, key preferences..."
+                  value={step2FollowUpNotes}
+                  onChange={(e) => setStep2FollowUpNotes(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowStep2Popup(false)}
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs animate-none border-0"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveStep2FollowUp}
+                  disabled={isSaving || !step2FollowUpDate || !step2FollowUpNotes}
+                  className="px-4 py-2 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center gap-1.5 cursor-pointer shadow-lg text-xs border-0"
+                >
+                  {isSaving ? 'Saving...' : 'Save & Continue'}
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lost Lead Popup Modal */}
+      {showLostModal && selectedLead && (
+        <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-4 backdrop-blur-md">
+          <div id="lost_lead_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
+                <span>💔</span> Mark Lead as Lost
+              </h4>
+              <button 
+                onClick={() => setShowLostModal(false)}
+                className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-lg text-xs text-red-200">
+              Please select a mandatory reason and log notes to set lead status to <strong>Lost</strong>.
+            </div>
+
+            <div className="space-y-3.5 text-xs text-slate-300">
+              <div>
+                <label className="block font-medium text-slate-400 mb-1">
+                  Lost Reason * (Required)
+                </label>
+                <select
+                  required
+                  value={lostReason}
+                  onChange={(e) => setLostReason(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                >
+                  <option value="">-- Select Reason --</option>
+                  <option value="Budget Constraint">Budget Constraint</option>
+                  <option value="Chose Competitor">Chose Competitor</option>
+                  <option value="Event Cancelled / Postponed">Event Cancelled / Postponed</option>
+                  <option value="No Response / Ghosted">No Response / Ghosted</option>
+                  <option value="Desired Date Unavailable">Desired Date Unavailable</option>
+                  <option value="Other">Other (Specify below)</option>
+                </select>
+              </div>
+
+              {lostReason === 'Other' && (
+                <div>
+                  <label className="block font-medium text-slate-400 mb-1">
+                    Specify Custom Lost Reason * (Required)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Enter custom lost reason..."
+                    value={otherLostReason}
+                    onChange={(e) => setOtherLostReason(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block font-medium text-slate-400 mb-1">
+                  Lost Notes * (Required)
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="Detail the exact reason client decided otherwise..."
+                  value={lostNotes}
+                  onChange={(e) => setLostNotes(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowLostModal(false)}
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs animate-none border-0"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveLostLead}
+                  disabled={isSaving || !lostReason || (lostReason === 'Other' && !otherLostReason) || !lostNotes}
+                  className="px-4 py-2 bg-gradient-to-r from-red-650 to-rose-650 hover:from-red-600 hover:to-rose-600 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center gap-1.5 cursor-pointer shadow-lg text-xs border-0"
+                >
+                  {isSaving ? 'Processing...' : 'Mark as Lost'}
+                  <CheckSquare className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
             {/* Mobile/Tablet Popup Modal for Lead Follow-up Details */}
       {selectedLead && (
-        <div id="lead_details_mobile_modal" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-0 sm:p-2 md:p-2 lg:p-3 overflow-hidden animate-fade-in">
-          <div className="bg-slate-900 border-0 sm:border border-slate-850 rounded-none sm:rounded-xl md:rounded-2xl w-full sm:w-[99vw] lg:w-[98vw] h-full sm:h-[96vh] lg:h-[97vh] shadow-2xl relative flex flex-col overflow-hidden text-left bg-gradient-to-tr from-slate-900 via-slate-900 to-slate-950">
+        <div id="lead_details_mobile_modal" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-0 sm:p-1 md:p-1.5 lg:p-2 overflow-hidden animate-fade-in">
+          <div className="bg-slate-900 border-0 sm:border border-slate-850 rounded-none sm:rounded-xl md:rounded-2xl w-full sm:w-[99vw] lg:w-[98.5vw] h-full sm:h-[97.5vh] lg:h-[98vh] shadow-2xl relative flex flex-col overflow-hidden text-left bg-gradient-to-tr from-slate-900 via-slate-900 to-slate-950">
             {/* Header: Sticky */}
-            <div className="py-1.5 px-4 sm:px-5 border-b border-slate-850 flex items-center justify-between bg-slate-950/40 sticky top-0 z-10 backdrop-blur-md shrink-0">
+            <div className="py-1 px-4 sm:px-5 border-b border-slate-850 flex items-center justify-between bg-slate-950/40 sticky top-0 z-10 backdrop-blur-sm shrink-0">
               <div className="flex items-center gap-2 text-left">
                 <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5 font-mono uppercase tracking-wider">
                   <span>💍</span> Digital Lead CRM Workspace — Client Board
@@ -7732,7 +8113,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </div>
               <button 
                 onClick={() => setSelectedLead(null)}
-                className="px-2.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs rounded border border-slate-750 font-bold uppercase tracking-wider transition-all cursor-pointer"
+                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs rounded border border-slate-750 font-bold uppercase tracking-wider transition-all cursor-pointer border-0"
               >
                 Close Desk
               </button>
@@ -7740,7 +8121,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
             {/* Custom Toast Alert */}
             {crmToast && (
-              <div className={`mx-4 mt-2.5 p-2 rounded-lg shadow-lg flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2 duration-200 shrink-0 ${
+              <div className={`mx-4 mt-1.5 p-1.5 rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200 shrink-0 ${
                 crmToast.type === 'success' 
                   ? 'bg-emerald-950 border border-emerald-500/20 text-emerald-400' 
                   : 'bg-red-950 border border-red-500/20 text-red-400'
@@ -7751,23 +8132,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             )}
 
             {/* Progress Bar & Indicators */}
-            <div className="w-full bg-slate-950/20 border-b border-slate-850 py-1.5 px-4 sm:px-5 shrink-0 justify-start text-left">
+            <div className="w-full bg-slate-950/20 border-b border-slate-850 py-1 px-4 sm:px-5 shrink-0 justify-start text-left">
               <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] sm:text-xs font-mono font-bold text-indigo-400 uppercase tracking-widest text-left">
-                    Step {crmWizardStep === 5 ? 4 : crmWizardStep} of 4:
+                    Step {crmWizardStep} of 3:
                   </span>
                   <span className="text-[10px] sm:text-xs font-semibold text-slate-300 bg-slate-800 py-0.5 px-2 rounded border border-slate-750">
                     {crmWizardStep === 1 ? 'Customer Details' :
                      crmWizardStep === 2 ? 'Event Details' :
-                     crmWizardStep === 3 ? 'Quotation Workspace' :
-                     'Status Update'}
+                     'Quotation Workspace'}
                   </span>
                 </div>
                 <div className="flex-1 max-w-xs h-1 bg-slate-950 rounded-full overflow-hidden">
                   <div 
                     className="h-full bg-indigo-500 transition-all duration-300"
-                    style={{ width: `${((crmWizardStep === 5 ? 4 : crmWizardStep) / 4) * 100}%` }}
+                    style={{ width: `${(crmWizardStep / 3) * 100}%` }}
                   />
                 </div>
               </div>
@@ -7789,9 +8169,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             )}
 
             {/* Content container with horizontal padding */}
-            <div id="crm-wizard-scroll-container" className="flex-1 overflow-y-auto p-3 sm:p-4">
+            <div id="crm-wizard-scroll-container" className="flex-1 overflow-y-auto p-2.5 sm:p-3">
               <div className="max-w-5xl mx-auto">
-                <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
+                <form onSubmit={(e) => e.preventDefault()} className="space-y-3">
                   {crmWizardStep === 1 && (
                     <div className="space-y-4 animate-fade-in text-left">
                       <div className="border-b border-slate-800 pb-1.5">
@@ -8223,12 +8603,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
 
             {/* Footer Buttons: Sticky */}
-            <div className="py-1.5 px-4 sm:px-5 border-t border-slate-850 flex items-center justify-between bg-slate-950/40 sticky bottom-0 z-10 shrink-0 backdrop-blur-md">
+            <div className="py-1 px-4 sm:px-5 border-t border-slate-850 flex items-center justify-between bg-slate-950/40 sticky bottom-0 z-10 shrink-0 backdrop-blur-sm">
               {crmWizardStep > 1 ? (
                 <button
                   type="button"
-                  onClick={() => setCrmWizardStep(crmWizardStep === 5 ? 3 : crmWizardStep - 1)}
-                  className="px-4 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border border-slate-705"
+                  onClick={() => setCrmWizardStep(crmWizardStep - 1)}
+                  className="px-3.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border border-slate-705 border-0"
                 >
                   Back
                 </button>
@@ -8236,18 +8616,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 <button
                   type="button"
                   onClick={() => setSelectedLead(null)}
-                  className="px-4 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border border-slate-705"
+                  className="px-3.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border border-slate-705 border-0"
                 >
                   Back
                 </button>
               )}
 
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => handleSaveStep(crmWizardStep)}
                   disabled={isSaving || (crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === ''))}
-                  className={`px-4 py-1.5 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 ${
+                  className={`px-4 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 border-0 ${
                     crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')
                       ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
                       : 'bg-indigo-650 hover:bg-indigo-600 text-white cursor-pointer'
@@ -8256,7 +8636,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   {isSaving ? (
                     <span className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
                   ) : null}
-                  <span>{isSaving ? 'Saving...' : crmWizardStep === 5 ? 'Save & Close' : 'Save & Next'}</span>
+                  <span>{isSaving ? 'Saving...' : crmWizardStep === 3 ? 'Save & Close' : 'Save & Next'}</span>
                 </button>
               </div>
             </div>
