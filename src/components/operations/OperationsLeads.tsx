@@ -35,7 +35,8 @@ export const OperationsLeads: React.FC = () => {
     refreshData,
     addLeadEquipmentHistory,
     getLeadCurrentStatus,
-    packages
+    packages,
+    quotations
   } = useRole();
 
   useEffect(() => {
@@ -130,15 +131,40 @@ export const OperationsLeads: React.FC = () => {
   }, [selectedLeadPkgs]);
 
   const teamMembersIncluded = useMemo(() => {
-    if (!selectedLeadPkgs || selectedLeadPkgs.length === 0 || !packages) return 'No team members specified in package.';
-    const teamMembersList = selectedLeadPkgs.map(lp => {
-      const pkg = packages.find(p => p.package_id === lp.package_id);
-      return pkg?.team_members ? `${pkg.package_name}: ${pkg.team_members}` : null;
-    }).filter(Boolean);
+    const leadQuotations = quotations?.filter(q => q.lead_id === parentLeadInstance?.lead_id) || [];
+    leadQuotations.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const latestQuote = leadQuotations[0];
     
-    if (teamMembersList.length === 0) return 'No team members specified in package.';
-    return teamMembersList.join('\n');
-  }, [selectedLeadPkgs, packages]);
+    let finalInclusions: string[] = [];
+
+    if (latestQuote) {
+      let metadata: any = null;
+      if (latestQuote.editableInclusions) {
+        metadata = { editableInclusions: latestQuote.editableInclusions };
+      } else if (latestQuote.terms_conditions && latestQuote.terms_conditions.includes('METADATA:')) {
+        try {
+          const metaStr = latestQuote.terms_conditions.split('METADATA:')[1];
+          metadata = JSON.parse(metaStr);
+        } catch (e) {}
+      }
+
+      if (metadata && metadata.editableInclusions) {
+         Object.values(metadata.editableInclusions).forEach((incList: any) => {
+           if (Array.isArray(incList)) {
+             incList.forEach(inc => {
+               if (inc) finalInclusions.push(inc);
+             });
+           }
+         });
+      }
+    }
+
+    if (finalInclusions.length > 0) {
+      return finalInclusions.join('\n');
+    }
+
+    return 'No team members finalized in quotation.';
+  }, [quotations, parentLeadInstance]);
 
   // State for completing shoot
   const [closingOrderId, setClosingOrderId] = useState<string | null>(null);
@@ -499,8 +525,8 @@ export const OperationsLeads: React.FC = () => {
       
       const matchedOrder = orders.find(o => o.order_id === assigningOrderId);
       
-      // Set status to Staff Assigned as requested
-      const targetStage: CurrentStage = 'Staff Assigned';
+      // Set status to Event Scheduled as requested
+      const targetStage: CurrentStage = 'Event Scheduled';
 
       console.log("Saving assignment for order:", assigningOrderId, {
         photographer,
@@ -1316,10 +1342,9 @@ export const OperationsLeads: React.FC = () => {
                           </span>
                         </div>
                         <div>
-                          <span className="text-[10px] text-zinc-505 block uppercase font-mono">WhatsApp Number</span>
+                          <span className="text-[10px] text-zinc-505 block uppercase font-mono">Alternate Mobile Number</span>
                           <span className="font-mono text-zinc-200 font-medium flex items-center gap-1">
-                            {parentLeadInstance?.whatsapp_number || parentLeadInstance?.mobile || activeOrderInstance?.mobile || 'N/A'}
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            {parentLeadInstance?.alternate_mobile || 'N/A'}
                           </span>
                         </div>
                       </div>
@@ -1331,9 +1356,9 @@ export const OperationsLeads: React.FC = () => {
                       </div>
                       <div className="grid grid-cols-3 gap-2">
                         <div className="col-span-2">
-                          <span className="text-[10px] text-zinc-505 block uppercase font-mono">Full Address</span>
+                          <span className="text-[10px] text-zinc-505 block uppercase font-mono">Event Address</span>
                           <span className="text-zinc-200 font-sans text-[11px] block leading-tight">
-                            {parentLeadInstance?.address || activeOrderInstance?.event_location || 'N/A'}
+                            {parentLeadInstance?.event_location || activeOrderInstance?.event_location || parentLeadInstance?.address || 'N/A'}
                           </span>
                         </div>
                         <div>
@@ -1343,10 +1368,22 @@ export const OperationsLeads: React.FC = () => {
                           </span>
                         </div>
                       </div>
+                      {parentLeadInstance?.google_maps_link && (
+                        <div>
+                          <span className="text-[10px] text-zinc-505 block uppercase font-mono">Google Maps Link</span>
+                          <a 
+                            href={parentLeadInstance.google_maps_link} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-400 hover:text-blue-300 font-sans text-[11px] break-all block underline"
+                          >
+                            {parentLeadInstance.google_maps_link}
+                          </a>
+                        </div>
+                      )}
                     </div>
                   </div>
-
-                  {/* Event Information Card */}
+                  {/* Event Information Card */}        {/* Event Information Card */}
                   <div className="bg-zinc-950/45 border border-zinc-850 p-4 rounded-2xl space-y-3 relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-3 text-[10px] text-zinc-655 select-none">
                       🎥 EVENT
@@ -1390,21 +1427,9 @@ export const OperationsLeads: React.FC = () => {
                         </div>
                       </div>
                       <div>
-                        <span className="text-[10px] text-zinc-505 block uppercase font-mono">Confirmed Package Name</span>
-                        <span className="text-white font-medium block">
-                          {activeOrderInstance?.package_name || 'Custom Shoot Package'}
-                        </span>
-                      </div>
-                      <div>
                         <span className="text-[10px] text-zinc-505 block uppercase font-mono">Package Composition & Line Items</span>
                         <div className="text-zinc-300 bg-zinc-950/80 px-2.5 py-1.5 rounded-xl border border-zinc-900 font-mono text-[10.5px] whitespace-pre-wrap leading-relaxed max-h-24 overflow-y-auto">
                           {packageDetailsString}
-                        </div>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-zinc-505 block uppercase font-mono">CRM Special Notes / Customer Request</span>
-                        <div className="text-zinc-350 italic font-sans text-xs bg-zinc-950/40 p-2.5 rounded-xl border border-zinc-900 leading-relaxed max-h-24 overflow-y-auto">
-                          {parentLeadInstance?.remarks || 'No remarks provided.'}
                         </div>
                       </div>
                     </div>

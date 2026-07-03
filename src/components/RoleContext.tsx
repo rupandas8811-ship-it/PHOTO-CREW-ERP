@@ -1243,7 +1243,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (resJson.success) {
             console.log(`[pushUpdate Proxy SUCCESS] for ${table}:`, resJson.data);
             updateDiagnosticMetric('update', 'ok');
-
+            if (table === 'lead_events' && resJson.data && resJson.data.length > 0) {
+              autoSyncEventToGoogle('update', resJson.data[0]);
+            }
             if (table === 'leads') {
               const leadId = finalMatchValue;
               const prevLead = leads.find(l => l.lead_id === leadId);
@@ -1324,7 +1326,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         console.log(`[pushUpdate SUCCESS] returned data:`, data);
         updateDiagnosticMetric('update', 'ok');
-
+        if (table === 'lead_events' && data && data.length > 0) {
+          autoSyncEventToGoogle('update', data[0]);
+        }
         if (table === 'leads') {
           const leadId = matchValue;
           const prevLead = leads.find(l => l.lead_id === leadId);
