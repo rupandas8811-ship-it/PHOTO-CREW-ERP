@@ -4,7 +4,6 @@ import { INITIAL_USERS, INITIAL_LEADS, INITIAL_ORDERS, INITIAL_OPERATIONS, INITI
 
 import { supabaseClient, updateDiagnosticMetric } from '../supabaseClient';
 import { serializeLeadEvents, deserializeLeadEvents } from '../utils';
-import { autoSyncEventToGoogle } from '../lib/calendarAutoSync';
 
 interface RoleContextType {
   currentUser: User | null;
@@ -1077,9 +1076,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const resJson = await response.json();
           if (resJson.success) {
             console.log(`[pushInsert Proxy SUCCESS] for ${table}:`, resJson.data);
-            if (table === 'lead_events') {
-              autoSyncEventToGoogle('insert', resJson.data[0]);
-            }
             updateDiagnosticMetric('insert', 'ok');
 
             // Clean up matching local record if any from erp_local_<tableKey>
@@ -1122,9 +1118,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: `[Table: ${table}] ${error?.message || String(error)}` };
       } else {
         updateDiagnosticMetric('insert', 'ok');
-        if (table === 'lead_events' && fallbackInsData && fallbackInsData.length > 0) {
-          autoSyncEventToGoogle('insert', fallbackInsData[0]);
-        }
 
         // Clean up matching local record if any from erp_local_<tableKey>
         const localKey = `erp_local_${table}`;
@@ -1243,9 +1236,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (resJson.success) {
             console.log(`[pushUpdate Proxy SUCCESS] for ${table}:`, resJson.data);
             updateDiagnosticMetric('update', 'ok');
-            if (table === 'lead_events' && resJson.data && resJson.data.length > 0) {
-              autoSyncEventToGoogle('update', resJson.data[0]);
-            }
             if (table === 'leads') {
               const leadId = finalMatchValue;
               const prevLead = leads.find(l => l.lead_id === leadId);
@@ -1326,9 +1316,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         console.log(`[pushUpdate SUCCESS] returned data:`, data);
         updateDiagnosticMetric('update', 'ok');
-        if (table === 'lead_events' && data && data.length > 0) {
-          autoSyncEventToGoogle('update', data[0]);
-        }
         if (table === 'leads') {
           const leadId = matchValue;
           const prevLead = leads.find(l => l.lead_id === leadId);
@@ -1449,13 +1436,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const resJson = await response.json();
           if (resJson.success) {
             console.log(`[pushDelete Proxy SUCCESS] for ${table}`);
-            if (table === 'lead_events') {
-              if (resJson.data && Array.isArray(resJson.data)) {
-                 for (const ev of resJson.data) {
-                    autoSyncEventToGoogle('delete', ev, ev.id);
-                 }
-              }
-            }
             updateDiagnosticMetric('delete', 'ok');
             broadcastSyncPing();
             return { success: true };
@@ -1479,11 +1459,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: `[Table: ${table}] ${error?.message || String(error)}` };
       } else {
         updateDiagnosticMetric('delete', 'ok');
-        if (table === 'lead_events' && fallbackDelData && Array.isArray(fallbackDelData)) {
-           for (const ev of fallbackDelData) {
-              autoSyncEventToGoogle('delete', ev, ev.id);
-           }
-        }
         // Realtime subscription will handle syncing deleted records
         broadcastSyncPing();
         return { success: true };

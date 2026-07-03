@@ -517,7 +517,7 @@ const MainAppContent: React.FC = () => {
               { id: 'sales_packages', label: 'Package Catalog', icon: Layers, color: 'text-teal-400' },
               { id: 'pending_payments', label: 'Pending Payment Report', icon: DollarSign, color: 'text-amber-500' },
               { id: 'notifications', label: 'Notifications', icon: Bell, color: 'text-rose-400' }
-            ].map(tab => {
+            ].filter(tab => !['sales_analytics', 'sales_calendar', 'notifications'].includes(tab.id)).map(tab => {
               const IconComponent = tab.icon;
               let isSelected = false;
               if (tab.id === 'sales_list') isSelected = activeTab === 'sales' && activeSalesSubTab === 'list';
@@ -627,27 +627,29 @@ const MainAppContent: React.FC = () => {
       )}
 
       {/* Global Actions at bottom of sidebar */}
-      <div className="bg-[#09090b]/80 border border-zinc-900 rounded-2xl p-3.5 space-y-2.5 shadow-lg">
-        <button
-          onClick={handleRefresh}
-          className="w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-mono uppercase tracking-wider font-extrabold rounded-xl transition-all cursor-pointer border border-emerald-500/10 hover:border-emerald-500/35 bg-emerald-500/5 hover:bg-emerald-500/15 text-emerald-450 group"
-        >
-          <div className="flex items-center gap-2.5">
-            <RefreshCw className={`w-3.5 h-3.5 text-emerald-450 ${isRefreshing ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-300'}`} />
-            <span>Refresh System Flow</span>
-          </div>
-        </button>
+      {!(activeTab === 'sales' || currentRole === 'Sales Team') && (
+        <div className="bg-[#09090b]/80 border border-zinc-900 rounded-2xl p-3.5 space-y-2.5 shadow-lg">
+          <button
+            onClick={handleRefresh}
+            className="w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-mono uppercase tracking-wider font-extrabold rounded-xl transition-all cursor-pointer border border-emerald-500/10 hover:border-emerald-500/35 bg-emerald-500/5 hover:bg-emerald-500/15 text-emerald-450 group"
+          >
+            <div className="flex items-center gap-2.5">
+              <RefreshCw className={`w-3.5 h-3.5 text-emerald-450 ${isRefreshing ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-300'}`} />
+              <span>Refresh System Flow</span>
+            </div>
+          </button>
 
-        <button
-          onClick={() => logout()}
-          className="w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-mono uppercase tracking-wider font-extrabold rounded-xl transition-all cursor-pointer border border-rose-500/10 hover:border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/15 text-rose-455"
-        >
-          <div className="flex items-center gap-2.5">
-            <LogOut className="w-3.5 h-3.5 text-rose-455" />
-            <span>Secure Logout</span>
-          </div>
-        </button>
-      </div>
+          <button
+            onClick={() => logout()}
+            className="w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-mono uppercase tracking-wider font-extrabold rounded-xl transition-all cursor-pointer border border-rose-500/10 hover:border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/15 text-rose-455"
+          >
+            <div className="flex items-center gap-2.5">
+              <LogOut className="w-3.5 h-3.5 text-rose-455" />
+              <span>Secure Logout</span>
+            </div>
+          </button>
+        </div>
+      )}
     </aside>
   );
 

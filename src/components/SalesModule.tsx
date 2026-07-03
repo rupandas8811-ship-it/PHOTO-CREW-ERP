@@ -2906,76 +2906,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     return (
       <div className="space-y-6">
-        {/* Deliverables Section with Add / Edit / Remove functionality */}
-        <div className="bg-slate-900/50 border border-slate-805/40 rounded-xl p-4.5 space-y-4 shadow-sm">
-          {/* List of Deliverables in tabular grid */}
-          <div className="space-y-4">
-            {/* List 2: Additional Services & Add-ons */}
-            <div className="space-y-2">
-              <h5 className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                Additional Deliverables & Add-ons
-              </h5>
-              {quoteServices.filter(s => s.isAdditional).length === 0 ? (
-                <p className="text-[10px] text-slate-500 italic px-2 font-mono pb-1">No custom additional deliverables added yet.</p>
-              ) : (
-                <div className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/40">
-                  <table className="w-full text-left text-xs min-w-[300px]">
-                    <thead>
-                      <tr className="bg-slate-900/80 text-slate-400 font-mono text-[10px] uppercase border-b border-slate-800">
-                        <th className="py-2.5 px-3">Service / Deliverables</th>
-                        <th className="py-2.5 px-3 text-center w-20">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/50">
-                      {quoteServices.filter(s => s.isAdditional).map(item => (
-                        <tr key={item.id} className="hover:bg-slate-900/30 transition-colors">
-                          <td className="py-2 px-3">
-                            <input
-                              type="text"
-                              value={item.name}
-                              onChange={(e) => handleEditServiceItem(item.id, { name: e.target.value })}
-                              className="w-full bg-slate-950/80 border border-slate-800 focus:border-cyan-500 rounded px-2 py-1 text-xs text-slate-100 placeholder-slate-600 focus:outline-none"
-                              placeholder="Deliverable Name..."
-                            />
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveServiceItem(item.id)}
-                              className="text-red-400 hover:text-red-350 hover:bg-red-500/10 px-2 py-1 rounded text-[10px] font-mono transition-colors font-bold"
-                            >
-                              Remove
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Add Deliverable Form Control */}
-          <button
-            type="button"
-            onClick={() => {
-              const newService = {
-                id: `add_addl_${Date.now()}_${Math.random()}`,
-                name: '',
-                qty: 1,
-                price: 0,
-                isAdditional: true
-              };
-              setQuoteServices(prev => [newService, ...prev]);
-            }}
-            className="bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/25 rounded px-3 py-1.5 text-xs font-mono font-bold transition-all shadow-sm w-fit mt-1"
-          >
-            + Add Deliverable
-          </button>
-        </div>
-
         {/* Section 2: Quotation Details */}
         <div className="bg-slate-900/50 border border-slate-805/40 rounded-xl p-4.5 space-y-3.5 shadow-sm">
           <h4 className="text-xs font-bold text-amber-500 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-2">
@@ -3046,56 +2976,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               <span className="text-lg font-extrabold text-amber-500 font-mono">
                 ₹{finalAmt.toLocaleString('en-IN')}
               </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Section 3: Remarks */}
-        <div className="bg-slate-900/50 border border-slate-805/40 rounded-xl p-4.5 space-y-3.5 shadow-sm">
-          <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-2">
-            <span>✍️</span> Section 3: Remarks & Follow-up
-          </h4>
-
-          <div className="space-y-4">
-            {/* Customer Remarks */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Customer Inbound Scope & Demands (Remarks)
-              </label>
-              <textarea
-                rows={2}
-                placeholder="List customized requests, physical albums requirement, or crew limits."
-                value={remarksValue || ''}
-                onChange={(e) => setRemarks(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-sans"
-              ></textarea>
-            </div>
-
-            {/* Internal notes */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Internal Sales Coordinator Notes (Private CRM Notes)
-              </label>
-              <textarea
-                rows={2}
-                placeholder="E.g., Client seems premium, referred by relative, follow up quickly."
-                value={notesValue || ''}
-                onChange={(e) => setNotes(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-sans"
-              ></textarea>
-            </div>
-
-            {/* Follow-up Date */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Next Scheduled CRM Follow-up Date (Optional)
-              </label>
-              <input
-                type="date"
-                value={followUpValue || ''}
-                onChange={(e) => setFollowUp(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-400 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-550/20 transition-all font-mono"
-              />
             </div>
           </div>
         </div>
@@ -5251,7 +5131,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           <button
             id="btn_lead_tab_profiles"
             onClick={() => { setActiveTab('profiles'); setSelectedLead(null); setSelectedCustomerProfileId(null); }}
-            className={`px-4 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+            className={`hidden px-4 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
               activeTab === 'profiles'
                 ? 'bg-zinc-900 border-zinc-750 text-white font-black hover:border-zinc-700'
                 : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'
@@ -6554,28 +6434,25 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         ) : activeTab === 'create' ? (
           /* SCREEN 2: Create Lead Layout as centered Popup Modal utilizing createPortal to escape parents with transform/will-change limits */
           createPortal(
-            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[9999] flex items-center justify-center p-0 sm:p-4 overflow-hidden animate-fade-in text-left">
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[9999] flex items-center justify-center p-0 sm:p-2 md:p-3 xl:p-4 overflow-hidden animate-fade-in text-left">
               <div 
                 id="create_lead_form"
-                className="bg-slate-900 border-0 sm:border border-slate-800 rounded-none sm:rounded-2xl w-full sm:w-[95vw] lg:w-[85vw] lg:max-w-[1200px] h-[100vh] sm:h-[90vh] shadow-2xl relative flex flex-col text-left overflow-hidden bg-gradient-to-tr from-slate-900 via-slate-900 to-slate-950 text-slate-100 whitespace-normal"
+                className="bg-slate-900 border-0 sm:border border-slate-800 rounded-none sm:rounded-xl md:rounded-2xl w-full sm:w-[98vw] lg:w-[96vw] xl:w-[97vw] h-full sm:h-[96vh] lg:h-[95vh] shadow-2xl relative flex flex-col text-left overflow-hidden bg-gradient-to-tr from-slate-900 via-slate-900 to-slate-950 text-slate-100 whitespace-normal"
               >
             {/* Header: Sticky */}
-            <div className="border-b border-slate-800/80 p-4 sm:p-5 flex items-center justify-between shrink-0 bg-slate-950/40 backdrop-blur-md">
+            <div className="border-b border-slate-800/80 py-2.5 px-4 sm:px-5 flex items-center justify-between shrink-0 bg-slate-950/40 backdrop-blur-md">
               <div className="space-y-0.5">
-                <h3 className="text-sm sm:text-base font-bold text-slate-100 flex items-center gap-2">
+                <h3 className="text-xs sm:text-sm font-bold text-slate-100 flex items-center gap-2">
                   <span className="text-emerald-400">✍️</span> Create New Inbound Lead
                 </h3>
-                <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium">
-                  Capture inbound photography and videography business queries.
-                </p>
               </div>
               <button 
                 type="button"
                 onClick={() => { resetForm(); setActiveTab('list'); }}
-                className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-xl transition-all cursor-pointer inline-flex items-center justify-center border border-transparent hover:border-slate-700/50"
+                className="p-1 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-lg transition-all cursor-pointer inline-flex items-center justify-center border border-transparent hover:border-slate-700/50"
                 title="Close Modal"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -6591,7 +6468,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             )}
 
             {/* Wizard Progress Bar */}
-            <div className="bg-slate-955/30 px-4 sm:px-6 py-3.5 border-b border-slate-800/50 shrink-0">
+            <div className="bg-slate-955/30 px-4 sm:px-6 py-1.5 border-b border-slate-800/50 shrink-0">
               <div className="grid grid-cols-5 gap-1.5 sm:gap-3">
                 {[
                   { step: 1, label: 'Customer' },
@@ -7280,7 +7157,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
 
             {/* Sticky Footer */}
-            <div className="flex justify-between items-center gap-3 border-t border-slate-800/80 p-4 sm:p-5 bg-slate-950/40 backdrop-blur-md shrink-0">
+            <div className="flex justify-between items-center gap-3 border-t border-slate-800/80 py-2 px-4 sm:px-5 bg-slate-950/40 backdrop-blur-md shrink-0">
               {/* Back or Cancel */}
               {wizardStep > 1 ? (
                 <button
@@ -7296,7 +7173,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   onClick={() => { resetForm(); setActiveTab('list'); }}
                   className="px-4.5 py-2 text-xs font-semibold bg-slate-805 hover:bg-slate-800 text-slate-300 rounded-xl cursor-pointer border border-slate-800 hover:border-slate-700/50 transition-colors"
                 >
-                  Cancel
+                  Back
                 </button>
               )}
 
@@ -7843,19 +7720,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
             {/* Mobile/Tablet Popup Modal for Lead Follow-up Details */}
       {selectedLead && (
-        <div id="lead_details_mobile_modal" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-0 sm:p-4 overflow-hidden animate-fade-in">
-          <div className="bg-slate-900 border border-slate-850 rounded-none sm:rounded-2xl w-full sm:w-[95vw] lg:w-[85vw] xl:w-[75vw] xl:max-w-[1000px] h-screen sm:h-[85vh] shadow-2xl relative flex flex-col overflow-hidden text-left bg-gradient-to-tr from-slate-900 via-slate-900 to-slate-950">
+        <div id="lead_details_mobile_modal" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-0 sm:p-2 md:p-2 lg:p-3 overflow-hidden animate-fade-in">
+          <div className="bg-slate-900 border-0 sm:border border-slate-850 rounded-none sm:rounded-xl md:rounded-2xl w-full sm:w-[99vw] lg:w-[98vw] h-full sm:h-[96vh] lg:h-[97vh] shadow-2xl relative flex flex-col overflow-hidden text-left bg-gradient-to-tr from-slate-900 via-slate-900 to-slate-950">
             {/* Header: Sticky */}
-            <div className="p-4 sm:p-5 border-b border-slate-850 flex items-center justify-between bg-slate-950/40 sticky top-0 z-10 backdrop-blur-md shrink-0">
-              <div className="flex flex-col text-left">
+            <div className="py-1.5 px-4 sm:px-5 border-b border-slate-850 flex items-center justify-between bg-slate-950/40 sticky top-0 z-10 backdrop-blur-md shrink-0">
+              <div className="flex items-center gap-2 text-left">
                 <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5 font-mono uppercase tracking-wider">
                   <span>💍</span> Digital Lead CRM Workspace — Client Board
                 </h3>
-                <span className="text-[10px] text-zinc-400 font-mono font-bold">Lead Code: {selectedLead.lead_id}</span>
+                <span className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded font-mono font-bold">Code: {selectedLead.lead_id}</span>
               </div>
               <button 
                 onClick={() => setSelectedLead(null)}
-                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs rounded-xl transition-all cursor-pointer border border-slate-750 font-bold uppercase tracking-wider"
+                className="px-2.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs rounded border border-slate-750 font-bold uppercase tracking-wider transition-all cursor-pointer"
               >
                 Close Desk
               </button>
@@ -7863,7 +7740,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
             {/* Custom Toast Alert */}
             {crmToast && (
-              <div className={`mx-4 mt-4 p-3 rounded-xl shadow-lg flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2 duration-200 shrink-0 ${
+              <div className={`mx-4 mt-2.5 p-2 rounded-lg shadow-lg flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2 duration-200 shrink-0 ${
                 crmToast.type === 'success' 
                   ? 'bg-emerald-950 border border-emerald-500/20 text-emerald-400' 
                   : 'bg-red-950 border border-red-500/20 text-red-400'
@@ -7874,20 +7751,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             )}
 
             {/* Progress Bar & Indicators */}
-            <div className="w-full bg-slate-950/20 border-b border-slate-850 p-4 shrink-0 justify-start text-left">
-              <div className="max-w-4xl mx-auto">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-mono font-bold text-indigo-400 uppercase tracking-widest text-left">
-                    CRM Workspace — Step {crmWizardStep === 5 ? 4 : crmWizardStep} of 4
+            <div className="w-full bg-slate-950/20 border-b border-slate-850 py-1.5 px-4 sm:px-5 shrink-0 justify-start text-left">
+              <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] sm:text-xs font-mono font-bold text-indigo-400 uppercase tracking-widest text-left">
+                    Step {crmWizardStep === 5 ? 4 : crmWizardStep} of 4:
                   </span>
-                  <span className="text-xs font-semibold text-slate-300 bg-slate-800 py-0.5 px-2 rounded-lg border border-slate-750">
+                  <span className="text-[10px] sm:text-xs font-semibold text-slate-300 bg-slate-800 py-0.5 px-2 rounded border border-slate-750">
                     {crmWizardStep === 1 ? 'Customer Details' :
                      crmWizardStep === 2 ? 'Event Details' :
                      crmWizardStep === 3 ? 'Quotation Workspace' :
                      'Status Update'}
                   </span>
                 </div>
-                <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden">
+                <div className="flex-1 max-w-xs h-1 bg-slate-950 rounded-full overflow-hidden">
                   <div 
                     className="h-full bg-indigo-500 transition-all duration-300"
                     style={{ width: `${((crmWizardStep === 5 ? 4 : crmWizardStep) / 4) * 100}%` }}
@@ -7898,8 +7775,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
             {/* If locked, display banner */}
             {isLeadLocked && (
-              <div className="mx-4 sm:mx-5 mt-4 bg-amber-950/25 border border-amber-500/20 p-4 rounded-xl flex items-start gap-4 text-left shadow-lg">
-                <span className="text-amber-500 text-lg mt-0.5">🔒</span>
+              <div className="mx-4 sm:mx-5 mt-2 bg-amber-950/25 border border-amber-500/20 p-2.5 rounded-xl flex items-start gap-3 text-left shadow-lg">
+                <span className="text-amber-500 text-base mt-0.5">🔒</span>
                 <div>
                   <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wide">Record Lock Active (CRM Closed)</h4>
                   <p className="text-[10px] text-zinc-400 leading-relaxed mt-0.5">
@@ -7912,31 +7789,31 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             )}
 
             {/* Content container with horizontal padding */}
-            <div id="crm-wizard-scroll-container" className="flex-1 overflow-y-auto p-4 sm:p-5">
-              <div className="max-w-3xl mx-auto">
-                <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
+            <div id="crm-wizard-scroll-container" className="flex-1 overflow-y-auto p-3 sm:p-4">
+              <div className="max-w-5xl mx-auto">
+                <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
                   {crmWizardStep === 1 && (
-                    <div className="space-y-6 animate-fade-in text-left">
-                      <div className="border-b border-slate-800 pb-3">
-                        <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                          <span className="p-1 px-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg text-xs font-mono">1</span>
+                    <div className="space-y-4 animate-fade-in text-left">
+                      <div className="border-b border-slate-800 pb-1.5">
+                        <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                          <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">1</span>
                           <span>Customer Details</span>
                         </h3>
-                        <p className="text-[11px] text-zinc-400 mt-1">Manage client contact identity, email correspondence, and location parameters.</p>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">Manage client contact identity, email correspondence, and location parameters.</p>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-left">
                         <div>
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Customer Name (Optional)</label>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Customer Name (Optional)</label>
                           <input
                             type="text"
                             value={wizardLeadData.customer_name || ''}
                             disabled={isLeadLocked}
                             onChange={(e) => setWizardLeadData({ ...wizardLeadData, customer_name: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white"
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-white"
                           />
                         </div>
                         <div>
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Mobile Number *</label>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Mobile Number *</label>
                           <input
                             type="text"
                             value={wizardLeadData.mobile || ''}
@@ -7945,37 +7822,37 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               const val = e.target.value.replace(/[^\d]/g, '').slice(0, 10);
                               setWizardLeadData({ ...wizardLeadData, mobile: val });
                             }}
-                            className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
+                            className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-white font-mono"
                             required
                           />
                         </div>
                         <div>
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">WhatsApp Number</label>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">WhatsApp Number</label>
                           <input
                             type="text"
                             value={wizardLeadData.whatsapp_number || ''}
                             disabled={isLeadLocked}
                             onChange={(e) => setWizardLeadData({ ...wizardLeadData, whatsapp_number: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-white font-mono"
                           />
                         </div>
                         <div>
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Email (Optional)</label>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Email (Optional)</label>
                           <input
                             type="email"
                             value={wizardLeadData.email || ''}
                             disabled={isLeadLocked}
                             onChange={(e) => setWizardLeadData({ ...wizardLeadData, email: e.target.value })}
-                            className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-mono"
+                            className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-white font-mono"
                           />
                         </div>
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Inbound Lead Channel Source *</label>
+                        <div className="sm:col-span-2">
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Inbound Lead Channel Source *</label>
                           <select
                             value={wizardLeadData.lead_source || ''}
                             disabled={isLeadLocked}
                             onChange={(e) => setWizardLeadData({ ...wizardLeadData, lead_source: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white cursor-pointer select-element"
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-white cursor-pointer select-element"
                             required
                           >
                             <option value="">── Choose Lead Source ──</option>
@@ -7989,10 +7866,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   )}
 
                   {crmWizardStep === 2 && (
-                    <div className="space-y-6 animate-fade-in text-left">
-                      <div className="border-b border-slate-800 pb-3">
-                        <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                          <span className="p-1 px-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg text-xs font-mono">2</span>
+                    <div className="space-y-4 animate-fade-in text-left">
+                      <div className="border-b border-slate-800 pb-1.5">
+                        <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                          <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">2</span>
                           <span>Event Details</span>
                         </h3>
                         <p className="text-[11px] text-zinc-400 mt-1">Configure event metadata, starting schedules, reporting times, shoot types, and lead origins.</p>
@@ -8003,22 +7880,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   )}
 
                   {crmWizardStep === 3 && (
-                    <div className="space-y-6 animate-fade-in text-left">
-                      <div className="border-b border-slate-800 pb-3">
-                        <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                          <span className="p-1 px-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg text-xs font-mono">3</span>
+                    <div className="space-y-4 animate-fade-in text-left">
+                      <div className="border-b border-slate-800 pb-1.5">
+                        <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                          <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">3</span>
                           <span>Quotation Workspace</span>
                         </h3>
-                        <p className="text-[11px] text-zinc-400 mt-1">Select from standard configured packages, customize team members and deliverables, adjust pricing, and generate the quotation.</p>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">Select from standard configured packages, customize team members and deliverables, adjust pricing, and generate the quotation.</p>
                       </div>
-                      <div className="space-y-5 text-left">
+                      <div className="space-y-3.5 text-left">
                         <div>
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Select Package Option *</label>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Select Package Option *</label>
                           <select
                             value={wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || ''}
                             disabled={isLeadLocked}
                             onChange={(e) => handlePackageChange(e.target.value)}
-                            className={`w-full bg-slate-950 border focus:outline-none rounded-xl py-2.5 px-4 text-xs cursor-pointer ${
+                            className={`w-full bg-slate-950 border focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer ${
                               !(wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id) || (wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id).trim() === ''
                                 ? 'border-rose-500/40 focus:border-rose-500 text-rose-200'
                                 : 'border-slate-800 focus:border-indigo-500 text-white'
@@ -8032,7 +7909,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             ))}
                           </select>
                           {!(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option) && (
-                            <p className="text-rose-450 font-bold text-xs mt-1.5 font-mono animate-pulse flex items-center gap-1.5">
+                            <p className="text-rose-450 font-bold text-xs mt-1 font-mono animate-pulse flex items-center gap-1.5">
                               ⚠️ Please select a package before continuing.
                             </p>
                           )}
@@ -8047,35 +7924,72 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                           return (
                             <div className="space-y-4 animate-fade-in">
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {/* Sales Executive Details */}
+                              <div className="bg-slate-900/50 border border-slate-805/40 rounded-lg p-3 space-y-2.5 shadow-sm mt-3">
+                                <h4 className="text-[11px] font-bold text-indigo-400 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-1">
+                                  <span>👤</span> Sales Executive Details
+                                </h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                  <div>
+                                    <label className="block text-[10px] font-semibold text-slate-400 mb-1">
+                                      Sales Staff Name *
+                                    </label>
+                                    <input
+                                      type="text"
+                                      required
+                                      disabled={isLeadLocked}
+                                      value={salesStaffName}
+                                      onChange={(e) => setSalesStaffName(e.target.value)}
+                                      placeholder="E.g., Jane Doe"
+                                      className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 font-sans transition-all"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-semibold text-slate-400 mb-1">
+                                      Sales Staff Mobile Number *
+                                    </label>
+                                    <input
+                                      type="text"
+                                      required
+                                      disabled={isLeadLocked}
+                                      value={salesStaffMobile}
+                                      onChange={(e) => setSalesStaffMobile(e.target.value)}
+                                      placeholder="E.g., 9876543210"
+                                      className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 font-mono transition-all"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 hidden">
                                 <div>
-                                  <label className="block text-[11px] font-bold text-slate-450 mb-1.5 uppercase font-mono tracking-wider">Package Name</label>
+                                  <label className="block text-[10px] font-bold text-slate-450 mb-1 uppercase font-mono tracking-wider">Package Name</label>
                                   <input
                                     type="text"
                                     value={selectedPkg.package_name || ''}
                                     disabled
-                                    className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2 px-3 text-xs text-slate-400 font-medium cursor-not-allowed"
+                                    className="w-full bg-slate-900 border border-slate-800 rounded-lg py-1.5 px-3 text-xs text-slate-400 font-medium cursor-not-allowed"
                                   />
                                 </div>
                                 <div>
-                                  <label className="block text-[11px] font-bold text-slate-455 mb-1.5 uppercase font-mono tracking-wider">Package Category</label>
+                                  <label className="block text-[10px] font-bold text-slate-455 mb-1 uppercase font-mono tracking-wider">Package Category</label>
                                   <input
                                     type="text"
                                     value={normalizeCategory(selectedPkg.category) || 'Wedding'}
                                     disabled
-                                    className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2 px-3 text-xs text-slate-400 font-medium cursor-not-allowed"
+                                    className="w-full bg-slate-900 border border-slate-800 rounded-lg py-1.5 px-3 text-xs text-slate-400 font-medium cursor-not-allowed"
                                   />
                                 </div>
                               </div>
 
                               <div>
-                                <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Package Price (Editable) *</label>
+                                <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Package Price (Editable) *</label>
                                 <input
                                   type="number"
                                   value={wizardLeadData.package_cost !== undefined ? wizardLeadData.package_cost : selectedPkg.price}
                                   disabled={isLeadLocked}
                                   onChange={(e) => setWizardLeadData({ ...wizardLeadData, package_cost: Math.max(0, parseInt(e.target.value) || 0) })}
-                                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-amber-400 font-mono font-bold"
+                                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-amber-400 font-mono font-bold"
                                   required
                                 />
                               </div>
@@ -8202,56 +8116,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 )}
                               </div>
 
-                              <div>
-                                <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Notes & Special Customizations</label>
-                                <textarea
-                                  rows={2}
-                                  value={wizardLeadData.notes || ''}
-                                  disabled={isLeadLocked}
-                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, notes: e.target.value })}
-                                  className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-slate-200"
-                                  placeholder="Special client requirements, location adjustments..."
-                                />
-                              </div>
-
                               {renderQuotationAndStep4Section(true)}
-
-                              {/* Sales Executive Details */}
-                              <div className="bg-slate-900/50 border border-slate-805/40 rounded-xl p-4.5 space-y-3.5 shadow-sm mt-6">
-                                <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-2">
-                                  <span>👤</span> Sales Executive Details
-                                </h4>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                  <div>
-                                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                                      Sales Staff Name *
-                                    </label>
-                                    <input
-                                      type="text"
-                                      required
-                                      disabled={isLeadLocked}
-                                      value={salesStaffName}
-                                      onChange={(e) => setSalesStaffName(e.target.value)}
-                                      placeholder="E.g., Jane Doe"
-                                      className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 font-sans transition-all"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                                      Sales Staff Mobile Number *
-                                    </label>
-                                    <input
-                                      type="text"
-                                      required
-                                      disabled={isLeadLocked}
-                                      value={salesStaffMobile}
-                                      onChange={(e) => setSalesStaffMobile(e.target.value)}
-                                      placeholder="E.g., 9876543210"
-                                      className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 font-mono transition-all"
-                                    />
-                                  </div>
-                                </div>
-                              </div>
                             </div>
                           );
                         })()}
@@ -8260,22 +8125,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   )}
 
                   {crmWizardStep === 5 && (
-                    <div className="space-y-6 animate-fade-in text-left">
-                      <div className="border-b border-slate-800 pb-3">
-                        <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                          <span className="p-1 px-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg text-xs font-mono">5</span>
+                    <div className="space-y-4 animate-fade-in text-left">
+                      <div className="border-b border-slate-800 pb-1.5">
+                        <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                          <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">4</span>
                           <span>Status Update</span>
                         </h3>
-                        <p className="text-[11px] text-zinc-400 mt-1">Determine final CRM pipeline stages or transition the contract to Operations.</p>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">Determine final CRM pipeline stages or transition the contract to Operations.</p>
                       </div>
-                      <div className="space-y-5 text-left">
+                      <div className="space-y-4 text-left">
                         <div>
-                          <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider text-xs font-black">Select Sales Pipeline Status *</label>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider font-black">Select Sales Pipeline Status *</label>
                           <select
                             value={wizardLeadData.status || ''}
                             disabled={isLeadLocked}
                             onChange={(e) => setWizardLeadData({ ...wizardLeadData, status: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-2.5 px-4 text-xs text-white font-bold cursor-pointer"
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-white font-bold cursor-pointer"
                           >
                             <option value="New Lead">New Lead</option>
                             <option value="Contacted">Contacted</option>
@@ -8288,13 +8153,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         </div>
 
                         {wizardLeadData.status === 'Order Confirmed' && (
-                          <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
-                            <div className="border-b border-emerald-500/20 pb-2">
-                              <h4 className="text-xs font-black text-emerald-400 uppercase tracking-widest font-mono">💍 Configure Confirmed Order & Booking Contract</h4>
-                              <p className="text-[10px] text-zinc-400 mt-1">Confirming this order locks the CRM profile and creates a real-time production entry. Only payment configurations remain editable.</p>
+                          <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
+                            <div className="border-b border-emerald-500/20 pb-1.5">
+                              <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest font-mono">💍 Configure Confirmed Order & Booking Contract</h4>
+                              <p className="text-[10px] text-zinc-400 mt-0.5">Confirming this order locks the CRM profile and creates a real-time production entry. Only payment configurations remain editable.</p>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-left">
                               <div>
                                 <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Confirmed Event Date *</label>
                                 <input
@@ -8302,7 +8167,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   value={wizardLeadData.confirmed_event_date || ''}
                                   disabled={isLeadLocked}
                                   onChange={(e) => setWizardLeadData({ ...wizardLeadData, confirmed_event_date: e.target.value })}
-                                  className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2 px-3 text-xs text-white font-mono"
+                                  className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
                                   required
                                 />
                               </div>
@@ -8313,7 +8178,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   value={wizardLeadData.confirmed_event_time || ''}
                                   disabled={isLeadLocked}
                                   onChange={(e) => setWizardLeadData({ ...wizardLeadData, confirmed_event_time: e.target.value })}
-                                  className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2 px-3 text-xs text-white font-mono"
+                                  className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
                                   required
                                 />
                               </div>
@@ -8324,7 +8189,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   value={wizardLeadData.final_amount || 0}
                                   disabled={isLeadLocked}
                                   onChange={(e) => setWizardLeadData({ ...wizardLeadData, final_amount: Math.max(0, parseInt(e.target.value) || 0) })}
-                                  className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2 px-3 text-xs text-amber-400 font-mono font-bold"
+                                  className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-amber-400 font-mono font-bold"
                                   required
                                 />
                               </div>
@@ -8335,13 +8200,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   value={wizardLeadData.advance_received || 0}
                                   disabled={isLeadLocked}
                                   onChange={(e) => setWizardLeadData({ ...wizardLeadData, advance_received: Math.max(0, parseInt(e.target.value) || 0) })}
-                                  className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2 px-3 text-xs text-emerald-400 font-mono font-bold"
+                                  className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-emerald-400 font-mono font-bold"
                                   required
                                 />
                               </div>
                             </div>
 
-                            <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 flex items-center justify-between text-xs">
+                            <div className="bg-slate-950 p-3 rounded-lg border border-slate-850 flex items-center justify-between text-xs">
                               <div>
                                 <span className="text-[10px] text-zinc-550 uppercase font-bold font-mono">Calculated Pending Amount</span>
                                 <strong className="block text-red-500 text-sm font-mono mt-0.5">₹{((wizardLeadData.final_amount || 0) - (wizardLeadData.advance_received || 0)).toLocaleString('en-IN')}</strong>
@@ -8358,32 +8223,31 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
 
             {/* Footer Buttons: Sticky */}
-            <div className="p-4 sm:p-5 border-t border-slate-850 flex items-center justify-between bg-slate-950/20 sticky bottom-0 z-10 shrink-0">
+            <div className="py-1.5 px-4 sm:px-5 border-t border-slate-850 flex items-center justify-between bg-slate-950/40 sticky bottom-0 z-10 shrink-0 backdrop-blur-md">
               {crmWizardStep > 1 ? (
                 <button
                   type="button"
                   onClick={() => setCrmWizardStep(crmWizardStep === 5 ? 3 : crmWizardStep - 1)}
-                  className="px-5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded-xl transition-all cursor-pointer border border-slate-705"
+                  className="px-4 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border border-slate-705"
                 >
                   Back
                 </button>
               ) : (
-                <div />
+                <button
+                  type="button"
+                  onClick={() => setSelectedLead(null)}
+                  className="px-4 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border border-slate-705"
+                >
+                  Back
+                </button>
               )}
 
               <div className="flex items-center gap-2.5">
                 <button
                   type="button"
-                  onClick={() => setSelectedLead(null)}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-850 text-slate-400 hover:text-slate-205 text-xs font-semibold rounded-xl border border-slate-800 transition-all cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
                   onClick={() => handleSaveStep(crmWizardStep)}
                   disabled={isSaving || (crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === ''))}
-                  className={`px-5 py-2 text-xs font-mono font-bold uppercase rounded-xl transition-all shadow-md flex items-center gap-1.5 ${
+                  className={`px-4 py-1.5 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 ${
                     crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')
                       ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
                       : 'bg-indigo-650 hover:bg-indigo-600 text-white cursor-pointer'

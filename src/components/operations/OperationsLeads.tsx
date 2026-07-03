@@ -1348,23 +1348,11 @@ export const OperationsLeads: React.FC = () => {
                           </span>
                         </div>
                       </div>
-                      <div>
-                        <span className="text-[10px] text-zinc-505 block uppercase font-mono">Email Coordinates</span>
-                        <span className="text-zinc-300 font-mono text-[11px] break-all block">
-                          {parentLeadInstance?.email || 'N/A'}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="col-span-2">
+                      <div className="grid grid-cols-1 gap-2">
+                        <div>
                           <span className="text-[10px] text-zinc-505 block uppercase font-mono">Event Address</span>
                           <span className="text-zinc-200 font-sans text-[11px] block leading-tight">
                             {parentLeadInstance?.event_location || activeOrderInstance?.event_location || parentLeadInstance?.address || 'N/A'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-zinc-550 block uppercase font-mono">City</span>
-                          <span className="text-zinc-200 font-bold uppercase font-mono text-[11px] block">
-                            {parentLeadInstance?.city || 'N/A'}
                           </span>
                         </div>
                       </div>
