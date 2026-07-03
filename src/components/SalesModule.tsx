@@ -236,7 +236,17 @@ const generateQuotationPDF = (
     const pkgId = pkg.package_id || pkg.id || 'default';
     const pkgName = pkg.package_name || pkg.name || 'Base Package';
 
-    if (editableInclusions && editableInclusions[pkgId] && editableInclusions[pkgId].length > 0) {
+    const eventSpecificKeys = Object.keys(editableInclusions || {}).filter(k => k.startsWith(`${pkgId}_`));
+    if (eventSpecificKeys.length > 0) {
+      eventSpecificKeys.forEach((key) => {
+        const eventId = key.substring(pkgId.length + 1);
+        const eventObj = (lead.events || []).find((e: any) => e.id === eventId);
+        const eventLabel = eventObj ? ` (${eventObj.event_name})` : '';
+        (editableInclusions[key] || []).forEach((inc) => {
+          allInclusions.push({ package: pkgName, item: `${inc}${eventLabel}` });
+        });
+      });
+    } else if (editableInclusions && editableInclusions[pkgId] && editableInclusions[pkgId].length > 0) {
       editableInclusions[pkgId].forEach((inc) => {
         allInclusions.push({ package: pkgName, item: inc });
       });
@@ -1451,6 +1461,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   }));
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [crmWizardStep, setCrmWizardStep] = useState<number>(1);
+  const [crmHighestStep, setCrmHighestStep] = useState<number>(1);
+
+  const appendCompletedStep = (existingRemarks: string | undefined, step: number) => {
+    const cleanRemarks = (existingRemarks || '').replace(/\[CRM_COMPLETED_STEP:\s*\d+\]/g, '').trim();
+    return `${cleanRemarks}\n[CRM_COMPLETED_STEP: ${step}]`.trim();
+  };
+
   const [wizardLeadData, setWizardLeadData] = useState({
     customer_name: '',
     mobile: '',
@@ -2399,14 +2416,25 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const pkg = packages.find((p) => p.package_id === pkgId);
       if (pkg) {
         setEditableInclusions(prev => {
+          let updated = { ...prev };
+          let changed = false;
+          const incList = parseTeamMembers(pkg.team_members);
+          const defaultInc = incList.length > 0 ? incList : ['1 Professional Photographer'];
+          
           if (!prev[pkgId] || prev[pkgId].length === 0) {
-            const incList = parseTeamMembers(pkg.team_members);
-            return {
-              ...prev,
-              [pkgId]: incList.length > 0 ? incList : ['1 Professional Photographer']
-            };
+            updated[pkgId] = defaultInc;
+            changed = true;
           }
-          return prev;
+          if (crmEvents && crmEvents.length > 0) {
+            crmEvents.forEach(ev => {
+              const key = `${pkgId}_${ev.id}`;
+              if (!prev[key] || prev[key].length === 0) {
+                updated[key] = [...defaultInc];
+                changed = true;
+              }
+            });
+          }
+          return changed ? updated : prev;
         });
 
         setEditableDeliverables(prev => {
@@ -3138,7 +3166,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setSalesStaffName('');
     setSalesStaffMobile('');
 
-    setCrmWizardStep(1);
     const activePackages = (leadPackages || []).filter(lp => lp.lead_id === lead.lead_id);
     const primaryLP = activePackages[0];
     
@@ -3146,6 +3173,43 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const latestQuote = [...(quotations || [])]
       .filter(q => q.lead_id === lead.lead_id)
       .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0];
+
+    // Detect highest completed step
+    const localSavedStep = localStorage.getItem(`crm_last_step_${lead.lead_id}`);
+    let completedStep = 0;
+    if (localSavedStep) {
+      completedStep = parseInt(localSavedStep, 10);
+    } else {
+      // Parse from remarks tag [CRM_COMPLETED_STEP: X]
+      const remarksMatch = lead.remarks?.match(/\[CRM_COMPLETED_STEP:\s*(\d+)\]/);
+      if (remarksMatch) {
+        completedStep = parseInt(remarksMatch[1], 10);
+      } else {
+        // Dynamic fallback detection based on fields
+        const hasEvents = lead.events && lead.events.length > 0;
+        const hasPackage = !!(lead.Select_Package_Option || primaryLP?.package_id || latestQuote?.package_id);
+        
+        if (hasEvents && hasPackage) {
+          completedStep = 3;
+        } else if (hasEvents) {
+          completedStep = 2;
+        } else {
+          completedStep = 1;
+        }
+      }
+    }
+
+    // Set highest step reached
+    setCrmHighestStep(completedStep);
+
+    // Set active start wizard step based on resume rules
+    let startStep = 1;
+    if (completedStep === 1) startStep = 2;
+    else if (completedStep === 2) startStep = 3;
+    else if (completedStep === 3) startStep = 3;
+    else startStep = 1;
+
+    setCrmWizardStep(startStep);
 
     if (latestQuote) {
       setActiveQuoteNum(latestQuote.quotation_number || '');
@@ -3270,10 +3334,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         ? pkg.deliverables.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
         : [];
 
-      setEditableInclusions((prev) => ({
-        ...prev,
-        [packageId]: incList.length > 0 ? incList : ['1 Professional Photographer'],
-      }));
+      const defaultInc = incList.length > 0 ? incList : ['1 Professional Photographer'];
+      const newInclusions = {
+        ...editableInclusions,
+        [packageId]: defaultInc,
+      };
+      if (crmEvents && crmEvents.length > 0) {
+        crmEvents.forEach((ev) => {
+          newInclusions[`${packageId}_${ev.id}`] = [...defaultInc];
+        });
+      }
+      setEditableInclusions(newInclusions);
+
       setEditableDeliverables((prev) => ({
         ...prev,
         [packageId]: delList.length > 0 ? delList : ['High Resolution Edited Photos'],
@@ -3308,6 +3380,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           setIsSaving(false);
           return;
         }
+        const updatedRemarks = appendCompletedStep(selectedLead.remarks || wizardLeadData.remarks, 1);
         await updateLead(selectedLead.lead_id, {
           customer_name: wizardLeadData.customer_name || 'Inbound Prospect',
           mobile: wizardLeadData.mobile,
@@ -3322,8 +3395,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           total_pax: wizardLeadData.total_pax,
           reference_source: wizardLeadData.reference_source,
           Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || '',
+          remarks: updatedRemarks,
           status: 'New Lead' // Automatically set to New Lead
         });
+
+        const newCompleted = Math.max(crmHighestStep, 1);
+        setCrmHighestStep(newCompleted);
+        localStorage.setItem(`crm_last_step_${selectedLead.lead_id}`, String(newCompleted));
+
+        setSelectedLead(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            remarks: updatedRemarks
+          };
+        });
+
         showToastMsg("CRM Updated Successfully. Status set to New Lead.", "success");
       } else if (step === 2) {
         let finalEventsList = [...crmEvents];
@@ -3439,12 +3526,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             additional_services_cost: 0
           }]);
         }
+        const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
         await updateLead(selectedLead.lead_id, {
           budget: Number(wizardLeadData.package_cost),
           package_price: Number(wizardLeadData.package_cost),
           deliverables_description: wizardLeadData.deliverables,
           notes_special_customizations: wizardLeadData.notes,
-          remarks: wizardLeadData.notes,
+          remarks: updatedRemarks,
           Select_Package_Option: wizardLeadData.selected_package_id,
           client_residence_address: wizardLeadData.client_residence_address,
           city: wizardLeadData.city,
@@ -3452,11 +3540,27 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           pincode: wizardLeadData.pincode,
           status: 'Negotiation' // Automatically update status to Negotiation
         });
+
+        const newCompleted = Math.max(crmHighestStep, 3);
+        setCrmHighestStep(newCompleted);
+        localStorage.setItem(`crm_last_step_${selectedLead.lead_id}`, String(newCompleted));
+
+        setSelectedLead(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            remarks: updatedRemarks
+          };
+        });
+
         showToastMsg("CRM Updated Successfully. Status set to Negotiation.", "success");
       }
 
       if (step < 3) {
-        const nextStep = step + 1;
+        let nextStep = step + 1;
+        if (crmHighestStep > step) {
+          nextStep = crmHighestStep;
+        }
         setCrmWizardStep(nextStep);
         setTimeout(() => {
           document.getElementById('crm-wizard-scroll-container')?.scrollTo({ top: 0, behavior: 'smooth' });
@@ -3541,28 +3645,44 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         events: finalEventsList
       });
 
+      const notesWithTag = appendCompletedStep(step2FollowUpNotes || 'Saved event details', 2);
+
       // Update lead follow up and set status to Follow-up
       await updateLeadFollowUp(
         selectedLead.lead_id,
         'Follow-up',
-        step2FollowUpNotes || 'Saved event details',
+        notesWithTag,
         step2FollowUpDate,
         Number(wizardLeadData.package_cost || selectedLead.budget || 0),
         step2FollowUpNotes || 'Saved event details'
       );
+
+      const newCompleted = Math.max(crmHighestStep, 2);
+      setCrmHighestStep(newCompleted);
+      localStorage.setItem(`crm_last_step_${selectedLead.lead_id}`, String(newCompleted));
+
+      // Locally update the status and remarks
+      const timestamp = new Date().toISOString();
+      const updatedRemarks = `${selectedLead.remarks || ''}\n[Update ${timestamp.split('T')[0]}]: ${notesWithTag}. ${step2FollowUpNotes ? 'Neg Notes: ' + step2FollowUpNotes : ''}. Next follow-up: ${step2FollowUpDate}`;
 
       // Locally update the status
       setSelectedLead(prev => {
         if (!prev) return null;
         return {
           ...prev,
-          status: 'Follow-up'
+          status: 'Follow-up',
+          remarks: updatedRemarks
         };
       });
 
       showToastMsg("Event details and follow-up saved successfully. Status set to Follow-up.", "success");
       setShowStep2Popup(false);
-      setCrmWizardStep(3); // Advance to Step 3 automatically
+      
+      let nextStep = 3;
+      if (crmHighestStep > 2) {
+        nextStep = crmHighestStep;
+      }
+      setCrmWizardStep(nextStep); // Advance to Step 3 or highest step automatically
     } catch (err: any) {
       console.error("Step 2 Follow-up save failed:", err);
       showToastMsg(err.message || String(err), "error");
@@ -6609,13 +6729,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
           </div>
         ) : activeTab === 'create' ? (
-          /* SCREEN 2: Create Lead Layout as centered Popup Modal utilizing createPortal to escape parents with transform/will-change limits */
+          /* SCREEN 2: Create Lead Layout as dedicated Full Page inside the application */
           createPortal(
-            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[9999] flex items-center justify-center p-0 sm:p-2 md:p-3 xl:p-4 overflow-hidden animate-fade-in text-left">
-              <div 
-                id="create_lead_form"
-                className="bg-slate-900 border-0 sm:border border-slate-800 rounded-none sm:rounded-xl md:rounded-2xl w-full sm:w-[98vw] lg:w-[96vw] xl:w-[97vw] h-full sm:h-[96vh] lg:h-[95vh] shadow-2xl relative flex flex-col text-left overflow-hidden bg-gradient-to-tr from-slate-900 via-slate-900 to-slate-950 text-slate-100 whitespace-normal"
-              >
+            <div 
+              id="create_lead_form"
+              className="fixed inset-0 bg-[#030303] z-[9999] flex flex-col text-left overflow-hidden text-slate-100 whitespace-normal font-sans"
+            >
             {/* Header: Sticky */}
             <div className="border-b border-slate-800/80 py-2.5 px-4 sm:px-5 flex items-center justify-between shrink-0 bg-slate-950/40 backdrop-blur-md">
               <div className="space-y-0.5">
@@ -7385,8 +7504,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 </button>
               )}
             </div>
-          </div>
-        </div>,
+          </div>,
         document.body
       )
     ) : (
@@ -7627,7 +7745,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     <th className="p-3.5">Current Status</th>
                     <th className="p-3.5">Payment Status</th>
                     <th className="p-3.5">Created Date</th>
-                    <th className="p-3.5 text-right pr-5">Action</th>
+                    <th className="p-3.5 text-right pr-5 w-[160px] min-w-[160px]">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900/60">
@@ -7689,14 +7807,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <td className="p-3.5 font-mono text-zinc-400">
                             {lead.created_date ? lead.created_date.split('T')[0] : 'N/A'}
                           </td>
-                          <td className="p-3.5 text-right pr-5">
-                            <div className="flex items-center justify-end gap-2">
+                          <td className="p-3.5 text-right pr-5 w-[160px] min-w-[160px]">
+                            <div className="flex flex-col gap-1.5 w-full">
                               <button
                                 id={`btn_followup_${lead.lead_id}`}
                                 onClick={() => handleSelectLead(lead)}
-                                className="px-3.5 py-1.5 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white rounded-xl border border-zinc-850 transition-all cursor-pointer inline-flex items-center gap-1.5 shadow"
+                                className="w-full h-8 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white rounded-xl border border-zinc-850 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow shrink-0"
                               >
-                                <Edit className="w-3 h-3" />
+                                <Edit className="w-3.5 h-3.5 shrink-0" />
                                 <span>{isActiveInSales && canEdit ? 'Manage CRM' : 'View CRM'}</span>
                               </button>
                               {isActiveInSales && canEdit && leadStatus !== 'Lost Lead' && leadStatus !== 'Order Confirmed' && (
@@ -7716,9 +7834,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       setSelectedLead(lead);
                                       setShowConfirmModal(true);
                                     }}
-                                    className="px-3 py-1.5 text-xs font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-white rounded-xl border border-emerald-900/30 transition-all cursor-pointer inline-flex items-center gap-1.5 shadow"
+                                    className="w-full h-8 text-xs font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-white rounded-xl border border-emerald-900/30 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow shrink-0"
                                   >
-                                    <CheckSquare className="w-3 h-3" />
+                                    <CheckSquare className="w-3.5 h-3.5 shrink-0" />
                                     <span>Confirm Order</span>
                                   </button>
                                   <button
@@ -7730,9 +7848,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       setLostNotes('');
                                       setShowLostModal(true);
                                     }}
-                                    className="px-3 py-1.5 text-xs font-bold bg-rose-950 hover:bg-rose-900 text-rose-400 hover:text-white rounded-xl border border-rose-900/30 transition-all cursor-pointer inline-flex items-center gap-1.5 shadow"
+                                    className="w-full h-8 text-xs font-bold bg-rose-950 hover:bg-rose-900 text-rose-400 hover:text-white rounded-xl border border-rose-900/30 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow shrink-0"
                                   >
-                                    <X className="w-3 h-3" />
+                                    <X className="w-3.5 h-3.5 shrink-0" />
                                     <span>Lost Lead</span>
                                   </button>
                                 </>
@@ -8101,10 +8219,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
             {/* Mobile/Tablet Popup Modal for Lead Follow-up Details */}
       {selectedLead && (
-        <div id="lead_details_mobile_modal" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-0 sm:p-1 md:p-1.5 lg:p-2 overflow-hidden animate-fade-in">
-          <div className="bg-slate-900 border-0 sm:border border-slate-850 rounded-none sm:rounded-xl md:rounded-2xl w-full sm:w-[99vw] lg:w-[98.5vw] h-full sm:h-[97.5vh] lg:h-[98vh] shadow-2xl relative flex flex-col overflow-hidden text-left bg-gradient-to-tr from-slate-900 via-slate-900 to-slate-950">
+        <div 
+          id="lead_details_mobile_modal" 
+          className="fixed inset-0 bg-[#030303] z-[9999] flex flex-col overflow-hidden text-left font-sans text-slate-100 animate-fade-in"
+        >
             {/* Header: Sticky */}
-            <div className="py-1 px-4 sm:px-5 border-b border-slate-850 flex items-center justify-between bg-slate-950/40 sticky top-0 z-10 backdrop-blur-sm shrink-0">
+            <div className="py-2.5 px-4 sm:px-5 border-b border-slate-850 flex items-center justify-between bg-slate-950/40 sticky top-0 z-10 backdrop-blur-sm shrink-0">
               <div className="flex items-center gap-2 text-left">
                 <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5 font-mono uppercase tracking-wider">
                   <span>💍</span> Digital Lead CRM Workspace — Client Board
@@ -8113,9 +8233,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </div>
               <button 
                 onClick={() => setSelectedLead(null)}
-                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs rounded border border-slate-750 font-bold uppercase tracking-wider transition-all cursor-pointer border-0"
+                className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs rounded-xl border border-slate-700 font-bold uppercase tracking-wider transition-all cursor-pointer inline-flex items-center gap-1 shadow"
               >
-                Close Desk
+                Back to Leads
               </button>
             </div>
 
@@ -8362,7 +8482,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 </div>
                               </div>
 
-                              <div>
+                              <div className="hidden">
                                 <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Package Price (Editable) *</label>
                                 <input
                                   type="number"
@@ -8375,62 +8495,143 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               </div>
 
                               <div>
-                                <div className="flex items-center justify-between mb-1.5">
-                                  <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Team Members Included (Editable)</label>
-                                  <button
-                                    type="button"
-                                    disabled={isLeadLocked}
-                                    onClick={() => {
-                                      const currentList = [...(editableInclusions[selectedPkgId] || [])];
-                                      currentList.push('');
-                                      setEditableInclusions({
-                                        ...editableInclusions,
-                                        [selectedPkgId]: currentList
-                                      });
-                                    }}
-                                    className="text-xs text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded"
-                                  >
-                                    + Add Member
-                                  </button>
-                                </div>
-                                {inclusionsList.length === 0 ? (
-                                  <p className="text-[10px] text-zinc-500 italic">No team members added yet.</p>
-                                ) : (
-                                  <div className="space-y-2">
-                                    {inclusionsList.map((item, idx) => (
-                                      <div key={idx} className="flex items-center gap-2">
-                                        <input
-                                          type="text"
-                                          value={item}
-                                          disabled={isLeadLocked}
-                                          onChange={(e) => {
-                                            const currentList = [...(editableInclusions[selectedPkgId] || [])];
-                                            currentList[idx] = e.target.value;
-                                            setEditableInclusions({
-                                              ...editableInclusions,
-                                              [selectedPkgId]: currentList
-                                            });
-                                          }}
-                                          className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
-                                        />
-                                        {!isLeadLocked && (
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              const currentList = [...(editableInclusions[selectedPkgId] || [])];
-                                              currentList.splice(idx, 1);
-                                              setEditableInclusions({
-                                                ...editableInclusions,
-                                                [selectedPkgId]: currentList
-                                              });
-                                            }}
-                                            className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono"
-                                          >
-                                            Remove
-                                          </button>
-                                        )}
+                                {crmEvents && crmEvents.length > 0 ? (
+                                  crmEvents.map((event) => {
+                                    const eventKey = `${selectedPkgId}_${event.id}`;
+                                    const eventInclusions = editableInclusions[eventKey] !== undefined
+                                      ? editableInclusions[eventKey]
+                                      : inclusionsList;
+
+                                    return (
+                                      <div key={event.id} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-3 mt-3 mb-4">
+                                        <h4 className="text-xs sm:text-sm font-bold text-slate-100 uppercase tracking-wider font-mono border-b border-slate-800/40 pb-1.5 flex items-center justify-between">
+                                          <span>🎬 {event.event_name || event.event_type || 'Unnamed Event'}</span>
+                                        </h4>
+                                        <div>
+                                          <div className="flex items-center justify-between mb-2">
+                                            <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">
+                                              Team Members Included (Editable)
+                                            </label>
+                                            <button
+                                              type="button"
+                                              disabled={isLeadLocked}
+                                              onClick={() => {
+                                                const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
+                                                currentList.push('');
+                                                setEditableInclusions({
+                                                  ...editableInclusions,
+                                                  [eventKey]: currentList
+                                                });
+                                              }}
+                                              className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded transition-all cursor-pointer"
+                                            >
+                                              + Add Member
+                                            </button>
+                                          </div>
+                                          {eventInclusions.length === 0 ? (
+                                            <p className="text-[10px] text-zinc-500 italic">No team members added yet.</p>
+                                          ) : (
+                                            <div className="space-y-2">
+                                              {eventInclusions.map((item, idx) => (
+                                                <div key={idx} className="flex items-center gap-2">
+                                                  <input
+                                                    type="text"
+                                                    value={item}
+                                                    disabled={isLeadLocked}
+                                                    onChange={(e) => {
+                                                      const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
+                                                      currentList[idx] = e.target.value;
+                                                      setEditableInclusions({
+                                                        ...editableInclusions,
+                                                        [eventKey]: currentList
+                                                      });
+                                                    }}
+                                                    className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
+                                                  />
+                                                  {!isLeadLocked && (
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
+                                                        currentList.splice(idx, 1);
+                                                        setEditableInclusions({
+                                                          ...editableInclusions,
+                                                          [eventKey]: currentList
+                                                        });
+                                                      }}
+                                                      className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer"
+                                                    >
+                                                      Remove
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
-                                    ))}
+                                    );
+                                  })
+                                ) : (
+                                  <div>
+                                    <div className="flex items-center justify-between mb-1.5">
+                                      <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Team Members Included (Editable)</label>
+                                      <button
+                                        type="button"
+                                        disabled={isLeadLocked}
+                                        onClick={() => {
+                                          const currentList = [...(editableInclusions[selectedPkgId] || [])];
+                                          currentList.push('');
+                                          setEditableInclusions({
+                                            ...editableInclusions,
+                                            [selectedPkgId]: currentList
+                                          });
+                                        }}
+                                        className="text-xs text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded"
+                                      >
+                                        + Add Member
+                                      </button>
+                                    </div>
+                                    {inclusionsList.length === 0 ? (
+                                      <p className="text-[10px] text-zinc-500 italic">No team members added yet.</p>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        {inclusionsList.map((item, idx) => (
+                                          <div key={idx} className="flex items-center gap-2">
+                                            <input
+                                              type="text"
+                                              value={item}
+                                              disabled={isLeadLocked}
+                                              onChange={(e) => {
+                                                const currentList = [...(editableInclusions[selectedPkgId] || [])];
+                                                currentList[idx] = e.target.value;
+                                                setEditableInclusions({
+                                                  ...editableInclusions,
+                                                  [selectedPkgId]: currentList
+                                                });
+                                              }}
+                                              className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
+                                            />
+                                            {!isLeadLocked && (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  const currentList = [...(editableInclusions[selectedPkgId] || [])];
+                                                  currentList.splice(idx, 1);
+                                                  setEditableInclusions({
+                                                    ...editableInclusions,
+                                                    [selectedPkgId]: currentList
+                                                  });
+                                                }}
+                                                className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono"
+                                              >
+                                                Remove
+                                              </button>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -8642,7 +8843,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
 
           </div>
-        </div>
       )}
 {/* MODAL: Existing Customer Detection Pop-up */}
       {showDetectionPopup && detectedCustomer && (
