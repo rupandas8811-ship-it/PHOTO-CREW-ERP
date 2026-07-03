@@ -2034,15 +2034,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
   }, [finalTotal, selectedPkgIds]);
 
-  // Body scroll lock effect when Create Lead modal is open
+  // Body scroll lock effect when Create Lead modal is open (REMOVED to allow scrolling on smaller screens)
   React.useEffect(() => {
-    if (activeTab === 'create') {
-      const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = originalOverflow;
-      };
-    }
+    // Body scroll lock removed to fix scrolling issues on smaller screens.
   }, [activeTab]);
 
   // Screen 3 Follow-Up Form State
@@ -3411,7 +3405,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           reference_source: wizardLeadData.reference_source,
           Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || '',
           remarks: updatedRemarks,
-          status: 'New Lead' // Automatically set to New Lead
+          status: selectedLead.status || 'New Lead'
         });
 
         const newCompleted = Math.max(crmHighestStep, 1);
@@ -3426,7 +3420,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           };
         });
 
-        showToastMsg("CRM Updated Successfully. Status set to New Lead.", "success");
+        showToastMsg("CRM Updated Successfully.", "success");
       } else if (step === 2) {
         let finalEventsList = [...crmEvents];
 
@@ -3542,9 +3536,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           }]);
         }
         const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
-        const finalStatus = (selectedLead.status === 'Quotation Sent' || selectedLead.status === 'Order Confirmed' || selectedLead.status === 'Lost Lead') 
-          ? selectedLead.status 
-          : 'Negotiation';
+        const finalStatus = selectedLead.status || 'Negotiation';
         await updateLead(selectedLead.lead_id, {
           budget: Number(wizardLeadData.package_cost),
           package_price: Number(wizardLeadData.package_cost),
@@ -3572,14 +3564,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           };
         });
 
-        showToastMsg(`CRM Updated Successfully. Status set to ${finalStatus}.`, "success");
+        showToastMsg(`CRM Updated Successfully.`, "success");
       }
 
       if (step < 3) {
         let nextStep = step + 1;
-        if (crmHighestStep > step) {
-          nextStep = crmHighestStep;
-        }
         setCrmWizardStep(nextStep);
         setTimeout(() => {
           document.getElementById('crm-wizard-scroll-container')?.scrollTo({ top: 0, behavior: 'smooth' });
@@ -3671,10 +3660,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       const notesWithTag = appendCompletedStep(step2FollowUpNotes || 'Saved event details', 2);
 
-      // Update lead follow up and set status to Follow-up
+      // Update lead follow up and preserve status
       await updateLeadFollowUp(
         currentLeadId,
-        'Follow-up',
+        isCreateFlow ? 'Follow-up' : (selectedLead?.status || 'Follow-up'),
         notesWithTag,
         step2FollowUpDate,
         Number(isCreateFlow ? (createForm.budget || 0) : (wizardLeadData.package_cost || selectedLead?.budget || 0)),
@@ -6728,7 +6717,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           /* SCREEN 2: Create Lead Layout as dedicated Full Page inside the application */
           <div 
             id="create_lead_form"
-            className="bg-[#030303] border border-slate-800 rounded-2xl w-full shadow-2xl flex flex-col overflow-hidden relative"
+            className="bg-[#030303] border border-slate-800 rounded-2xl w-full shadow-2xl flex flex-col overflow-hidden relative h-[calc(100vh-220px)] min-h-[500px]"
           >
             {/* Header: Sticky */}
             <div className="border-b border-slate-800/80 py-2.5 px-4 sm:px-5 flex items-center justify-between shrink-0 bg-slate-950/40 backdrop-blur-md">
@@ -7817,7 +7806,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                     className="w-32 h-8 text-xs font-bold bg-sky-950/30 hover:bg-sky-900/50 text-sky-400 hover:text-white rounded-xl border border-sky-900/50 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow shrink-0"
                                   >
                                     <Edit className="w-3.5 h-3.5 shrink-0 text-sky-400" />
-                                    <span>Manage CRM</span>
+                                    <span>{lead.status === 'Order Confirmed' ? 'View CRM' : 'Manage CRM'}</span>
                                   </button>
                                 );
                               } else if (isActionsDropdownStatus && isActiveInSales && canEdit) {
@@ -7849,7 +7838,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                           className="w-full h-8 px-3 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white rounded-lg border border-zinc-850/40 transition-all cursor-pointer flex items-center gap-2 shadow"
                                         >
                                           <Edit className="w-3.5 h-3.5 shrink-0" />
-                                          <span>Manage CRM</span>
+                                          <span>{lead.status === 'Order Confirmed' ? 'View CRM' : 'Manage CRM'}</span>
                                         </button>
 
                                         {/* Confirm Order Option */}
