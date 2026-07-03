@@ -560,56 +560,23 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return localStorage.getItem('erp_user_name') || 'Rupand Das';
   });
 
-  const [leads, setLeads] = useState<Lead[]>(() => {
-    const cached = localStorage.getItem('erp_leads');
-    return cached ? JSON.parse(cached) : [];
-  });
-  const [statusHistory, setStatusHistory] = useState<any[]>(() => {
-    const cached = localStorage.getItem('erp_status_history');
-    return cached ? JSON.parse(cached) : [];
-  });
-  const [quotations, setQuotations] = useState<any[]>(() => {
-    const cached = localStorage.getItem('erp_quotations');
-    return cached ? JSON.parse(cached) : [];
-  });
-  const [leadPackages, setLeadPackages] = useState<LeadPackage[]>(() => {
-    const cached = localStorage.getItem('erp_lead_packages');
-    return cached ? JSON.parse(cached) : [];
-  });
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [statusHistory, setStatusHistory] = useState<any[]>([]);
+  const [quotations, setQuotations] = useState<any[]>([]);
+  const [leadPackages, setLeadPackages] = useState<LeadPackage[]>([]);
   const [packages, setPackages] = useState<Package[]>([]);
-  const [orders, setOrders] = useState<Order[]>(() => {
-    const cached = localStorage.getItem('erp_orders');
-    return cached ? JSON.parse(cached) : [];
-  });
-  const [operations, setOperations] = useState<Operation[]>(() => {
-    const cached = localStorage.getItem('erp_operations');
-    return cached ? JSON.parse(cached) : [];
-  });
-  const [rawFootage, setRawFootage] = useState<RawFootage[]>(() => {
-    const cached = localStorage.getItem('erp_raw_footage');
-    return cached ? JSON.parse(cached) : [];
-  });
-  const [production, setProduction] = useState<Production[]>(() => {
-    const cached = localStorage.getItem('erp_production');
-    return cached ? JSON.parse(cached) : [];
-  });
-  const [payments, setPayments] = useState<Payment[]>(() => {
-    const cached = localStorage.getItem('erp_payments');
-    return cached ? JSON.parse(cached) : [];
-  });
-  const [logs, setLogs] = useState<ActivityLog[]>(() => {
-    const cached = localStorage.getItem('erp_activity_logs');
-    return cached ? JSON.parse(cached) : [];
-  });
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [operations, setOperations] = useState<Operation[]>([]);
+  const [rawFootage, setRawFootage] = useState<RawFootage[]>([]);
+  const [production, setProduction] = useState<Production[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
 
   const [equipment, setEquipment] = useState<Equipment[]>([]);
 
-  const [staffAssignments, setStaffAssignments] = useState<StaffAssignment[]>(() => {
-    const saved = localStorage.getItem('erp_staff_assignments');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [staffAssignments, setStaffAssignments] = useState<StaffAssignment[]>([]);
 
   const [leadStaffAssignmentHistory, setLeadStaffAssignmentHistory] = useState<LeadStaffAssignmentHistory[]>([]);
   const [leadEquipmentHistory, setLeadEquipmentHistory] = useState<LeadEquipmentHistory[]>([]);
@@ -634,51 +601,18 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [equipmentHandovers, setEquipmentHandovers] = useState<EquipmentHandover[]>([]);
 
 
-  useEffect(() => {
-    localStorage.setItem('erp_staff_assignments', JSON.stringify(staffAssignments));
-  }, [staffAssignments]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_lead_staff_assignment_history', JSON.stringify(leadStaffAssignmentHistory));
-  }, [leadStaffAssignmentHistory]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_leads', JSON.stringify(leads));
-  }, [leads]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_orders', JSON.stringify(orders));
-  }, [orders]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_operations', JSON.stringify(operations));
-  }, [operations]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_raw_footage', JSON.stringify(rawFootage));
-  }, [rawFootage]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_production', JSON.stringify(production));
-  }, [production]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_payments', JSON.stringify(payments));
-  }, [payments]);
 
 
 
-  useEffect(() => {
-    localStorage.setItem('erp_quotations', JSON.stringify(quotations));
-  }, [quotations]);
 
-  useEffect(() => {
-    localStorage.setItem('erp_lead_packages', JSON.stringify(leadPackages));
-  }, [leadPackages]);
 
-  useEffect(() => {
-    localStorage.setItem('erp_packages', JSON.stringify(packages));
-  }, [packages]);
+
+
+
+
+
+
+
 
   // Track session/auth state in localStorage to keep developer/user logged-in across refreshes
   useEffect(() => {
@@ -1441,7 +1375,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
               })
             );
             
-            await fetchFromDb();
+            
           }
         }
 
@@ -1610,651 +1544,176 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchFromDb = async (showLoader = false) => {
     if (!supabaseClient) return;
     if (showLoader) setIsDataLoading(true);
+
     try {
-      const dbOperationsPromise = supabaseClient.from('operations').select('*');
-      const dbRawFootagePromise = supabaseClient.from('raw_footage').select('*');
-      const dbProductionPromise = supabaseClient.from('production').select('*');
-      const dbPaymentsPromise = supabaseClient.from('payments').select('*');
-      const dbLogsPromise = supabaseClient.from('activity_logs').select('*').order('timestamp', { ascending: false });
-      const dbStaffPromise = supabaseClient.from('operations_staff').select('*').order('name').then(
-        (res) => res,
-        (err) => {
-          console.error('Error fetching operations_staff:', err);
-          return { data: null, error: err };
-        }
-      );
-      const dbNotificationsPromise = supabaseClient.from('notifications').select('*').order('created_at', { ascending: false }).then(
-        (res) => res,
-        (err) => {
-          console.warn('Could not read notifications from Supabase:', err);
-          return { data: null, error: null };
-        }
-      );
-      const dbEquipmentPromise = supabaseClient.from('equipment').select('*').order('created_at', { ascending: false }).then(
-        (res) => res,
-        () => {
-          return { data: [], error: null };
-        }
-      );
-      const dbLeadPackagesPromise = supabaseClient.from('lead_packages').select('*').then(
-        (res) => {
-          if (res.error) {
-            console.warn('Supabase lead_packages load error:', res.error?.message);
-            const cached = localStorage.getItem('erp_lead_packages');
-            return { data: cached ? JSON.parse(cached) : [], error: null };
-          }
-          return res;
-        },
-        (err) => {
-          console.warn('Could not read lead_packages from Supabase:', err);
-          const cached = localStorage.getItem('erp_lead_packages');
-          return { data: cached ? JSON.parse(cached) : [], error: null };
-        }
-      );
-
-      const dbPackagesPromise = (async () => {
-        try {
-          await validatePackagesDatabase('SELECT');
-          const res = await supabaseClient.from('packages').select('*').order('created_at', { ascending: false });
-          if (res.error) throw res.error;
-          return res;
-        } catch (err: any) {
-          console.error('Packages database validation/fetch error:', err);
-          return { data: [], error: err };
-        }
-      })();
-
-      const dbStaffAssignmentsPromise = supabaseClient.from('staff_assignments').select('*').then(
-        (res) => {
-          if (res.error) {
-            console.warn('Supabase staff_assignments load error:', res.error?.message);
-            const cached = localStorage.getItem('erp_staff_assignments');
-            return { data: cached ? JSON.parse(cached) : [], error: null };
-          }
-          return res;
-        },
-        (err) => {
-          console.warn('Could not read staff_assignments from Supabase:', err);
-          const cached = localStorage.getItem('erp_staff_assignments');
-          return { data: cached ? JSON.parse(cached) : [], error: null };
-        }
-      );
-
-      const dbQuotationsPromise = supabaseClient.from('quotations').select('*').then(
-        (res) => {
-          if (res.error) {
-            console.warn('Supabase quotations load error:', res.error?.message);
-            const cached = localStorage.getItem('erp_quotations');
-            return { data: cached ? JSON.parse(cached) : [], error: null };
-          }
-          return res;
-        },
-        (err) => {
-          console.warn('Could not read quotations from Supabase:', err);
-          const cached = localStorage.getItem('erp_quotations');
-          return { data: cached ? JSON.parse(cached) : [], error: null };
-        }
-      );
-
-      const dbStatusHistoryPromise = supabaseClient.from('lead_status_history').select('*').order('created_at', { ascending: true }).then(
-        (res) => res,
-        (err) => {
-          console.warn('Could not read lead_status_history from Supabase:', err);
-          return { data: null, error: null };
-        }
-      );
-
-      const dbLeadStaffAssignmentHistoryPromise = supabaseClient.from('lead_staff_assignment_history').select('*').order('assigned_at', { ascending: false }).then(
-        (res) => res,
-        (err) => {
-          console.warn('Could not read lead_staff_assignment_history from Supabase:', err);
-          const cached = localStorage.getItem('erp_lead_staff_assignment_history');
-          return { data: cached ? JSON.parse(cached) : [], error: null };
-        }
-      );
-
-      const dbLeadEquipmentHistoryPromise = supabaseClient.from('lead_equipment_history').select('*').order('returned_at', { ascending: false }).then(
-        (res) => res,
-        (err) => {
-          console.warn('Could not read lead_equipment_history from Supabase:', err);
-          return { data: [], error: null };
-        }
-      );
-
-      const dbLeadEventsPromise = supabaseClient.from('lead_events').select('*').order('created_at', { ascending: true }).then(
-        (res) => res,
-        (err) => {
-          console.warn('Could not read lead_events from Supabase:', err);
-          return { data: [], error: null };
-        }
-      );
-
-      const [
-        { data: dbUsers, error: uErr },
-        { data: dbLeads, error: ldErr },
-        { data: dbOrders, error: ordErr },
-        { data: dbOperations, error: opErr },
-        { data: dbRawFootage, error: rfErr },
-        { data: dbProduction, error: prodErr },
-        { data: dbPayments, error: payErr },
-        { data: dbLogs, error: logErr },
-        staffRes,
-        notifRes,
-        equipRes,
-        leadPackagesRes,
-        packagesRes,
-        staffAssignmentsRes,
-        quotationsRes,
-        statusHistoryRes,
-        leadStaffAssignmentHistoryRes,
-        leadEquipmentHistoryRes,
-        leadEventsRes
-      ] = await Promise.all([
+      const results = await Promise.all([
         supabaseClient.from('users').select('*'),
         supabaseClient.from('leads').select('*').order('created_at', { ascending: false }),
         supabaseClient.from('orders').select('*').order('created_at', { ascending: false }),
-        dbOperationsPromise,
-        dbRawFootagePromise,
-        dbProductionPromise,
-        dbPaymentsPromise,
-        dbLogsPromise,
-        dbStaffPromise,
-        dbNotificationsPromise,
-        dbEquipmentPromise,
-        dbLeadPackagesPromise,
-        dbPackagesPromise,
-        dbStaffAssignmentsPromise,
-        dbQuotationsPromise,
-        dbStatusHistoryPromise,
-        dbLeadStaffAssignmentHistoryPromise,
-        dbLeadEquipmentHistoryPromise,
-        dbLeadEventsPromise
+        supabaseClient.from('operations').select('*'),
+        supabaseClient.from('raw_footage').select('*'),
+        supabaseClient.from('production').select('*'),
+        supabaseClient.from('payments').select('*'),
+        supabaseClient.from('activity_logs').select('*').order('timestamp', { ascending: false }),
+        supabaseClient.from('operations_staff').select('*').order('name'),
+        supabaseClient.from('notifications').select('*').order('created_at', { ascending: false }),
+        supabaseClient.from('equipment').select('*').order('created_at', { ascending: false }),
+        supabaseClient.from('lead_packages').select('*'),
+        supabaseClient.from('packages').select('*').order('created_at', { ascending: false }),
+        supabaseClient.from('staff_assignments').select('*'),
+        supabaseClient.from('quotations').select('*'),
+        supabaseClient.from('lead_status_history').select('*').order('created_at', { ascending: true }),
+        supabaseClient.from('lead_staff_assignment_history').select('*').order('assigned_at', { ascending: false }),
+        supabaseClient.from('lead_equipment_history').select('*').order('returned_at', { ascending: false }),
+        supabaseClient.from('lead_events').select('*').order('created_at', { ascending: true }),
+        supabaseClient.from('equipment_handovers').select('*').order('created_at', { ascending: false }),
+        supabaseClient.from('production_specialties').select('*'),
+        supabaseClient.from('editor_assignments').select('*')
       ]);
 
-      if (uErr || ldErr || ordErr || opErr || rfErr || prodErr || payErr || logErr) {
-        console.warn('Some tables could not be read from Supabase (this is expected if you are not fully logged in). Attempting to load available tables and fallback to cached states...');
-        updateDiagnosticMetric('read', 'warn', (uErr || ldErr || ordErr || opErr || rfErr || prodErr || payErr || logErr)?.message);
+      const tables = [
+        'users', 'leads', 'orders', 'operations', 'raw_footage', 'production', 
+        'payments', 'activity_logs', 'operations_staff', 'notifications', 
+        'equipment', 'lead_packages', 'packages', 'staff_assignments', 
+        'quotations', 'lead_status_history', 'lead_staff_assignment_history', 
+        'lead_equipment_history', 'lead_events', 'equipment_handovers', 
+        'production_specialties', 'editor_assignments'
+      ];
+      
+      let hasError = false;
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].error) {
+           console.warn(`Data Fetch Warning in table ${tables[i]}:`, results[i].error);
+           if (tables[i] === 'leads' && results[i].error.message?.includes('created_at')) {
+             // Fallback for leads if created_at is missing
+             const fallbackRes = await supabaseClient.from('leads').select('*');
+             results[i] = fallbackRes;
+           }
+           if (tables[i] === 'orders' && results[i].error.message?.includes('created_at')) {
+             const fallbackRes = await supabaseClient.from('orders').select('*');
+             results[i] = fallbackRes;
+           }
+        }
       }
 
-      // 1. Resolve users table with local fallback if select failed
-      let finalUsers = dbUsers;
-      if (uErr || !dbUsers) {
-        console.warn('Using INITIAL_USERS fallback because users table select failed or returned null:', uErr?.message);
-        finalUsers = INITIAL_USERS.map(u => ({
-          ...u,
-          id: mapToDbUserId(u.id)
-        }));
-      }
+      const [
+        { data: dbUsers },
+        { data: dbLeads },
+        { data: dbOrders },
+        { data: dbOperations },
+        { data: dbRawFootage },
+        { data: dbProduction },
+        { data: dbPayments },
+        { data: dbLogs },
+        { data: dbStaff },
+        { data: dbNotifications },
+        { data: dbEquipment },
+        { data: dbLeadPackages },
+        { data: dbPackages },
+        { data: dbStaffAssignments },
+        { data: dbQuotations },
+        { data: dbStatusHistory },
+        { data: dbLeadStaffAssignmentHistory },
+        { data: dbLeadEquipmentHistory },
+        { data: dbLeadEvents },
+        { data: dbHandovers },
+        { data: dbSpecList },
+        { data: dbAssignList }
+      ] = results;
 
-      if (finalUsers && finalUsers.length === 0) {
+      if (dbUsers && dbUsers.length === 0) {
         await seedDatabase();
-        // retry fetch once
         await fetchFromDb(showLoader);
         return;
       }
-
-      if (finalUsers) {
-        setUsers(finalUsers.map(mapUserFieldsFromDb));
+      if (dbUsers) {
+        setUsers(dbUsers.map(mapUserFieldsFromDb));
       }
 
-      // 2. Resolve other database tables with robust cached fallbacks
-      let resolvedLeads = dbLeads;
-      if (ldErr || !dbLeads) {
-        const cached = localStorage.getItem('erp_leads');
-        resolvedLeads = cached ? JSON.parse(cached) : INITIAL_LEADS;
-      } else {
-        localStorage.removeItem('erp_local_leads');
-      }
-
-      // Merge with any local-only leads (only if we failed to fetch from Supabase)
-      const localLeadsKey = 'erp_local_leads';
-      const localLeadsStr = localStorage.getItem(localLeadsKey);
-      if (ldErr && localLeadsStr) {
-        try {
-          const localLeads = JSON.parse(localLeadsStr);
-          if (Array.isArray(localLeads) && localLeads.length > 0) {
-            // Apply updates to existing leads if the local update is newer
-            resolvedLeads = (resolvedLeads || []).map((dbLead: any) => {
-              const localUpdate = localLeads.find((l: any) => l && l.lead_id === dbLead.lead_id);
-              if (!localUpdate) return dbLead;
-              const dbTime = dbLead.updated_at ? new Date(dbLead.updated_at).getTime() : 0;
-              const localTime = localUpdate.updated_at ? new Date(localUpdate.updated_at).getTime() : 0;
-              if (localTime >= dbTime) {
-                return { ...dbLead, ...localUpdate };
-              }
-              return dbLead;
-            });
-            // Append entirely new local leads
-            const resolvedIds = new Set((resolvedLeads || []).map((l: any) => l.lead_id));
-            const uniqueLocal = localLeads.filter((l: any) => l && l.lead_id && !resolvedIds.has(l.lead_id));
-            resolvedLeads = [...uniqueLocal, ...(resolvedLeads || [])];
+      if (dbLeads) {
+        const parsedLeads = dbLeads.map((l: any) => {
+          let evts = [];
+          if (dbLeadEvents) {
+            evts = dbLeadEvents.filter((e: any) => e.lead_id === l.lead_id);
           }
-        } catch (e) {
-          console.error('Error parsing local fallback leads:', e);
-        }
-      }
-
-      let resolvedOrders = dbOrders;
-      if (ordErr || !dbOrders) {
-        const cached = localStorage.getItem('erp_orders');
-        resolvedOrders = cached ? JSON.parse(cached) : INITIAL_ORDERS;
-      } else {
-        localStorage.removeItem('erp_local_orders');
-      }
-
-      // Merge with any local-only orders (only if we failed to fetch from Supabase)
-      const localOrdersKey = 'erp_local_orders';
-      const localOrdersStr = localStorage.getItem(localOrdersKey);
-      if (ordErr && localOrdersStr) {
-        try {
-          const localOrders = JSON.parse(localOrdersStr);
-          if (Array.isArray(localOrders) && localOrders.length > 0) {
-            // Apply updates to existing orders if the local update is newer
-            resolvedOrders = (resolvedOrders || []).map((dbOrder: any) => {
-              const localUpdate = localOrders.find((o: any) => o && o.order_id === dbOrder.order_id);
-              if (!localUpdate) return dbOrder;
-              const dbTime = dbOrder.updated_at ? new Date(dbOrder.updated_at).getTime() : 0;
-              const localTime = localUpdate.updated_at ? new Date(localUpdate.updated_at).getTime() : 0;
-              if (localTime >= dbTime) {
-                return { ...dbOrder, ...localUpdate };
-              }
-              return dbOrder;
-            });
-            // Append entirely new local orders
-            const resolvedIds = new Set((resolvedOrders || []).map((o: any) => o.order_id));
-            const uniqueLocal = localOrders.filter((o: any) => o && o.order_id && !resolvedIds.has(o.order_id));
-            resolvedOrders = [...uniqueLocal, ...(resolvedOrders || [])];
+          if (evts.length === 0 && l.notes_special_customizations) {
+            evts = deserializeLeadEvents(l.notes_special_customizations).events || [];
           }
-        } catch (e) {
-          console.error('Error parsing local fallback orders:', e);
-        }
-      }
-
-      let resolvedRawFootage = dbRawFootage;
-      if (rfErr || !dbRawFootage) {
-        const cached = localStorage.getItem('erp_raw_footage');
-        resolvedRawFootage = cached ? JSON.parse(cached) : INITIAL_RAW_FOOTAGE;
-      }
-
-      let resolvedProduction = dbProduction;
-      if (prodErr || !dbProduction) {
-        const cached = localStorage.getItem('erp_production');
-        resolvedProduction = cached ? JSON.parse(cached) : INITIAL_PRODUCTION;
-      }
-
-      let resolvedOperations = dbOperations;
-      if (opErr || !dbOperations) {
-        const cached = localStorage.getItem('erp_operations');
-        resolvedOperations = cached ? JSON.parse(cached) : INITIAL_OPERATIONS;
-      }
-
-      let resolvedPayments = dbPayments;
-      if (payErr || !dbPayments) {
-        const cached = localStorage.getItem('erp_payments');
-        resolvedPayments = cached ? JSON.parse(cached) : INITIAL_PAYMENTS;
-      }
-
-      let resolvedLogs = dbLogs;
-      if (logErr || !dbLogs) {
-        const cached = localStorage.getItem('erp_activity_logs');
-        resolvedLogs = cached ? JSON.parse(cached) : INITIAL_LOGS;
-      }
-
-      // Resolve lead packages and merge with any local-only lead packages
-      const localLeadPkgsKey = 'erp_local_lead_packages';
-      const localLeadPkgsStr = localStorage.getItem(localLeadPkgsKey);
-      let resolvedLeadPackages = leadPackagesRes?.data || [];
-      if (leadPackagesRes?.error || !leadPackagesRes?.data) {
-        const cached = localStorage.getItem('erp_lead_packages');
-        resolvedLeadPackages = cached ? JSON.parse(cached) : [];
-      } else {
-        localStorage.removeItem('erp_local_lead_packages');
-      }
-      if (leadPackagesRes?.error && localLeadPkgsStr) {
-        try {
-          const localPkgs = JSON.parse(localLeadPkgsStr);
-          if (Array.isArray(localPkgs) && localPkgs.length > 0) {
-            const resolvedIds = new Set((resolvedLeadPackages || []).map((p: any) => p.lead_package_id));
-            const uniqueLocal = localPkgs.filter((p: any) => p && p.lead_package_id && !resolvedIds.has(p.lead_package_id));
-            resolvedLeadPackages = [...uniqueLocal, ...(resolvedLeadPackages || [])];
+          let finalStatus = l.current_status || l.status || 'New Lead';
+          if (dbStatusHistory) {
+             const h = dbStatusHistory.filter((sh: any) => sh.lead_id === l.lead_id);
+             if (h.length > 0) {
+               // Safe sort just in case created_at is missing
+               const sorted = [...h].sort((a: any,b: any) => (new Date(b.created_at || 0).getTime()) - (new Date(a.created_at || 0).getTime()));
+               if (sorted[0]?.new_status) {
+                 finalStatus = sorted[0].new_status;
+               }
+             }
           }
-        } catch (e) {
-          console.error('Error parsing local fallback lead packages:', e);
-        }
-      }
-
-      // 3. Populate React state with mapped variables
-      let resolvedStatusHistory = statusHistoryRes?.data;
-      if (statusHistoryRes?.error || !statusHistoryRes?.data) {
-        const cached = localStorage.getItem('erp_status_history');
-        resolvedStatusHistory = cached ? JSON.parse(cached) : [];
-      } else {
-        localStorage.setItem('erp_status_history', JSON.stringify(statusHistoryRes.data));
-      }
-      setStatusHistory(resolvedStatusHistory);
-
-      let resolvedLeadEvents = leadEventsRes?.data;
-      if (leadEventsRes?.error || !leadEventsRes?.data) {
-        resolvedLeadEvents = [];
-      }
-
-      if (resolvedLeads) {
-        const dbStatusHist = resolvedStatusHistory || [];
-        const mappedLeads = resolvedLeads.map(ld => {
-          const rawStatus = ld.status || 'New Lead';
-          
-          // Get latest history status
-          const historyForLead = dbStatusHist.filter((h: any) => h.lead_id === ld.lead_id);
-          const sorted = [...historyForLead].sort((a: any, b: any) => 
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          );
-          const latestHistoryStatus = sorted[0]?.new_status;
-          
-          const finalStatus = latestHistoryStatus || ld.current_status || rawStatus;
-          const parsed = deserializeLeadEvents(ld.notes_special_customizations);
-          
-          // Use DB events if they exist, otherwise fallback to parsed notes for backward compatibility
-          const dbEventsForLead = resolvedLeadEvents.filter((ev: any) => ev.lead_id === ld.lead_id);
-          
-          return {
-            ...ld,
-            status: finalStatus as CurrentStage,
-            current_status: finalStatus,
-            events: dbEventsForLead.length > 0 ? dbEventsForLead : parsed.events
-          };
+          return { ...l, status: finalStatus, current_status: finalStatus, events: evts };
         });
-        setLeads(prev => {
-          const merged = mappedLeads.map(dbLead => {
-            const prevLead = prev.find(p => p.lead_id === dbLead.lead_id);
-            if (!prevLead) return dbLead;
-            
-            const dbTime = dbLead.updated_at ? new Date(dbLead.updated_at).getTime() : 0;
-            const localTime = prevLead.updated_at ? new Date(prevLead.updated_at).getTime() : 0;
-            
-            // If the local state is newer (e.g. from an optimistic update), keep it
-            if (localTime > dbTime) {
-              return { ...dbLead, ...prevLead };
-            }
-            return dbLead;
-          });
-          localStorage.setItem('erp_leads', JSON.stringify(merged));
-          return merged;
-        });
-      }
-
-      if (resolvedLeadPackages) {
-        setLeadPackages(resolvedLeadPackages as LeadPackage[]);
-        localStorage.setItem('erp_lead_packages', JSON.stringify(resolvedLeadPackages));
-      }
-
-      if (packagesRes && packagesRes.data) {
-        if (packagesRes.data.length === 0 && !packagesRes.error) {
-          console.log('Detected empty packages table, seeding INITIAL_PACKAGES into Supabase...');
-          const mappedInitialPackages = INITIAL_PACKAGES.map(pkg => {
-            const extraData = {
-              category: pkg.category,
-              deliverables: pkg.deliverables,
-              team_members: pkg.team_members || '',
-              seasonal_offer: pkg.seasonal_offer || '',
-              terms_conditions: pkg.terms_conditions || '',
-              event_type: pkg.event_type || '',
-              duration: pkg.duration || '',
-              package_includes: pkg.package_includes || ''
-            };
-            return {
-              package_id: pkg.package_id,
-              name: pkg.package_name,
-              description: JSON.stringify(extraData),
-              price: pkg.price,
-              status: pkg.status,
-              created_at: pkg.created_at || new Date().toISOString()
-            };
-          });
-          await supabaseClient.from('packages').upsert(mappedInitialPackages);
-          
-          const mapped = INITIAL_PACKAGES.map(pkg => ({
-            ...pkg,
-            created_at: pkg.created_at || new Date().toISOString()
-          }));
-          setPackages(mapped);
-          localStorage.setItem('erp_packages', JSON.stringify(mapped));
-        } else {
-          const mapped = packagesRes.data.map(mapDbRecordToPackage);
-          setPackages(mapped);
-          localStorage.setItem('erp_packages', JSON.stringify(mapped));
-        }
-      }
-
-      if (resolvedOrders) {
-        const mappedOrders = resolvedOrders.map((ord: any) => {
-          const associatedLead = resolvedLeads?.find(ld => ld.lead_id === ord.lead_id);
-          const leadStatus = associatedLead?.current_status || associatedLead?.status;
-          return {
-            ...ord,
-            current_stage: leadStatus || ord.current_stage
-          };
-        }) as any;
-        setOrders(mappedOrders);
-        localStorage.setItem('erp_orders', JSON.stringify(mappedOrders));
-      }
-
-      if (resolvedOperations) {
-        setOperations(resolvedOperations);
-        localStorage.setItem('erp_operations', JSON.stringify(resolvedOperations));
-      }
-
-      if (resolvedRawFootage) {
-        setRawFootage(resolvedRawFootage as any);
-        localStorage.setItem('erp_raw_footage', JSON.stringify(resolvedRawFootage));
-      }
-
-      if (resolvedProduction) {
-        const mappedProduction = resolvedProduction.map((prod: any) => {
-          let leadId = '';
-          if (prod.production_id && prod.production_id.startsWith('PRD-')) {
-            leadId = prod.production_id.replace('PRD-', '');
-          }
-          if (!leadId) {
-            const raw = resolvedRawFootage?.find(r => r.tracking_id === prod.tracking_id);
-            const ord = resolvedOrders?.find(o => o.order_id === raw?.order_id);
-            leadId = ord?.lead_id || '';
-          }
-          const associatedLead = resolvedLeads?.find(ld => ld.lead_id === leadId);
-          const leadStatus = associatedLead?.current_status || associatedLead?.status;
-          return {
-            ...prod,
-            editing_status: leadStatus || prod.editing_status
-          };
-        }) as any;
-        setProduction(mappedProduction);
-        localStorage.setItem('erp_production', JSON.stringify(mappedProduction));
-      }
-
-      if (resolvedPayments) {
-        setPayments(resolvedPayments as any);
-        localStorage.setItem('erp_payments', JSON.stringify(resolvedPayments));
-      }
-
-      if (resolvedLogs) {
-        setLogs(resolvedLogs as any);
-        localStorage.setItem('erp_activity_logs', JSON.stringify(resolvedLogs));
-      }
-      if (staffAssignmentsRes && staffAssignmentsRes.data) {
-        setStaffAssignments(staffAssignmentsRes.data as StaffAssignment[]);
-        localStorage.setItem('erp_staff_assignments', JSON.stringify(staffAssignmentsRes.data));
-      }
-
-      if (leadStaffAssignmentHistoryRes && leadStaffAssignmentHistoryRes.data) {
-        setLeadStaffAssignmentHistory(leadStaffAssignmentHistoryRes.data as LeadStaffAssignmentHistory[]);
-        localStorage.setItem('erp_lead_staff_assignment_history', JSON.stringify(leadStaffAssignmentHistoryRes.data));
-      }
-
-      if (leadEquipmentHistoryRes && leadEquipmentHistoryRes.data) {
-        setLeadEquipmentHistory(leadEquipmentHistoryRes.data as LeadEquipmentHistory[]);
-      }
-
-      if (quotationsRes && quotationsRes.data) {
-        const parsedQuotes = (quotationsRes.data as any[]).map((q: any) => {
-          let metadata: any = {};
-          if (q.terms_conditions && q.terms_conditions.includes('METADATA:')) {
-            try {
-              const parts = q.terms_conditions.split('METADATA:');
-              const jsonStr = parts[1]?.trim();
-              if (jsonStr) {
-                metadata = JSON.parse(jsonStr);
-              }
-            } catch (e) {
-              console.warn('Failed to parse metadata from terms_conditions:', e);
-            }
-          }
-          return {
-            ...q,
-            order_id: q.order_id || metadata.order_id || '',
-            customer_id: q.customer_id || metadata.customer_id || '',
-            pdf_url: q.pdf_url || metadata.pdf_url || '',
-            whatsapp_sent_status: q.whatsapp_sent_status !== undefined ? q.whatsapp_sent_status : (metadata.whatsapp_sent_status || false),
-            viewed_status: q.viewed_status !== undefined ? q.viewed_status : (metadata.viewed_status || false),
-            generated_date: q.generated_date || metadata.generated_date || q.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
-            sales_staff_name: metadata.sales_staff_name || '',
-            sales_staff_mobile: metadata.sales_staff_mobile || '',
-            editableInclusions: metadata.editableInclusions || null,
-            editableDeliverables: metadata.editableDeliverables || null
-          };
-        });
-        setQuotations(parsedQuotes);
-        localStorage.setItem('erp_quotations', JSON.stringify(parsedQuotes));
-      }
-
-      if (notifRes && notifRes.data) {
-        setNotifications(notifRes.data.map(mapNotificationFromDb));
+        setLeads(parsedLeads);
       }
       
-      let finalStaff = (staffRes && staffRes.data) ? staffRes.data : [];
-      if (staffRes && staffRes.data && staffRes.data.length === 0) {
-        console.log('Operations staff table is empty in database. Seeding initial staff on-the-fly...');
-        const initialStaffSeed = [
-          {
-            staff_id: 'STF-001',
-            name: 'Emily Watson',
-            mobile: '+1 (555) 234-5678',
-            email: 'emily@photocrew.com',
-            role: 'Production Manager',
-            department: 'Operations',
-            status: 'Active',
-            joining_date: '2025-01-10',
-            profile_photo: '',
-            notes: 'Orchestrates chief editing operations and delivery workflows.',
-            created_by: 'System',
-            updated_by: 'System',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          },
-          {
-            staff_id: 'STF-002',
-            name: 'Alex Rivera',
-            mobile: '+1 (555) 345-6789',
-            email: 'alex@photocrew.com',
-            role: 'Senior Wedding Editor',
-            department: 'Operations',
-            status: 'Active',
-            joining_date: '2024-03-15',
-            profile_photo: '',
-            notes: 'Cinematic storytelling, custom audio layout, color grading master.',
-            created_by: 'System',
-            updated_by: 'System',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }
-        ];
-        
-        const mappedSeed = initialStaffSeed.map(s => {
-          const sanitized = stripClientOnlyFields('operations_staff', s);
-          sanitized.staff_id = mapToDbStaffId(s.staff_id);
-          return sanitized;
-        });
-        await supabaseClient.from('operations_staff').upsert(mappedSeed).then(
-          () => console.log('Successfully seeded operations_staff.'),
-          (err) => console.warn('Failed seeding operations_staff:', err)
-        );
-        // Map the initial seeded staff using the same logic as database parsing so that internal state is fully aligned and loaded right after seeding
-        finalStaff = mappedSeed;
+      if (dbOrders) {
+         setOrders(dbOrders.map((o: any) => ({ ...o, current_stage: o.current_stage || o.order_status })));
       }
-
-      if (finalStaff && finalStaff.length > 0) {
-        const mappedStaff = finalStaff.map((st: any) => {
-          let extra: any = {};
-          if (st.notes && st.notes.trim().startsWith('{') && st.notes.trim().endsWith('}')) {
-            try {
-              extra = JSON.parse(st.notes);
-            } catch (e) {
-              // Not JSON notes, use as is
+      if (dbOperations) setOperations(dbOperations);
+      if (dbRawFootage) setRawFootage(dbRawFootage);
+      if (dbProduction) setProduction(dbProduction);
+      if (dbPayments) setPayments(dbPayments);
+      if (dbLogs) setLogs(dbLogs);
+      if (dbHandovers) setEquipmentHandovers(dbHandovers);
+      if (dbSpecList) setSpecialities(dbSpecList);
+      if (dbAssignList) setEditorAssignments(dbAssignList);
+      
+      if (dbStaff) {
+         setStaff(dbStaff.map((item: any) => {
+            let extra: any = {};
+            if (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) {
+              try { extra = JSON.parse(item.notes); } catch (e) {}
             }
-          }
-          return {
-            ...st,
-            ...extra,
-            staff_id: mapFromDbStaffId(st.staff_id),
-            notes: (st.notes && st.notes.trim().startsWith('{') && st.notes.trim().endsWith('}')) ? (extra.notes || '') : st.notes
-          };
-        });
-        setStaff(mappedStaff);
+            return {
+              ...item,
+              ...extra,
+              staff_id: mapFromDbStaffId(item.staff_id),
+              notes: (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) ? (extra.notes || '') : item.notes
+            };
+         }));
       }
-      let finalEquipment = (equipRes && equipRes.data) ? equipRes.data : [];
-      if (equipRes && equipRes.data && equipRes.data.length === 0 && INITIAL_EQUIPMENT && INITIAL_EQUIPMENT.length > 0) {
-        console.log('Equipment table is empty in database. Seeding initial equipment on-the-fly...');
-        const mappedSeed = INITIAL_EQUIPMENT.map(e => {
-          const sanitized = stripClientOnlyFields('equipment', e);
-          sanitized.equipment_id = mapToDbEquipmentId(e.equipment_id);
-          return sanitized;
-        });
-        await supabaseClient.from('equipment').upsert(mappedSeed).then(
-          () => console.log('Successfully seeded equipment.'),
-          (err) => console.warn('Failed seeding equipment:', err)
-        );
-        finalEquipment = mappedSeed;
+      
+      if (dbNotifications) {
+        setNotifications(dbNotifications.map(mapNotificationFromDb));
       }
-
-      if (finalEquipment && finalEquipment.length > 0) {
-        const mappedEquipment = finalEquipment.map((eq: any) => ({
-          ...eq,
-          equipment_id: mapFromDbEquipmentId(eq.equipment_id)
+      if (dbEquipment) {
+        setEquipment(dbEquipment.map((item: any) => ({ ...item, equipment_id: mapFromDbEquipmentId(item.equipment_id) })));
+      }
+      if (dbLeadPackages) setLeadPackages(dbLeadPackages);
+      if (dbPackages) setPackages(dbPackages.map(mapDbRecordToPackage));
+      if (dbStaffAssignments) setStaffAssignments(dbStaffAssignments);
+      
+      if (dbQuotations) {
+        setQuotations(dbQuotations.map((q: any) => {
+           let srv = q.services_included;
+           if (typeof srv === 'string') {
+             try { srv = JSON.parse(srv); } catch(e){}
+           }
+           if (srv && !Array.isArray(srv) && typeof srv === 'object' && srv.services) {
+             srv = srv.services;
+           }
+           return { ...q, services_included: Array.isArray(srv) ? srv : [] };
         }));
-        setEquipment(mappedEquipment);
       }
-
-      // Sync specialties and editor assignments from Supabase if they exist
-      try {
-        const { data: dbSpecList } = await supabaseClient.from('production_specialties').select('*');
-        if (dbSpecList) {
-          setSpecialities(dbSpecList);
-        }
-      } catch (err) {
-        console.warn('Could not read production_specialties from Supabase:', err);
-      }
-
-      try {
-        const { data: dbAssignList } = await supabaseClient.from('editor_assignments').select('*');
-        if (dbAssignList) {
-          setEditorAssignments(dbAssignList);
-        }
-      } catch (err) {
-        console.warn('Could not read editor_assignments from Supabase:', err);
-      }
-
-      try {
-        const { data: dbHandovers } = await supabaseClient.from('equipment_handovers').select('*');
-        if (dbHandovers && dbHandovers.length > 0) {
-          setEquipmentHandovers(dbHandovers);
-        }
-      } catch (err) {
-        console.warn('Could not read equipment_handovers from Supabase:', err);
-      }
-
+      
+      if (dbStatusHistory) setStatusHistory(dbStatusHistory);
+      if (dbLeadStaffAssignmentHistory) setLeadStaffAssignmentHistory(dbLeadStaffAssignmentHistory);
+      if (dbLeadEquipmentHistory) setLeadEquipmentHistory(dbLeadEquipmentHistory);
+      
       updateDiagnosticMetric('read', 'ok');
       updateDiagnosticMetric('connection', 'connected');
     } catch (err: any) {
-      console.warn('Fetch error (handled):', err?.message || String(err));
-      updateDiagnosticMetric('read', 'fail', err?.message || String(err));
+      console.error('Data fetch error:', err);
+      window.alert(`Database Fetch Error: ${err.message}`);
     } finally {
       setIsDataLoading(false);
     }
@@ -2420,114 +1879,29 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             updateDiagnosticMetric('realtime', 'ok');
             if (payload.eventType === 'INSERT') {
               setter((prev: any[]) => {
-                const item = payload.new;
-                let mappedItem = table === 'users' ? { ...item, id: mapFromDbUserId(item.id) } : item;
-                if (table === 'notifications') {
-                  mappedItem = mapNotificationFromDb(item);
-                }
-                if (table === 'leads') {
-                  let finalStatus = mappedItem.current_status || mappedItem.status || 'New Lead';
-                  if (statusHistory && statusHistory.length > 0) {
-                    const historyForLead = statusHistory.filter((h: any) => h.lead_id === mappedItem.lead_id);
-                    if (historyForLead.length > 0) {
-                      const sorted = [...historyForLead].sort((a: any, b: any) => 
-                        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                      );
-                      if (sorted[0]?.new_status) {
-                        finalStatus = sorted[0].new_status;
-                      }
-                    }
-                  }
-                  const parsed = deserializeLeadEvents(mappedItem.notes_special_customizations);
-                  const existingLead = prev.find(l => l.lead_id === mappedItem.lead_id);
-                  mappedItem = { ...mappedItem, status: finalStatus as CurrentStage, current_status: finalStatus, events: existingLead?.events || parsed.events };
-                }
-                if (table === 'orders') {
-                  mappedItem = { ...mappedItem, current_stage: mappedItem.current_stage || mappedItem.order_status };
-                }
-                if (table === 'operations_staff') {
-                  let extra: any = {};
-                  if (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) {
-                    try {
-                      extra = JSON.parse(item.notes);
-                    } catch (e) {
-                      console.warn("Real-time parsing error:", e);
-                    }
-                  }
-                  mappedItem = {
-                    ...item,
-                    ...extra,
-                    staff_id: mapFromDbStaffId(item.staff_id),
-                    notes: (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) ? (extra.notes || '') : item.notes
-                  };
-                }
-                if (table === 'packages') {
-                  mappedItem = mapDbRecordToPackage(item);
-                }
-                if (table === 'equipment') {
-                  mappedItem = {
-                    ...item,
-                    equipment_id: mapFromDbEquipmentId(item.equipment_id)
-                  };
-                }
-                const exists = prev.some(x => x[key] === mappedItem[key]);
-                if (exists) return prev;
-                return [mappedItem, ...prev];
-              });
-            } else if (payload.eventType === 'UPDATE') {
-              setter((prev: any[]) => {
-                const item = payload.new;
-                let mappedItem = table === 'users' ? { ...item, id: mapFromDbUserId(item.id) } : item;
-                if (table === 'notifications') {
-                  mappedItem = mapNotificationFromDb(item);
-                }
-                if (table === 'leads') {
-                  let finalStatus = mappedItem.current_status || mappedItem.status || 'New Lead';
-                  if (statusHistory && statusHistory.length > 0) {
-                    const historyForLead = statusHistory.filter((h: any) => h.lead_id === mappedItem.lead_id);
-                    if (historyForLead.length > 0) {
-                      const sorted = [...historyForLead].sort((a: any, b: any) => 
-                        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                      );
-                      if (sorted[0]?.new_status) {
-                        finalStatus = sorted[0].new_status;
-                      }
-                    }
-                  }
-                  const parsed = deserializeLeadEvents(mappedItem.notes_special_customizations);
-                  const existingLead = prev.find(l => l.lead_id === mappedItem.lead_id);
-                  mappedItem = { ...mappedItem, status: finalStatus as CurrentStage, current_status: finalStatus, events: existingLead?.events || parsed.events };
-                }
-                if (table === 'orders') {
-                  mappedItem = { ...mappedItem, current_stage: mappedItem.current_stage || mappedItem.order_status };
-                }
-                if (table === 'operations_staff') {
-                  let extra: any = {};
-                  if (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) {
-                    try {
-                      extra = JSON.parse(item.notes);
-                    } catch (e) {
-                      console.warn("Real-time parsing error:", e);
-                    }
-                  }
-                  mappedItem = {
-                    ...item,
-                    ...extra,
-                    staff_id: mapFromDbStaffId(item.staff_id),
-                    notes: (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) ? (extra.notes || '') : item.notes
-                  };
-                }
-                if (table === 'packages') {
-                  mappedItem = mapDbRecordToPackage(item);
-                }
-                if (table === 'equipment') {
-                  mappedItem = {
-                    ...item,
-                    equipment_id: mapFromDbEquipmentId(item.equipment_id)
-                  };
-                }
-                return prev.map(x => (x[key] === mappedItem[key] ? mappedItem : x));
-              });
+  const item = payload.new;
+  let mappedItem = table === 'users' ? { ...item, id: mapFromDbUserId(item.id) } : item;
+  if (table === 'notifications') mappedItem = mapNotificationFromDb(item);
+  if (table === 'leads') {
+    mappedItem = { 
+      ...mappedItem, 
+      status: mappedItem.current_status || mappedItem.status || 'New Lead', 
+      current_status: mappedItem.current_status || mappedItem.status || 'New Lead',
+      events: deserializeLeadEvents(mappedItem.notes_special_customizations).events || []
+    };
+  }
+  if (table === 'orders') mappedItem = { ...mappedItem, current_stage: mappedItem.current_stage || mappedItem.order_status };
+  if (table === 'operations_staff') {
+    let extra: any = {};
+    if (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) {
+      try { extra = JSON.parse(item.notes); } catch (e) {}
+    }
+    mappedItem = { ...item, ...extra, staff_id: mapFromDbStaffId(item.staff_id), notes: extra.notes || item.notes };
+  }
+  if (table === 'packages') mappedItem = mapDbRecordToPackage(item);
+  if (table === 'equipment') mappedItem = { ...item, equipment_id: mapFromDbEquipmentId(item.equipment_id) };
+  return prev.map((x: any) => (x[key] === mappedItem[key] ? mappedItem : x));
+});
             } else if (payload.eventType === 'DELETE') {
               setter((prev: any[]) => {
                 const oldItem = payload.old;
@@ -3074,7 +2448,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // await fetchFromDb(); // Disabled to prevent full reload
+    //  // Disabled to prevent full reload
 
     logActivity(`Created Lead: ${newLead.customer_name}`, 'Sales', leadId, 'N/A', 'New Lead');
     return leadId;
@@ -3098,7 +2472,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // await fetchFromDb(); // Disabled to prevent full reload
+    //  // Disabled to prevent full reload
   };
 
   // 2. Lead Follow-Up (Screen 3)
@@ -3192,7 +2566,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
 
-    await fetchFromDb();
+    
     logActivity(`Updated Lead Follow-up, stage: ${status}`, 'Sales', leadId, previousStage, status);
   };
 
@@ -3468,7 +2842,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
 
-    await fetchFromDb();
+    
 
     logActivity(`Confirmed Order for ${targetLead.customer_name}. Package: ${packageName}`, 'Sales', masterOrderId, targetLead.status, 'Order Confirmed');
 
@@ -3606,7 +2980,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setStatusHistory(prev => [...prev, newHist]);
     }
 
-    // await fetchFromDb(); // Disabled to prevent full reload
+    //  // Disabled to prevent full reload
 
     logActivity(`Assigned Crew for Order: ${orderId} (Status: ${targetStatus})`, 'Operations', opId, previousStage, targetStageNum);
   };
@@ -3792,7 +3166,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // STEP 6: REFRESH DASHBOARD
-    await fetchFromDb();
+    
 
     // Create notifications for assigned staff
     assignments.forEach((a) => {
@@ -3893,7 +3267,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await pushInsert('raw_footage', newRawFootage);
     await pushInsert('production', newProd);
 
-    // await fetchFromDb(); // Disabled to prevent full reload
+    //  // Disabled to prevent full reload
 
     logActivity(`Marked Event Completed for Order ${orderId}. Raw Footage recorded: ${trackingId}`, 'Operations', orderId, previousStage, 'Event Completed');
   };
@@ -4143,7 +3517,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // await fetchFromDb(); // Disabled to prevent full reload
+    //  // Disabled to prevent full reload
 
     logActivity(
       `Updated Production ${productionId}: status=${updates.editing_status || 'unchanged'}`, 
@@ -4190,7 +3564,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // await fetchFromDb(); // Disabled to prevent full reload
+    //  // Disabled to prevent full reload
 
     logActivity(`Audited & accepted Raw Footage for Order: ${orderId}. Assigned to editing pipelines.`, 'Production', orderId, previousStage, 'Raw Footage Received');
   };
@@ -4348,7 +3722,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       recipient_role: 'Production Team'
     });
 
-    // await fetchFromDb(); // Disabled to prevent full reload
+    //  // Disabled to prevent full reload
 
     logActivity(`Raw Footage Received and Confirmed in system for Order: ${orderId}. Drive Link: ${resolvedLink}. Storage: ${storageType || 'Google Drive'}`, 'Operations', orderId, previousStage, targetStage);
   };
@@ -4379,7 +3753,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // await fetchFromDb(); // Disabled to prevent full reload
+    //  // Disabled to prevent full reload
 
     logActivity(`Updated stage for Order ${orderId}`, 'Operations', orderId, previousStage, stage);
   };
@@ -4459,7 +3833,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // await fetchFromDb(); // Disabled to prevent full reload
+    //  // Disabled to prevent full reload
 
     logActivity(`Marked Project Delivered to client for Order: ${orderId}`, 'Production', trackingId, previousStage, targetStage);
   };
@@ -4530,7 +3904,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // await fetchFromDb(); // Disabled to prevent full reload
+    //  // Disabled to prevent full reload
 
     logActivity(`Recorded payment of ₹${amountReceived} for Order ${orderId}. Fully paid: ${isFullyPaid}`, 'Finance', orderId, previousStage, nextStage);
   };
@@ -5419,7 +4793,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setStatusHistory(prev => [...prev, newHist]);
     }
 
-    await fetchFromDb();
+    
     return res;
   };
 
