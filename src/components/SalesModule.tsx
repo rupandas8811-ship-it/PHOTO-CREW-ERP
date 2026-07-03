@@ -2816,24 +2816,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const activePkgs = getSelectedPkgsInfo(isEdit);
       const quotNum = activeQuoteNum || `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
       
-      let currentLogo = logoBase64;
-      let currentAspect = logoAspectRatio;
-      try {
-        const logoUrl = 'https://aqifyxsimhqayfjwzzwj.supabase.co/storage/v1/object/public/img/logo.png';
-        const result = await getLogoBase64FromUrl(logoUrl);
-        currentLogo = result.base64;
-        currentAspect = result.aspect;
-      } catch (e) {
-        console.warn("Failed to wait-load logo for download, using preloaded:", e);
-      }
-
       const doc = generateQuotationPDF(
         leadObj,
         activePkgs,
         quotNum,
         quotationTerms,
-        currentLogo,
-        currentAspect,
+        logoBase64,
+        logoAspectRatio,
         editableInclusions,
         editableDeliverables,
         quoteDiscount,
@@ -2860,24 +2849,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const finalAmt = dynamicFinalAmt;
       const quotNum = activeQuoteNum || `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
 
-      let currentLogo = logoBase64;
-      let currentAspect = logoAspectRatio;
-      try {
-        const logoUrl = 'https://aqifyxsimhqayfjwzzwj.supabase.co/storage/v1/object/public/img/logo.png';
-        const result = await getLogoBase64FromUrl(logoUrl);
-        currentLogo = result.base64;
-        currentAspect = result.aspect;
-      } catch (e) {
-        console.warn("Failed to wait-load logo for WhatsApp generation:", e);
-      }
-
       const doc = generateQuotationPDF(
         leadObj,
         activePkgs,
         quotNum,
         quotationTerms,
-        currentLogo,
-        currentAspect,
+        logoBase64,
+        logoAspectRatio,
         editableInclusions,
         editableDeliverables,
         quoteDiscount,
@@ -2889,27 +2867,31 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const blobUrl = URL.createObjectURL(pdfBlob);
       setGeneratedPDFBlobUrl(blobUrl);
 
+      // Download the PDF automatically as requested
+      doc.save(`Quotation_${quotNum}.pdf`);
+
       const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
       const phone = leadObj.whatsapp_number || leadObj.mobile || '';
       
-      const message = `*Quotation Details*\n\n` +
-        `Hello *${leadObj.customer_name || 'Client'}*,\n\n` +
-        `Thank you for choosing us. Please find your quotation details below:\n\n` +
-        `• Quotation No: ${quotNum}\n` +
-        `• Event: ${leadObj.event_type || 'Event'}\n` +
-        `• Event Date: ${leadObj.event_date || 'N/A'}\n` +
-        `• Package: ${pkgNames}\n` +
-        `• Package Amount: ₹${basePkgSum.toLocaleString('en-IN')}\n` +
-        `• Discount: ₹${quoteDiscount.toLocaleString('en-IN')}\n` +
-        `• Additional Charges: ₹${quoteAdditional.toLocaleString('en-IN')}\n` +
-        `• Final Amount: ₹${finalAmt.toLocaleString('en-IN')}\n\n` +
-        `Please let us know if you have any questions. Thank you!`;
+      const message = `Hello *${leadObj.customer_name || 'Client'}*,\n\n` +
+        `Thank you for choosing *PhotoCrew Pictures*.\n\n` +
+        `Please find your quotation details below:\n\n` +
+        `📄 Quotation No: ${quotNum}\n` +
+        `🎉 Event: ${leadObj.event_type || 'Event'}\n` +
+        `📅 Event Date: ${leadObj.event_date || 'N/A'}\n` +
+        `📍 Event Address: ${leadObj.event_location || leadObj.location || 'N/A'}\n` +
+        `💰 Final Amount: ₹${finalAmt.toLocaleString('en-IN')}\n\n` +
+        `Thank you.\nPhotoCrew Pictures`;
 
       const cleanPhone = phone.replace(/[^0-9]/g, '');
       const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
 
-      window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
-      showToastMsg("Quotation sent via WhatsApp and updated to CRM!", "success");
+      // We use a small timeout to let the PDF download trigger before opening the popup
+      setTimeout(() => {
+        window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
+      }, 100);
+
+      showToastMsg("Quotation downloaded and WhatsApp prepared!", "success");
     } catch (err: any) {
       console.error("WhatsApp quote failed:", err);
       showToastMsg(err.message || "Failed to send WhatsApp quote.", "error");

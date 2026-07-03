@@ -138,17 +138,17 @@ export const OperationsStaffManagement: React.FC = () => {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
       {/* Roster form - Left */}
-      <div className="lg:col-span-4 bg-zinc-900/40 border border-zinc-850 rounded-2xl p-5 shadow-xl space-y-4">
+      <div className="lg:col-span-4 flex flex-col bg-zinc-900/40 border border-zinc-850 rounded-2xl p-5 shadow-xl space-y-4 overflow-hidden h-full">
         <h3 className="text-xs font-mono font-black uppercase text-zinc-300 flex items-center gap-1.5 border-b border-zinc-850 pb-2.5">
           <PlusCircle className="w-4 h-4 text-amber-500" />
           <span>{editingId ? 'Edit Operative Profile' : 'Onboard Field Operative'}</span>
         </h3>
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          <fieldset disabled={!canEdit} className="space-y-4">
-            <div>
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs flex-1 flex flex-col">
+          <fieldset disabled={!canEdit} className="space-y-4 flex-1">
+            <div className="min-w-0">
               <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
                 Staff Full Name *
               </label>
@@ -158,11 +158,11 @@ export const OperationsStaffManagement: React.FC = () => {
                 placeholder="e.g. Jack Richards"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
+                className="w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
               />
             </div>
 
-            <div>
+            <div className="min-w-0">
               <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
                 Mobile Number *
               </label>
@@ -172,11 +172,11 @@ export const OperationsStaffManagement: React.FC = () => {
                 placeholder="e.g. +91 9876543210"
                 value={form.mobile}
                 onChange={(e) => setForm({ ...form, mobile: e.target.value })}
-                className="w-full bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
+                className="w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
               />
             </div>
 
-            <div>
+            <div className="min-w-0">
               <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
                 WhatsApp Number
               </label>
@@ -185,28 +185,28 @@ export const OperationsStaffManagement: React.FC = () => {
                 placeholder="e.g. +91 9876543210"
                 value={form.whatsapp_number}
                 onChange={(e) => setForm({ ...form, whatsapp_number: e.target.value })}
-                className="w-full bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
+                className="w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
               />
             </div>
 
-            <div>
+            <div className="min-w-0">
               <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
                 Skills
               </label>
-              <div className="flex flex-wrap gap-2 mb-2 min-h-[40px] p-2 bg-zinc-950 border border-zinc-850 rounded-xl items-center">
+              <div className="flex flex-wrap gap-2 mb-2 min-h-[40px] p-2 bg-zinc-950 border border-zinc-850 rounded-xl items-center w-full">
                 {skills.length === 0 ? (
                   <span className="text-zinc-550 italic font-mono text-[10px] pl-1">No skills added yet</span>
                 ) : (
                   skills.map((skill) => (
                     <div 
                       key={skill} 
-                      className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono text-[10px] rounded-lg"
+                      className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono text-[10px] rounded-lg break-all"
                     >
                       <span>{skill}</span>
                       <button
                         type="button"
                         onClick={() => handleRemoveSkill(skill)}
-                        className="text-zinc-500 hover:text-rose-400 focus:outline-none transition-colors ml-1 font-bold cursor-pointer"
+                        className="text-zinc-500 hover:text-rose-400 focus:outline-none transition-colors ml-1 font-bold cursor-pointer shrink-0"
                         title={`Remove ${skill}`}
                       >
                         ✖
@@ -215,7 +215,7 @@ export const OperationsStaffManagement: React.FC = () => {
                   ))
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 w-full">
                 <input
                   type="text"
                   placeholder="Type a skill..."
@@ -227,12 +227,12 @@ export const OperationsStaffManagement: React.FC = () => {
                       handleAddSkill();
                     }
                   }}
-                  className="flex-1 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-amber-500/50 text-xs"
+                  className="flex-1 min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-amber-500/50 text-xs"
                 />
                 <button
                   type="button"
                   onClick={handleAddSkill}
-                  className="px-3 py-1.5 bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white rounded-xl text-xs transition-all font-mono font-bold cursor-pointer"
+                  className="px-3 py-1.5 shrink-0 bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white rounded-xl text-xs transition-all font-mono font-bold cursor-pointer"
                 >
                   + Add Skill
                 </button>
@@ -268,15 +268,13 @@ export const OperationsStaffManagement: React.FC = () => {
       </div>
 
       {/* Roster table - Right */}
-      <div className="lg:col-span-8 bg-zinc-900/40 border border-zinc-850 rounded-2xl overflow-hidden shadow-xl">
-        <div className="p-4 border-b border-zinc-850 bg-zinc-950/70 flex items-center justify-between">
-          <h3 className="text-[10px] font-mono font-black text-zinc-350 uppercase tracking-widest flex items-center gap-1.5">
-            <Users className="w-4 h-4 text-amber-500" />
-            <span>ACTIVE ROSTER SUMMARY ({operationsCrew.length} registered)</span>
-          </h3>
-        </div>
+      <div className="lg:col-span-8 flex flex-col bg-zinc-900/40 border border-zinc-850 rounded-2xl p-5 shadow-xl space-y-4 overflow-hidden h-full">
+        <h3 className="text-xs font-mono font-black uppercase text-zinc-300 flex items-center gap-1.5 border-b border-zinc-850 pb-2.5">
+          <Users className="w-4 h-4 text-amber-500" />
+          <span>ACTIVE ROSTER SUMMARY ({operationsCrew.length} registered)</span>
+        </h3>
 
-        <div className="overflow-x-auto text-xs">
+        <div className="overflow-x-auto text-xs flex-1 bg-zinc-950/30 rounded-xl border border-zinc-850">
           <table className="w-full text-left border-collapse min-w-[700px]">
             <thead>
               <tr className="border-b border-zinc-850 text-[10px] font-mono uppercase text-zinc-400 bg-zinc-950/30">
