@@ -24,6 +24,8 @@ import {
 } from 'lucide-react';
 import { formatINR, formatTime12Hour } from '../utils';
 import { EVENT_TYPES } from '../types';
+import { syncToGoogleCalendar } from '../lib/calendarSync';
+import { getAccessTokenSync, googleSignIn } from '../lib/googleAuth';
 
 interface UnifiedCalendarProps {
   role: 'sales' | 'operations' | 'production' | 'owner' | 'worker';
@@ -122,6 +124,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   
   // Memo form overlay state
   const [showAddMemo, setShowAddMemo] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState('');
   const [newMemoTitle, setNewMemoTitle] = useState('');
   const [newMemoMessage, setNewMemoMessage] = useState('');
   
@@ -132,6 +136,32 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   const tomorrowStr = getLocalDateStr(tomorrowDate);
 
   // Highlight Mapper to map status/class to custom color themes
+  const handleSyncGoogle = async () => {
+    try {
+      let token = getAccessTokenSync();
+      if (!token) {
+        setIsSyncing(true);
+        setSyncStatus('Authenticating with Google...');
+        const result = await googleSignIn();
+        if (result) {
+          token = result.accessToken;
+        } else {
+          throw new Error('Google Sign In failed');
+        }
+      }
+      setIsSyncing(true);
+      setSyncStatus('Starting sync...');
+      await syncToGoogleCalendar(filteredEvents, token, (msg) => setSyncStatus(msg));
+      setTimeout(() => setSyncStatus(''), 3000);
+    } catch (err: any) {
+      console.error(err);
+      setSyncStatus('Failed: ' + err.message);
+      setTimeout(() => setSyncStatus(''), 5000);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const getEventHighlights = (ev: CalendarEvent) => {
     const isCompleted = ['Event Completed', 'Raw Footage Received', 'Delivered', 'Paid', 'Closed'].includes(ev.currentStage);
     const dateStr = ev.date;
@@ -850,6 +880,15 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
               Assign Memo
             </button>
           )}
+          <button
+            id="btn_sync_google"
+            onClick={handleSyncGoogle}
+            disabled={isSyncing}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 border border-blue-700 rounded-xl text-xs text-white font-bold transition-all disabled:opacity-50"
+          >
+            <CalendarIcon className="w-3.5 h-3.5 stroke-[2.5]" />
+            {isSyncing ? syncStatus : 'Sync to Google'}
+          </button>
         </div>
       </div>
 
