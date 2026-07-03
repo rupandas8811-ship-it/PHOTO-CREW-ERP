@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useRole, mapUserFieldsFromDb } from './RoleContext';
 import { supabaseClient } from '../supabaseClient';
 import { 
-  Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2
+  Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye
 } from 'lucide-react';
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, LeadEvent } from '../types';
 import { StatusText } from './ui/StatusText';
@@ -1625,6 +1625,21 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [otherLostReason, setOtherLostReason] = useState('');
 
   const isLeadLocked = selectedLead ? isRecordLocked(selectedLead.lead_id, 'Sales') : false;
+
+  const [openDropdownLeadId, setOpenDropdownLeadId] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.actions-dropdown-container')) {
+        setOpenDropdownLeadId(null);
+      }
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => {
+      document.removeEventListener('click', handleOutsideClick);
+    };
+  }, []);
 
   // Repeat Customer / Reorder System states
   const [detectedCustomer, setDetectedCustomer] = useState<any>(null);
@@ -7807,55 +7822,107 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <td className="p-3.5 font-mono text-zinc-400">
                             {lead.created_date ? lead.created_date.split('T')[0] : 'N/A'}
                           </td>
-                          <td className="p-3.5 text-right pr-5 w-[160px] min-w-[160px]">
-                            <div className="flex flex-col gap-1.5 w-full">
-                              <button
-                                id={`btn_followup_${lead.lead_id}`}
-                                onClick={() => handleSelectLead(lead)}
-                                className="w-full h-8 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white rounded-xl border border-zinc-850 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow shrink-0"
-                              >
-                                <Edit className="w-3.5 h-3.5 shrink-0" />
-                                <span>{isActiveInSales && canEdit ? 'Manage CRM' : 'View CRM'}</span>
-                              </button>
-                              {isActiveInSales && canEdit && leadStatus !== 'Lost Lead' && leadStatus !== 'Order Confirmed' && (
-                                <>
+                          <td className="p-3.5 text-right pr-5 w-[160px] min-w-[160px] overflow-visible relative">
+                            {(() => {
+                              const isSalesStatus = ['New Lead', 'Follow-up', 'Follow Up', 'Negotiation', 'Quotation Sent'].includes(leadStatus);
+                              const showActionsDropdown = isSalesStatus && isActiveInSales && canEdit;
+
+                              if (showActionsDropdown) {
+                                return (
+                                  <div className="relative inline-block text-left actions-dropdown-container">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenDropdownLeadId(openDropdownLeadId === lead.lead_id ? null : lead.lead_id);
+                                      }}
+                                      className="w-32 h-8 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white rounded-xl border border-zinc-850 transition-all cursor-pointer inline-flex items-center justify-between px-3 shadow shrink-0"
+                                    >
+                                      <span>⚡ Actions</span>
+                                      <span className="text-[10px] ml-1">▼</span>
+                                    </button>
+
+                                    {openDropdownLeadId === lead.lead_id && (
+                                      <div className="absolute right-0 mt-1.5 w-48 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl z-50 p-1.5 space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-100 text-left">
+                                        {/* Manage CRM Option */}
+                                        <button
+                                          type="button"
+                                          id={`btn_followup_${lead.lead_id}`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenDropdownLeadId(null);
+                                            handleSelectLead(lead);
+                                          }}
+                                          className="w-full h-8 px-3 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white rounded-lg border border-zinc-850/40 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                        >
+                                          <Edit className="w-3.5 h-3.5 shrink-0" />
+                                          <span>Manage CRM</span>
+                                        </button>
+
+                                        {/* Confirm Order Option */}
+                                        <button
+                                          type="button"
+                                          id={`btn_confirm_order_direct_${lead.lead_id}`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenDropdownLeadId(null);
+                                            setConfirmForm({
+                                              package_name: lead.event_type === 'Other' ? (lead.custom_event_name || 'Premium Package') : `${lead.event_type} Premium Package`,
+                                              quotation_amount: lead.package_price || lead.budget || 0,
+                                              advance_received: 0,
+                                              event_date: lead.event_date || '',
+                                              event_time: lead.event_time || '12:00',
+                                              payment_mode: 'UPI',
+                                              notes: lead.remarks || '',
+                                            });
+                                            setSelectedLead(lead);
+                                            setShowConfirmModal(true);
+                                          }}
+                                          className="w-full h-8 px-3 text-xs font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-white rounded-lg border border-emerald-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                        >
+                                          <CheckSquare className="w-3.5 h-3.5 shrink-0" />
+                                          <span>Confirm Order</span>
+                                        </button>
+
+                                        {/* Lost Lead Option */}
+                                        <button
+                                          type="button"
+                                          id={`btn_lost_lead_direct_${lead.lead_id}`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenDropdownLeadId(null);
+                                            setSelectedLead(lead);
+                                            setLostReason('');
+                                            setOtherLostReason('');
+                                            setLostNotes('');
+                                            setShowLostModal(true);
+                                          }}
+                                          className="w-full h-8 px-3 text-xs font-bold bg-rose-950 hover:bg-rose-900 text-rose-400 hover:text-white rounded-lg border border-rose-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                        >
+                                          <X className="w-3.5 h-3.5 shrink-0" />
+                                          <span>Lost Lead</span>
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              } else {
+                                return (
                                   <button
-                                    id={`btn_confirm_order_direct_${lead.lead_id}`}
-                                    onClick={() => {
-                                      setConfirmForm({
-                                        package_name: lead.event_type === 'Other' ? (lead.custom_event_name || 'Premium Package') : `${lead.event_type} Premium Package`,
-                                        quotation_amount: lead.package_price || lead.budget || 0,
-                                        advance_received: 0,
-                                        event_date: lead.event_date || '',
-                                        event_time: lead.event_time || '12:00',
-                                        payment_mode: 'UPI',
-                                        notes: lead.remarks || '',
-                                      });
-                                      setSelectedLead(lead);
-                                      setShowConfirmModal(true);
+                                    type="button"
+                                    id={`btn_followup_${lead.lead_id}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSelectLead(lead);
                                     }}
-                                    className="w-full h-8 text-xs font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-white rounded-xl border border-emerald-900/30 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow shrink-0"
+                                    className="w-32 h-8 text-xs font-bold bg-sky-950/40 hover:bg-sky-900/50 text-sky-400 hover:text-white rounded-xl border border-sky-900/50 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow shrink-0"
                                   >
-                                    <CheckSquare className="w-3.5 h-3.5 shrink-0" />
-                                    <span>Confirm Order</span>
+                                    <Eye className="w-3.5 h-3.5 shrink-0 text-sky-400 group-hover:text-white" />
+                                    <span>View CRM</span>
                                   </button>
-                                  <button
-                                    id={`btn_lost_lead_direct_${lead.lead_id}`}
-                                    onClick={() => {
-                                      setSelectedLead(lead);
-                                      setLostReason('');
-                                      setOtherLostReason('');
-                                      setLostNotes('');
-                                      setShowLostModal(true);
-                                    }}
-                                    className="w-full h-8 text-xs font-bold bg-rose-950 hover:bg-rose-900 text-rose-400 hover:text-white rounded-xl border border-rose-900/30 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow shrink-0"
-                                  >
-                                    <X className="w-3.5 h-3.5 shrink-0" />
-                                    <span>Lost Lead</span>
-                                  </button>
-                                </>
-                              )}
-                            </div>
+                                );
+                              }
+                            })()}
                           </td>
                         </tr>
                       );
