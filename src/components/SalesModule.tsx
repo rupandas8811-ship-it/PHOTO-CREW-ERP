@@ -2599,18 +2599,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     return missing;
   };
 
-  const handleGenerateQuote = async (isEdit: boolean) => {
+  const handleGenerateQuote = async (isEdit: boolean): Promise<boolean> => {
     setIsSaving(true);
     try {
       if (!salesStaffName || !salesStaffName.trim()) {
         showToastMsg("Quotation Incomplete! Please enter Sales Staff Name.", "error");
         setIsSaving(false);
-        return;
+        return false;
       }
       if (!salesStaffMobile || !salesStaffMobile.trim() || salesStaffMobile.trim().length !== 10 || !/^\d+$/.test(salesStaffMobile.trim())) {
         showToastMsg("Please enter a valid 10-digit mobile number.", "error");
         setIsSaving(false);
-        return;
+        return false;
       }
 
       const leadObj = getLeadInfoForQuote(isEdit);
@@ -2620,7 +2620,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       if (missingFields.length > 0) {
         showToastMsg(`Quotation Incomplete! Please enter the following fields: ${missingFields.join(', ')}`, "error");
         setIsSaving(false);
-        return;
+        return false;
       }
 
       const basePkgSum = dynamicBaseSum;
@@ -2667,11 +2667,30 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       await addQuotation(standardQuotation);
 
       if (isEdit) {
+        if (wizardLeadData.selected_package_id) {
+          const selectedPkg = packages.find((p) => p.package_id === wizardLeadData.selected_package_id);
+          await saveLeadPackages(leadObj.lead_id, [{
+            package_id: wizardLeadData.selected_package_id,
+            package_name: selectedPkg?.package_name || 'Selected Package',
+            package_cost: Number(wizardLeadData.package_cost),
+            quantity: 1,
+            total_amount: Number(wizardLeadData.package_cost),
+            discount: 0,
+            final_amount: Number(wizardLeadData.package_cost),
+            deliverables_description: wizardLeadData.deliverables,
+            notes_special_customizations: wizardLeadData.notes,
+            additional_services_cost: 0
+          }]);
+        }
+
+        const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
+
         setWizardLeadData(prev => ({
           ...prev,
           budget: finalAmt,
           final_quoted_amount: finalAmt,
-          status: 'Quotation Sent' as CurrentStage
+          status: 'Quotation Sent' as CurrentStage,
+          remarks: updatedRemarks
         }));
         await updateLead(leadObj.lead_id, {
           budget: finalAmt,
@@ -2686,10 +2705,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           state: leadObj.state,
           pincode: leadObj.pincode,
           desired_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
-          remarks: getRemarksPayload(wizardLeadData.remarks, wizardLeadData.notes || '', wizardLeadData.next_follow_up_date, wizardLeadData.whatsapp_number, wizardLeadData.address, wizardLeadData.city),
+          remarks: updatedRemarks,
           Select_Package_Option: leadObj.Select_Package_Option || ''
         });
-        setSelectedLead(null); // Close CRM Workspace
+        
+        setSelectedLead(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            status: 'Quotation Sent' as CurrentStage,
+            remarks: updatedRemarks
+          };
+        });
       } else {
         setCreateForm(prev => ({
           ...prev,
@@ -2714,10 +2741,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         });
       }
 
-      showToastMsg("Quotation successfully generated and saved to CRM!", "success");
+      return true;
     } catch (err: any) {
-      console.error("Failed to generate quotation:", err);
-      alert("Failed to generate quotation. Please try again.");
+      console.error("Failed to save quotation data:", err);
+      showToastMsg(err.message || "Failed to save quotation data.", "error");
+      return false;
     } finally {
       setIsSaving(false);
     }
@@ -2781,15 +2809,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleDownloadQuotePDF = async (isEdit: boolean) => {
     try {
+      const success = await handleGenerateQuote(isEdit);
+      if (!success) return;
+
       const leadObj = getLeadInfoForQuote(isEdit);
       const activePkgs = getSelectedPkgsInfo(isEdit);
-
-      const missingFields = validateLeadForQuotation(leadObj, activePkgs);
-      if (missingFields.length > 0) {
-        showToastMsg(`Quotation Incomplete! Please enter the following fields: ${missingFields.join(', ')}`, "error");
-        return;
-      }
-
       const quotNum = activeQuoteNum || `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
       
       let currentLogo = logoBase64;
@@ -2818,126 +2842,52 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       );
       
       doc.save(`Quotation_${quotNum}.pdf`);
-    } catch (err) {
+      showToastMsg("Quotation successfully generated and saved to CRM!", "success");
+    } catch (err: any) {
       console.error("PDF download failed:", err);
-      alert("Failed to download PDF.");
+      showToastMsg(err.message || "Failed to download PDF.", "error");
     }
   };
 
   const handleSendWhatsAppQuote = async (isEdit: boolean) => {
-    setIsSaving(true);
     try {
-      if (!salesStaffName || !salesStaffName.trim()) {
-        showToastMsg("Quotation Incomplete! Please enter Sales Staff Name.", "error");
-        setIsSaving(false);
-        return;
-      }
-      if (!salesStaffMobile || !salesStaffMobile.trim() || salesStaffMobile.trim().length !== 10 || !/^\d+$/.test(salesStaffMobile.trim())) {
-        showToastMsg("Please enter a valid 10-digit mobile number.", "error");
-        setIsSaving(false);
-        return;
-      }
+      const success = await handleGenerateQuote(isEdit);
+      if (!success) return;
 
       const leadObj = getLeadInfoForQuote(isEdit);
       const activePkgs = getSelectedPkgsInfo(isEdit);
-
-      const missingFields = validateLeadForQuotation(leadObj, activePkgs);
-      if (missingFields.length > 0) {
-        showToastMsg(`Quotation Incomplete! Please enter the following fields: ${missingFields.join(', ')}`, "error");
-        setIsSaving(false);
-        return;
-      }
-
       const basePkgSum = dynamicBaseSum;
       const finalAmt = dynamicFinalAmt;
       const quotNum = activeQuoteNum || `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-      
-      if (!activeQuoteNum) {
-        setActiveQuoteNum(quotNum);
+
+      let currentLogo = logoBase64;
+      let currentAspect = logoAspectRatio;
+      try {
+        const logoUrl = 'https://aqifyxsimhqayfjwzzwj.supabase.co/storage/v1/object/public/img/logo.png';
+        const result = await getLogoBase64FromUrl(logoUrl);
+        currentLogo = result.base64;
+        currentAspect = result.aspect;
+      } catch (e) {
+        console.warn("Failed to wait-load logo for WhatsApp generation:", e);
       }
 
-      const qId = 'QT-' + Math.random().toString(36).substring(2, 9).toUpperCase();
+      const doc = generateQuotationPDF(
+        leadObj,
+        activePkgs,
+        quotNum,
+        quotationTerms,
+        currentLogo,
+        currentAspect,
+        editableInclusions,
+        editableDeliverables,
+        quoteDiscount,
+        quoteAdditional,
+        quoteServices
+      );
       
-      const standardQuotation = {
-        quotation_id: qId,
-        quotation_number: quotNum,
-        lead_id: leadObj.lead_id || 'DRAFT-LEAD',
-        customer_id: leadObj.customer_name || 'Customer',
-        customer_name: leadObj.customer_name || 'Customer',
-        order_id: '',
-        package_name: activePkgs.map(p => p.package_name).join(' + '),
-        package_price: basePkgSum,
-        discount: quoteDiscount,
-        additional_services_cost: quoteAdditional,
-        final_quotation_amount: finalAmt,
-        quotation_status: 'Sent',
-        pdf_url: '',
-        generated_date: new Date().toISOString().split('T')[0],
-        whatsapp_sent_status: true,
-        viewed_status: false,
-        terms_conditions: quotationTerms,
-        deliverables_description: leadObj.deliverables_description,
-        notes_special_customizations: leadObj.notes_special_customizations,
-        client_residence_address: leadObj.client_residence_address,
-        city: leadObj.city,
-        state: leadObj.state,
-        pincode: leadObj.pincode,
-        desired_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
-        sales_staff_name: salesStaffName,
-        sales_staff_mobile: salesStaffMobile,
-        editableInclusions: editableInclusions,
-        editableDeliverables: editableDeliverables
-      };
-
-      await addQuotation(standardQuotation);
-
-      if (isEdit) {
-        setWizardLeadData(prev => ({
-          ...prev,
-          budget: finalAmt,
-          final_quoted_amount: finalAmt,
-          status: 'Quotation Sent' as CurrentStage
-        }));
-        await updateLead(leadObj.lead_id, {
-          budget: finalAmt,
-          status: 'Quotation Sent' as CurrentStage,
-          package_price: basePkgSum,
-          deliverables_description: leadObj.deliverables_description,
-          notes_special_customizations: leadObj.notes_special_customizations,
-          quotation_discount: quoteDiscount,
-          additional_services_cost: quoteAdditional,
-          client_residence_address: leadObj.client_residence_address,
-          city: leadObj.city,
-          state: leadObj.state,
-          pincode: leadObj.pincode,
-          desired_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
-          remarks: getRemarksPayload(wizardLeadData.remarks, wizardLeadData.notes || '', wizardLeadData.next_follow_up_date, wizardLeadData.whatsapp_number, wizardLeadData.address, wizardLeadData.city),
-          Select_Package_Option: leadObj.Select_Package_Option || ''
-        });
-        setSelectedLead(null); // Close CRM Workspace
-      } else {
-        setCreateForm(prev => ({
-          ...prev,
-          budget: finalAmt
-        }));
-        setSalesStatus('Quotation Sent');
-        await updateLead(createdLeadId!, {
-          budget: finalAmt,
-          status: 'Quotation Sent' as CurrentStage,
-          package_price: basePkgSum,
-          deliverables_description: leadObj.deliverables_description,
-          notes_special_customizations: leadObj.notes_special_customizations,
-          quotation_discount: quoteDiscount,
-          additional_services_cost: quoteAdditional,
-          client_residence_address: leadObj.client_residence_address,
-          city: leadObj.city,
-          state: leadObj.state,
-          pincode: leadObj.pincode,
-          desired_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
-          remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city),
-          Select_Package_Option: leadObj.Select_Package_Option || ''
-        });
-      }
+      const pdfBlob = doc.output('blob');
+      const blobUrl = URL.createObjectURL(pdfBlob);
+      setGeneratedPDFBlobUrl(blobUrl);
 
       const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
       const phone = leadObj.whatsapp_number || leadObj.mobile || '';
@@ -2962,9 +2912,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       showToastMsg("Quotation sent via WhatsApp and updated to CRM!", "success");
     } catch (err: any) {
       console.error("WhatsApp quote failed:", err);
-      alert("Failed to send WhatsApp quote: " + (err.message || String(err)));
-    } finally {
-      setIsSaving(false);
+      showToastMsg(err.message || "Failed to send WhatsApp quote.", "error");
     }
   };
 
@@ -3536,7 +3484,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           }]);
         }
         const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
-        const finalStatus = selectedLead.status || 'Negotiation';
+        let finalStatus = selectedLead.status || 'Negotiation';
+        if (finalStatus === 'New Lead' || finalStatus === 'Follow-up' || finalStatus === 'Follow Up') {
+          finalStatus = 'Negotiation';
+        }
         await updateLead(selectedLead.lead_id, {
           budget: Number(wizardLeadData.package_cost),
           package_price: Number(wizardLeadData.package_cost),
