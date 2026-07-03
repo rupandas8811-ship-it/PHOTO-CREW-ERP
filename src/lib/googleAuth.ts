@@ -10,7 +10,7 @@ provider.addScope('https://www.googleapis.com/auth/calendar');
 provider.addScope('https://www.googleapis.com/auth/calendar.events');
 
 let isSigningIn = false;
-let cachedAccessToken: string | null = null;
+let cachedAccessToken: string | null = localStorage.getItem('google_access_token');
 
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
@@ -22,10 +22,13 @@ export const initAuth = (
         if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
       } else if (!isSigningIn) {
         cachedAccessToken = null;
+      localStorage.removeItem('google_access_token');
+  localStorage.removeItem('google_access_token');
         if (onAuthFailure) onAuthFailure();
       }
     } else {
       cachedAccessToken = null;
+      localStorage.removeItem('google_access_token');
       if (onAuthFailure) onAuthFailure();
     }
   });
@@ -44,6 +47,7 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     }
 
     cachedAccessToken = credential.accessToken;
+    localStorage.setItem('google_access_token', cachedAccessToken);
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     console.error('Sign in error:', error);
@@ -64,4 +68,5 @@ export const getAccessTokenSync = (): string | null => {
 export const googleLogout = async () => {
   await signOut(auth);
   cachedAccessToken = null;
+      localStorage.removeItem('google_access_token');
 };

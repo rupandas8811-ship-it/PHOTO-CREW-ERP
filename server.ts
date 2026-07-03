@@ -269,12 +269,12 @@ async function startServer() {
     try {
       const db = getServerSupabase();
       console.log(`[Server DB Delete] Deleting from ${table} where ${matchColumn}=${matchValue}`);
-      const { error } = await db.from(table).delete().eq(matchColumn, matchValue);
+      const { data, error } = await db.from(table).delete().eq(matchColumn, matchValue).select();
       if (error) {
         console.error(`[Server DB Delete Error] ${table}`, error);
         return res.status(400).json({ success: false, error: error.message });
       }
-      res.json({ success: true });
+      res.json({ success: true, data });
     } catch (err: any) {
       console.error(`[Server DB Delete Exception] ${table}`, err);
       res.status(500).json({ success: false, error: err.message || String(err) });

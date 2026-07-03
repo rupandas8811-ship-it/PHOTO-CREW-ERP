@@ -126,6 +126,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   const [showAddMemo, setShowAddMemo] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState('');
+  const [isGoogleConnected, setIsGoogleConnected] = useState(!!getAccessTokenSync());
   const [newMemoTitle, setNewMemoTitle] = useState('');
   const [newMemoMessage, setNewMemoMessage] = useState('');
   
@@ -880,15 +881,25 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
               Assign Memo
             </button>
           )}
-          <button
-            id="btn_sync_google"
-            onClick={handleSyncGoogle}
-            disabled={isSyncing}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 border border-blue-700 rounded-xl text-xs text-white font-bold transition-all disabled:opacity-50"
-          >
-            <CalendarIcon className="w-3.5 h-3.5 stroke-[2.5]" />
-            {isSyncing ? syncStatus : 'Sync to Google'}
-          </button>
+          {!isGoogleConnected && (
+            <button
+              id="btn_connect_google"
+              onClick={async () => {
+                 try {
+                   setSyncStatus('Connecting...');
+                   await googleSignIn();
+                   setSyncStatus(''); setIsGoogleConnected(true);
+                 } catch(e) {
+                   setSyncStatus('');
+                   alert('Failed to connect to Google Calendar');
+                 }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 border border-blue-700 rounded-xl text-xs text-white font-bold transition-all cursor-pointer"
+            >
+              <CalendarIcon className="w-3.5 h-3.5 stroke-[2.5]" />
+              {syncStatus || 'Connect Google Calendar'}
+            </button>
+          )}
         </div>
       </div>
 
