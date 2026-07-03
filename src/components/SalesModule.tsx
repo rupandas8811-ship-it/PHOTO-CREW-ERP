@@ -3542,6 +3542,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           }]);
         }
         const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
+        const finalStatus = (selectedLead.status === 'Quotation Sent' || selectedLead.status === 'Order Confirmed' || selectedLead.status === 'Lost Lead') 
+          ? selectedLead.status 
+          : 'Negotiation';
         await updateLead(selectedLead.lead_id, {
           budget: Number(wizardLeadData.package_cost),
           package_price: Number(wizardLeadData.package_cost),
@@ -3553,7 +3556,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           city: wizardLeadData.city,
           state: wizardLeadData.state,
           pincode: wizardLeadData.pincode,
-          status: 'Negotiation' // Automatically update status to Negotiation
+          status: finalStatus
         });
 
         const newCompleted = Math.max(crmHighestStep, 3);
@@ -3564,11 +3567,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           if (!prev) return null;
           return {
             ...prev,
+            status: finalStatus,
             remarks: updatedRemarks
           };
         });
 
-        showToastMsg("CRM Updated Successfully. Status set to Negotiation.", "success");
+        showToastMsg(`CRM Updated Successfully. Status set to ${finalStatus}.`, "success");
       }
 
       if (step < 3) {
@@ -3619,14 +3623,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   };
 
   const handleSaveStep2FollowUp = async () => {
-    if (!selectedLead) return;
+    const isCreateFlow = activeTab === 'create';
+    const currentLeadId = isCreateFlow ? createdLeadId : selectedLead?.lead_id;
+    if (!currentLeadId) {
+      showToastMsg("Lead not initialized yet.", "error");
+      return;
+    }
     if (!step2FollowUpDate) {
       showToastMsg("Next Follow-up Date is mandatory.", "error");
       return;
     }
     setIsSaving(true);
     try {
-      const finalEventsList = [...crmEvents];
+      const finalEventsList = isCreateFlow ? [...createEvents] : [...crmEvents];
       if (finalEventsList.length === 0) {
         showToastMsg("No events found to save.", "error");
         setIsSaving(false);
@@ -3635,10 +3644,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const firstEvent = finalEventsList[0];
 
       const formattedEventTime = validateAndFormatTime(firstEvent.event_start_time, "Event Start Time");
-      const formattedReportingTime = validateAndFormatTime(wizardLeadData.reporting_time, "Reporting Time");
+      const formattedReportingTime = validateAndFormatTime(isCreateFlow ? reportingTime : wizardLeadData.reporting_time, "Reporting Time");
 
       // Save event details first
-      await updateLead(selectedLead.lead_id, {
+      await updateLead(currentLeadId, {
         event_type: firstEvent.event_type === 'Other' ? 'Other' : firstEvent.event_type,
         custom_event_name: firstEvent.event_name,
         custom_event_type: firstEvent.event_type === 'Other' ? firstEvent.event_name : undefined,
@@ -3647,16 +3656,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         reporting_time: formattedReportingTime || null,
         event_location: firstEvent.event_location,
         google_maps_link: firstEvent.google_maps_link || '',
-        lead_source: wizardLeadData.lead_source,
+        lead_source: isCreateFlow ? createForm.lead_source : wizardLeadData.lead_source,
         shoot_type: firstEvent.event_shoot_type || 'Photography',
         desired_event_shoot_type: firstEvent.event_shoot_type || 'Photography',
-        client_residence_address: wizardLeadData.client_residence_address,
-        city: wizardLeadData.city,
-        state: wizardLeadData.state,
-        pincode: wizardLeadData.pincode,
+        client_residence_address: isCreateFlow ? createForm.client_residence_address : wizardLeadData.client_residence_address,
+        city: isCreateFlow ? createForm.city : wizardLeadData.city,
+        state: isCreateFlow ? createForm.state : wizardLeadData.state,
+        pincode: isCreateFlow ? createForm.pincode : wizardLeadData.pincode,
         total_pax: firstEvent.guest_pax,
-        reference_source: wizardLeadData.reference_source || '',
-        Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || '',
+        reference_source: isCreateFlow ? createForm.reference_source : wizardLeadData.reference_source || '',
+        Select_Package_Option: isCreateFlow ? (createForm.Select_Package_Option || selectedPkgIds[0] || '') : (wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || ''),
         events: finalEventsList
       });
 
@@ -3664,40 +3673,47 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       // Update lead follow up and set status to Follow-up
       await updateLeadFollowUp(
-        selectedLead.lead_id,
+        currentLeadId,
         'Follow-up',
         notesWithTag,
         step2FollowUpDate,
-        Number(wizardLeadData.package_cost || selectedLead.budget || 0),
+        Number(isCreateFlow ? (createForm.budget || 0) : (wizardLeadData.package_cost || selectedLead?.budget || 0)),
         step2FollowUpNotes || 'Saved event details'
       );
 
-      const newCompleted = Math.max(crmHighestStep, 2);
-      setCrmHighestStep(newCompleted);
-      localStorage.setItem(`crm_last_step_${selectedLead.lead_id}`, String(newCompleted));
+      if (isCreateFlow) {
+        setSalesStatus('Follow-up');
+        setWizardStep(3);
+      } else {
+        const newCompleted = Math.max(crmHighestStep, 2);
+        setCrmHighestStep(newCompleted);
+        if (selectedLead) {
+          localStorage.setItem(`crm_last_step_${selectedLead.lead_id}`, String(newCompleted));
+        }
 
-      // Locally update the status and remarks
-      const timestamp = new Date().toISOString();
-      const updatedRemarks = `${selectedLead.remarks || ''}\n[Update ${timestamp.split('T')[0]}]: ${notesWithTag}. ${step2FollowUpNotes ? 'Neg Notes: ' + step2FollowUpNotes : ''}. Next follow-up: ${step2FollowUpDate}`;
+        // Locally update the status and remarks
+        const timestamp = new Date().toISOString();
+        const updatedRemarks = `${selectedLead?.remarks || ''}\n[Update ${timestamp.split('T')[0]}]: ${notesWithTag}. ${step2FollowUpNotes ? 'Neg Notes: ' + step2FollowUpNotes : ''}. Next follow-up: ${step2FollowUpDate}`;
 
-      // Locally update the status
-      setSelectedLead(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          status: 'Follow-up',
-          remarks: updatedRemarks
-        };
-      });
+        // Locally update the status
+        setSelectedLead(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            status: 'Follow-up',
+            remarks: updatedRemarks
+          };
+        });
+
+        let nextStep = 3;
+        if (crmHighestStep > 2) {
+          nextStep = crmHighestStep;
+        }
+        setCrmWizardStep(nextStep); // Advance to Step 3 or highest step automatically
+      }
 
       showToastMsg("Event details and follow-up saved successfully. Status set to Follow-up.", "success");
       setShowStep2Popup(false);
-      
-      let nextStep = 3;
-      if (crmHighestStep > 2) {
-        nextStep = crmHighestStep;
-      }
-      setCrmWizardStep(nextStep); // Advance to Step 3 or highest step automatically
     } catch (err: any) {
       console.error("Step 2 Follow-up save failed:", err);
       showToastMsg(err.message || String(err), "error");
@@ -4679,13 +4695,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           created_by: finalUser?.name || currentUser?.name || 'Sales Team'
         };
 
-        // Reset Create Lead modal and open CRM Workspace directly at Step 2 for the new lead
-        resetForm();
-        setActiveTab('list');
-        handleSelectLead(newLeadObj);
-        setCrmWizardStep(2);
+        // Stay in Create Lead form, and advance to Step 2
+        setWizardStep(2);
 
-        showToastMsg("Inbound lead created successfully! CRM Workspace opened.", "success");
+        showToastMsg("Inbound lead created successfully! Continuing to Step 2.", "success");
       } catch (err: any) {
         console.error("Step 1 saving failed:", err);
         const errMsg = err.message || String(err);
@@ -4794,45 +4807,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const firstEvent = finalEventsList[0];
 
       try {
-        setIsSaving(true);
-        const finalSource = createForm.lead_source === 'Other' ? (otherSource ? `Other: ${otherSource}` : 'Other') : createForm.lead_source;
-        const finalEventType = firstEvent.event_type === 'Other' ? 'Other' : firstEvent.event_type;
-        const finalCustomEventName = firstEvent.event_name;
-        const finalCustomEventType = firstEvent.event_type === 'Other' ? firstEvent.event_name : undefined;
-
-        const formattedEventTime = validateAndFormatTime(firstEvent.event_start_time, "Event Start Time");
-        const formattedReportingTime = validateAndFormatTime(reportingTime, "Reporting Time");
-
-        await updateLead(createdLeadId!, {
-          event_type: finalEventType || '',
-          custom_event_name: finalCustomEventName || '',
-          custom_event_type: finalCustomEventType,
-          event_date: firstEvent.event_date || '',
-          event_time: formattedEventTime || null,
-          reporting_time: formattedReportingTime || null,
-          event_location: firstEvent.event_location || '',
-          google_maps_link: firstEvent.google_maps_link || '',
-          lead_source: finalSource || 'Walk-in',
-          shoot_type: firstEvent.event_shoot_type || 'Photography',
-          desired_event_shoot_type: firstEvent.event_shoot_type || 'Photography',
-          whatsapp_number: createForm.whatsapp_number,
-          address: createForm.address,
-          city: createForm.city,
-          state: createForm.state,
-          pincode: createForm.pincode,
-          client_residence_address: createForm.client_residence_address,
-          total_pax: firstEvent.guest_pax,
-          reference_source: createForm.reference_source || '',
-          remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
-          Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || '',
-          events: finalEventsList
-        });
-        setWizardStep(3);
-        showToastMsg("Event details saved successfully.", "success");
-        setTimeout(() => {
-          autoScrollToFormHeader();
-          document.getElementById('wizard_step3_first_field')?.focus();
-        }, 100);
+        // Open Step 2 Follow-up details modal before moving to Step 3
+        setStep2FollowUpDate('');
+        setStep2FollowUpNotes('');
+        setShowStep2Popup(true);
+        setIsSaving(false);
       } catch (err: any) {
         console.error("Step 2 saving failed:", err);
         const errMsg = err.message || String(err);
@@ -4870,6 +4849,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         }));
         await saveLeadPackages(createdLeadId!, packagesPayload);
 
+        const finalStatus = (salesStatus === 'Quotation Sent') ? 'Quotation Sent' : 'Negotiation';
+        if (salesStatus !== 'Quotation Sent') {
+          setSalesStatus('Negotiation');
+        }
+
         await updateLead(createdLeadId!, {
           budget: finalTotal,
           package_price: finalTotal,
@@ -4880,7 +4864,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           client_residence_address: createForm.client_residence_address,
           city: createForm.city,
           state: createForm.state,
-          pincode: createForm.pincode
+          pincode: createForm.pincode,
+          status: finalStatus
         });
 
         // Sync local states
@@ -6747,9 +6732,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           /* SCREEN 2: Create Lead Layout as dedicated Full Page inside the application */
           createPortal(
             <div 
-              id="create_lead_form"
-              className="fixed inset-0 bg-[#030303] z-[9999] flex flex-col text-left overflow-hidden text-slate-100 whitespace-normal font-sans"
+              id="create_lead_form_overlay"
+              className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 overflow-y-auto text-left font-sans text-slate-100 whitespace-normal animate-fade-in"
             >
+              <div 
+                id="create_lead_form"
+                className="bg-[#030303] border border-slate-800 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col my-auto max-h-[90vh] h-fit overflow-hidden relative"
+              >
             {/* Header: Sticky */}
             <div className="border-b border-slate-800/80 py-2.5 px-4 sm:px-5 flex items-center justify-between shrink-0 bg-slate-950/40 backdrop-blur-md">
               <div className="space-y-0.5">
@@ -7518,6 +7507,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   {isSaving ? 'Saving...' : salesStatus === 'Order Confirmed' ? '🎉 Confirm Order & Transition' : '✍️ Create Lead'}
                 </button>
               )}
+            </div>
             </div>
           </div>,
         document.body
@@ -8302,9 +8292,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             {/* Mobile/Tablet Popup Modal for Lead Follow-up Details */}
       {selectedLead && (
         <div 
-          id="lead_details_mobile_modal" 
-          className="fixed inset-0 bg-[#030303] z-[9999] flex flex-col overflow-hidden text-left font-sans text-slate-100 animate-fade-in"
+          id="lead_details_mobile_overlay" 
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 overflow-y-auto text-left font-sans text-slate-100 animate-fade-in"
         >
+          <div 
+            id="lead_details_mobile_modal" 
+            className="bg-[#030303] border border-slate-800 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col my-auto max-h-[90vh] h-fit overflow-hidden relative"
+          >
             {/* Header: Sticky */}
             <div className="py-2.5 px-4 sm:px-5 border-b border-slate-850 flex items-center justify-between bg-slate-950/40 sticky top-0 z-10 backdrop-blur-sm shrink-0">
               <div className="flex items-center gap-2 text-left">
@@ -8923,8 +8917,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 </button>
               </div>
             </div>
-
           </div>
+        </div>
       )}
 {/* MODAL: Existing Customer Detection Pop-up */}
       {showDetectionPopup && detectedCustomer && (
