@@ -3705,11 +3705,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           };
         });
 
-        let nextStep = 3;
-        if (crmHighestStep > 2) {
-          nextStep = crmHighestStep;
-        }
-        setCrmWizardStep(nextStep); // Advance to Step 3 or highest step automatically
+        setCrmWizardStep(3);
       }
 
       showToastMsg("Event details and follow-up saved successfully. Status set to Follow-up.", "success");
@@ -5816,7 +5812,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       {/* Main Sandbox Area & Mobile Base view */}
       <div className="space-y-6">
-        {activeTab === 'calendar' ? (
+        {selectedLead ? null : activeTab === 'calendar' ? (
           <SalesCalendar />
         ) : activeTab === 'profiles' ? (
           /* NEW SCREEN: Customer Profiles & History Timeline sub-tab */
@@ -6730,15 +6726,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           </div>
         ) : activeTab === 'create' ? (
           /* SCREEN 2: Create Lead Layout as dedicated Full Page inside the application */
-          createPortal(
-            <div 
-              id="create_lead_form_overlay"
-              className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 overflow-y-auto text-left font-sans text-slate-100 whitespace-normal animate-fade-in"
-            >
-              <div 
-                id="create_lead_form"
-                className="bg-[#030303] border border-slate-800 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col my-auto max-h-[90vh] h-fit overflow-hidden relative"
-              >
+          <div 
+            id="create_lead_form"
+            className="bg-[#030303] border border-slate-800 rounded-2xl w-full shadow-2xl flex flex-col overflow-hidden relative"
+          >
             {/* Header: Sticky */}
             <div className="border-b border-slate-800/80 py-2.5 px-4 sm:px-5 flex items-center justify-between shrink-0 bg-slate-950/40 backdrop-blur-md">
               <div className="space-y-0.5">
@@ -7508,11 +7499,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 </button>
               )}
             </div>
-            </div>
-          </div>,
-        document.body
-      )
-    ) : (
+          </div>
+        ) : (
         /* SCREEN 1: Lead List datagrid */
         <div className="space-y-4">
 
@@ -8289,16 +8277,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         </div>
       )}
 
-            {/* Mobile/Tablet Popup Modal for Lead Follow-up Details */}
       {selectedLead && (
         <div 
-          id="lead_details_mobile_overlay" 
-          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 overflow-y-auto text-left font-sans text-slate-100 animate-fade-in"
+          id="lead_details_mobile_modal" 
+          className="bg-[#030303] border border-slate-800 rounded-2xl w-full shadow-2xl flex flex-col overflow-hidden relative animate-fade-in text-left font-sans text-slate-100"
         >
-          <div 
-            id="lead_details_mobile_modal" 
-            className="bg-[#030303] border border-slate-800 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col my-auto max-h-[90vh] h-fit overflow-hidden relative"
-          >
             {/* Header: Sticky */}
             <div className="py-2.5 px-4 sm:px-5 border-b border-slate-850 flex items-center justify-between bg-slate-950/40 sticky top-0 z-10 backdrop-blur-sm shrink-0">
               <div className="flex items-center gap-2 text-left">
@@ -8918,8 +8901,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 {/* MODAL: Existing Customer Detection Pop-up */}
       {showDetectionPopup && detectedCustomer && (
         <div id="modal_existing_customer_detection" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-4 animate-fade-in text-left">
