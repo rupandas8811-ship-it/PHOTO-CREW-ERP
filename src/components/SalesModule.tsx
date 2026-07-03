@@ -7824,10 +7824,25 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </td>
                           <td className="p-3.5 text-right pr-5 w-[160px] min-w-[160px] overflow-visible relative">
                             {(() => {
-                              const isSalesStatus = ['New Lead', 'Follow-up', 'Follow Up', 'Negotiation', 'Quotation Sent'].includes(leadStatus);
-                              const showActionsDropdown = isSalesStatus && isActiveInSales && canEdit;
+                              const isManageCrmOnlyStatus = ['New Lead', 'Follow-up', 'Follow Up', 'Contacted'].includes(leadStatus);
+                              const isActionsDropdownStatus = ['Negotiation', 'Quotation Sent'].includes(leadStatus);
 
-                              if (showActionsDropdown) {
+                              if (isManageCrmOnlyStatus && isActiveInSales && canEdit) {
+                                return (
+                                  <button
+                                    type="button"
+                                    id={`btn_followup_${lead.lead_id}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSelectLead(lead);
+                                    }}
+                                    className="w-32 h-8 text-xs font-bold bg-sky-950/30 hover:bg-sky-900/50 text-sky-400 hover:text-white rounded-xl border border-sky-900/50 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow shrink-0"
+                                  >
+                                    <Edit className="w-3.5 h-3.5 shrink-0 text-sky-400" />
+                                    <span>Manage CRM</span>
+                                  </button>
+                                );
+                              } else if (isActionsDropdownStatus && isActiveInSales && canEdit) {
                                 return (
                                   <div className="relative inline-block text-left actions-dropdown-container">
                                     <button
@@ -7915,9 +7930,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       e.stopPropagation();
                                       handleSelectLead(lead);
                                     }}
-                                    className="w-32 h-8 text-xs font-bold bg-sky-950/40 hover:bg-sky-900/50 text-sky-400 hover:text-white rounded-xl border border-sky-900/50 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow shrink-0"
+                                    className="w-32 h-8 text-xs font-bold bg-purple-950/30 hover:bg-purple-900/50 text-purple-400 hover:text-white rounded-xl border border-purple-900/50 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow shrink-0"
                                   >
-                                    <Eye className="w-3.5 h-3.5 shrink-0 text-sky-400 group-hover:text-white" />
+                                    <Eye className="w-3.5 h-3.5 shrink-0 text-purple-400" />
                                     <span>View CRM</span>
                                   </button>
                                 );
