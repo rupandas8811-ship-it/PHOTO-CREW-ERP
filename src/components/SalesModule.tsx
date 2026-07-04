@@ -3806,10 +3806,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       const notesWithTag = appendCompletedStep(step2FollowUpNotes || 'Saved event details', 2);
 
-      // Update lead follow up and preserve status
+      // Determine target status: If the current status is New Lead or empty, update to Follow Up. Otherwise preserve advanced status.
+      const previousStatus = isCreateFlow ? 'New Lead' : (selectedLead ? getLeadCurrentStatus(selectedLead) : 'New Lead');
+      const targetStatus = (previousStatus === 'New Lead' || !previousStatus) ? 'Follow Up' : previousStatus;
+
+      // Update lead follow up and preserve/update status
       await updateLeadFollowUp(
         currentLeadId,
-        isCreateFlow ? 'Follow-up' : (selectedLead?.status || 'Follow-up'),
+        targetStatus as CurrentStage,
         notesWithTag,
         step2FollowUpDate,
         Number(isCreateFlow ? (createForm.budget || 0) : (wizardLeadData.package_cost || selectedLead?.budget || 0)),
@@ -3817,7 +3821,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       );
 
       if (isCreateFlow) {
-        setSalesStatus('Follow-up');
+        setSalesStatus(targetStatus as CurrentStage);
         setWizardStep(3);
       } else {
         const newCompleted = Math.max(crmHighestStep, 2);
@@ -3835,7 +3839,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           if (!prev) return null;
           return {
             ...prev,
-            status: 'Follow-up',
+            status: targetStatus as CurrentStage,
+            current_status: targetStatus,
             remarks: updatedRemarks
           };
         });

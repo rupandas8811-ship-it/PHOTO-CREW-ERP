@@ -1656,6 +1656,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
                }
              }
           }
+          if (finalStatus === 'Follow-up' || finalStatus === 'Follow-Up') {
+            finalStatus = 'Follow Up';
+          }
           return { ...l, status: finalStatus, current_status: finalStatus, events: evts };
         });
         setLeads(parsedLeads);
@@ -2515,9 +2518,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const previousStage = targetLead ? (targetLead.current_status || targetLead.status || 'New Lead') : 'New Lead';
     const timestamp = new Date().toISOString();
 
+    // Normalize different spellings of Follow Up to prevent fragmented sources of truth
+    const normalizedStatus = (status as string === 'Follow-up' || status as string === 'Follow-Up' || status === 'Follow Up') ? 'Follow Up' : status;
+
     const res = await pushUpdate('leads', 'lead_id', leadId, {
-      status,
-      current_status: status,
+      status: normalizedStatus,
+      current_status: normalizedStatus,
       budget: quotationAmount !== undefined ? quotationAmount : targetLead?.budget,
       remarks: `${targetLead?.remarks || ''}\n[Update ${timestamp.split('T')[0]}]: ${callNotes}. ${negotiationNotes ? 'Neg Notes: ' + negotiationNotes : ''}. Next follow-up: ${nextFollowUpDate}`,
       updated_by: currentUserName,
@@ -2528,11 +2534,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error(res?.error || "Failed to save follow-up details in database.");
     }
 
-    if (status !== previousStage) {
+    if (normalizedStatus !== previousStage) {
       const linkedOrder = orders.find(o => o.lead_id === leadId);
       const orderId = linkedOrder?.order_id || null;
 
-      if (status === 'Order Confirmed' && !orderId) {
+      if (normalizedStatus === 'Order Confirmed' && !orderId) {
         throw new Error(`"order_id" is required for "Order Confirmed" status, but it was not found or is missing.`);
       }
       
@@ -2546,7 +2552,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lead_id: leadId,
         order_id: orderId,
         old_status: previousStage,
-        new_status: status,
+        new_status: normalizedStatus,
         changed_by: changedBy,
         changed_by_role: changedByRole,
         remarks: callNotes || 'Status updated from CRM follow-up panel',
@@ -2565,8 +2571,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (ld.lead_id === leadId) {
           return {
             ...ld,
-            status,
-            current_status: status,
+            status: normalizedStatus,
+            current_status: normalizedStatus,
             budget: quotationAmount !== undefined ? quotationAmount : ld.budget,
             remarks: `${ld.remarks || ''}\n[Update ${timestamp.split('T')[0]}]: ${callNotes}. ${negotiationNotes ? 'Neg Notes: ' + negotiationNotes : ''}. Next follow-up: ${nextFollowUpDate}`,
             updated_by: currentUserName,
@@ -4978,6 +4984,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const getLeadCurrentStatus = (lead: Lead): string => {
+    let rawStatus = 'New Lead';
     if (statusHistory && statusHistory.length > 0) {
       const historyForLead = statusHistory.filter((h: any) => h.lead_id === lead.lead_id);
       if (historyForLead.length > 0) {
@@ -4985,17 +4992,21 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
         if (sorted[0]?.new_status) {
-          return sorted[0].new_status;
+          rawStatus = sorted[0].new_status;
+        } else {
+          rawStatus = lead.current_status || lead.status || 'New Lead';
         }
+      } else {
+        rawStatus = lead.current_status || lead.status || 'New Lead';
       }
+    } else {
+      rawStatus = lead.current_status || lead.status || 'New Lead';
     }
 
-    const current = lead.current_status;
-    if (current && current.trim() !== "") {
-      return current;
+    if (rawStatus === 'Follow-up' || rawStatus === 'Follow-Up') {
+      return 'Follow Up';
     }
-    
-    return lead.status || 'New Lead';
+    return rawStatus;
   };
 
   const getLeadCurrentStage = (lead: Lead): 'Sales' | 'Operations' | 'Production' | 'Completed' => {
