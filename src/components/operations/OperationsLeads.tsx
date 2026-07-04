@@ -83,6 +83,18 @@ export const OperationsLeads: React.FC = () => {
   const [activeAssignments, setActiveAssignments] = useState<{ staff_role: string; staff_id: string; staff_name: string }[]>([]);
   const [selectedRole, setSelectedRole] = useState('Lead Photographer');
   const [selectedStaff, setSelectedStaff] = useState('');
+  
+  const [assignForm, setAssignForm] = useState<any>({
+    photographer_assigned: '',
+    videographer_assigned: '',
+    drone_operator_assigned: '',
+    assistant_assigned: '',
+    equipment_kit: '',
+    reporting_time: '',
+    remarks: '',
+    event_date: '',
+    event_time: ''
+  });
 
   // Modals / Selection states
   const [activeModalOrderId, setActiveModalOrderId] = useState<string | null>(null);

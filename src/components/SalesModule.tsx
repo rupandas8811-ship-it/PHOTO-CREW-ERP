@@ -1623,15 +1623,40 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [lostReason, setLostReason] = useState('Price too high');
   const [lostNotes, setLostNotes] = useState('');
   const [otherLostReason, setOtherLostReason] = useState('');
+  const [errorDetails, setErrorDetails] = useState<{
+    title: string;
+    reason: string;
+    source?: string;
+    failedFunction?: string;
+    database?: string;
+    leadId?: string;
+    suggestedFix?: string;
+    stack?: string;
+  } | null>(null);
+
+  const showErrorHelper = (title: string, reason: string, failedFunction: string, leadId: string, suggestedFix: string, err?: any) => {
+    console.error(`❌ ${title}\nReason: ${reason}\nFunction: ${failedFunction}\n`, err);
+    setErrorDetails({
+      title,
+      reason: err?.message || reason,
+      source: 'SalesModule.tsx',
+      failedFunction,
+      database: 'quotations / leads',
+      leadId,
+      suggestedFix,
+      stack: err?.stack || ''
+    });
+  };
 
   const isLeadLocked = selectedLead ? isRecordLocked(selectedLead.lead_id, 'Sales') : false;
 
   const [openDropdownLeadId, setOpenDropdownLeadId] = useState<string | null>(null);
+  const [dropdownCoords, setDropdownCoords] = useState<{ top: number | string, right: number | string, bottom: number | string }>({ top: 0, right: 0, bottom: 'auto' });
 
   React.useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-      if (!target.closest('.actions-dropdown-container')) {
+      if (!target.closest('.actions-dropdown-container') && !target.closest('.actions-dropdown-menu')) {
         setOpenDropdownLeadId(null);
       }
     };
@@ -2600,24 +2625,44 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setIsSaving(true);
     console.log("✔ Starting quotation generation...");
     try {
+      const leadObj = getLeadInfoForQuote(isEdit);
+      const leadIdForError = leadObj?.lead_id || createdLeadId || 'UNKNOWN';
+
       if (!salesStaffName || !salesStaffName.trim()) {
-        showToastMsg("Quotation Incomplete! Please enter Sales Staff Name.", "error");
+        showErrorHelper(
+          "Quotation Generation Failed",
+          "Missing required field: Sales Staff Name",
+          "handleGenerateQuote()",
+          leadIdForError,
+          "Enter a valid Sales Staff Name in the form."
+        );
         setIsSaving(false);
         return null;
       }
       if (!salesStaffMobile || !salesStaffMobile.trim() || salesStaffMobile.trim().length !== 10 || !/^\d+$/.test(salesStaffMobile.trim())) {
-        showToastMsg("Please enter a valid 10-digit mobile number.", "error");
+        showErrorHelper(
+          "Quotation Generation Failed",
+          "Invalid mobile number. Must be 10 digits.",
+          "handleGenerateQuote()",
+          leadIdForError,
+          "Enter a valid 10-digit mobile number in the form."
+        );
         setIsSaving(false);
         return null;
       }
 
       console.log("✔ Validating form...");
-      const leadObj = getLeadInfoForQuote(isEdit);
       const activePkgs = getSelectedPkgsInfo(isEdit);
 
       const missingFields = validateLeadForQuotation(leadObj, activePkgs);
       if (missingFields.length > 0) {
-        showToastMsg(`Quotation Incomplete! Please enter the following fields: ${missingFields.join(', ')}`, "error");
+        showErrorHelper(
+          "Quotation Incomplete",
+          `Missing required fields: ${missingFields.join(', ')}`,
+          "validateLeadForQuotation()",
+          leadIdForError,
+          "Complete all required fields before generating the quotation."
+        );
         setIsSaving(false);
         return null;
       }
@@ -2757,8 +2802,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       console.log("✔ Process completed");
       return quotNum;
     } catch (err: any) {
-      console.error("Failed to save quotation data:", err);
-      showToastMsg(err.message || "Failed to save quotation data.", "error");
+      showErrorHelper(
+        "Quotation Save Failed",
+        err.message || "Failed to save quotation data to the database.",
+        "handleGenerateQuote()",
+        isEdit && selectedLead ? selectedLead.lead_id : (createdLeadId || 'UNKNOWN'),
+        "Check your network connection and ensure the lead data is valid.",
+        err
+      );
       return null;
     } finally {
       setIsSaving(false);
@@ -2848,8 +2899,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       doc.save(`Quotation_${generatedQuotNum}.pdf`);
       showToastMsg("Quotation successfully generated and saved to CRM!", "success");
     } catch (err: any) {
-      console.error("PDF download failed:", err);
-      showToastMsg(err.message || "Failed to download PDF.", "error");
+      showErrorHelper(
+        "PDF Generation Failed",
+        err.message || "jsPDF failed to render the quotation document.",
+        "handleDownloadQuotePDF()",
+        isEdit && selectedLead ? selectedLead.lead_id : (createdLeadId || 'UNKNOWN'),
+        "Check console logs to see if there is an issue with the document template or variables.",
+        err
+      );
     }
   };
 
@@ -2901,6 +2958,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         `Thank you.\nPhotoCrew Pictures`;
 
       const cleanPhone = phone.replace(/[^0-9]/g, '');
+      if (!cleanPhone) {
+        showErrorHelper(
+          "WhatsApp Redirect Failed",
+          "Customer WhatsApp or mobile number is missing.",
+          "handleSendWhatsAppQuote()",
+          isEdit && selectedLead ? selectedLead.lead_id : (createdLeadId || 'UNKNOWN'),
+          "Enter a valid mobile/WhatsApp number in Customer Details."
+        );
+        return;
+      }
       const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
 
       window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
@@ -2908,8 +2975,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       showToastMsg("Quotation downloaded and WhatsApp prepared!", "success");
       console.log("✔ Process completed");
     } catch (err: any) {
-      console.error("WhatsApp quote failed:", err);
-      showToastMsg(err.message || "Failed to send WhatsApp quote.", "error");
+      showErrorHelper(
+        "WhatsApp Redirect Failed",
+        err.message || "Failed to prepare WhatsApp message or generate PDF.",
+        "handleSendWhatsAppQuote()",
+        isEdit && selectedLead ? selectedLead.lead_id : (createdLeadId || 'UNKNOWN'),
+        "Check console logs to see if there is an issue with the document template or variables.",
+        err
+      );
     }
   };
 
@@ -7766,7 +7839,25 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setOpenDropdownLeadId(openDropdownLeadId === lead.lead_id ? null : lead.lead_id);
+                                        if (openDropdownLeadId === lead.lead_id) {
+                                          setOpenDropdownLeadId(null);
+                                        } else {
+                                          const rect = e.currentTarget.getBoundingClientRect();
+                                          const spaceBelow = window.innerHeight - rect.bottom;
+                                          const spaceAbove = rect.top;
+                                          const menuHeight = 130;
+                                          
+                                          let top: number | string = rect.bottom + 4;
+                                          let bottom: number | string = 'auto';
+                                          
+                                          if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
+                                            top = 'auto';
+                                            bottom = window.innerHeight - rect.top + 4;
+                                          }
+                                          
+                                          setDropdownCoords({ top, right: window.innerWidth - rect.right, bottom });
+                                          setOpenDropdownLeadId(lead.lead_id);
+                                        }
                                       }}
                                       className="w-32 h-8 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white rounded-xl border border-zinc-850 transition-all cursor-pointer inline-flex items-center justify-between px-3 shadow shrink-0"
                                     >
@@ -7774,8 +7865,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       <span className="text-[10px] ml-1">▼</span>
                                     </button>
 
-                                    {openDropdownLeadId === lead.lead_id && (
-                                      <div className="absolute right-0 mt-1.5 w-48 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl z-50 p-1.5 space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-100 text-left">
+                                    {openDropdownLeadId === lead.lead_id && createPortal(
+                                      <div 
+                                        className="fixed w-48 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl z-[9999] p-1.5 space-y-1.5 animate-in fade-in zoom-in-95 duration-100 text-left actions-dropdown-menu"
+                                        style={{ top: dropdownCoords.top, right: dropdownCoords.right, bottom: dropdownCoords.bottom }}
+                                      >
                                         {/* Manage CRM Option */}
                                         <button
                                           type="button"
@@ -7834,7 +7928,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                           <X className="w-3.5 h-3.5 shrink-0" />
                                           <span>Lost Lead</span>
                                         </button>
-                                      </div>
+                                      </div>,
+                                      document.body
                                     )}
                                   </div>
                                 );
@@ -8117,6 +8212,51 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error Details Modal */}
+      {errorDetails && (
+        <div className="fixed inset-0 bg-black/85 z-[100] flex items-center justify-center p-4 backdrop-blur-md">
+          <div className="bg-slate-900 border border-red-900/50 rounded-xl overflow-hidden max-w-lg w-full shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <h4 className="font-bold text-red-400 text-lg flex items-center gap-2">
+                <span>❌</span> {errorDetails.title}
+              </h4>
+              <button 
+                onClick={() => setErrorDetails(null)}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-3 text-sm text-slate-300">
+              <p><strong>Reason:</strong> {errorDetails.reason}</p>
+              {errorDetails.source && <p><strong>Source:</strong> {errorDetails.source}</p>}
+              {errorDetails.failedFunction && <p><strong>Failed Function:</strong> {errorDetails.failedFunction}</p>}
+              {errorDetails.database && <p><strong>Database:</strong> {errorDetails.database}</p>}
+              {errorDetails.leadId && <p><strong>Lead ID:</strong> {errorDetails.leadId}</p>}
+              {errorDetails.suggestedFix && (
+                <div className="mt-4 p-3 bg-blue-950/30 border border-blue-900/50 rounded-lg text-blue-300">
+                  <strong>Suggested Fix:</strong> {errorDetails.suggestedFix}
+                </div>
+              )}
+              {process.env.NODE_ENV !== 'production' && errorDetails.stack && (
+                <div className="mt-4 p-3 bg-slate-950 rounded-lg overflow-auto max-h-40 border border-slate-800 text-[10px] font-mono text-slate-500">
+                  {errorDetails.stack}
+                </div>
+              )}
+            </div>
+            <div className="pt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setErrorDetails(null)}
+                className="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
