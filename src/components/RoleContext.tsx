@@ -35,6 +35,7 @@ interface RoleContextType {
   markNotificationRead: (notificationId: string) => Promise<void>;
   markAllNotificationsRead: () => Promise<void>;
   deleteNotification: (notificationId: string) => Promise<void>;
+  deleteAllReadNotifications: () => Promise<void>;
   archiveNotification: (notificationId: string, archiveStatus?: boolean) => Promise<void>;
   
   leadPackages: LeadPackage[];
@@ -2464,6 +2465,16 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     //  // Disabled to prevent full reload
 
+    addNotification({
+      user_id: 'All',
+      project_id: leadId,
+      task_id: 'New Lead Inflow',
+      notification_type: 'New Lead Created',
+      title: '🆕 New Lead Created',
+      message: `A new Lead (${leadId}) has been created for ${newLead.customer_name}. Reference Source: ${newLead.reference_source || 'Direct'}.`,
+      recipient_role: 'Business Owner'
+    });
+
     logActivity(`Created Lead: ${newLead.customer_name}`, 'Sales', leadId, 'N/A', 'New Lead');
     return leadId;
   };
@@ -3000,6 +3011,30 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     //  // Disabled to prevent full reload
 
+    const customerName = targetOrder ? targetOrder.customer_name : 'Customer';
+    const eventName = targetOrder ? (targetOrder.event_type || targetOrder.package_name || 'Event') : 'Wedding';
+    const formattedDate = event_date || (targetOrder ? targetOrder.event_date : '');
+
+    addNotification({
+      user_id: 'All',
+      project_id: orderId,
+      task_id: 'Operations Assignment',
+      notification_type: 'Event Scheduled',
+      title: '📅 Event Scheduled',
+      message: `${eventName} Event has been scheduled. Customer: ${customerName}. Event: ${eventName}. Date: ${formattedDate}.`,
+      recipient_role: 'Sales Team'
+    });
+
+    addNotification({
+      user_id: 'All',
+      project_id: orderId,
+      task_id: 'Operations Assignment',
+      notification_type: 'Event Scheduled',
+      title: '📅 Event Scheduled',
+      message: `${eventName} Event has been scheduled. Customer: ${customerName}. Event: ${eventName}. Date: ${formattedDate}.`,
+      recipient_role: 'Business Owner'
+    });
+
     logActivity(`Assigned Crew for Order: ${orderId} (Status: ${targetStatus})`, 'Operations', opId, previousStage, targetStageNum);
   };
 
@@ -3286,6 +3321,40 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await pushInsert('production', newProd);
 
     //  // Disabled to prevent full reload
+
+    const customerName = targetOrder ? targetOrder.customer_name : 'Customer';
+    const eventName = targetOrder ? (targetOrder.event_type || targetOrder.package_name || 'Event') : 'Wedding';
+
+    // 1. Event Completed for Operations Team and Business Owner
+    addNotification({
+      user_id: 'All',
+      project_id: orderId,
+      task_id: 'Operations Completion',
+      notification_type: 'Event Completed',
+      title: '✅ Event Completed',
+      message: `${eventName} coverage has been completed. Customer: ${customerName}.`,
+      recipient_role: 'Operations Team'
+    });
+    addNotification({
+      user_id: 'All',
+      project_id: orderId,
+      task_id: 'Operations Completion',
+      notification_type: 'Event Completed',
+      title: '✅ Event Completed',
+      message: `${eventName} coverage has been completed. Customer: ${customerName}.`,
+      recipient_role: 'Business Owner'
+    });
+
+    // 2. New Event Ready for Editing for Production Team
+    addNotification({
+      user_id: 'All',
+      project_id: orderId,
+      task_id: 'Editing Ready',
+      notification_type: 'New Event Ready for Editing',
+      title: '🎥 New Event Ready for Editing',
+      message: `Raw footage for "${eventName}" (Order: ${orderId}) is ready for editing. Customer: ${customerName}.`,
+      recipient_role: 'Production Team'
+    });
 
     logActivity(`Marked Event Completed for Order ${orderId}. Raw Footage recorded: ${trackingId}`, 'Operations', orderId, previousStage, 'Event Completed');
   };
@@ -3810,6 +3879,24 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         title: 'Delivery Task Completed',
         message: `Delivery completed for "${orderName}" (Order: ${orderId}).`,
         recipient_role: 'Production Team'
+      });
+      addNotification({
+        user_id: 'All',
+        project_id: orderId,
+        task_id: 'Delivery',
+        notification_type: 'Project Delivered',
+        title: '✅ Project Delivered',
+        message: `Customer deliverables for "${orderName}" (Order: ${orderId}) have been completed and delivered successfully.`,
+        recipient_role: 'Sales Team'
+      });
+      addNotification({
+        user_id: 'All',
+        project_id: orderId,
+        task_id: 'Delivery',
+        notification_type: 'Project Delivered',
+        title: '✅ Project Delivered',
+        message: `Customer deliverables for "${orderName}" (Order: ${orderId}) have been completed and delivered successfully.`,
+        recipient_role: 'Business Owner'
       });
     }
 
@@ -4345,6 +4432,43 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .eq('notification_id', notificationId);
     if (error) {
       console.warn("Failed to delete notification in Supabase:", error);
+    }
+  };
+
+  const deleteAllReadNotifications = async () => {
+    const visibleNotifs = notifications.filter(n => {
+      if (currentRole !== 'Business Owner') {
+        return n.recipient_role === currentRole || n.recipient_role === 'All';
+      }
+      return true;
+    });
+
+    const readIds = visibleNotifs.filter(n => n.read_status).map(n => n.notification_id);
+    if (readIds.length === 0) return;
+
+    setNotifications((prev) => prev.filter((n) => !readIds.includes(n.notification_id)));
+
+    try {
+      const deletedStr = localStorage.getItem('erp_deleted_notifications');
+      const deletedIds = deletedStr ? JSON.parse(deletedStr) : [];
+      readIds.forEach(id => {
+        if (!deletedIds.includes(id)) {
+          deletedIds.push(id);
+        }
+      });
+      localStorage.setItem('erp_deleted_notifications', JSON.stringify(deletedIds));
+    } catch (e) {
+      console.warn("Failed to write deleted notifications to localStorage:", e);
+    }
+
+    if (!supabaseClient) return;
+
+    const { error } = await supabaseClient
+      .from('notifications')
+      .delete()
+      .in('notification_id', readIds);
+    if (error) {
+      console.warn("Failed to bulk delete notifications in Supabase:", error);
     }
   };
 
@@ -5373,7 +5497,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Automatic Reminder Notifications for Target Delivery Date
+  // Automatic Reminder Notifications for Event Dates & Target Delivery Dates
   useEffect(() => {
     if (isDataLoading) return;
 
@@ -5381,6 +5505,15 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const todayStr = new Date().toISOString().split('T')[0];
       const nowMs = Date.now();
       
+      const getDaysDiff = (targetDateStr: string, todayDateStr: string) => {
+        const d1 = new Date(targetDateStr);
+        const d2 = new Date(todayDateStr);
+        d1.setHours(0,0,0,0);
+        d2.setHours(0,0,0,0);
+        const diffTime = d1.getTime() - d2.getTime();
+        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      };
+
       // Load deleted notification IDs to avoid recreation
       let deletedIds: string[] = [];
       try {
@@ -5394,16 +5527,73 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const newlyAddedIds = new Set<string>();
 
+      // A. EVENT REMINDERS (for Sales Team, Operations Team, Business Owner)
+      for (const order of augmentedOrders) {
+        const eventDateStr = order.event_date;
+        if (!eventDateStr) continue;
+
+        const cleanEventDateStr = eventDateStr.split('T')[0];
+        const daysDiff = getDaysDiff(cleanEventDateStr, todayStr);
+
+        const isEventCompleted = order.current_stage === 'Event Completed' || order.current_stage === 'Closed' || order.current_stage === 'Raw Footage Received';
+        if (isEventCompleted) continue;
+
+        const customerName = order.customer_name || 'Valued Client';
+        const eventType = order.event_type || order.package_name || 'Event';
+        const orderIdValue = order.order_id;
+
+        // Reminder thresholds: 7 days, 3 days, 1 day, 0 days (Event Day)
+        const thresholds = [
+          { days: 7, label: '7 Days Before' },
+          { days: 3, label: '3 Days Before' },
+          { days: 1, label: '1 Day Before' },
+          { days: 0, label: 'Event Day' }
+        ];
+
+        for (const t of thresholds) {
+          if (daysDiff === t.days) {
+            const roles = ['Sales Team', 'Operations Team', 'Business Owner'];
+            for (const role of roles) {
+              const prefix = role.replace(/\s+/g, '');
+              const notifId = `NTF-rem-event-${orderIdValue}-${prefix}-${t.days}`;
+              const exists = notifications.some(n => n.notification_id === notifId) || deletedIds.includes(notifId) || newlyAddedIds.has(notifId);
+              
+              if (!exists) {
+                newlyAddedIds.add(notifId);
+                let title = '';
+                let message = '';
+                
+                if (role === 'Sales Team' || role === 'Business Owner') {
+                  title = `📅 Event Reminder (${t.label})`;
+                  message = `Event scheduled for **${customerName}** (${eventType}) is coming up in ${t.days === 0 ? 'TODAY' : t.days + ' days'} (Date: ${cleanEventDateStr}).`;
+                } else if (role === 'Operations Team') {
+                  title = `📅 Event Schedule Reminder (${t.label})`;
+                  message = `Operations Reminder: Event for **${customerName}** is scheduled in ${t.days === 0 ? 'TODAY' : t.days + ' days'}. Please verify staff assignments and kit readiness!`;
+                }
+
+                await addNotification({
+                  notification_id: notifId,
+                  title,
+                  message,
+                  recipient_role: role,
+                  task_id: 'Event Reminder',
+                  notification_type: role === 'Operations Team' ? 'Event Schedule Reminder' : 'Event Reminder',
+                  project_id: orderIdValue,
+                  priority: t.days <= 1 ? 'High' : 'Medium'
+                });
+              }
+            }
+          }
+        }
+      }
+
+      // B. PRODUCTION / DELIVERY REMINDERS (for Production Team)
       for (const p of augmentedProduction) {
-        const targetDateStr = p.target_delivery_date || p.expected_delivery_date;
+        const targetDateStr = p.expected_delivery_date || p.target_delivery_date;
         if (!targetDateStr) continue;
 
         const cleanDateStr = targetDateStr.split('T')[0];
-        // Target is at 6:00 PM on target date
-        const targetTimeObj = new Date(cleanDateStr + 'T18:00:00');
-        const targetMs = targetTimeObj.getTime();
-        const diffMs = targetMs - nowMs;
-        const diffHours = diffMs / (1000 * 60 * 60);
+        const daysDiff = getDaysDiff(cleanDateStr, todayStr);
 
         // Find customer name
         const ord = augmentedOrders.find(o => o.order_id === p.tracking_id || o.lead_id === p.tracking_id);
@@ -5411,80 +5601,52 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const customerName = ord?.customer_name || parentLead?.customer_name || 'Customer';
         const orderIdValue = ord?.order_id || p.tracking_id || 'N/A';
 
-        // Check if project is marked as delivered
         const isDelivered = p.editing_status === 'Delivered' || p.editing_status === 'Closed' || p.editing_status === 'Approved' || p.editing_status === 'Final Approval';
+        if (isDelivered) continue;
 
-        // 1. 24 Hours Before Reminder
-        if (diffHours > 0 && diffHours <= 24 && !isDelivered) {
-          const notifId = `NTF-rem-${p.production_id}-24h`;
-          const exists = notifications.some(n => n.notification_id === notifId) || deletedIds.includes(notifId) || newlyAddedIds.has(notifId);
-          if (!exists) {
-            newlyAddedIds.add(notifId);
-            await addNotification({
-              notification_id: notifId,
-              title: 'Target Delivery Reminder',
-              message: `Project for **${customerName}** is due for delivery in 24 hours.`,
-              recipient_role: 'Production Team',
-              task_id: 'Delivery Reminder',
-              notification_type: 'Target Delivery Reminder',
-              project_id: orderIdValue,
-              priority: 'High'
-            });
+        // Delivery reminder thresholds: 7 days, 3 days, 1 day, 0 days, overdue (daysDiff < 0)
+        const deliveryThresholds = [
+          { days: 7, label: '7 Days Before Delivery', title: 'Target Delivery Reminder', priority: 'Medium' },
+          { days: 3, label: '3 Days Before Delivery', title: 'Target Delivery Reminder', priority: 'High' },
+          { days: 1, label: '1 Day Before Delivery', title: 'Target Delivery Reminder', priority: 'High' },
+          { days: 0, label: 'Delivery Due Today', title: 'Delivery Due Today', priority: 'Critical' }
+        ];
+
+        for (const t of deliveryThresholds) {
+          if (daysDiff === t.days) {
+            const notifId = `NTF-rem-prod-${p.production_id}-${t.days}`;
+            const exists = notifications.some(n => n.notification_id === notifId) || deletedIds.includes(notifId) || newlyAddedIds.has(notifId);
+            
+            if (!exists) {
+              newlyAddedIds.add(notifId);
+              await addNotification({
+                notification_id: notifId,
+                title: t.title,
+                message: `Project for **${customerName}** is due for delivery ${t.days === 0 ? 'TODAY' : 'in ' + t.days + ' days'} (Date: ${cleanDateStr}).`,
+                recipient_role: 'Production Team',
+                task_id: 'Delivery Reminder',
+                notification_type: 'Target Delivery Reminder',
+                project_id: orderIdValue,
+                priority: t.priority as any
+              });
+            }
           }
         }
 
-        // 2. 5 Hours Before Reminder
-        if (diffHours > 0 && diffHours <= 5 && !isDelivered) {
-          const notifId = `NTF-rem-${p.production_id}-5h`;
+        // Overdue Delivery
+        if (daysDiff < 0) {
+          const notifId = `NTF-rem-prod-${p.production_id}-overdue`;
           const exists = notifications.some(n => n.notification_id === notifId) || deletedIds.includes(notifId) || newlyAddedIds.has(notifId);
-          if (!exists) {
-            newlyAddedIds.add(notifId);
-            await addNotification({
-              notification_id: notifId,
-              title: 'Urgent Delivery Reminder',
-              message: `Project for **${customerName}** is due for delivery in 5 hours.`,
-              recipient_role: 'Production Team',
-              task_id: 'Delivery Reminder',
-              notification_type: 'Target Delivery Reminder',
-              project_id: orderIdValue,
-              priority: 'Critical'
-            });
-          }
-        }
-
-        // 3. On Target Delivery Date Reminder
-        if (todayStr === cleanDateStr && !isDelivered) {
-          const notifId = `NTF-rem-${p.production_id}-today`;
-          const exists = notifications.some(n => n.notification_id === notifId) || deletedIds.includes(notifId) || newlyAddedIds.has(notifId);
-          if (!exists) {
-            newlyAddedIds.add(notifId);
-            await addNotification({
-              notification_id: notifId,
-              title: 'Delivery Due Today',
-              message: `Project for **${customerName}** must be delivered today.`,
-              recipient_role: 'Production Team',
-              task_id: 'Delivery Reminder',
-              notification_type: 'Target Delivery Reminder',
-              project_id: orderIdValue,
-              priority: 'Critical'
-            });
-          }
-        }
-
-        // 4. Overdue Delivery Reminder
-        const isOverdue = (nowMs > targetMs || todayStr > cleanDateStr) && !isDelivered;
-        if (isOverdue) {
-          const notifId = `NTF-rem-${p.production_id}-overdue`;
-          const exists = notifications.some(n => n.notification_id === notifId) || deletedIds.includes(notifId) || newlyAddedIds.has(notifId);
+          
           if (!exists) {
             newlyAddedIds.add(notifId);
             await addNotification({
               notification_id: notifId,
               title: 'Delivery Overdue',
-              message: `Project for **${customerName}** has passed its Target Delivery Date and is still pending delivery.`,
+              message: `Project for **${customerName}** is OVERDUE! The target delivery date was ${cleanDateStr}.`,
               recipient_role: 'Production Team',
               task_id: 'Delivery Reminder',
-              notification_type: 'Target Delivery Reminder',
+              notification_type: 'Delivery Overdue',
               project_id: orderIdValue,
               priority: 'Critical'
             });
@@ -5528,6 +5690,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         markNotificationRead,
         markAllNotificationsRead,
         deleteNotification,
+        deleteAllReadNotifications,
         archiveNotification,
         leadPackages,
         packages,

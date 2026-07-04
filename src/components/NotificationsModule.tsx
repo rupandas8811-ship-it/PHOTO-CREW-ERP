@@ -10,7 +10,9 @@ export const NotificationsModule: React.FC = () => {
   const { 
     notifications, 
     markNotificationRead, 
+    markAllNotificationsRead,
     deleteNotification,
+    deleteAllReadNotifications,
     archiveNotification,
     production, 
     orders, 
@@ -21,6 +23,9 @@ export const NotificationsModule: React.FC = () => {
 
   // Selected Notification for Details Modal
   const [selectedNotifId, setSelectedNotifId] = useState<string | null>(null);
+
+  // Pagination limit state
+  const [visibleLimit, setVisibleLimit] = useState(20);
 
   // Filter Select State: 'All' | 'Task Assigned' | 'Task Completed' | 'Due Date Alert' | 'System Notification' (or type based matches)
   const [activeFilter, setActiveFilter] = useState<'All' | 'Task Assigned' | 'Task Completed' | 'Due Date Alert' | 'System Notification'>('All');
@@ -201,28 +206,58 @@ export const NotificationsModule: React.FC = () => {
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  visibleNotifications.forEach(n => {
-                    if (!n.read_status) markNotificationRead(n.notification_id);
-                  });
+                  markAllNotificationsRead();
                 }}
-                className="text-[9px] text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-850 px-2 py-1 rounded transition-colors"
+                className="text-[9px] text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-850 px-2 py-1 rounded transition-colors cursor-pointer"
                 title="Mark all notifications as read"
               >
                 MARK ALL AS READ
+              </button>
+            )}
+            {readCount > 0 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteAllReadNotifications();
+                }}
+                className="text-[9px] text-red-400 hover:text-red-300 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 px-2 py-1 rounded transition-colors cursor-pointer font-bold"
+                title="Delete all read notifications"
+              >
+                DELETE ALL READ
               </button>
             )}
           </div>
         </h3>
 
         <div className="divide-y divide-zinc-900">
-          {filteredNotifications.map((notif) => {
+          {filteredNotifications.slice(0, visibleLimit).map((notif) => {
             const isUnread = !notif.read_status;
             const type = notif.notification_type;
             
             return (
               <div
                 key={notif.notification_id}
-                onClick={() => setSelectedNotifId(notif.notification_id)}
+                onClick={() => {
+                  // 1. Mark as read immediately if unread
+                  if (isUnread) {
+                    markNotificationRead(notif.notification_id);
+                  }
+                  
+                  // 2. Open details modal
+                  setSelectedNotifId(notif.notification_id);
+
+                  // 3. Dispatch navigation custom event
+                  const event = new CustomEvent('erp-notification-click', {
+                    detail: {
+                      notification_id: notif.notification_id,
+                      project_id: notif.project_id,
+                      notification_type: notif.notification_type,
+                      recipient_role: notif.recipient_role,
+                      related_record_id: notif.project_id
+                    }
+                  });
+                  window.dispatchEvent(event);
+                }}
                 className={`p-5 flex items-start gap-4 transition-all cursor-pointer relative group ${
                   isUnread 
                     ? 'bg-red-950/[0.04] hover:bg-red-950/[0.08]' 
@@ -287,7 +322,10 @@ export const NotificationsModule: React.FC = () => {
                 <div className="flex items-center gap-1.5 flex-shrink-0 self-center">
                   {isUnread && (
                     <button
-                      onClick={(e) => handleMarkRead(notif.notification_id, e)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        markNotificationRead(notif.notification_id);
+                      }}
                       className="px-2.5 py-1.5 border border-zinc-850 hover:border-emerald-500/30 hover:bg-emerald-950/20 text-[10px] uppercase font-mono font-bold text-zinc-400 hover:text-emerald-400 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
                       title="Mark alert as read"
                     >
@@ -322,6 +360,17 @@ export const NotificationsModule: React.FC = () => {
               </div>
             );
           })}
+
+          {filteredNotifications.length > visibleLimit && (
+            <div className="p-4 flex justify-center bg-zinc-950 border-t border-zinc-900">
+              <button
+                onClick={() => setVisibleLimit(prev => prev + 20)}
+                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-xs font-mono font-bold text-zinc-300 hover:text-white transition-all cursor-pointer uppercase tracking-wider"
+              >
+                Load More Notifications
+              </button>
+            </div>
+          )}
 
           {filteredNotifications.length === 0 && (
             <div className="py-20 text-center text-zinc-500 uppercase font-mono text-xs">

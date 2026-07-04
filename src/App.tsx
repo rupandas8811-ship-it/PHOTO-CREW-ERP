@@ -230,6 +230,47 @@ const MainAppContent: React.FC = () => {
     refreshData();
   };
 
+  // Listen to ERP Notification Click Events for Direct, Deep Navigation
+  useEffect(() => {
+    const handleNotifClick = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (!customEvent.detail) return;
+      
+      const { recipient_role, notification_type } = customEvent.detail;
+      const targetRole = recipient_role || currentRole;
+
+      if (targetRole === 'Sales Team') {
+        setActiveTab('sales');
+        setActiveSalesSubTab('list');
+      } else if (targetRole === 'Operations Team') {
+        setActiveTab('operations');
+        setActiveOpSubTab('operations_leads');
+      } else if (targetRole === 'Production Team') {
+        setActiveTab('production');
+        setActiveSubTab('production_leads');
+      } else if (targetRole === 'Business Owner') {
+        // Owner can view the relevant module based on notification type
+        if (notification_type?.includes('Lead') || notification_type?.includes('Quotation')) {
+          setActiveTab('sales');
+          setActiveSalesSubTab('list');
+        } else if (notification_type?.includes('Event Scheduled') || notification_type?.includes('Event Completed')) {
+          setActiveTab('operations');
+          setActiveOpSubTab('operations_leads');
+        } else if (notification_type?.includes('Delivered') || notification_type?.includes('Editing') || notification_type?.includes('Raw Footage')) {
+          setActiveTab('production');
+          setActiveSubTab('production_leads');
+        } else {
+          setActiveTab('dashboard');
+        }
+      }
+    };
+
+    window.addEventListener('erp-notification-click', handleNotifClick);
+    return () => {
+      window.removeEventListener('erp-notification-click', handleNotifClick);
+    };
+  }, [currentRole]);
+
   const prevRoleRef = useRef<string>(currentRole);
   const prevUserRef = useRef<any>(null);
 
