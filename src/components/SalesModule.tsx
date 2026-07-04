@@ -1524,6 +1524,33 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   });
 
   const [crmToast, setCrmToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const showValidationError = (fieldId: string, msg: string) => {
+    const el = document.getElementById(fieldId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.focus();
+      el.classList.add('border-rose-500', 'ring-1', 'ring-rose-500');
+      let msgEl = el.nextElementSibling as HTMLElement;
+      if (!msgEl || !msgEl.classList.contains('validation-error-msg')) {
+        msgEl = document.createElement('div');
+        msgEl.className = 'validation-error-msg text-rose-500 text-[10px] mt-1 font-bold animate-fade-in';
+        el.parentNode?.insertBefore(msgEl, el.nextSibling);
+      }
+      msgEl.textContent = msg;
+      
+      const removeHighlight = () => {
+        el.classList.remove('border-rose-500', 'ring-1', 'ring-rose-500');
+        if (msgEl && msgEl.parentNode) msgEl.parentNode.removeChild(msgEl);
+        el.removeEventListener('input', removeHighlight);
+        el.removeEventListener('change', removeHighlight);
+      };
+      el.addEventListener('input', removeHighlight);
+      el.addEventListener('change', removeHighlight);
+    } else {
+      showToastMsg(msg, "error");
+    }
+  };
+
   const showToastMsg = (message: string, type: 'success' | 'error' = 'success') => {
     setCrmToast({ message, type });
     setTimeout(() => setCrmToast(null), 3000);
@@ -2629,24 +2656,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const leadIdForError = leadObj?.lead_id || createdLeadId || 'UNKNOWN';
 
       if (!salesStaffName || !salesStaffName.trim()) {
-        showErrorHelper(
-          "Quotation Generation Failed",
-          "Missing required field: Sales Staff Name",
-          "handleGenerateQuote()",
-          leadIdForError,
-          "Enter a valid Sales Staff Name in the form."
-        );
+        showValidationError("input_sales_staff_name", "Missing required field: Sales Staff Name");
         setIsSaving(false);
         return null;
       }
       if (!salesStaffMobile || !salesStaffMobile.trim() || salesStaffMobile.trim().length !== 10 || !/^\d+$/.test(salesStaffMobile.trim())) {
-        showErrorHelper(
-          "Quotation Generation Failed",
-          "Invalid mobile number. Must be 10 digits.",
-          "handleGenerateQuote()",
-          leadIdForError,
-          "Enter a valid 10-digit mobile number in the form."
-        );
+        showValidationError("input_sales_staff_mobile", "Invalid mobile number. Must be 10 digits.");
         setIsSaving(false);
         return null;
       }
@@ -2819,11 +2834,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const handlePreviewQuotePDF = async (isEdit: boolean) => {
     try {
       if (!salesStaffName || !salesStaffName.trim()) {
-        showToastMsg("Quotation Incomplete! Please enter Sales Staff Name.", "error");
+        showValidationError("input_sales_staff_name", "Quotation Incomplete! Please enter Sales Staff Name.");
         return;
       }
       if (!salesStaffMobile || !salesStaffMobile.trim() || salesStaffMobile.trim().length !== 10 || !/^\d+$/.test(salesStaffMobile.trim())) {
-        showToastMsg("Please enter a valid 10-digit mobile number.", "error");
+        showValidationError("input_sales_staff_mobile", "Please enter a valid 10-digit mobile number.");
         return;
       }
 
@@ -2897,7 +2912,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       
       console.log("✔ PDF generated");
       doc.save(`Quotation_${generatedQuotNum}.pdf`);
-      showToastMsg("Quotation successfully generated and saved to CRM!", "success");
+      
+      if (!isEdit) {
+        setWizardStep(4);
+      } else {
+        showToastMsg("Quotation successfully generated and saved to CRM!", "success");
+      }
     } catch (err: any) {
       showErrorHelper(
         "PDF Generation Failed",
@@ -2972,7 +2992,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
 
-      showToastMsg("Quotation downloaded and WhatsApp prepared!", "success");
+      if (!isEdit) { setWizardStep(4); } else { showToastMsg("Quotation downloaded and WhatsApp prepared!", "success"); }
       console.log("✔ Process completed");
     } catch (err: any) {
       showErrorHelper(
@@ -3724,7 +3744,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setShowStep2Popup(false);
     } catch (err: any) {
       console.error("Step 2 Follow-up save failed:", err);
-      showToastMsg(err.message || String(err), "error");
+      showErrorHelper(
+        "Step 2 Save & Next Failed",
+        err.message || String(err),
+        "handleSaveStep2FollowUp",
+        currentLeadId,
+        "Check event details and try again.",
+        err
+      );
+      setTimeout(() => {
+        document.getElementById('error_details_modal')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
     } finally {
       setIsSaving(false);
     }
@@ -3889,23 +3919,23 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleSaveEventForm = (isCrm: boolean = !!selectedLead, addAnother: boolean = false) => {
     if (!eventForm.event_type) {
-      showToastMsg("Event Type is required.", "error");
+      showValidationError("input_event_type", "Event Type is required.");
       return;
     }
     if (!eventForm.event_name.trim()) {
-      showToastMsg("Event Name is required.", "error");
+      showValidationError("input_event_name", "Event Name is required.");
       return;
     }
     if (!eventForm.event_shoot_type) {
-      showToastMsg("Event Shoot Type is required.", "error");
+      showValidationError("input_event_shoot_type", "Event Shoot Type is required.");
       return;
     }
     if (!eventForm.event_date) {
-      showToastMsg("Event Date is required.", "error");
+      showValidationError("input_event_date", "Event Date is required.");
       return;
     }
     if (!eventForm.event_location.trim()) {
-      showToastMsg("Event Location is required.", "error");
+      showValidationError("input_event_location", "Event Location is required.");
       return;
     }
 
@@ -4246,6 +4276,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   Event Type *
                 </label>
                 <select
+                  id="input_event_type"
                   value={eventForm.event_type}
                   onChange={(e) => {
                     const val = e.target.value;
@@ -4273,6 +4304,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       Event Name *
                     </label>
                     <input
+                      id="input_event_name"
                       type="text"
                       required
                       placeholder="e.g. Sangeet, Haldi, Reception"
@@ -4288,6 +4320,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       Event Shoot Type *
                     </label>
                     <select
+                      id="input_event_shoot_type"
                       value={eventForm.event_shoot_type}
                       onChange={(e) => setEventForm({ ...eventForm, event_shoot_type: e.target.value })}
                       className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none cursor-pointer"
@@ -4309,6 +4342,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       Event Date *
                     </label>
                     <input
+                      id="input_event_date"
                       type="date"
                       required
                       value={eventForm.event_date}
@@ -4323,6 +4357,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       Event Start Time
                     </label>
                     <input
+                      id="input_event_start_time"
                       type="time"
                       value={convertTo24Hour(eventForm.event_start_time)}
                       onChange={(e) => {
@@ -4340,6 +4375,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       Event End Time
                     </label>
                     <input
+                      id="input_event_end_time"
                       type="time"
                       value={convertTo24Hour(eventForm.event_end_time)}
                       onChange={(e) => {
@@ -4484,11 +4520,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     if (wizardStep === 1) {
       if (!createForm.mobile) {
-        showToastMsg("Phone Number is required.", "error");
+        showValidationError("input_mobile", "Phone Number is required.");
         return;
       }
       if (!createForm.lead_source || createForm.lead_source === '') {
-        showToastMsg("Lead Source is required.", "error");
+        showValidationError("input_lead_source", "Lead Source is required.");
         return;
       }
 
@@ -4739,29 +4775,28 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       // If eventForm is visible or there are no events in the list, validate and add
       if (showEventForm || finalEventsList.length === 0) {
         if (!eventForm.event_type || eventForm.event_type === '') {
-          showToastMsg("Please select Event Type.", "error");
+          showValidationError("input_event_type", "Please select Event Type.");
           return;
         }
         if (!eventForm.event_name || eventForm.event_name.trim() === '') {
-          showToastMsg("Please enter Event Name.", "error");
+          showValidationError("input_event_name", "Please enter Event Name.");
           return;
         }
         if (!eventForm.event_shoot_type || eventForm.event_shoot_type === '') {
-          showToastMsg("Please select Event Shoot Type.", "error");
+          showValidationError("input_event_shoot_type", "Please select Event Shoot Type.");
           return;
         }
         if (!eventForm.event_date || eventForm.event_date === '') {
-          showToastMsg("Please select Event Date.", "error");
+          showValidationError("input_event_date", "Please select Event Date.");
           return;
         }
         if (!eventForm.event_location || eventForm.event_location.trim() === '') {
-          showToastMsg("Please enter Event Location.", "error");
+          showValidationError("input_event_location", "Please enter Event Location.");
           return;
         }
-
         if (eventForm.event_start_time && eventForm.event_end_time) {
           if (isTimeEarlier(eventForm.event_start_time, eventForm.event_end_time)) {
-            showToastMsg("Event End Time cannot be earlier than Event Start Time.", "error");
+            showValidationError("input_event_end_time", "Event End Time cannot be earlier than Event Start Time.");
             return;
           }
         }
@@ -6841,6 +6876,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         Mobile Number *
                       </label>
                       <input
+                        id="input_mobile"
                         type="text"
                         required
                         placeholder="e.g. 9876543210"
@@ -8146,7 +8182,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       )}
 
       {/* Step 2 Mandatory Follow-up Popup Modal */}
-      {showStep2Popup && selectedLead && (
+      {showStep2Popup && (selectedLead || activeTab === 'create') && (
         <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-4 backdrop-blur-md">
           <div id="step2_followup_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -8573,6 +8609,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       Sales Staff Name *
                                     </label>
                                     <input
+                                      id="input_sales_staff_name"
                                       type="text"
                                       required
                                       disabled={isLeadLocked}
@@ -8587,6 +8624,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       Sales Staff Mobile Number *
                                     </label>
                                     <input
+                                      id="input_sales_staff_mobile"
                                       type="text"
                                       required
                                       disabled={isLeadLocked}

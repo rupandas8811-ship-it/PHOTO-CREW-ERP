@@ -4483,6 +4483,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (!supabaseClient) return;
 
+    // Verify logged-in user is authenticated
+    const { data: userData, error: userErr } = await supabaseClient.auth.getUser();
+    if (userErr || !userData?.user) {
+      console.warn("User is not authenticated. Cannot insert quotation.");
+      throw new Error("You must be logged in to generate a quotation.");
+    }
+
     const metadataObj = {
       order_id: newQuote.order_id,
       customer_id: newQuote.customer_id,
