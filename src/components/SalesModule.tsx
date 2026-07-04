@@ -2752,19 +2752,21 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       const basePkgSum = dynamicBaseSum;
       const finalAmt = dynamicFinalAmt;
+
+      const existingQuotation = (quotations || []).find(q => q.lead_id === (leadObj.lead_id || 'DRAFT-LEAD'));
       
       const d = new Date();
       const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
       const randomFour = String(Math.floor(1 + Math.random() * 9999)).padStart(4, '0');
-      const generatedQuotNum = `QT-${dateStr}-${randomFour}`;
+      const generatedQuotNum = existingQuotation ? existingQuotation.quotation_number : `QT-${dateStr}-${randomFour}`;
       const quotNum = activeQuoteNum || generatedQuotNum;
       
       if (!activeQuoteNum) {
         setActiveQuoteNum(quotNum);
       }
 
-      console.log(`✔ Creating quotation ${quotNum}...`);
-      const qId = 'QT-' + Math.random().toString(36).substring(2, 9).toUpperCase();
+      console.log(`✔ Creating/Updating quotation ${quotNum}...`);
+      const qId = existingQuotation ? existingQuotation.quotation_id : ('QT-' + Math.random().toString(36).substring(2, 9).toUpperCase());
       
       const standardQuotation = {
         quotation_id: qId,
@@ -2785,7 +2787,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         quotation_status: 'Sent',
         pdf_url: '',
         generated_date: new Date().toISOString().split('T')[0],
-        created_at: new Date().toISOString(),
+        created_at: existingQuotation ? existingQuotation.created_at : new Date().toISOString(),
         created_by: salesStaffName || 'System',
         whatsapp_sent_status: false,
         viewed_status: false,
@@ -2804,7 +2806,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       };
 
       console.log("✔ Saving to Supabase...");
-      await addQuotation(standardQuotation);
+      if (existingQuotation) {
+        await updateQuotation(qId, standardQuotation);
+      } else {
+        await addQuotation(standardQuotation);
+      }
       console.log("✔ Quotation saved successfully");
 
       if (isEdit) {

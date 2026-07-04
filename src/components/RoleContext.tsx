@@ -4586,7 +4586,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const packedTerms = `${cleanTerms}\n\nMETADATA:${JSON.stringify(metadataObj)}`;
 
-      const standardPayload = {
+            const standardPayload = {
         quotation_status: updatedQuote.quotation_status,
         terms_conditions: packedTerms,
         package_name: updatedQuote.package_name,
@@ -4595,6 +4595,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         notes_special_customizations: updatedQuote.notes_special_customizations,
         discount_amount: updatedQuote.discount_amount,
         additional_services_cost: updatedQuote.additional_services_cost,
+        quotation_amount: updatedQuote.quotation_amount,
+        tax_amount: updatedQuote.tax_amount || 0,
+        final_amount: updatedQuote.final_amount,
         client_residence_address: updatedQuote.client_residence_address,
         city: updatedQuote.city,
         state: updatedQuote.state,
