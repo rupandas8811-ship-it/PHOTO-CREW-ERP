@@ -561,6 +561,56 @@ export const validateLeadEventsDatabase = async (operation: 'SELECT' | 'INSERT' 
   }
 };
 
+export const validateLeadsDatabase = async (operation: 'SELECT' | 'INSERT' | 'UPDATE', payload?: any) => {
+  if (!supabaseClient) {
+    throw new Error('Supabase client is not initialized.');
+  }
+
+  // 1. Verify if the table exists
+  const { error: tableError } = await supabaseClient.from('leads').select('lead_id').limit(0);
+  if (tableError) {
+    if (tableError.code === '42P01' || tableError.message?.toLowerCase().includes('relation "leads" does not exist')) {
+      const errorMsg = `❌ Database Error\n\nTable: leads\n\nReason: The table does not exist.\n\nSuggested Fix: Create the **leads** table in Supabase.`;
+      window.alert(errorMsg);
+      throw new Error(errorMsg);
+    }
+  }
+
+  // 2. Verify if every required column exists
+  const requiredCols = [
+    { name: 'sales_staff_name', type: 'VARCHAR(255)' },
+    { name: 'sales_staff_mobile', type: 'VARCHAR(20)' },
+    { name: 'event_shoot_type', type: 'TEXT' },
+    { name: 'event_start_time', type: 'VARCHAR(50)' },
+    { name: 'event_end_time', type: 'VARCHAR(50)' },
+    { name: 'event_location', type: 'TEXT' },
+    { name: 'google_maps_link', type: 'TEXT' },
+    { name: 'guest_pax', type: 'INTEGER' },
+    { name: 'staff_pax', type: 'INTEGER' }
+  ];
+
+  for (const col of requiredCols) {
+    const { error: colError } = await supabaseClient.from('leads').select(col.name).limit(0);
+    if (colError) {
+      if (colError.code === '42703' || colError.message?.toLowerCase().includes('column') || colError.message?.toLowerCase().includes('does not exist')) {
+        const sqlStatement = `ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS ${col.name} ${col.type};`;
+        const errorMsg = `❌ Database Error\n\nTable Name: leads\n\nMissing Column Name: ${col.name}\n\nReason: The column does not exist in the Supabase database.\n\nSuggested SQL:\n${sqlStatement}`;
+        window.alert(errorMsg);
+        throw new Error(errorMsg);
+      }
+    }
+  }
+
+  // 3. For INSERT/UPDATE, check the payload
+  if (operation === 'INSERT' || operation === 'UPDATE') {
+    if (!payload) {
+      const errorMsg = `❌ Mapping Error\n\nReason: Payload is missing.`;
+      window.alert(errorMsg);
+      throw new Error(errorMsg);
+    }
+  }
+};
+
 export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [globalModalAlert, setGlobalModalAlert] = useState<{ message: string; title: string } | null>(null);
 
@@ -2484,6 +2534,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     // Strip events property to prevent DB schema errors
     delete (newLead as any).events;
+    
+    // Validate database schema before inserting
+    await validateLeadsDatabase('INSERT', newLead);
     
     console.log('Lead Payload', newLead);
     const res = await pushInsert('leads', newLead);
@@ -5067,6 +5120,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       finalUpdates.status = anyStatus as CurrentStage;
       finalUpdates.current_status = anyStatus;
     }
+    
+    // Validate database schema before updating
+    await validateLeadsDatabase('UPDATE', finalUpdates);
+
     const res = await pushUpdate('leads', 'lead_id', leadId, { ...finalUpdates, updated_at: timestamp });
     if (!res?.success) {
       throw new Error(res?.error || "Failed to update lead in database.");

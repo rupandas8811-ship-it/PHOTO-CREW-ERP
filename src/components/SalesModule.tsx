@@ -1612,6 +1612,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     lead_value: 0,
     lead_score: 0,
     booking_status: 'Pending',
+    sales_staff_name: '',
+    sales_staff_mobile: '',
+    event_start_time: '',
+    event_end_time: '',
+    google_maps_link: '',
   });
 
   const [crmToast, setCrmToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -1853,6 +1858,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     lead_value: number | '';
     lead_score: number | '';
     booking_status: string;
+    sales_staff_name: string;
+    sales_staff_mobile: string;
+    event_start_time: string;
+    event_end_time: string;
+    google_maps_link: string;
   }>({
     customer_name: '',
     mobile: '',
@@ -1884,6 +1894,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     reference_source: '',
     lead_score: '',
     booking_status: '',
+    sales_staff_name: '',
+    sales_staff_mobile: '',
+    event_start_time: '',
+    event_end_time: '',
+    google_maps_link: '',
   });
 
   const [createEvents, setCreateEvents] = useState<LeadEvent[]>([]);
@@ -1959,6 +1974,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       lead_value: '',
       lead_score: '',
       booking_status: '',
+      sales_staff_name: '',
+      sales_staff_mobile: '',
+      event_start_time: '',
+      event_end_time: '',
+      google_maps_link: '',
     });
     setCreateEvents([]);
     setWizardLeadData({
@@ -2009,7 +2029,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       lead_value: 0,
       lead_score: 0,
       booking_status: 'Pending',
+      sales_staff_name: '',
+      sales_staff_mobile: '',
+      event_start_time: '',
+      event_end_time: '',
+      google_maps_link: '',
     });
+    setSalesStaffName('');
+    setSalesStaffMobile('');
     setOtherSource('');
     setSelectedPkgIds([]);
     setLeadDiscount('');
@@ -2887,7 +2914,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           pincode: leadObj.pincode,
           desired_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
           remarks: updatedRemarks,
-          Select_Package_Option: leadObj.Select_Package_Option || ''
+          Select_Package_Option: leadObj.Select_Package_Option || '',
+          // Requested fields
+          sales_staff_name: salesStaffName || '',
+          sales_staff_mobile: salesStaffMobile || '',
+          event_shoot_type: wizardLeadData.event_shoot_type || wizardLeadData.shoot_type || '',
+          event_start_time: wizardLeadData.event_start_time || wizardLeadData.event_time || '',
+          event_end_time: wizardLeadData.event_end_time || '',
+          event_location: wizardLeadData.event_location || '',
+          google_maps_link: wizardLeadData.google_maps_link || '',
+          guest_pax: wizardLeadData.guest_pax !== '' ? Number(wizardLeadData.guest_pax) : undefined,
+          staff_pax: wizardLeadData.staff_pax !== '' ? Number(wizardLeadData.staff_pax) : undefined,
         });
         
         setSelectedLead(prev => {
@@ -2918,7 +2955,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           pincode: leadObj.pincode,
           desired_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
           remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city),
-          Select_Package_Option: leadObj.Select_Package_Option || ''
+          Select_Package_Option: leadObj.Select_Package_Option || '',
+          // Requested fields
+          sales_staff_name: salesStaffName || '',
+          sales_staff_mobile: salesStaffMobile || '',
+          event_shoot_type: createForm.event_shoot_type || createForm.desired_event_shoot_type || '',
+          event_start_time: createForm.event_start_time || createForm.event_time || '',
+          event_end_time: createForm.event_end_time || '',
+          event_location: createForm.event_location || '',
+          google_maps_link: createForm.google_maps_link || '',
+          guest_pax: createForm.guest_pax !== '' ? Number(createForm.guest_pax) : undefined,
+          staff_pax: createForm.staff_pax !== '' ? Number(createForm.staff_pax) : undefined,
         });
       }
 
@@ -3363,14 +3410,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setActiveQuoteNum(latestQuote.quotation_number || '');
       setQuoteDiscount(latestQuote.discount_amount || 0);
       setQuoteAdditional(latestQuote.additional_services_cost || 0);
-      setSalesStaffName(latestQuote.sales_staff_name || '');
-      setSalesStaffMobile(latestQuote.sales_staff_mobile || '');
+      setSalesStaffName(lead.sales_staff_name || latestQuote.sales_staff_name || '');
+      setSalesStaffMobile(lead.sales_staff_mobile || latestQuote.sales_staff_mobile || '');
       if (latestQuote.editableInclusions) {
         setEditableInclusions(latestQuote.editableInclusions);
       }
       if (latestQuote.editableDeliverables) {
         setEditableDeliverables(latestQuote.editableDeliverables);
       }
+    } else {
+      setSalesStaffName(lead.sales_staff_name || '');
+      setSalesStaffMobile(lead.sales_staff_mobile || '');
     }
 
     const matchedPkgId = latestQuote?.package_id || primaryLP?.package_id || lead.Select_Package_Option || '';
@@ -3378,13 +3428,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     const firstEvent = lead.events && lead.events.length > 0 ? lead.events[0] : null;
     const evName = firstEvent?.event_name || lead.custom_event_name || lead.event_type || '';
-    const evShootType = firstEvent?.event_shoot_type || lead.desired_event_shoot_type || lead.shoot_type || 'CANDID PHOTOGRAPHY';
+    const evShootType = lead.event_shoot_type || firstEvent?.event_shoot_type || lead.desired_event_shoot_type || lead.shoot_type || 'CANDID PHOTOGRAPHY';
     const evDate = firstEvent?.event_date || lead.event_date || '';
     const evStartDate = firstEvent?.event_start_date || lead.event_date || '';
     const evEndDate = firstEvent?.event_end_date || lead.event_date || '';
-    const evLocation = firstEvent?.event_location || lead.event_location || '';
-    const evGuestPax = firstEvent?.guest_pax || lead.total_pax || 100;
-    const evStaffPax = firstEvent?.staff_pax || 2;
+    const evStartTime = lead.event_start_time || firstEvent?.event_start_time || lead.event_time || '';
+    const evEndTime = lead.event_end_time || firstEvent?.event_end_time || '';
+    const evLocation = lead.event_location || firstEvent?.event_location || '';
+    const evGoogleMapsLink = lead.google_maps_link || firstEvent?.google_maps_link || '';
+    const evGuestPax = lead.guest_pax !== undefined && lead.guest_pax !== null ? lead.guest_pax : (firstEvent?.guest_pax || lead.total_pax || 100);
+    const evStaffPax = lead.staff_pax !== undefined && lead.staff_pax !== null ? lead.staff_pax : (firstEvent?.staff_pax || 2);
 
     setWizardLeadData({
       customer_name: lead.customer_name || '',
@@ -3438,6 +3491,50 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       lead_value: lead.lead_value || 0,
       lead_score: lead.lead_score || 0,
       booking_status: lead.booking_status || 'Pending',
+      // Requested fields
+      sales_staff_name: lead.sales_staff_name || latestQuote?.sales_staff_name || '',
+      sales_staff_mobile: lead.sales_staff_mobile || latestQuote?.sales_staff_mobile || '',
+      event_start_time: evStartTime,
+      event_end_time: evEndTime,
+      google_maps_link: evGoogleMapsLink,
+    });
+
+    setCreateForm({
+      customer_name: lead.customer_name || '',
+      mobile: lead.mobile || '',
+      alternate_mobile: lead.alternate_mobile || '',
+      email: lead.email || '',
+      lead_source: lead.lead_source || '',
+      event_type: lead.event_type || '',
+      custom_event_name: lead.custom_event_name || '',
+      event_name: evName,
+      event_shoot_type: evShootType,
+      event_date: evDate,
+      event_start_date: evStartDate,
+      event_end_date: evEndDate,
+      event_time: evStartTime || lead.event_time || '',
+      event_location: evLocation,
+      guest_pax: evGuestPax as any,
+      staff_pax: evStaffPax as any,
+      budget: lead.budget || '',
+      remarks: lead.remarks || '',
+      whatsapp_number: lead.whatsapp_number || lead.mobile || '',
+      address: lead.address || '',
+      city: lead.city || '',
+      state: lead.state || '',
+      pincode: lead.pincode || '',
+      client_residence_address: lead.client_residence_address || '',
+      desired_event_shoot_type: evShootType || lead.desired_event_shoot_type || '',
+      Select_Package_Option: lead.Select_Package_Option || '',
+      total_pax: lead.total_pax || '',
+      reference_source: lead.reference_source || '',
+      lead_score: lead.lead_score || '',
+      booking_status: lead.booking_status || '',
+      sales_staff_name: lead.sales_staff_name || latestQuote?.sales_staff_name || '',
+      sales_staff_mobile: lead.sales_staff_mobile || latestQuote?.sales_staff_mobile || '',
+      event_start_time: evStartTime,
+      event_end_time: evEndTime,
+      google_maps_link: evGoogleMapsLink,
     });
 
     setFollowUpForm({
@@ -3544,7 +3641,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           reference_source: wizardLeadData.reference_source,
           Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || '',
           remarks: updatedRemarks,
-          status: selectedLead.status || 'New Lead'
+          status: selectedLead.status || 'New Lead',
+          // Requested fields
+          sales_staff_name: salesStaffName || wizardLeadData.sales_staff_name || '',
+          sales_staff_mobile: salesStaffMobile || wizardLeadData.sales_staff_mobile || '',
+          event_shoot_type: wizardLeadData.event_shoot_type || wizardLeadData.shoot_type || '',
+          event_start_time: wizardLeadData.event_start_time || wizardLeadData.event_time || '',
+          event_end_time: wizardLeadData.event_end_time || '',
+          event_location: wizardLeadData.event_location || '',
+          google_maps_link: wizardLeadData.google_maps_link || '',
+          guest_pax: wizardLeadData.guest_pax !== '' ? Number(wizardLeadData.guest_pax) : undefined,
+          staff_pax: wizardLeadData.staff_pax !== '' ? Number(wizardLeadData.staff_pax) : undefined,
         });
 
         const newCompleted = Math.max(crmHighestStep, 1);
@@ -3832,7 +3939,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         total_pax: firstEvent.guest_pax,
         reference_source: isCreateFlow ? createForm.reference_source : wizardLeadData.reference_source || '',
         Select_Package_Option: isCreateFlow ? (createForm.Select_Package_Option || selectedPkgIds[0] || '') : (wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || ''),
-        events: finalEventsList
+        events: finalEventsList,
+        // Requested fields
+        sales_staff_name: salesStaffName || (isCreateFlow ? createForm.sales_staff_name : wizardLeadData.sales_staff_name) || '',
+        sales_staff_mobile: salesStaffMobile || (isCreateFlow ? createForm.sales_staff_mobile : wizardLeadData.sales_staff_mobile) || '',
+        event_shoot_type: firstEvent.event_shoot_type || '',
+        event_start_time: firstEvent.event_start_time || '',
+        event_end_time: firstEvent.event_end_time || '',
+        guest_pax: firstEvent.guest_pax,
+        staff_pax: firstEvent.staff_pax,
       });
 
       const notesWithTag = appendCompletedStep(step2FollowUpNotes || 'Saved event details', 2);
@@ -4811,7 +4926,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             event_location: createForm.event_location || 'TBD',
             budget: Number(createForm.budget) || 0,
             remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
-            Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
+            Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || '',
+            // Requested fields
+            sales_staff_name: salesStaffName || createForm.sales_staff_name || '',
+            sales_staff_mobile: salesStaffMobile || createForm.sales_staff_mobile || '',
+            event_shoot_type: createForm.event_shoot_type || createForm.desired_event_shoot_type || '',
+            event_start_time: createForm.event_start_time || createForm.event_time || '',
+            event_end_time: createForm.event_end_time || '',
+            google_maps_link: createForm.google_maps_link || '',
+            guest_pax: createForm.guest_pax !== '' ? Number(createForm.guest_pax) : undefined,
+            staff_pax: createForm.staff_pax !== '' ? Number(createForm.staff_pax) : undefined,
           });
           setCreatedLeadId(newId);
           finalId = newId;
@@ -4834,7 +4958,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             reference_source: createForm.reference_source,
             booking_status: createForm.booking_status || undefined,
             remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
-            Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
+            Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || '',
+            // Requested fields
+            sales_staff_name: salesStaffName || createForm.sales_staff_name || '',
+            sales_staff_mobile: salesStaffMobile || createForm.sales_staff_mobile || '',
+            event_shoot_type: createForm.event_shoot_type || createForm.desired_event_shoot_type || '',
+            event_start_time: createForm.event_start_time || createForm.event_time || '',
+            event_end_time: createForm.event_end_time || '',
+            event_location: createForm.event_location || 'TBD',
+            google_maps_link: createForm.google_maps_link || '',
+            guest_pax: createForm.guest_pax !== '' ? Number(createForm.guest_pax) : undefined,
+            staff_pax: createForm.staff_pax !== '' ? Number(createForm.staff_pax) : undefined,
           });
         }
         const isEdit = !!createdLeadId;
