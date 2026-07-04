@@ -4490,21 +4490,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error("You must be logged in to generate a quotation.");
     }
 
-    const metadataObj = {
-      order_id: newQuote.order_id,
-      customer_id: newQuote.customer_id,
-      pdf_url: newQuote.pdf_url,
-      whatsapp_sent_status: newQuote.whatsapp_sent_status,
-      viewed_status: newQuote.viewed_status,
-      generated_date: newQuote.generated_date,
-      sales_staff_name: newQuote.sales_staff_name || '',
-      sales_staff_mobile: newQuote.sales_staff_mobile || '',
-      editableInclusions: newQuote.editableInclusions || null,
-      editableDeliverables: newQuote.editableDeliverables || null
-    };
-
-    const packedTerms = `${newQuote.terms_conditions || ''}\n\nMETADATA:${JSON.stringify(metadataObj)}`;
-
     const standardPayload = {
       quotation_id: newQuote.quotation_id,
       lead_id: newQuote.lead_id,
@@ -4515,7 +4500,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       final_amount: newQuote.final_amount,
       quotation_status: newQuote.quotation_status,
       valid_until: newQuote.valid_until || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      terms_conditions: packedTerms,
+      terms_conditions: newQuote.terms_conditions || '',
       created_by: newQuote.created_by,
       created_at: newQuote.created_at,
       updated_at: new Date().toISOString(),
@@ -4529,6 +4514,17 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       state: newQuote.state,
       pincode: newQuote.pincode,
       desired_event_shoot_type: newQuote.desired_event_shoot_type,
+      customer_id: newQuote.customer_id,
+      customer_name: newQuote.customer_name,
+      order_id: newQuote.order_id,
+      pdf_url: newQuote.pdf_url,
+      whatsapp_sent_status: newQuote.whatsapp_sent_status,
+      viewed_status: newQuote.viewed_status,
+      generated_date: newQuote.generated_date,
+      sales_staff_name: newQuote.sales_staff_name || '',
+      sales_staff_mobile: newQuote.sales_staff_mobile || '',
+      editableInclusions: newQuote.editableInclusions || null,
+      editableDeliverables: newQuote.editableDeliverables || null
     };
 
     try {
@@ -4564,31 +4560,16 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!updatedQuote) return;
       if (!supabaseClient) return;
 
-      const metadataObj = {
-        order_id: updatedQuote.order_id,
-        customer_id: updatedQuote.customer_id,
-        pdf_url: updatedQuote.pdf_url,
-        whatsapp_sent_status: updatedQuote.whatsapp_sent_status,
-        viewed_status: updatedQuote.viewed_status,
-        generated_date: updatedQuote.generated_date,
-        sales_staff_name: updatedQuote.sales_staff_name || '',
-        sales_staff_mobile: updatedQuote.sales_staff_mobile || '',
-        editableInclusions: updatedQuote.editableInclusions || null,
-        editableDeliverables: updatedQuote.editableDeliverables || null
-      };
-
       let cleanTerms = updatedQuote.terms_conditions || '';
       if (cleanTerms.includes('\n\nMETADATA:')) {
         cleanTerms = cleanTerms.split('\n\nMETADATA:')[0];
       } else if (cleanTerms.includes('METADATA:')) {
         cleanTerms = cleanTerms.split('METADATA:')[0];
       }
-
-      const packedTerms = `${cleanTerms}\n\nMETADATA:${JSON.stringify(metadataObj)}`;
-
-            const standardPayload = {
+      
+      const standardPayload = {
         quotation_status: updatedQuote.quotation_status,
-        terms_conditions: packedTerms,
+        terms_conditions: cleanTerms,
         package_name: updatedQuote.package_name,
         package_price: updatedQuote.package_price,
         deliverables_description: updatedQuote.deliverables_description,
@@ -4603,15 +4584,24 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         state: updatedQuote.state,
         pincode: updatedQuote.pincode,
         desired_event_shoot_type: updatedQuote.desired_event_shoot_type,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        customer_id: updatedQuote.customer_id,
+        customer_name: updatedQuote.customer_name,
+        order_id: updatedQuote.order_id,
+        pdf_url: updatedQuote.pdf_url,
+        whatsapp_sent_status: updatedQuote.whatsapp_sent_status,
+        viewed_status: updatedQuote.viewed_status,
+        generated_date: updatedQuote.generated_date,
+        sales_staff_name: updatedQuote.sales_staff_name || '',
+        sales_staff_mobile: updatedQuote.sales_staff_mobile || '',
+        editableInclusions: updatedQuote.editableInclusions || null,
+        editableDeliverables: updatedQuote.editableDeliverables || null
       };
 
       try {
         const { error } = await supabaseClient.from('quotations').update(standardPayload).eq('quotation_id', quotationId);
         if (error) {
           console.warn('Supabase Update error for quotations table:', error.message);
-        } else {
-          // fetchFromDb().catch(console.error); // Disabled to prevent full reload
         }
       } catch (err) {
         console.warn('Supabase Exception on updating quotation:', err);

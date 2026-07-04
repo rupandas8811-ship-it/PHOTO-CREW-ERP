@@ -3039,19 +3039,26 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       console.log("✔ Opening WhatsApp...");
       const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
-      const phone = leadObj.whatsapp_number || leadObj.mobile || '';
+      const rawPhone = leadObj.whatsapp_number || leadObj.mobile || '';
+      const phoneStr = typeof rawPhone === 'string' ? rawPhone : String(rawPhone);
       
-      const message = `Hello *${leadObj.customer_name || 'Client'}*,\n\n` +
+      const safeCustomerName = String(leadObj.customer_name || 'Client');
+      const safeEventType = String(leadObj.event_type || 'Event');
+      const safeEventDate = String(leadObj.event_date || 'N/A');
+      const safeEventLocation = String(leadObj.event_location || leadObj.location || 'N/A');
+      const safeQuotNum = String(generatedQuotNum || '');
+
+      const message = `Hello *${safeCustomerName}*,\n\n` +
         `Thank you for choosing *PhotoCrew Pictures*.\n\n` +
         `Please find your quotation details below:\n\n` +
-        `📄 Quotation No: ${generatedQuotNum}\n` +
-        `🎉 Event: ${leadObj.event_type || 'Event'}\n` +
-        `📅 Event Date: ${leadObj.event_date || 'N/A'}\n` +
-        `📍 Event Address: ${leadObj.event_location || leadObj.location || 'N/A'}\n` +
+        `📄 Quotation No: ${safeQuotNum}\n` +
+        `🎉 Event: ${safeEventType}\n` +
+        `📅 Event Date: ${safeEventDate}\n` +
+        `📍 Event Address: ${safeEventLocation}\n` +
         `💰 Final Amount: ₹${finalAmt.toLocaleString('en-IN')}\n\n` +
         `Thank you.\nPhotoCrew Pictures`;
 
-      const cleanPhone = phone.replace(/[^0-9]/g, '');
+      const cleanPhone = phoneStr.replace(/[^0-9]/g, '');
       if (!cleanPhone) {
         showErrorHelper(
           "WhatsApp Redirect Failed",
@@ -3080,33 +3087,49 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
   };
 
-  const handleSendEmailQuote = (isEdit: boolean) => {
-    const leadObj = getLeadInfoForQuote(isEdit);
-    const activePkgs = getSelectedPkgsInfo(isEdit);
-    const basePkgSum = dynamicBaseSum;
-    const finalAmt = dynamicFinalAmt;
-    const quotNum = activeQuoteNum || `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-    
-    const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
-    const email = leadObj.email || '';
-    
-    const subject = `Photocrew Pictures - Custom Quotation Details (${quotNum})`;
-    const body = `Dear ${leadObj.customer_name || 'Client'},\n\n` +
-      `Thank you for reach out to us! We are pleased to provide the custom quotation details for your upcoming ${leadObj.event_type || 'Event'} shoot.\n\n` +
-      `Quotation Number: ${quotNum}\n` +
-      `Selected Package: ${pkgNames}\n` +
-      `Package Amount: Rs. ${basePkgSum.toLocaleString('en-IN')}\n` +
-      `Discount Applied: Rs. ${quoteDiscount.toLocaleString('en-IN')}\n` +
-      `Additional Services: Rs. ${quoteAdditional.toLocaleString('en-IN')}\n` +
-      `Final Quotation Amount: Rs. ${finalAmt.toLocaleString('en-IN')}\n\n` +
-      `We will follow up shortly to discuss any specific adjustments you might need.\n\n` +
-      `Warm regards,\n` +
-      `The Photocrew Pictures Team\n` +
-      `https://www.photocrewpictures.com/`;
+  const handleSendEmailQuote = async (isEdit: boolean) => {
+    try {
+      const generatedQuotNum = await handleGenerateQuote(isEdit);
+      if (!generatedQuotNum) return;
 
-    window.open(`mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+      const leadObj = getLeadInfoForQuote(isEdit);
+      const activePkgs = getSelectedPkgsInfo(isEdit);
+      const basePkgSum = dynamicBaseSum;
+      const finalAmt = dynamicFinalAmt;
+      const quotNum = generatedQuotNum;
+      
+      const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
+      const email = leadObj.email || '';
+      
+      const safeCustomerName = String(leadObj.customer_name || 'Client');
+      const safeEventType = String(leadObj.event_type || 'Event');
+
+      const subject = `Photocrew Pictures - Custom Quotation Details (${quotNum})`;
+      const body = `Dear ${safeCustomerName},\n\n` +
+        `Thank you for reach out to us! We are pleased to provide the custom quotation details for your upcoming ${safeEventType} shoot.\n\n` +
+        `Quotation Number: ${quotNum}\n` +
+        `Selected Package: ${pkgNames}\n` +
+        `Package Amount: Rs. ${basePkgSum.toLocaleString('en-IN')}\n` +
+        `Discount Applied: Rs. ${quoteDiscount.toLocaleString('en-IN')}\n` +
+        `Additional Services: Rs. ${quoteAdditional.toLocaleString('en-IN')}\n` +
+        `Final Quotation Amount: Rs. ${finalAmt.toLocaleString('en-IN')}\n\n` +
+        `We will follow up shortly to discuss any specific adjustments you might need.\n\n` +
+        `Warm regards,\n` +
+        `The Photocrew Pictures Team\n` +
+        `https://www.photocrewpictures.com/`;
+
+      window.open(`mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+    } catch (err: any) {
+      showErrorHelper(
+        "Email Redirect Failed",
+        err.message || "Failed to prepare email message.",
+        "handleSendEmailQuote()",
+        isEdit && selectedLead ? selectedLead.lead_id : (createdLeadId || 'UNKNOWN'),
+        "Check console logs.",
+        err
+      );
+    }
   };
-
   const renderQuotationAndStep4Section = (isEdit: boolean) => {
     const activePkgs = getSelectedPkgsInfo(isEdit);
     const basePkgSum = dynamicBaseSum;
@@ -3879,10 +3902,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     
     const matched = parsedCustomers.find(c => {
       if (type === 'phone') {
-        const cleanInput = value.replace(/[^\d]/g, '').slice(-10);
+        const cleanInput = String(value).replace(/[^\d]/g, '').slice(-10);
         if (!cleanInput || cleanInput.length < 10) return false;
-        const cleanMobile = c.mobile.replace(/[^\d]/g, '').slice(-10);
-        const cleanAlt = c.alternate_mobile?.replace(/[^\d]/g, '').slice(-10);
+        const cleanMobile = String(c.mobile || '').replace(/[^\d]/g, '').slice(-10);
+        const cleanAlt = String(c.alternate_mobile || '').replace(/[^\d]/g, '').slice(-10);
         return cleanInput === cleanMobile || (cleanAlt && cleanInput === cleanAlt);
       } else {
         const cleanInput = value.trim().toLowerCase();
