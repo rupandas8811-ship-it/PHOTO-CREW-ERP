@@ -1567,6 +1567,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     city: '',
     state: '',
     pincode: '',
+    Specify_Custom_Lead_Source_Name: '',
     client_residence_address: '',
     desired_event_shoot_type: '',
     // Step 2
@@ -1876,6 +1877,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     city: '',
     state: '',
     pincode: '',
+    Specify_Custom_Lead_Source_Name: '',
     client_residence_address: '',
     desired_event_shoot_type: '',
     Select_Package_Option: '',
@@ -1950,6 +1952,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       city: '',
       state: '',
       pincode: '',
+    Specify_Custom_Lead_Source_Name: '',
       client_residence_address: '',
       desired_event_shoot_type: '',
       Select_Package_Option: '',
@@ -1969,6 +1972,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       city: '',
       state: '',
       pincode: '',
+    Specify_Custom_Lead_Source_Name: '',
       client_residence_address: '',
       desired_event_shoot_type: '',
       event_type: '',
@@ -3430,6 +3434,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       guest_pax: evGuestPax,
       staff_pax: evStaffPax,
       lead_source: lead.lead_source || 'Reference',
+      Specify_Custom_Lead_Source_Name: lead.Specify_Custom_Lead_Source_Name || '',
       shoot_type: evShootType,
       // Step 3
       selected_package_id: latestQuote?.package_id || primaryLP?.package_id || lead.Select_Package_Option || '',
@@ -3558,6 +3563,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           pincode: wizardLeadData.pincode,
           client_residence_address: wizardLeadData.client_residence_address,
           lead_source: wizardLeadData.lead_source,
+          Specify_Custom_Lead_Source_Name: wizardLeadData.lead_source === 'Other' && wizardLeadData.Specify_Custom_Lead_Source_Name?.trim() !== '' ? wizardLeadData.Specify_Custom_Lead_Source_Name.trim() : null,
           total_pax: wizardLeadData.total_pax,
           reference_source: wizardLeadData.reference_source,
           Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || '',
@@ -4823,7 +4829,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       try {
         setIsSaving(true);
-        const finalSource = createForm.lead_source === 'Other' ? (otherSource ? `Other: ${otherSource}` : 'Other') : createForm.lead_source;
+        const finalSource = createForm.lead_source === 'Other' ? 'Other' : createForm.lead_source;
+        const customLeadSourceName = createForm.lead_source === 'Other' && otherSource.trim() !== '' ? otherSource.trim() : null;
         let finalId = createdLeadId;
         if (!createdLeadId) {
           const newId = await addLead({
@@ -4832,6 +4839,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             alternate_mobile: (createForm.alternate_mobile && createForm.alternate_mobile.trim() !== '' && createForm.alternate_mobile.trim() !== '+91') ? createForm.alternate_mobile : undefined,
             email: createForm.email,
             lead_source: finalSource,
+            Specify_Custom_Lead_Source_Name: customLeadSourceName,
             whatsapp_number: createForm.whatsapp_number,
             address: createForm.address,
             city: createForm.city,
@@ -4861,6 +4869,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             alternate_mobile: (createForm.alternate_mobile && createForm.alternate_mobile.trim() !== '' && createForm.alternate_mobile.trim() !== '+91') ? createForm.alternate_mobile : undefined,
             email: createForm.email,
             lead_source: finalSource,
+            Specify_Custom_Lead_Source_Name: customLeadSourceName,
             whatsapp_number: createForm.whatsapp_number,
             address: createForm.address,
             city: createForm.city,
@@ -4884,6 +4893,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           alternate_mobile: (createForm.alternate_mobile && createForm.alternate_mobile.trim() !== '' && createForm.alternate_mobile.trim() !== '+91') ? createForm.alternate_mobile : undefined,
           email: createForm.email,
           lead_source: finalSource,
+            Specify_Custom_Lead_Source_Name: customLeadSourceName,
           whatsapp_number: createForm.whatsapp_number,
           address: createForm.address,
           city: createForm.city,
@@ -5735,7 +5745,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </div>
               <div>
                 <span className="text-slate-500 block">Lead Source</span>
-                <strong className="text-slate-200 font-medium">{selectedLead.lead_source}</strong>
+                <strong className="text-slate-200 font-medium">
+                  {selectedLead.lead_source === 'Other' && selectedLead.Specify_Custom_Lead_Source_Name 
+                    ? `Other: ${selectedLead.Specify_Custom_Lead_Source_Name}` 
+                    : selectedLead.lead_source}
+                </strong>
               </div>
               <div>
                 <span className="text-slate-500 block">Date Scheduled</span>
@@ -6365,7 +6379,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                     <span className="font-semibold text-slate-300 font-mono">{ld.event_date}</span>
                                   </div>
                                   <div className="text-[11px] text-slate-400 mt-1">
-                                    Shoot: <strong className="text-slate-100">{ld.event_type}</strong> | Source: {ld.lead_source}
+                                    Shoot: <strong className="text-slate-100">{ld.event_type}</strong> | Source: {ld.lead_source === 'Other' && ld.Specify_Custom_Lead_Source_Name ? `Other: ${ld.Specify_Custom_Lead_Source_Name}` : ld.lead_source}
                                   </div>
                                 </div>
 
@@ -8687,6 +8701,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               <option key={source} value={source}>{source}</option>
                             ))}
                           </select>
+                          {wizardLeadData.lead_source === 'Other' && (
+                            <div className="animate-fade-in-down mt-2">
+                              <label className="block text-xs font-mono font-bold text-amber-500 mb-1.5">
+                                Specify Custom Lead Source Name *
+                              </label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="e.g. Billboard, Event Flyer"
+                                value={wizardLeadData.Specify_Custom_Lead_Source_Name || ''}
+                                disabled={isLeadLocked}
+                                onChange={(e) => setWizardLeadData({ ...wizardLeadData, Specify_Custom_Lead_Source_Name: e.target.value })}
+                                className="w-full bg-slate-955 border border-amber-500/50 rounded-lg py-2 px-3 text-xs text-amber-200 focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all"
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

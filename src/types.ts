@@ -184,6 +184,7 @@ export interface Lead {
   client_residence_address?: string;
   desired_event_shoot_type?: string;
   Select_Package_Option?: string;
+  Specify_Custom_Lead_Source_Name?: string | null;
   package_price?: number;
   deliverables_description?: string;
   notes_special_customizations?: string;
@@ -249,6 +250,7 @@ export interface Order {
   client_residence_address?: string;
   desired_event_shoot_type?: string;
   Select_Package_Option?: string;
+  Specify_Custom_Lead_Source_Name?: string | null;
   package_price?: number;
   deliverables_description?: string;
   notes_special_customizations?: string;
