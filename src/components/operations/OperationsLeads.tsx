@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useRole } from '../RoleContext';
+import { useRole, validateLeadEventsDatabase } from '../RoleContext';
+import { supabaseClient } from '../../supabaseClient';
 import { 
   Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin
 } from 'lucide-react';
@@ -421,6 +422,44 @@ export const OperationsLeads: React.FC = () => {
     });
     setAssigningOrderId(order.order_id);
     
+    // Initialize event allocations
+    const parentLd = leads?.find(l => l.lead_id === order.lead_id);
+    const evts = parentLd?.events || [];
+    const allocations: Record<string, any> = {};
+
+    evts.forEach((ev, idx) => {
+      const eid = ev.id || `EV-N/A-${idx}`;
+      
+      let staffForEv = (staffAssignments || [])
+        .filter(s => s.order_id === order.order_id && s.staff_role.includes(`|${eid}`))
+        .map(s => ({
+          staff_role: s.staff_role.split('|')[0],
+          staff_id: s.staff_id,
+          staff_name: s.staff_name
+        }));
+
+      if (staffForEv.length === 0 && ev.assigned_staff_names) {
+        const names = ev.assigned_staff_names.split(',').map((s: string) => s.trim()).filter(Boolean);
+        staffForEv = names.map((name: string) => {
+          const staffMember = staff?.find(s => s.name === name);
+          return {
+            staff_role: staffMember?.role || 'Staff',
+            staff_id: staffMember?.staff_id || 'MOCK-' + Math.random().toString(36).substr(2, 4),
+            staff_name: name
+          };
+        });
+      }
+
+      allocations[eid] = {
+        reporting_date: ev.event_date || order.event_date || '',
+        reporting_time: op?.reporting_time || order.reporting_time || '08:00',
+        event_start_time: ev.event_start_time || order.event_time || '',
+        event_end_time: ev.event_end_time || '',
+        staff: staffForEv
+      };
+    });
+    setEventAllocations(allocations);
+    
     // Initialize selectedKits
     const kits = isNewAssignment ? [] : (op?.equipment_kit ? op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
     setSelectedKits(kits);
@@ -483,8 +522,67 @@ export const OperationsLeads: React.FC = () => {
 
     try {
       setIsSaving(true);
+      
+      // Build a unified list of assignments across all events to save to staff_assignments
+      const unifiedAssignments: { staff_role: string; staff_id: string; staff_name: string }[] = [];
+      
+      if (parentLeadInstance?.events) {
+        for (const ev of parentLeadInstance.events) {
+          const evId = ev.id || 'N/A';
+          const allocation = eventAllocations[evId];
+          if (allocation) {
+            const allocStaff = allocation.staff || [];
+            for (const s of allocStaff) {
+              unifiedAssignments.push({
+                staff_role: `${s.staff_role}|${evId}`,
+                staff_id: s.staff_id,
+                staff_name: s.staff_name
+              });
+            }
+          }
+        }
+      }
+
+      const finalAssignmentsToSave = unifiedAssignments.length > 0 ? unifiedAssignments : activeAssignments;
+
       // First save the multi-staff role assignments to Supabase & Context state!
-      await saveStaffAssignments(assigningOrderId, activeAssignments);
+      await saveStaffAssignments(assigningOrderId, finalAssignmentsToSave);
+
+      // Save/update per-event allocations in lead_events table in Supabase
+      if (parentLeadInstance?.events) {
+        for (const ev of parentLeadInstance.events) {
+          const evId = ev.id || 'N/A';
+          const allocation = eventAllocations[evId];
+          if (allocation) {
+            const allocStaff = allocation.staff || [];
+            const assignedStaffNames = allocStaff.map(s => s.staff_name).join(', ');
+            const assignedStaffMobiles = allocStaff.map(s => {
+              const info = staff?.find(st => st.name === s.staff_name);
+              return info?.mobile || 'N/A';
+            }).join(', ');
+
+            const eventPayload = {
+              event_start_time: allocation.event_start_time || ev.event_start_time || '',
+              event_end_time: allocation.event_end_time || ev.event_end_time || '',
+              assigned_staff_names: assignedStaffNames,
+              assigned_staff_mobiles: assignedStaffMobiles
+            };
+            
+            // Validate the columns exist in lead_events table before updating
+            await validateLeadEventsDatabase('UPDATE', eventPayload);
+
+            const { error: updErr } = await supabaseClient
+              .from('lead_events')
+              .update(eventPayload)
+              .eq('id', ev.id);
+              
+            if (updErr) {
+              console.error("Failed to update lead_event", ev.id, updErr);
+              throw new Error(`Failed to update event details in database: ${updErr.message}`);
+            }
+          }
+        }
+      }
       
       // Update data so that UI reflects new crew directly from lead_staff_assignment_history
       refreshData();

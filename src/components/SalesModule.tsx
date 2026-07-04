@@ -7,7 +7,21 @@ import {
 } from 'lucide-react';
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, LeadEvent } from '../types';
 import { StatusText } from './ui/StatusText';
+import { MultiSelectDropdown } from './ui/MultiSelectDropdown';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
+
+export const SHOOT_TYPES = [
+  "CANDID PHOTOGRAPHY",
+  "CINEMATOGRAPHY",
+  "TRADITIONAL PHOTOGRAPHY",
+  "TRADITIONAL VIDEOGRAPHY",
+  "DRONEGRAPHY",
+  "LIVE STREAMING",
+  "SEMI CANDID PHOTOGRAPHY",
+  "SEMI CANDID VIDEOGRAPHY",
+  "STANDARD PHOTOGRAPHY",
+  "STANDARD VIDEOGRAPHY"
+];
 import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers } from '../utils';
 import { SalesCalendar } from './SalesCalendar';
 import { AddressAutocomplete } from './AddressAutocomplete';
@@ -165,6 +179,12 @@ const generateQuotationPDF = (
   const wrapEventType = doc.splitTextToSize(displayEventType, 50);
   const wrapLocation = doc.splitTextToSize(lead.event_location || 'N/A', 50);
 
+  const shootTypeStr = lead.desired_event_shoot_type || lead.shoot_type || '';
+  const shootTypes = shootTypeStr ? shootTypeStr.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+  const wrapShootType = shootTypes.length > 0 
+    ? shootTypes.map((st: string) => `• ${st}`) 
+    : ['N/A'];
+
   // Resolve dynamic services
   let services = [...quoteServices];
   if (!services || services.length === 0) {
@@ -300,6 +320,8 @@ const generateQuotationPDF = (
     simRightY += (wrapEventType.length * cfg.textPadding);
     simRightY += cfg.textPadding;
     simRightY += (wrapLocation.length * cfg.textPadding);
+    simRightY += cfg.textPadding;
+    simRightY += (wrapShootType.length * cfg.textPadding);
     simRightY += cfg.textPadding;
 
     const simBoxHeight = Math.max(simLeftY, simRightY) + cfg.boxPadding;
@@ -609,6 +631,8 @@ const generateQuotationPDF = (
   rightColYOffset += cfg.textPadding; 
   rightColYOffset += (wrapLocation.length * cfg.textPadding);
   rightColYOffset += cfg.textPadding; 
+  rightColYOffset += (wrapShootType.length * cfg.textPadding);
+  rightColYOffset += cfg.textPadding; 
 
   const boxHeight = Math.max(leftColYOffset, rightColYOffset) + cfg.boxPadding;
 
@@ -679,6 +703,7 @@ const generateQuotationPDF = (
     { label: 'Event Type',     val: wrapEventType, isWrapped: true },
     { label: 'Event Date',     val: formattedEvDate },
     { label: 'Event Location', val: wrapLocation, isWrapped: true },
+    { label: 'Shoot Type',     val: wrapShootType, isWrapped: true },
     { label: 'Quotation Date', val: quoteDateStr }
   ];
 
@@ -3353,7 +3378,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     const firstEvent = lead.events && lead.events.length > 0 ? lead.events[0] : null;
     const evName = firstEvent?.event_name || lead.custom_event_name || lead.event_type || '';
-    const evShootType = firstEvent?.event_shoot_type || lead.desired_event_shoot_type || lead.shoot_type || 'Photography';
+    const evShootType = firstEvent?.event_shoot_type || lead.desired_event_shoot_type || lead.shoot_type || 'CANDID PHOTOGRAPHY';
     const evDate = firstEvent?.event_date || lead.event_date || '';
     const evStartDate = firstEvent?.event_start_date || lead.event_date || '';
     const evEndDate = firstEvent?.event_end_date || lead.event_date || '';
@@ -3798,8 +3823,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         event_location: firstEvent.event_location,
         google_maps_link: firstEvent.google_maps_link || '',
         lead_source: isCreateFlow ? createForm.lead_source : wizardLeadData.lead_source,
-        shoot_type: firstEvent.event_shoot_type || 'Photography',
-        desired_event_shoot_type: firstEvent.event_shoot_type || 'Photography',
+        shoot_type: firstEvent.event_shoot_type || 'CANDID PHOTOGRAPHY',
+        desired_event_shoot_type: firstEvent.event_shoot_type || 'CANDID PHOTOGRAPHY',
         client_residence_address: isCreateFlow ? createForm.client_residence_address : wizardLeadData.client_residence_address,
         city: isCreateFlow ? createForm.city : wizardLeadData.city,
         state: isCreateFlow ? createForm.state : wizardLeadData.state,
@@ -4127,7 +4152,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setEventForm({
       event_type: ev.event_type || '',
       event_name: ev.event_name,
-      event_shoot_type: ev.event_shoot_type || 'Photography',
+      event_shoot_type: ev.event_shoot_type || 'CANDID PHOTOGRAPHY',
       event_date: ev.event_date,
       event_start_time: ev.event_start_time || '',
       event_end_time: ev.event_end_time || '',
@@ -4433,21 +4458,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     <label className="block text-xs font-semibold text-slate-400 mb-1.5">
                       Event Shoot Type *
                     </label>
-                    <select
+                    <MultiSelectDropdown
                       id="input_event_shoot_type"
-                      value={eventForm.event_shoot_type}
-                      onChange={(e) => setEventForm({ ...eventForm, event_shoot_type: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none cursor-pointer"
-                    >
-                      <option value="Photography">Photography</option>
-                      <option value="Videography">Videography</option>
-                      <option value="Photography + Videography">Photography + Videography Combo</option>
-                      <option value="Drone Shoot">Drone Shoot</option>
-                      <option value="Cinematic Shoot">Cinematic Shoot</option>
-                      <option value="Live Streaming">Live Streaming</option>
-                      <option value="Album Design">Album Design</option>
-                      <option value="Custom Package">Custom Package</option>
-                    </select>
+                      selected={eventForm.event_shoot_type ? eventForm.event_shoot_type.split(',').map(s => s.trim()).filter(Boolean) : []}
+                      options={SHOOT_TYPES}
+                      onChange={(vals) => setEventForm({ ...eventForm, event_shoot_type: vals.join(', ') })}
+                      placeholder="Select Shoot Types"
+                    />
                   </div>
 
                   {/* Event Date */}

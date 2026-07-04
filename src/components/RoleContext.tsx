@@ -497,6 +497,70 @@ export const validatePackagesDatabase = async (operation: 'SELECT' | 'INSERT' | 
   }
 };
 
+export const validateLeadEventsDatabase = async (operation: 'SELECT' | 'INSERT' | 'UPDATE', payload?: any) => {
+  if (!supabaseClient) {
+    throw new Error('Supabase client is not initialized.');
+  }
+
+  // 1. Verify if the table exists
+  const { error: tableError } = await supabaseClient.from('lead_events').select('id').limit(0);
+  if (tableError) {
+    if (tableError.code === '42P01' || tableError.message?.toLowerCase().includes('relation "lead_events" does not exist')) {
+      const sqlStatement = `CREATE TABLE public.lead_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_id VARCHAR(50) NOT NULL,
+  event_type VARCHAR(255),
+  event_name VARCHAR(255),
+  event_shoot_type TEXT,
+  event_date DATE,
+  event_start_time VARCHAR(50),
+  event_end_time VARCHAR(50),
+  event_location TEXT,
+  google_maps_link TEXT,
+  guest_pax INTEGER,
+  staff_pax INTEGER,
+  assigned_staff_names TEXT,
+  assigned_staff_mobiles TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);`;
+      const errorMsg = `❌ Database Error\n\nTable Name: lead_events\n\nReason: The table does not exist.\n\nSuggested SQL:\n${sqlStatement}`;
+      window.alert(errorMsg);
+      throw new Error(errorMsg);
+    }
+  }
+
+  // 2. Verify if every required column exists
+  const requiredCols = [
+    { name: 'event_start_time', type: 'VARCHAR(50)' },
+    { name: 'event_end_time', type: 'VARCHAR(50)' },
+    { name: 'event_shoot_type', type: 'TEXT' },
+    { name: 'assigned_staff_names', type: 'TEXT' },
+    { name: 'assigned_staff_mobiles', type: 'TEXT' }
+  ];
+
+  for (const col of requiredCols) {
+    const { error: colError } = await supabaseClient.from('lead_events').select(col.name).limit(0);
+    if (colError) {
+      if (colError.code === '42703' || colError.message?.toLowerCase().includes('column') || colError.message?.toLowerCase().includes('does not exist')) {
+        const sqlStatement = `ALTER TABLE public.lead_events ADD COLUMN IF NOT EXISTS ${col.name} ${col.type};`;
+        const errorMsg = `❌ Database Error\n\nTable Name: lead_events\n\nMissing Column Name: ${col.name}\n\nReason: The column does not exist in the Supabase database.\n\nSuggested SQL:\n${sqlStatement}`;
+        window.alert(errorMsg);
+        throw new Error(errorMsg);
+      }
+    }
+  }
+
+  // 3. For INSERT/UPDATE, check the payload
+  if (operation === 'INSERT' || operation === 'UPDATE') {
+    if (!payload) {
+      const errorMsg = `❌ Mapping Error\n\nReason: Payload is missing.`;
+      window.alert(errorMsg);
+      throw new Error(errorMsg);
+    }
+  }
+};
+
 export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [globalModalAlert, setGlobalModalAlert] = useState<{ message: string; title: string } | null>(null);
 
@@ -1640,7 +1704,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 event_start_date: e.event_start_time || e.event_date || '',
                 event_end_date: e.event_end_time || e.event_date || '',
                 event_start_time: e.event_start_time || '',
-                event_end_time: e.event_end_time || ''
+                event_end_time: e.event_end_time || '',
+                assigned_staff_names: e.assigned_staff_names || '',
+                assigned_staff_mobiles: e.assigned_staff_mobiles || ''
               }));
           }
           if (evts.length === 0 && l.notes_special_customizations) {
@@ -2442,8 +2508,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           event_location: ev.event_location || '',
           google_maps_link: ev.google_maps_link || '',
           guest_pax: Number(ev.guest_pax) || 0,
-          staff_pax: Number(ev.staff_pax) || 0
+          staff_pax: Number(ev.staff_pax) || 0,
+          assigned_staff_names: ev.assigned_staff_names || '',
+          assigned_staff_mobiles: ev.assigned_staff_mobiles || ''
         };
+        // Perform Database Schema Validation before the operation
+        await validateLeadEventsDatabase('INSERT', newEventRecord);
+        
         const evRes = await pushInsert('lead_events', newEventRecord);
         if (!evRes?.success) {
           throw new Error(`Failed to save event to lead_events table: ${evRes?.error || "Unknown error"}`);
@@ -5037,13 +5108,17 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           event_location: ev.event_location || '',
           google_maps_link: ev.google_maps_link || '',
           guest_pax: Number(ev.guest_pax) || 0,
-          staff_pax: Number(ev.staff_pax) || 0
+          staff_pax: Number(ev.staff_pax) || 0,
+          assigned_staff_names: ev.assigned_staff_names || '',
+          assigned_staff_mobiles: ev.assigned_staff_mobiles || ''
         };
 
         if (isNew) {
+          await validateLeadEventsDatabase('INSERT', eventPayload);
           const insRes = await pushInsert('lead_events', eventPayload);
           if (!insRes.success) throw new Error(`Failed to insert new event: ${insRes.error}`);
         } else {
+          await validateLeadEventsDatabase('UPDATE', eventPayload);
           const updRes = await pushUpdate('lead_events', 'id', ev.id, eventPayload);
           if (!updRes.success) throw new Error(`Failed to update existing event: ${updRes.error}`);
         }
