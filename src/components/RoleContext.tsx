@@ -997,10 +997,32 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
-  const sanitizeTimeFieldsForDb = (record: any) => {
+  const sanitizeTimeFieldsForDb = (record: any, table?: string) => {
     if (!record || typeof record !== 'object') return record;
     const clone = { ...record };
+    
+    // Fallbacks for leads table not-null constraints
+    if (table === 'leads') {
+      if (clone.event_date === null || clone.event_date === '' || clone.event_date === undefined) {
+         clone.event_date = new Date().toISOString().split('T')[0];
+      }
+      if (clone.event_time === null || clone.event_time === '' || clone.event_time === undefined) {
+         clone.event_time = '12:00:00';
+      }
+    }
+
     const timeFields = ['event_time', 'reporting_time', 'confirmed_event_time'];
+    const dateFields = ['event_date', 'booking_date', 'event_start_date', 'event_end_date', 'delivery_target_date'];
+    
+    for (const field of dateFields) {
+      if (field in clone) {
+        const val = clone[field];
+        if (val === undefined || val === null || String(val).trim() === '') {
+          clone[field] = null;
+        }
+      }
+    }
+    
     for (const field of timeFields) {
       if (field in clone) {
         const val = clone[field];
@@ -1036,6 +1058,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     }
+
+    // Double check NOT NULL for leads just in case it got nulled
+    if (table === 'leads') {
+      if (clone.event_date === null) clone.event_date = new Date().toISOString().split('T')[0];
+      if (clone.event_time === null) clone.event_time = '12:00:00';
+    }
+
     return clone;
   };
 
@@ -1051,7 +1080,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           record.reference_source = '';
         }
       }
-      const sanitized = sanitizeTimeFieldsForDb(stripClientOnlyFields(table, record));
+      const sanitized = sanitizeTimeFieldsForDb(stripClientOnlyFields(table, record), table);
       if (table === 'operations_staff' && sanitized.staff_id) {
         sanitized.staff_id = mapToDbStaffId(sanitized.staff_id);
       }
@@ -1153,7 +1182,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const pushUpdate = async (table: string, matchColumn: string, matchValue: any, updates: any): Promise<{ success: boolean; error?: string; localFallback?: boolean }> => {
     if (!supabaseClient) return { success: true };
     try {
-      const sanitized = sanitizeTimeFieldsForDb(stripClientOnlyFields(table, updates));
+      const sanitized = sanitizeTimeFieldsForDb(stripClientOnlyFields(table, updates), table);
       let finalMatchValue = matchValue;
       if (table === 'operations_staff') {
         if (matchColumn === 'staff_id' && matchValue) {
