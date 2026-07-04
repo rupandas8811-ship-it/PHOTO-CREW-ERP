@@ -2608,6 +2608,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   }, [showConfirmModal]);
 
   React.useEffect(() => {
+    if (showStep3Popup) {
+      triggerAutoScrollAndFocus('#modal_step3_proceed_status', 150);
+    }
+  }, [showStep3Popup]);
+
+  React.useEffect(() => {
     // Completely removed automated quotation number generation as per instructions
   }, [wizardStep, crmWizardStep, activeQuoteNum]);
 
@@ -3742,65 +3748,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         setShowStep3Popup(false);
         setSelectedLead(null);
       } else if (step3Option === 'quotation_send') {
-        // Automatically:
-        // 1. Update Lead Status to Quotation Sent.
-        // 2. Save the updated Lead Status in table.
         await updateLead(selectedLead.lead_id, {
           status: 'Quotation Sent' as CurrentStage
         });
-        
-        // 3. Generate the latest quotation PDF using live CRM data.
-        // 4. Download the PDF.
-        // 5. Open WhatsApp with the customer's number and a pre-filled quotation message.
-        // 6. Return to the Leads Directory after completion.
-        console.log("✔ Generating PDF and preparing WhatsApp...");
-        const leadObj = getLeadInfoForQuote(true);
-        const activePkgs = getSelectedPkgsInfo(true);
-        const finalAmt = dynamicFinalAmt;
-
-        const doc = generateQuotationPDF(
-          leadObj,
-          activePkgs,
-          "", // no quotation number
-          quotationTerms,
-          logoBase64,
-          logoAspectRatio,
-          editableInclusions,
-          editableDeliverables,
-          Number(quoteDiscount || 0),
-          Number(quoteAdditional || 0),
-          quoteServices
-        );
-        
-        // Download the PDF automatically
-        doc.save(`Quotation.pdf`);
-
-        const rawPhone = leadObj.whatsapp_number || leadObj.mobile || '';
-        const phoneStr = typeof rawPhone === 'string' ? rawPhone : String(rawPhone);
-        
-        const safeCustomerName = String(leadObj.customer_name || 'Client');
-        const safeEventType = String(leadObj.event_type || 'Event');
-        const safeEventDate = String(leadObj.event_date || 'N/A');
-        const safeEventLocation = String(leadObj.event_location || leadObj.location || 'N/A');
-
-        const message = `Hello *${safeCustomerName}*,\n\n` +
-          `Thank you for choosing *PhotoCrew Pictures*.\n\n` +
-          `Please find your quotation details below:\n\n` +
-          `🎉 Event: ${safeEventType}\n` +
-          `📅 Event Date: ${safeEventDate}\n` +
-          `📍 Event Address: ${safeEventLocation}\n` +
-          `💰 Final Amount: ₹${finalAmt.toLocaleString('en-IN')}\n\n` +
-          `Thank you.\nPhotoCrew Pictures`;
-
-        const cleanPhone = phoneStr.replace(/[^0-9]/g, '');
-        if (cleanPhone) {
-          const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-          window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
-        } else {
-          showToastMsg("Customer has no valid mobile/WhatsApp number. Opened without redirect.", "error");
-        }
-
-        showToastMsg("Lead updated to Quotation Sent. PDF downloaded and WhatsApp opened.", "success");
+        showToastMsg("Lead status updated to Quotation Sent.", "success");
         setShowStep3Popup(false);
         setSelectedLead(null);
       }
@@ -8283,32 +8234,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </div>
 
               {/* Transaction ID (Optional) */}
-              {confirmForm.advance_received > 0 && (
-                <div>
-                  <label className="block font-medium text-slate-400 mb-1">
-                    Transaction ID (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="UPI ID, Bank Ref, IMPS reference etc."
-                    value={confirmForm.transaction_id || ''}
-                    onChange={(e) => setConfirmForm({ ...confirmForm, transaction_id: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
-                  />
-                </div>
-              )}
-
-              {/* Notes */}
               <div>
                 <label className="block font-medium text-slate-400 mb-1">
-                  Notes / Contract Clauses
+                  Transaction ID (Optional)
                 </label>
-                <textarea
-                  placeholder="Add payment timelines, custom requests, shoot clauses..."
-                  value={confirmForm.notes}
-                  onChange={(e) => setConfirmForm({ ...confirmForm, notes: e.target.value })}
-                  rows={2}
-                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs"
+                <input
+                  type="text"
+                  placeholder="Enter Payment Transaction ID"
+                  value={confirmForm.transaction_id || ''}
+                  onChange={(e) => setConfirmForm({ ...confirmForm, transaction_id: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
                 />
               </div>
 
@@ -9233,8 +9168,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-slate-750 bg-slate-900 cursor-pointer"
                   />
                   <div>
-                    <span className="text-sm font-bold text-white">Quotation Send</span>
-                    <p className="text-[11px] text-zinc-400 mt-0.5 font-sans">Update status to Quotation Sent, download PDF, and open WhatsApp.</p>
+                    <span className="text-sm font-bold text-white">Quotation Sent</span>
+                    <p className="text-[11px] text-zinc-400 mt-0.5 font-sans">Update lead status to Quotation Sent and return to Leads Directory.</p>
                   </div>
                 </label>
               </div>

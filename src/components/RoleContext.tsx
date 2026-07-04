@@ -2762,6 +2762,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         advance_received: advanceReceived,
         balance_due: quotationAmount - advanceReceived,
         payment_status: advanceReceived >= quotationAmount ? 'Fully Paid' : (advanceReceived > 0 ? 'Partially Paid' : 'Pending'),
+        transaction_id: transactionId || undefined,
       });
       if (!rPay?.success) throw new Error("Failed to update Payment: " + rPay?.error);
     }
