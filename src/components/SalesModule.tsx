@@ -3671,6 +3671,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           }
         }
 
+
+        // Open Step 2 Follow-up details modal before moving to Step 3
+        setStep2FollowUpDate('');
+        setStep2FollowUpNotes('');
+        setShowStep2Popup(true);
+        setIsSaving(false);
+        return; // Halt here. The rest of the Step 2 saving is handled in handleSaveStep2FollowUp
+      } else if (step === 3) {
         if (!salesStaffName || !salesStaffName.trim()) {
           showToastMsg("Please enter Sales Staff Name.", "error");
           setIsSaving(false);
@@ -3682,13 +3690,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           return;
         }
 
-        // Open Step 2 Follow-up details modal before moving to Step 3
-        setStep2FollowUpDate('');
-        setStep2FollowUpNotes('');
-        setShowStep2Popup(true);
-        setIsSaving(false);
-        return; // Halt here. The rest of the Step 2 saving is handled in handleSaveStep2FollowUp
-      } else if (step === 3) {
         if (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '') {
           showToastMsg("Please select a package before continuing.", "error");
           setIsSaving(false);
@@ -3711,6 +3712,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         }
         const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
         
+        const updatedEvents = crmEvents.map(ev => ({
+          ...ev,
+          assigned_staff_names: salesStaffName,
+          assigned_staff_mobiles: salesStaffMobile
+        }));
+
         await updateLead(selectedLead.lead_id, {
           budget: Number(wizardLeadData.package_cost),
           package_price: Number(wizardLeadData.package_cost),
@@ -3721,7 +3728,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           client_residence_address: wizardLeadData.client_residence_address,
           city: wizardLeadData.city,
           state: wizardLeadData.state,
-          pincode: wizardLeadData.pincode
+          pincode: wizardLeadData.pincode,
+          sales_staff_name: salesStaffName,
+          sales_staff_mobile: salesStaffMobile,
+          events: updatedEvents
         });
 
         const newCompleted = Math.max(crmHighestStep, 3);
@@ -3741,7 +3751,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             client_residence_address: wizardLeadData.client_residence_address,
             city: wizardLeadData.city,
             state: wizardLeadData.state,
-            pincode: wizardLeadData.pincode
+            pincode: wizardLeadData.pincode,
+            sales_staff_name: salesStaffName,
+            sales_staff_mobile: salesStaffMobile
           };
         });
 
