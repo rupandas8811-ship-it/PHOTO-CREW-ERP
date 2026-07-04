@@ -1,9 +1,9 @@
-const fs = require('fs');
-let content = fs.readFileSync('src/components/RoleContext.tsx', 'utf8');
+import fs from 'fs';
+let content = fs.readFileSync('src/components/SalesModule.tsx', 'utf-8');
 
-// Find the problematic lines around cleanTerms
-const badLines = `      if (cleanTerms.includes('\n\nMETADATA:')) {\n        cleanTerms = cleanTerms.split('\n\nMETADATA:')[0];`;
-// But it was literally a newline in the string literal, let's just replace it by regex
-content = content.replace(/cleanTerms\.includes\('[\s\S]*?METADATA:'\)\) \{[\s\S]*?cleanTerms\.split\('[\s\S]*?METADATA:'\)\[0\];/, "cleanTerms.includes('\\n\\nMETADATA:')) {\n        cleanTerms = cleanTerms.split('\\n\\nMETADATA:')[0];");
+const targetStr = 'className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${`';
+const replaceStr = 'className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${';
 
-fs.writeFileSync('src/components/RoleContext.tsx', content);
+content = content.replace(targetStr, replaceStr);
+fs.writeFileSync('src/components/SalesModule.tsx', content, 'utf-8');
+console.log("Fixed syntax");

@@ -1637,8 +1637,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
               .filter((e: any) => e.lead_id === l.lead_id)
               .map((e: any) => ({
                 ...e,
-                event_start_date: e.event_start_time || e.event_date || '',
-                event_end_date: e.event_end_time || e.event_date || '',
+                event_start_date: e.event_start_date || e.event_date || '',
+                event_end_date: e.event_end_date || e.event_date || '',
                 event_start_time: e.event_start_time || '',
                 event_end_time: e.event_end_time || ''
               }));
@@ -2437,8 +2437,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           event_name: ev.event_name || '',
           event_shoot_type: ev.event_shoot_type || '',
           event_date: ev.event_date || '',
-          event_start_time: ev.event_start_time || ev.event_start_date || '',
-          event_end_time: ev.event_end_time || ev.event_end_date || '',
+          event_start_time: ev.event_start_time || '',
+          event_end_time: ev.event_end_time || '',
           event_location: ev.event_location || '',
           google_maps_link: ev.google_maps_link || '',
           guest_pax: String(ev.guest_pax) !== '' && ev.guest_pax != null ? Number(ev.guest_pax) : null,
@@ -2534,14 +2534,24 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Normalize different spellings of Follow Up to prevent fragmented sources of truth
     const normalizedStatus = (status as string === 'Follow-up' || status as string === 'Follow-Up' || status === 'Follow Up') ? 'Follow Up' : status;
 
-    const res = await pushUpdate('leads', 'lead_id', leadId, {
+    const updatesPayload: any = {
       status: normalizedStatus,
       current_status: normalizedStatus,
       budget: quotationAmount !== undefined ? quotationAmount : targetLead?.budget,
       remarks: `${targetLead?.remarks || ''}\n[Update ${timestamp.split('T')[0]}]: ${callNotes}. ${negotiationNotes ? 'Neg Notes: ' + negotiationNotes : ''}. Next follow-up: ${nextFollowUpDate}`,
       updated_by: currentUserName,
       updated_at: timestamp
-    });
+    };
+    
+    if (callNotes) updatesPayload["Follow-up_Notes"] = callNotes;
+    if (nextFollowUpDate) updatesPayload["Next_Follow_up_Date"] = nextFollowUpDate;
+    
+    if (normalizedStatus === 'Lost Lead') {
+      updatesPayload["Lost_Reason"] = callNotes; // Lost Reason is usually passed via callNotes or negotiationNotes
+      updatesPayload["Lost_Notes"] = negotiationNotes || callNotes;
+    }
+
+    const res = await pushUpdate('leads', 'lead_id', leadId, updatesPayload);
 
     if (!res?.success) {
       throw new Error(res?.error || "Failed to save follow-up details in database.");
@@ -5035,8 +5045,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           event_name: ev.event_name || '',
           event_shoot_type: ev.event_shoot_type || '',
           event_date: ev.event_date || '',
-          event_start_time: ev.event_start_time || ev.event_start_date || '',
-          event_end_time: ev.event_end_time || ev.event_end_date || '',
+          event_start_time: ev.event_start_time || '',
+          event_end_time: ev.event_end_time || '',
           event_location: ev.event_location || '',
           google_maps_link: ev.google_maps_link || '',
           guest_pax: String(ev.guest_pax) !== '' && ev.guest_pax != null ? Number(ev.guest_pax) : null,

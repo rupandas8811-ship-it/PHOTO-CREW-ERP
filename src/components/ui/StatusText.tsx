@@ -19,6 +19,7 @@ export const getStatusColorClass = (status: string) => {
   if (s === 'ready for delivery') return 'text-teal-500';
   if (s === 'delivered') return 'text-green-500';
   if (s === 'completed' || s === 'closed') return 'text-green-700';
+  if (s === 'lost lead') return 'text-rose-500 font-bold';
   return 'text-zinc-400';
 };
 

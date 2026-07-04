@@ -193,6 +193,10 @@ export interface Lead {
   total_pax?: number;
   reference_source?: string;
   lead_value?: number;
+  "Follow-up_Notes"?: string;
+  Next_Follow_up_Date?: string;
+  Lost_Reason?: string;
+  Lost_Notes?: string;
   lead_score?: number;
   booking_status?: string;
   google_maps_link?: string;
@@ -259,6 +263,10 @@ export interface Order {
   total_pax?: number;
   reference_source?: string;
   lead_value?: number;
+  "Follow-up_Notes"?: string;
+  Next_Follow_up_Date?: string;
+  Lost_Reason?: string;
+  Lost_Notes?: string;
   lead_score?: number;
   booking_status?: string;
 }

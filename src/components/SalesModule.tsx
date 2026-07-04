@@ -2234,8 +2234,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [salesStaffMobile, setSalesStaffMobile] = useState<string>('');
   const [quoteDiscount, setQuoteDiscount] = useState<number | ''>('');
   const [quoteAdditional, setQuoteAdditional] = useState<number | ''>('');
-  const [quoteExtraCharges, setQuoteExtraCharges] = useState<number | ''>('');
-
+  
   const [quoteServices, setQuoteServices] = useState<{ id: string; name: string; qty: number; price: number; isAdditional?: boolean }[]>([]);
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
   
@@ -2270,14 +2269,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setQuoteServices(prev => prev.filter(s => s.id !== id));
   };
 
-  // Keep quoteAdditional synchronized in real-time
-  React.useEffect(() => {
-    const additionalSum = quoteServices
-      .filter(s => s.isAdditional)
-      .reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
-    setQuoteAdditional(additionalSum);
-  }, [quoteServices]);
-
+  
   // Synchronize/initialize services on entering Step 4
   React.useEffect(() => {
     const isStep4Active = wizardStep === 4 || crmWizardStep === 4;
@@ -2687,9 +2679,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const dynamicAdditionalSum = quoteServices
     .filter(s => s.isAdditional)
     .reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
-  const extraChargesVal = Number(quoteExtraCharges || 0);
-  const discountVal = Number(quoteDiscount || 0);
-  const dynamicFinalAmt = Math.max(0, dynamicBaseSum + dynamicAdditionalSum + extraChargesVal - discountVal);
+    const discountVal = Number(quoteDiscount || 0);
+  const dynamicFinalAmt = Math.max(0, dynamicBaseSum + Number(quoteAdditional || 0) - discountVal);
 
   React.useEffect(() => {
     setWizardLeadData(prev => {
@@ -2820,10 +2811,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         order_id: '',
         package_name: activePkgs.map(p => p.package_name).join(' + '),
         package_price: basePkgSum,
-        quotation_amount: basePkgSum + Number(quoteAdditional || 0) + Number(quoteExtraCharges || 0),
+        quotation_amount: basePkgSum + Number(quoteAdditional || 0),
         discount: quoteDiscount,
         discount_amount: quoteDiscount,
-        additional_services_cost: Number(quoteAdditional || 0) + Number(quoteExtraCharges || 0),
+        additional_services_cost: Number(quoteAdditional || 0),
         final_quotation_amount: finalAmt,
         final_amount: finalAmt,
         tax_amount: 0,
@@ -2842,8 +2833,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         state: leadObj.state,
         pincode: leadObj.pincode,
         desired_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
-        sales_staff_name: salesStaffName,
-        sales_staff_mobile: salesStaffMobile,
+
         editableInclusions: editableInclusions,
         editableDeliverables: editableDeliverables
       };
@@ -2986,7 +2976,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         editableInclusions,
         editableDeliverables,
         Number(quoteDiscount || 0),
-        Number(quoteExtraCharges || 0),
+        0, // Extra charges removed
         quoteServices
       );
       
@@ -3015,7 +3005,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         editableInclusions,
         editableDeliverables,
         Number(quoteDiscount || 0),
-        Number(quoteExtraCharges || 0),
+        0, // Extra charges removed
         quoteServices
       );
       
@@ -3056,7 +3046,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         editableInclusions,
         editableDeliverables,
         Number(quoteDiscount || 0),
-        Number(quoteExtraCharges || 0),
+        0, // Extra charges removed
         quoteServices
       );
       
@@ -3253,33 +3243,21 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               <input
                 type="number"
                 value={quoteAdditional || ''}
-                readOnly
-                placeholder="0"
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg py-2 px-3 text-xs text-slate-400 font-mono opacity-80 cursor-not-allowed"
-                title="Automatically calculated from services added in Step 4"
-              />
-            </div>
-
-            {/* Extra Charges */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Extra Charges (₹)
-              </label>
-              <input
-                type="number"
-                value={quoteExtraCharges || ''}
-                onChange={(e) => setQuoteExtraCharges(Number(e.target.value))}
+                onChange={(e) => setQuoteAdditional(Number(e.target.value))}
                 placeholder="0"
                 className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 font-mono transition-all"
               />
             </div>
+
+            {/* Extra Charges */}
+
           </div>
 
           {/* Final Calculated Amount Badge */}
           <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 flex items-center justify-between shadow-inner mt-2">
             <div className="space-y-0.5">
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide font-mono">Final Quotation Amount</p>
-              <p className="text-[9px] text-slate-500 font-mono">Formula: Base Price (₹{basePkgSum}) + Addl (₹{quoteAdditional}) + Extra (₹{quoteExtraCharges || 0}) - Disc (₹{quoteDiscount})</p>
+              <p className="text-[9px] text-slate-500 font-mono">Formula: Base Price (₹{basePkgSum}) + Addl (₹{quoteAdditional || 0}) - Disc (₹{quoteDiscount || 0})</p>
             </div>
             <div className="text-right">
               <span className="text-lg font-extrabold text-amber-500 font-mono">
@@ -3329,12 +3307,21 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setActiveQuoteNum('');
     setQuoteDiscount(0);
     setQuoteAdditional(0);
-    setQuoteExtraCharges(0);
     // Explicitly reset on new lead selection
     setEditableInclusions({});
     setEditableDeliverables({});
-    setSalesStaffName(lead.sales_staff_name || '');
-    setSalesStaffMobile(lead.sales_staff_mobile || '');
+    // Extract staff info from events if not directly on lead
+    let evtStaffName = '';
+    let evtStaffMobile = '';
+    if (lead.events && lead.events.length > 0) {
+      const evWithStaff = lead.events.find(e => e.assigned_staff_names);
+      if (evWithStaff) {
+        evtStaffName = evWithStaff.assigned_staff_names || '';
+        evtStaffMobile = evWithStaff.assigned_staff_mobiles || '';
+      }
+    }
+    setSalesStaffName(lead.sales_staff_name || evtStaffName || '');
+    setSalesStaffMobile(lead.sales_staff_mobile || evtStaffMobile || '');
 
     const activePackages = (leadPackages || []).filter(lp => lp.lead_id === lead.lead_id);
     const primaryLP = activePackages[0];
@@ -3384,9 +3371,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     if (latestQuote) {
       setActiveQuoteNum(latestQuote.quotation_number || '');
       setQuoteDiscount(latestQuote.discount_amount || 0);
-      setQuoteExtraCharges(latestQuote.additional_services_cost || 0);
-      setSalesStaffName(latestQuote.sales_staff_name || lead.sales_staff_name || '');
-      setSalesStaffMobile(latestQuote.sales_staff_mobile || lead.sales_staff_mobile || '');
+      setQuoteAdditional(latestQuote.additional_services_cost || 0);
+      setSalesStaffName(latestQuote.sales_staff_name || lead.sales_staff_name || evtStaffName || '');
+      setSalesStaffMobile(latestQuote.sales_staff_mobile || lead.sales_staff_mobile || evtStaffMobile || '');
       if (latestQuote.editableInclusions) {
         setEditableInclusions(latestQuote.editableInclusions);
       }
@@ -3729,8 +3716,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           city: wizardLeadData.city,
           state: wizardLeadData.state,
           pincode: wizardLeadData.pincode,
-          sales_staff_name: salesStaffName,
-          sales_staff_mobile: salesStaffMobile,
+          
           events: updatedEvents
         });
 
@@ -3848,11 +3834,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
     setIsSaving(true);
     try {
-      const finalEventsList = (isCreateFlow ? [...createEvents] : [...crmEvents]).map(ev => ({
-        ...ev,
-        assigned_staff_names: salesStaffName || '',
-        assigned_staff_mobiles: salesStaffMobile || ''
-      }));
+      const finalEventsList = (isCreateFlow ? [...createEvents] : [...crmEvents]);
       if (finalEventsList.length === 0) {
         showToastMsg("No events found to save.", "error");
         setIsSaving(false);
@@ -3886,8 +3868,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         total_pax: firstEvent.guest_pax !== '' && firstEvent.guest_pax != null ? Number(firstEvent.guest_pax) : null,
         guest_pax: firstEvent.guest_pax !== '' && firstEvent.guest_pax != null ? Number(firstEvent.guest_pax) : null,
         staff_pax: firstEvent.staff_pax !== '' && firstEvent.staff_pax != null ? Number(firstEvent.staff_pax) : null,
-        sales_staff_name: salesStaffName,
-        sales_staff_mobile: salesStaffMobile,
+        
         reference_source: isCreateFlow ? createForm.reference_source : wizardLeadData.reference_source || '',
         Select_Package_Option: isCreateFlow ? (createForm.Select_Package_Option || selectedPkgIds[0] || '') : (wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || ''),
         events: finalEventsList
@@ -3972,16 +3953,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     try {
       await updateLead(selectedLead.lead_id, {
         status: 'Lost Lead',
-        remarks: `Lost Reason: ${finalReason}. Notes: ${lostNotes}`
-      });
+        remarks: `Lost Reason: ${finalReason}. Notes: ${lostNotes}`,
+        "Lost_Reason": finalReason,
+        "Lost_Notes": lostNotes
+      } as any);
 
       await updateLeadFollowUp(
         selectedLead.lead_id,
         'Lost Lead',
-        `Lost Reason: ${finalReason}. Notes: ${lostNotes}`,
+        finalReason,
         '',
         Number(selectedLead.package_price || selectedLead.budget || 0),
-        `Lost Reason: ${finalReason}. Notes: ${lostNotes}`
+        lostNotes
       );
 
       showToastMsg("Lead status set to Lost successfully.", "success");
@@ -7979,6 +7962,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     <th className="p-3.5">Event Date</th>
                     <th className="p-3.5">Current Stage</th>
                     <th className="p-3.5">Current Status</th>
+                    <th className="p-3.5">Next Follow-up Date</th>
+                    <th className="p-3.5">Follow-up Notes</th>
                     <th className="p-3.5">Payment Status</th>
                     <th className="p-3.5">Created Date</th>
                     <th className="p-3.5 text-right pr-5 w-[160px] min-w-[160px]">Action</th>
@@ -8029,6 +8014,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </td>
                           <td className="p-3.5">
                             <StatusText status={leadStatus} />
+                          </td>
+                          <td className="p-3.5 font-mono text-zinc-350">
+                            {lead.Next_Follow_up_Date ? lead.Next_Follow_up_Date : 'N/A'}
+                          </td>
+                          <td className="p-3.5 text-zinc-400 max-w-[150px] truncate" title={lead["Follow-up_Notes"] || ''}>
+                            {lead["Follow-up_Notes"] ? lead["Follow-up_Notes"] : 'N/A'}
                           </td>
                           <td className="p-3.5">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
@@ -8625,6 +8616,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 </div>
               </div>
             </div>
+
+            {/* If Lost Lead, display Lost Details */}
+            {selectedLead && selectedLead.status === 'Lost Lead' && (
+              <div className="mx-4 sm:mx-5 mt-2 bg-rose-950/25 border border-rose-500/20 p-2.5 rounded-xl flex items-start gap-3 text-left shadow-lg">
+                <span className="text-rose-500 text-base mt-0.5">❌</span>
+                <div>
+                  <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wide">Lost Lead Information</h4>
+                  <p className="text-[11px] text-zinc-400 leading-relaxed mt-0.5">
+                    <strong>Reason:</strong> {selectedLead.Lost_Reason || 'N/A'} <br />
+                    <strong>Notes:</strong> {selectedLead.Lost_Notes || 'N/A'}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* If locked, display banner */}
             {isLeadLocked && (
