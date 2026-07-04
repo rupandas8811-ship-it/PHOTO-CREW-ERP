@@ -1,0 +1,58 @@
+  const drawDeliverablesTable = (title: string, list: { package: string; item: string }[]) => {
+    if (list.length === 0) return;
+
+    let tableH = 4 + 7.5; 
+    list.forEach((item) => {
+      const wrappedPkg = doc.splitTextToSize(item.package || '', 45);
+      const cleanedDetailName = cleanText(item.item || '');
+      const wrappedDetail = doc.splitTextToSize(cleanedDetailName, 114);
+      tableH += Math.max(7.5, Math.max(wrappedPkg.length, wrappedDetail.length) * cfg.rowTextHeight + cfg.rowPadding);
+    });
+
+    if (currentY + tableH > 250 && tableH <= (250 - 52)) {
+      currentY = createNewPage();
+    }
+
+    if (currentY + 4 > 250) {
+      currentY = createNewPage();
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+    doc.text(title, 15, currentY);
+    currentY += 4;
+
+    if (currentY + 7.5 > 250) {
+      currentY = createNewPage();
+    }
+    doc.setFillColor(30, 41, 59); // Slate-800
+    doc.rect(15, currentY, 180, 7.5, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(255, 255, 255);
+    doc.text('PACKAGE / CATEGORY', 19, currentY + 4.8);
+    doc.text('INCLUSION / DELIVERABLE DETAIL', 69, currentY + 4.8);
+
+    currentY += 7.5;
+
+    doc.setDrawColor(203, 213, 225); 
+    doc.setLineWidth(0.2);
+
+    list.forEach((item, index) => {
+      const wrappedPkg = doc.splitTextToSize(item.package || '', 45);
+      const cleanedDetailName = cleanText(item.item || '');
+      const wrappedDetail = doc.splitTextToSize(cleanedDetailName, 114);
+      const rowHeight = Math.max(7.5, Math.max(wrappedPkg.length, wrappedDetail.length) * cfg.rowTextHeight + cfg.rowPadding);
+
+      if (currentY + rowHeight > 250) {
+        doc.line(15, currentY, 195, currentY);
+        currentY = createNewPage();
+
+        doc.setFillColor(30, 41, 59);
+        doc.rect(15, currentY, 180, 7.5, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(255, 255, 255);
+        doc.text('PACKAGE / CATEGORY (CONTINUED)', 19, currentY + 4.8);
+        doc.text('INCLUSION / DELIVERABLE DETAIL', 69, currentY + 4.8);

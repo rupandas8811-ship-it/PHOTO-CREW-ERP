@@ -228,63 +228,45 @@ const generateQuotationPDF = (
     return cleaned.trim();
   };
 
-  // Prep Deliverables
-  const allInclusions: { package: string; item: string }[] = [];
-  const allDeliverables: { package: string; item: string }[] = [];
+    // NEW PREP FOR TEAM MEMBERS (INCLUSIONS) AND DELIVERABLES
+  const eventInclusionsMap: Record<string, string[]> = {};
+  const eventDeliverablesMap: Record<string, { pkgName: string, items: string[] }> = {};
+  let generalInclusions: string[] = [];
+  let generalDeliverables: { pkgName: string, items: string[] }[] = [];
 
   activePkgs.forEach((pkg) => {
     const pkgId = pkg.package_id || pkg.id || 'default';
     const pkgName = pkg.package_name || pkg.name || 'Base Package';
 
-    const eventSpecificKeys = Object.keys(editableInclusions || {}).filter(k => k.startsWith(`${pkgId}_`));
-    if (eventSpecificKeys.length > 0) {
-      eventSpecificKeys.forEach((key) => {
+    const incKeys = Object.keys(editableInclusions || {}).filter(k => k.startsWith(`${pkgId}_`));
+    if (incKeys.length > 0) {
+      incKeys.forEach((key) => {
         const eventId = key.substring(pkgId.length + 1);
         const eventObj = (lead.events || []).find((e: any) => e.id === eventId);
-        const eventLabel = eventObj ? ` (${eventObj.event_name})` : '';
-        (editableInclusions[key] || []).forEach((inc) => {
-          allInclusions.push({ package: pkgName, item: `${inc}${eventLabel}` });
-        });
+        const eventName = eventObj ? eventObj.event_name : 'Event';
+        if (!eventInclusionsMap[eventName]) eventInclusionsMap[eventName] = [];
+        eventInclusionsMap[eventName].push(...(editableInclusions![key] || []).filter(Boolean));
       });
-    } else if (editableInclusions && editableInclusions[pkgId] && editableInclusions[pkgId].length > 0) {
-      editableInclusions[pkgId].forEach((inc) => {
-        allInclusions.push({ package: pkgName, item: inc });
-      });
-    } else if (pkg.inclusions) {
-      const incList = typeof pkg.inclusions === 'string'
-        ? pkg.inclusions.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
-        : Array.isArray(pkg.inclusions) ? pkg.inclusions : [];
-      incList.forEach((inc: string) => {
-        allInclusions.push({ package: pkgName, item: inc });
-      });
+    } else {
+      generalInclusions.push(...(editableInclusions?.[pkgId] || []).filter(Boolean));
     }
 
-    if (editableDeliverables && editableDeliverables[pkgId] && editableDeliverables[pkgId].length > 0) {
-      editableDeliverables[pkgId].forEach((del) => {
-        allDeliverables.push({ package: pkgName, item: del });
+    const delKeys = Object.keys(editableDeliverables || {}).filter(k => k.startsWith(`${pkgId}_`));
+    if (delKeys.length > 0) {
+      delKeys.forEach((key) => {
+        const eventId = key.substring(pkgId.length + 1);
+        const eventObj = (lead.events || []).find((e: any) => e.id === eventId);
+        const eventName = eventObj ? eventObj.event_name : 'Event';
+        if (!eventDeliverablesMap[eventName]) eventDeliverablesMap[eventName] = { pkgName, items: [] };
+        eventDeliverablesMap[eventName].items.push(...(editableDeliverables![key] || []).filter(Boolean));
       });
-    } else if (pkg.deliverables) {
-      const delList = typeof pkg.deliverables === 'string'
-        ? pkg.deliverables.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
-        : Array.isArray(pkg.deliverables) ? pkg.deliverables : [];
-      delList.forEach((del: string) => {
-        allDeliverables.push({ package: pkgName, item: del });
-      });
+    } else {
+      generalDeliverables.push({ pkgName, items: (editableDeliverables?.[pkgId] || []).filter(Boolean) });
     }
   });
 
-  const combinedList = [...allInclusions, ...allDeliverables];
-  
-  // Deduplicate: Compare deliverables listed in second section with those in Chosen Package Specifications (baseServices)
-  const cleanedBaseServicesNames = baseServices.map(s => normalizeForComparison(cleanText(s.name)));
-
-  const filteredCombinedList = combinedList
-    .map(item => ({ package: item.package, item: cleanText(item.item) }))
-    .filter(item => {
-      if (!item.item) return false;
-      const normItem = normalizeForComparison(item.item);
-      return !cleanedBaseServicesNames.includes(normItem);
-    });
+  const hasEventsInclusions = Object.keys(eventInclusionsMap).length > 0;
+  const hasEventsDeliverables = Object.keys(eventDeliverablesMap).length > 0;
 
   const custRemarks = lead.remarks_raw || lead.remarks || '';
   const teamRemarks = lead.notes || ''; 
@@ -333,67 +315,18 @@ const generateQuotationPDF = (
       return h;
     };
 
-    if (baseServices.length > 0) {
-      const tableH = getTableSimHeight(baseServices);
-      if (simY + tableH > 250 && tableH <= (250 - 52)) {
-        simY = 52;
-        simPageCount++;
-      } else {
-        let currentTableY = simY + 4 + 7.5;
-        baseServices.forEach((item) => {
-          const cleanedName = cleanText(item.name || '');
-          const wrappedName = doc.splitTextToSize(cleanedName, 166);
-          const rowH = Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
-          if (currentTableY + rowH > 250) {
-            currentTableY = 52 + 7.5;
-            simPageCount++;
-          }
-          currentTableY += rowH;
-        });
-        simY = currentTableY;
-      }
-      simY += cfg.tableSpacing;
-    }
-
-    if (additionalServices.length > 0) {
-      const tableH = getTableSimHeight(additionalServices);
-      if (simY + tableH > 250 && tableH <= (250 - 52)) {
-        simY = 52;
-        simPageCount++;
-      } else {
-        let currentTableY = simY + 4 + 7.5;
-        additionalServices.forEach((item) => {
-          const cleanedName = cleanText(item.name || '');
-          const wrappedName = doc.splitTextToSize(cleanedName, 166);
-          const rowH = Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
-          if (currentTableY + rowH > 250) {
-            currentTableY = 52 + 7.5;
-            simPageCount++;
-          }
-          currentTableY += rowH;
-        });
-        simY = currentTableY;
-      }
-      simY += cfg.tableSpacing;
-    }
-
-    if (filteredCombinedList.length > 0) {
-      let tableH = 4 + 7.5;
-      filteredCombinedList.forEach((item) => {
-        const wrappedPkg = doc.splitTextToSize(item.package || '', 45);
-        const wrappedDetail = doc.splitTextToSize(item.item || '', 114);
-        tableH += Math.max(7.5, Math.max(wrappedPkg.length, wrappedDetail.length) * cfg.rowTextHeight + cfg.rowPadding);
+    const simTable = (items: any[]) => {
+      let tableH = 4 + 7.5; 
+      items.forEach((item) => {
+        tableH += Math.max(7.5, 1 * cfg.rowTextHeight + cfg.rowPadding);
       });
-
       if (simY + tableH > 250 && tableH <= (250 - 52)) {
         simY = 52;
         simPageCount++;
       } else {
         let currentTableY = simY + 4 + 7.5;
-        filteredCombinedList.forEach((item) => {
-          const wrappedPkg = doc.splitTextToSize(item.package || '', 45);
-          const wrappedDetail = doc.splitTextToSize(item.item || '', 114);
-          const rowH = Math.max(7.5, Math.max(wrappedPkg.length, wrappedDetail.length) * cfg.rowTextHeight + cfg.rowPadding);
+        items.forEach((item) => {
+          const rowH = Math.max(7.5, 1 * cfg.rowTextHeight + cfg.rowPadding);
           if (currentTableY + rowH > 250) {
             currentTableY = 52 + 7.5;
             simPageCount++;
@@ -403,6 +336,18 @@ const generateQuotationPDF = (
         simY = currentTableY;
       }
       simY += cfg.tableSpacing;
+    };
+
+    if (hasEventsInclusions) {
+      Object.entries(eventInclusionsMap).forEach(([_, members]) => simTable(members));
+    } else if (generalInclusions.length > 0) {
+      simTable(generalInclusions);
+    }
+    
+    if (hasEventsDeliverables) {
+      Object.entries(eventDeliverablesMap).forEach(([_, data]) => simTable(data.items));
+    } else if (generalDeliverables.length > 0) {
+      simTable(generalDeliverables);
     }
 
     const pricingH = 4.5 + cfg.pricingCardHeight;
@@ -943,9 +888,21 @@ const generateQuotationPDF = (
     currentY += cfg.tableSpacing; 
   };
 
-  // 2. Chosen base inclusions table
-  if (baseServices.length > 0) {
-    drawTable('CHOSEN PACKAGE SPECIFICATIONS (BASE INCLUSIONS)', baseServices);
+    // 2. Team Members Included section
+  const drawTeamMembers = (eventName: string | null, members: string[]) => {
+    if (members.length === 0) return;
+    const title = eventName ? `${eventName} - TEAM MEMBERS INCLUDED` : 'TEAM MEMBERS INCLUDED';
+    const mapped = members.map((m, i) => ({ id: String(i), name: m, qty: 1, price: 0 }));
+    drawTable(title, mapped);
+  };
+
+
+  if (hasEventsInclusions) {
+    Object.entries(eventInclusionsMap).forEach(([eventName, members]) => {
+      drawTeamMembers(eventName, members);
+    });
+  } else if (generalInclusions.length > 0) {
+    drawTeamMembers(null, generalInclusions);
   }
 
   // 3. Additional services table
@@ -953,9 +910,120 @@ const generateQuotationPDF = (
     drawTable('ADDITIONAL SPECIFICATIONS & SERVICE ADD-ONS', additionalServices);
   }
 
-  // 4. Inclusions & Deliverables table
-  if (filteredCombinedList.length > 0) {
-    drawDeliverablesTable('PACKAGE INCLUSIONS & DELIVERABLES DETAILED LIST', filteredCombinedList);
+  // 4. Deliverables table
+  const drawNewDeliverablesTable = (eventName: string | null, data: { pkgName: string, items: string[] }[]) => {
+    if (data.length === 0) return;
+    const title = eventName ? `${eventName} - PACKAGE INCLUSIONS & DELIVERABLES DETAILED LIST` : 'PACKAGE INCLUSIONS & DELIVERABLES DETAILED LIST';
+    
+    // Create flattened list
+    const list: { type: 'pkgName' | 'header' | 'item', text: string }[] = [];
+    data.forEach(d => {
+      if (d.items.length === 0) return;
+      list.push({ type: 'pkgName', text: `Package Name: ${d.pkgName}` });
+      list.push({ type: 'header', text: `Deliverables` });
+      d.items.forEach(item => {
+        list.push({ type: 'item', text: item });
+      });
+    });
+
+    if (list.length === 0) return;
+
+    let tableH = 4 + 7.5; 
+    list.forEach((item) => {
+      const wrapped = doc.splitTextToSize(cleanText(item.text), 166);
+      tableH += Math.max(7.5, wrapped.length * cfg.rowTextHeight + cfg.rowPadding);
+    });
+
+    if (currentY + tableH > 250 && tableH <= (250 - 52)) {
+      currentY = createNewPage();
+    }
+    if (currentY + 4 > 250) {
+      currentY = createNewPage();
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+    doc.text(title, 15, currentY);
+    currentY += 4;
+
+    if (currentY + 7.5 > 250) {
+      currentY = createNewPage();
+    }
+    doc.setFillColor(30, 41, 59); // Slate-800
+    doc.rect(15, currentY, 180, 7.5, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(255, 255, 255);
+    doc.text('DELIVERABLES', 19, currentY + 4.8);
+
+    currentY += 7.5;
+
+    doc.setDrawColor(203, 213, 225); 
+    doc.setLineWidth(0.2);
+
+    list.forEach((item, index) => {
+      const cleanedText = cleanText(item.text || '');
+      const wrappedText = doc.splitTextToSize(cleanedText, 166);
+      const rowHeight = Math.max(7.5, wrappedText.length * cfg.rowTextHeight + cfg.rowPadding);
+
+      if (currentY + rowHeight > 250) {
+        doc.line(15, currentY, 195, currentY);
+        currentY = createNewPage();
+
+        doc.setFillColor(30, 41, 59);
+        doc.rect(15, currentY, 180, 7.5, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(255, 255, 255);
+        doc.text('DELIVERABLES (CONTINUED)', 19, currentY + 4.8);
+        currentY += 7.5;
+      }
+
+      if (item.type === 'pkgName' || item.type === 'header') {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(15, currentY, 180, rowHeight, 'F');
+      }
+
+      doc.line(15, currentY, 15, currentY + rowHeight);
+      doc.line(195, currentY, 195, currentY + rowHeight);
+
+      if (item.type === 'pkgName') {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.setTextColor(30, 41, 59);
+      } else if (item.type === 'header') {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(15, 23, 42);
+      } else {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(51, 65, 85);
+        doc.setFillColor(51, 65, 85);
+        doc.circle(20, currentY + 4.3 - 0.9, 0.6, 'F');
+      }
+
+      wrappedText.forEach((line: string, i: number) => {
+        const xOffset = item.type === 'item' ? 23 : 19;
+        doc.text(line, xOffset, currentY + 4.3 + (i * cfg.rowTextHeight));
+      });
+
+      doc.line(15, currentY + rowHeight, 195, currentY + rowHeight);
+      currentY += rowHeight;
+    });
+
+    currentY += cfg.tableSpacing; 
+  };
+
+
+  if (hasEventsDeliverables) {
+    Object.entries(eventDeliverablesMap).forEach(([eventName, data]) => {
+      drawNewDeliverablesTable(eventName, [data]);
+    });
+  } else if (generalDeliverables.length > 0) {
+    drawNewDeliverablesTable(null, generalDeliverables);
   }
 
   // 5. PRICING SUMMARY CARD
