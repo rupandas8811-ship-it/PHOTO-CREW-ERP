@@ -140,8 +140,6 @@ export interface LeadEvent {
   event_start_time?: string;
   event_end_time?: string;
   google_maps_link?: string;
-  assigned_staff_names?: string;
-  assigned_staff_mobiles?: string;
 }
 
 export interface Lead {
@@ -195,13 +193,6 @@ export interface Lead {
   lead_score?: number;
   booking_status?: string;
   google_maps_link?: string;
-  sales_staff_name?: string;
-  sales_staff_mobile?: string;
-  event_shoot_type?: string;
-  event_start_time?: string;
-  event_end_time?: string;
-  guest_pax?: number;
-  staff_pax?: number;
 }
 
 export interface LeadPackage {
