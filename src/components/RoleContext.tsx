@@ -2441,8 +2441,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           event_end_time: ev.event_end_time || ev.event_end_date || '',
           event_location: ev.event_location || '',
           google_maps_link: ev.google_maps_link || '',
-          guest_pax: Number(ev.guest_pax) || 0,
-          staff_pax: Number(ev.staff_pax) || 0
+          guest_pax: String(ev.guest_pax) !== '' && ev.guest_pax != null ? Number(ev.guest_pax) : null,
+          staff_pax: String(ev.staff_pax) !== '' && ev.staff_pax != null ? Number(ev.staff_pax) : null
         };
         const evRes = await pushInsert('lead_events', newEventRecord);
         if (!evRes?.success) {
@@ -5037,8 +5037,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           event_end_time: ev.event_end_time || ev.event_end_date || '',
           event_location: ev.event_location || '',
           google_maps_link: ev.google_maps_link || '',
-          guest_pax: Number(ev.guest_pax) || 0,
-          staff_pax: Number(ev.staff_pax) || 0
+          guest_pax: String(ev.guest_pax) !== '' && ev.guest_pax != null ? Number(ev.guest_pax) : null,
+          staff_pax: String(ev.staff_pax) !== '' && ev.staff_pax != null ? Number(ev.staff_pax) : null
         };
 
         if (isNew) {
