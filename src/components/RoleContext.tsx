@@ -44,7 +44,7 @@ interface RoleContextType {
   deletePackage: (packageId: string) => Promise<void>;
 
   quotations: any[];
-  addQuotation: (quotation: any) => Promise<void>;
+  addQuotation: (quotation: any) => Promise<string>;
   updateQuotation: (quotationId: string, updates: Partial<any>) => Promise<void>;
   updateLead: (leadId: string, updates: Partial<Lead>) => Promise<any>;
   saveLeadPackages: (leadId: string, packagesSelected: Omit<LeadPackage, 'lead_package_id' | 'lead_id'>[]) => Promise<void>;
@@ -4472,16 +4472,15 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logActivity(`Removed Editor Task Assignment: ${assignmentId}`, 'Production', assignmentId);
   };
 
-  const addQuotation = async (newQuote: any) => {
-    setQuotations((prev) => {
-      const next = [newQuote, ...prev];
-      localStorage.setItem('erp_quotations', JSON.stringify(next));
-      return next;
-    });
-
-    logActivity(`Generated Quotation: ${newQuote.quotation_number}`, 'Sales', newQuote.lead_id, 'N/A', 'Quotation Generated');
-
-    if (!supabaseClient) return;
+  const addQuotation = async (newQuote: any): Promise<string> => {
+    if (!supabaseClient) {
+      setQuotations((prev) => {
+        const next = [newQuote, ...prev];
+        localStorage.setItem('erp_quotations', JSON.stringify(next));
+        return next;
+      });
+      return newQuote.quotation_number;
+    }
 
     // Verify logged-in user is authenticated
     const { data: userData, error: userErr } = await supabaseClient.auth.getUser();
@@ -4490,10 +4489,108 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error("You must be logged in to generate a quotation.");
     }
 
+    // 1. Try to invoke the database-side atomic upsert function
+    try {
+      const rpcPayload = {
+        p_quotation_id: newQuote.quotation_id,
+        p_lead_id: newQuote.lead_id,
+        p_package_name: newQuote.package_name,
+        p_package_price: Number(newQuote.package_price || 0),
+        p_quotation_amount: Number(newQuote.quotation_amount || 0),
+        p_discount_amount: Number(newQuote.discount_amount || 0),
+        p_additional_services_cost: Number(newQuote.additional_services_cost || 0),
+        p_final_amount: Number(newQuote.final_amount || 0),
+        p_tax_amount: Number(newQuote.tax_amount || 0),
+        p_quotation_status: newQuote.quotation_status,
+        p_generated_date: newQuote.generated_date || new Date().toISOString().split('T')[0],
+        p_created_by: newQuote.created_by || userData.user.email || 'Sales Team',
+        p_terms_conditions: newQuote.terms_conditions || '',
+        p_deliverables_description: newQuote.deliverables_description || '',
+        p_notes_special_customizations: newQuote.notes_special_customizations || '',
+        p_client_residence_address: newQuote.client_residence_address || '',
+        p_city: newQuote.city || '',
+        p_state: newQuote.state || '',
+        p_pincode: newQuote.pincode || '',
+        p_desired_event_shoot_type: newQuote.desired_event_shoot_type || '',
+        p_customer_id: newQuote.customer_id || '',
+        p_customer_name: newQuote.customer_name || '',
+        p_order_id: newQuote.order_id || '',
+        p_pdf_url: newQuote.pdf_url || '',
+        p_whatsapp_sent_status: !!newQuote.whatsapp_sent_status,
+        p_viewed_status: !!newQuote.viewed_status,
+        p_sales_staff_name: newQuote.sales_staff_name || '',
+        p_sales_staff_mobile: newQuote.sales_staff_mobile || '',
+        p_editable_inclusions: newQuote.editableInclusions || null,
+        p_editable_deliverables: newQuote.editableDeliverables || null
+      };
+
+      console.log("Invoking atomic database transaction: upsert_quotation RPC...", rpcPayload);
+      const { data, error } = await supabaseClient.rpc('upsert_quotation', rpcPayload);
+
+      if (!error && data && data.length > 0) {
+        const result = data[0];
+        const finalQuoteId = result.r_quotation_id || newQuote.quotation_id;
+        const finalQuoteNum = result.r_quotation_number || newQuote.quotation_number;
+        const action = result.r_action || 'INSERT';
+
+        console.log(`✔ Database transaction succeeded via RPC [Action: ${action}]! Final Quote Number: ${finalQuoteNum}`);
+
+        const finalQuoteObj = {
+          ...newQuote,
+          quotation_id: finalQuoteId,
+          quotation_number: finalQuoteNum,
+          updated_at: new Date().toISOString()
+        };
+
+        setQuotations((prev) => {
+          let next;
+          if (action === 'UPDATE') {
+            next = prev.map((q) => q.quotation_id === finalQuoteId || q.lead_id === newQuote.lead_id ? finalQuoteObj : q);
+          } else {
+            next = [finalQuoteObj, ...prev.filter(q => q.lead_id !== newQuote.lead_id)];
+          }
+          localStorage.setItem('erp_quotations', JSON.stringify(next));
+          return next;
+        });
+
+        logActivity(
+          `${action === 'UPDATE' ? 'Updated' : 'Generated'} Quotation: ${finalQuoteNum}`, 
+          'Sales', 
+          newQuote.lead_id, 
+          'N/A', 
+          `Quotation ${action === 'UPDATE' ? 'Updated' : 'Generated'}`
+        );
+
+        return finalQuoteNum;
+      } else if (error) {
+        // If it's a 404 (method not found), we fall back gracefully to the safe client-side check. Otherwise log warning.
+        if (error.code !== 'P0001' && !error.message.includes('function') && !error.message.includes('404')) {
+          console.warn("RPC call failed with database-level error:", error);
+          throw new Error(`Database transaction failed: ${error.message}`);
+        }
+        console.info("RPC upsert_quotation not found or not yet applied. Falling back to progressive enhancement client check...");
+      }
+    } catch (rpcErr: any) {
+      if (rpcErr.message && rpcErr.message.includes('Database transaction failed')) {
+        throw rpcErr;
+      }
+      console.warn("Exception during RPC check, falling back to safe local check:", rpcErr);
+    }
+
+    // 2. Safe Progressive Fallback: Retrieve existing quotation directly from DB
+    console.log("Running safe fallback: checking for existing quotation for Lead ID:", newQuote.lead_id);
+    const { data: dbExisting, error: checkErr } = await supabaseClient
+      .from('quotations')
+      .select('quotation_id, quotation_number')
+      .eq('lead_id', newQuote.lead_id)
+      .maybeSingle();
+
+    if (checkErr) {
+      console.warn("Error running safe db check:", checkErr.message);
+    }
+
     const standardPayload = {
-      quotation_id: newQuote.quotation_id,
       lead_id: newQuote.lead_id,
-      quotation_number: newQuote.quotation_number,
       quotation_amount: newQuote.quotation_amount,
       discount_amount: newQuote.discount_amount,
       tax_amount: newQuote.tax_amount || 0,
@@ -4501,8 +4598,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       quotation_status: newQuote.quotation_status,
       valid_until: newQuote.valid_until || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       terms_conditions: newQuote.terms_conditions || '',
-      created_by: newQuote.created_by,
-      created_at: newQuote.created_at,
       updated_at: new Date().toISOString(),
       package_name: newQuote.package_name,
       package_price: newQuote.package_price,
@@ -4518,8 +4613,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       customer_name: newQuote.customer_name,
       order_id: newQuote.order_id,
       pdf_url: newQuote.pdf_url,
-      whatsapp_sent_status: newQuote.whatsapp_sent_status,
-      viewed_status: newQuote.viewed_status,
+      whatsapp_sent_status: !!newQuote.whatsapp_sent_status,
+      viewed_status: !!newQuote.viewed_status,
       generated_date: newQuote.generated_date,
       sales_staff_name: newQuote.sales_staff_name || '',
       sales_staff_mobile: newQuote.sales_staff_mobile || '',
@@ -4527,17 +4622,84 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       editableDeliverables: newQuote.editableDeliverables || null
     };
 
-    try {
-      const { error } = await supabaseClient.from('quotations').insert(standardPayload);
-      if (error) {
-        console.warn('Could not insert quotation into Supabase with standard fields:', error.message);
-        throw new Error(`Failed to save quotation to database: ${error.message}`);
-      } else {
-        // fetchFromDb().catch(console.error); // Disabled to prevent full reload
+    if (dbExisting) {
+      console.log(`Fallback Match: Found existing quotation ${dbExisting.quotation_number}. Performing UPDATE.`);
+      
+      const { error: updateErr } = await supabaseClient
+        .from('quotations')
+        .update(standardPayload)
+        .eq('quotation_id', dbExisting.quotation_id);
+
+      if (updateErr) {
+        throw new Error(`Failed to update existing quotation in database: ${updateErr.message}`);
       }
-    } catch (err: any) {
-      console.warn('Supabase exception on inserting quotation:', err);
-      throw new Error(err.message || 'Failed to save quotation to database.');
+
+      const finalQuoteObj = {
+        ...newQuote,
+        quotation_id: dbExisting.quotation_id,
+        quotation_number: dbExisting.quotation_number,
+        updated_at: new Date().toISOString()
+      };
+
+      setQuotations((prev) => {
+        const next = prev.map((q) => q.quotation_id === dbExisting.quotation_id || q.lead_id === newQuote.lead_id ? finalQuoteObj : q);
+        localStorage.setItem('erp_quotations', JSON.stringify(next));
+        return next;
+      });
+
+      logActivity(`Updated Quotation: ${dbExisting.quotation_number}`, 'Sales', newQuote.lead_id, 'N/A', 'Quotation Updated');
+      return dbExisting.quotation_number;
+    } else {
+      console.log(`Fallback Match: No existing quotation found. Performing INSERT.`);
+      
+      const insertPayload = {
+        ...standardPayload,
+        quotation_id: newQuote.quotation_id,
+        quotation_number: newQuote.quotation_number, // Trigger will override if sequence is applied
+        created_by: newQuote.created_by || userData.user.email || 'Sales Team',
+        created_at: newQuote.created_at || new Date().toISOString()
+      };
+
+      const { error: insertErr } = await supabaseClient
+        .from('quotations')
+        .insert(insertPayload);
+
+      if (insertErr) {
+        // Double check if there was a duplicate race condition error on quotation_number
+        if (insertErr.message.includes('unique constraint') || insertErr.code === '23505') {
+          console.warn("Detected constraint race condition on insert. Fetching newly created quotation row...");
+          const { data: dbFresh } = await supabaseClient
+            .from('quotations')
+            .select('quotation_id, quotation_number')
+            .eq('lead_id', newQuote.lead_id)
+            .maybeSingle();
+
+          if (dbFresh) {
+            const finalQuoteObj = {
+              ...newQuote,
+              quotation_id: dbFresh.quotation_id,
+              quotation_number: dbFresh.quotation_number,
+              updated_at: new Date().toISOString()
+            };
+            setQuotations((prev) => {
+              const next = [finalQuoteObj, ...prev.filter(q => q.lead_id !== newQuote.lead_id)];
+              localStorage.setItem('erp_quotations', JSON.stringify(next));
+              return next;
+            });
+            return dbFresh.quotation_number;
+          }
+        }
+        throw new Error(`Failed to save new quotation to database: ${insertErr.message}`);
+      }
+
+      setQuotations((prev) => {
+        const next = [newQuote, ...prev.filter(q => q.lead_id !== newQuote.lead_id)];
+        localStorage.setItem('erp_quotations', JSON.stringify(next));
+        return next;
+      });
+
+      logActivity(`Generated Quotation: ${newQuote.quotation_number}`, 'Sales', newQuote.lead_id, 'N/A', 'Quotation Generated');
+      return newQuote.quotation_number;
     }
   };
 

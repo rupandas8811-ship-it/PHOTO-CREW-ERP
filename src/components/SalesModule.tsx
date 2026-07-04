@@ -2753,7 +2753,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const basePkgSum = dynamicBaseSum;
       const finalAmt = dynamicFinalAmt;
 
-      const existingQuotation = (quotations || []).find(q => q.lead_id === (leadObj.lead_id || 'DRAFT-LEAD'));
+      const leadId = leadObj.lead_id || 'DRAFT-LEAD';
+      let dbQuote = null;
+      if (supabaseClient && leadId !== 'DRAFT-LEAD') {
+        const { data, error } = await supabaseClient
+          .from('quotations')
+          .select('quotation_id, quotation_number, created_at')
+          .eq('lead_id', leadId)
+          .maybeSingle();
+        if (!error && data) {
+          dbQuote = data;
+        }
+      }
+
+      const existingQuotation = dbQuote || (quotations || []).find(q => q.lead_id === leadId);
       
       const d = new Date();
       const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
@@ -2761,17 +2774,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const generatedQuotNum = existingQuotation ? existingQuotation.quotation_number : `QT-${dateStr}-${randomFour}`;
       const quotNum = activeQuoteNum || generatedQuotNum;
       
-      if (!activeQuoteNum) {
-        setActiveQuoteNum(quotNum);
-      }
-
       console.log(`✔ Creating/Updating quotation ${quotNum}...`);
       const qId = existingQuotation ? existingQuotation.quotation_id : ('QT-' + Math.random().toString(36).substring(2, 9).toUpperCase());
       
       const standardQuotation = {
         quotation_id: qId,
         quotation_number: quotNum,
-        lead_id: leadObj.lead_id || 'DRAFT-LEAD',
+        lead_id: leadId,
         customer_id: leadObj.customer_name || 'Customer',
         customer_name: leadObj.customer_name || 'Customer',
         order_id: '',
@@ -2806,12 +2815,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       };
 
       console.log("✔ Saving to Supabase...");
-      if (existingQuotation) {
-        await updateQuotation(qId, standardQuotation);
-      } else {
-        await addQuotation(standardQuotation);
-      }
-      console.log("✔ Quotation saved successfully");
+      const finalQuoteNum = await addQuotation(standardQuotation);
+      console.log(`✔ Quotation saved successfully. Confirmed Quotation Number: ${finalQuoteNum}`);
+      setActiveQuoteNum(finalQuoteNum);
 
       if (isEdit) {
         if (wizardLeadData.selected_package_id) {
@@ -2889,7 +2895,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
 
       console.log("✔ Process completed");
-      return quotNum;
+      return finalQuoteNum;
     } catch (err: any) {
       showErrorHelper(
         "Quotation Save Failed",
