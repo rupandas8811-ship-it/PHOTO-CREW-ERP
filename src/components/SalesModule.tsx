@@ -3396,7 +3396,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     const firstEvent = lead.events && lead.events.length > 0 ? lead.events[0] : null;
     const evName = firstEvent?.event_name || lead.custom_event_name || '';
-    const evShootType = firstEvent?.event_shoot_type || lead.desired_event_shoot_type || lead.shoot_type || 'CANDID PHOTOGRAPHY';
+    const evShootType = firstEvent?.event_shoot_type || lead.desired_event_shoot_type || lead.shoot_type || '';
     const evDate = firstEvent?.event_date || lead.event_date || '';
     const evStartDate = firstEvent?.event_start_date || lead.event_date || '';
     const evEndDate = firstEvent?.event_end_date || lead.event_date || '';
@@ -3425,7 +3425,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       event_start_date: evStartDate,
       event_end_date: evEndDate,
       event_time: lead.event_time || '',
-      reporting_time: lead.reporting_time || '08:00',
+      reporting_time: lead.reporting_time || '',
       event_location: evLocation,
       guest_pax: evGuestPax,
       staff_pax: evStaffPax,
@@ -3830,7 +3830,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
     setIsSaving(true);
     try {
-      const finalEventsList = isCreateFlow ? [...createEvents] : [...crmEvents];
+      const finalEventsList = (isCreateFlow ? [...createEvents] : [...crmEvents]).map(ev => ({
+        ...ev,
+        assigned_staff_names: salesStaffName || '',
+        assigned_staff_mobiles: salesStaffMobile || ''
+      }));
       if (finalEventsList.length === 0) {
         showToastMsg("No events found to save.", "error");
         setIsSaving(false);
@@ -3848,11 +3852,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         custom_event_type: firstEvent.event_type === 'Other' ? firstEvent.event_name : undefined,
         event_date: firstEvent.event_date,
         event_time: formattedEventTime || null,
+        event_start_time: firstEvent.event_start_time || null,
+        event_end_time: firstEvent.event_end_time || null,
         reporting_time: formattedReportingTime || null,
         event_location: firstEvent.event_location,
         google_maps_link: firstEvent.google_maps_link || '',
         lead_source: isCreateFlow ? createForm.lead_source : wizardLeadData.lead_source,
         shoot_type: firstEvent.event_shoot_type || 'CANDID PHOTOGRAPHY',
+        event_shoot_type: firstEvent.event_shoot_type || 'CANDID PHOTOGRAPHY',
         desired_event_shoot_type: firstEvent.event_shoot_type || 'CANDID PHOTOGRAPHY',
         client_residence_address: isCreateFlow ? createForm.client_residence_address : wizardLeadData.client_residence_address,
         city: isCreateFlow ? createForm.city : wizardLeadData.city,
@@ -4038,11 +4045,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setIsQuickReorderView(false);
     setDetectedCustomer(null);
     setReorderForm({
-      event_type: 'Pre Weddings',
+      event_type: '',
       custom_event_name: '',
       custom_event_type: '',
       event_date: '',
-      event_time: '12:00',
+      event_time: '',
       event_location: '',
       package_name: '',
       quotation_amount: 0,
@@ -4161,7 +4168,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     if (addAnother) {
       setEventForm({
-        event_type: savedEventType,
+        event_type: '',
         event_name: '',
         event_shoot_type: '',
         event_date: '',
@@ -4184,17 +4191,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setEditingEventId(ev.id);
     setEventForm({
       event_type: ev.event_type || '',
-      event_name: ev.event_name,
-      event_shoot_type: ev.event_shoot_type || 'CANDID PHOTOGRAPHY',
-      event_date: ev.event_date,
+      event_name: ev.event_name || '',
+      event_shoot_type: ev.event_shoot_type || '',
+      event_date: ev.event_date || '',
       event_start_time: ev.event_start_time || '',
       event_end_time: ev.event_end_time || '',
-      event_location: ev.event_location,
+      event_location: ev.event_location || '',
       google_maps_link: ev.google_maps_link || '',
-      guest_pax: ev.guest_pax,
-      staff_pax: ev.staff_pax,
-      event_start_date: ev.event_start_date || ev.event_date,
-      event_end_date: ev.event_end_date || ev.event_date
+      guest_pax: ev.guest_pax !== null && ev.guest_pax !== undefined ? ev.guest_pax : ('' as any),
+      staff_pax: ev.staff_pax !== null && ev.staff_pax !== undefined ? ev.staff_pax : ('' as any),
+      event_start_date: ev.event_start_date || ev.event_date || '',
+      event_end_date: ev.event_end_date || ev.event_date || ''
     });
     setShowEventForm(true);
   };
@@ -4210,10 +4217,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleAddNewEventClick = (isCrm: boolean = !!selectedLead) => {
     setEditingEventId(null);
-    const list = isCrm ? crmEvents : createEvents;
-    const lastEventType = list.length > 0 ? list[list.length - 1].event_type : '';
     setEventForm({
-      event_type: lastEventType || '',
+      event_type: '',
       event_name: '',
       event_shoot_type: '',
       event_date: '',
@@ -4838,10 +4843,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             total_pax: createForm.total_pax !== '' ? Number(createForm.total_pax) : undefined,
             reference_source: createForm.reference_source,
             booking_status: createForm.booking_status || undefined,
-            event_type: createForm.event_type || 'Other',
-            event_date: createForm.event_date || new Date().toISOString().split('T')[0],
-            event_time: createForm.event_time || '12:00',
-            event_location: createForm.event_location || 'TBD',
+            event_type: createForm.event_type || '',
+            event_date: createForm.event_date || '',
+            event_time: createForm.event_time || '',
+            event_location: createForm.event_location || '',
             budget: Number(createForm.budget) || 0,
             remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
             Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''

@@ -2442,7 +2442,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           event_location: ev.event_location || '',
           google_maps_link: ev.google_maps_link || '',
           guest_pax: String(ev.guest_pax) !== '' && ev.guest_pax != null ? Number(ev.guest_pax) : null,
-          staff_pax: String(ev.staff_pax) !== '' && ev.staff_pax != null ? Number(ev.staff_pax) : null
+          staff_pax: String(ev.staff_pax) !== '' && ev.staff_pax != null ? Number(ev.staff_pax) : null,
+          assigned_staff_names: ev.assigned_staff_names || '',
+          assigned_staff_mobiles: ev.assigned_staff_mobiles || ''
         };
         const evRes = await pushInsert('lead_events', newEventRecord);
         if (!evRes?.success) {
@@ -5038,7 +5040,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           event_location: ev.event_location || '',
           google_maps_link: ev.google_maps_link || '',
           guest_pax: String(ev.guest_pax) !== '' && ev.guest_pax != null ? Number(ev.guest_pax) : null,
-          staff_pax: String(ev.staff_pax) !== '' && ev.staff_pax != null ? Number(ev.staff_pax) : null
+          staff_pax: String(ev.staff_pax) !== '' && ev.staff_pax != null ? Number(ev.staff_pax) : null,
+          assigned_staff_names: ev.assigned_staff_names || '',
+          assigned_staff_mobiles: ev.assigned_staff_mobiles || ''
         };
 
         if (isNew) {
