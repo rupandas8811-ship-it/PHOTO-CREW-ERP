@@ -193,8 +193,8 @@ export interface Lead {
   total_pax?: number;
   reference_source?: string;
   lead_value?: number;
-  "Follow-up_Notes"?: string;
-  Next_Follow_up_Date?: string;
+  follow_up_notes?: string;
+  next_follow_up_date?: string;
   Lost_Reason?: string;
   Lost_Notes?: string;
   lead_score?: number;
@@ -263,8 +263,8 @@ export interface Order {
   total_pax?: number;
   reference_source?: string;
   lead_value?: number;
-  "Follow-up_Notes"?: string;
-  Next_Follow_up_Date?: string;
+  follow_up_notes?: string;
+  next_follow_up_date?: string;
   Lost_Reason?: string;
   Lost_Notes?: string;
   lead_score?: number;

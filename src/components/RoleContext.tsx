@@ -2572,8 +2572,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updated_at: timestamp
     };
     
-    if (callNotes) updatesPayload["Follow-up_Notes"] = callNotes;
-    if (nextFollowUpDate) updatesPayload["Next_Follow_up_Date"] = nextFollowUpDate;
+    updatesPayload.follow_up_notes = callNotes || null;
+    updatesPayload.next_follow_up_date = nextFollowUpDate || null;
     
     if (normalizedStatus === 'Lost Lead') {
       updatesPayload["Lost_Reason"] = callNotes; // Lost Reason is usually passed via callNotes or negotiationNotes

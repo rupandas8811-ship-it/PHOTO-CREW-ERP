@@ -1595,7 +1595,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     final_quoted_amount: 0,
     remarks: '',
     next_follow_up_date: '',
-    // Step 5
+      // Step 5
     status: '' as CurrentStage,
     // Order Confirmed Rule fields
     confirmed_event_date: '',
@@ -2914,6 +2914,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           pincode: leadObj.pincode,
           desired_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
           remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city),
+            next_follow_up_date: followUpDate || null,
+            follow_up_notes: internalNotes || null,
           Select_Package_Option: leadObj.Select_Package_Option || ''
         });
       }
@@ -3394,7 +3396,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const evLocation = firstEvent?.event_location || lead.event_location || '';
     const evGuestPax = firstEvent?.guest_pax ?? lead.guest_pax ?? lead.total_pax ?? '';
     const evStaffPax = firstEvent?.staff_pax ?? lead.staff_pax ?? '';
-
+    setInternalNotes(lead.follow_up_notes || '');
+    setFollowUpDate(lead.next_follow_up_date || '');
     setWizardLeadData({
       customer_name: lead.customer_name || '',
       mobile: lead.mobile || '',
@@ -3451,7 +3454,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     });
 
     setFollowUpForm({
-      call_notes: '',
+      call_notes: lead.follow_up_notes || '',
       next_follow_up_date: '',
       status: lead.status,
       quotation_amount: 0,
@@ -4852,6 +4855,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             event_location: createForm.event_location || '',
             budget: Number(createForm.budget) || 0,
             remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
+            next_follow_up_date: followUpDate || null,
+            follow_up_notes: internalNotes || null,
             Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
           });
           setCreatedLeadId(newId);
@@ -4876,6 +4881,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             reference_source: createForm.reference_source,
             booking_status: createForm.booking_status || undefined,
             remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
+            next_follow_up_date: followUpDate || null,
+            follow_up_notes: internalNotes || null,
             Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
           });
         }
@@ -4906,6 +4913,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           event_location: createForm.event_location || 'TBD',
           budget: Number(createForm.budget) || 0,
           remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
+            next_follow_up_date: followUpDate || null,
+            follow_up_notes: internalNotes || null,
           Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || '',
           status: 'New Lead',
           created_date: new Date().toISOString().split('T')[0],
@@ -5077,6 +5086,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           deliverables_description: selectedPkgs.map(p => pkgDeliverables[p.id] || p.deliverables || 'N/A').join('\n'),
           notes_special_customizations: selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
           remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
+            next_follow_up_date: followUpDate || null,
+            follow_up_notes: internalNotes || null,
           Select_Package_Option: selectedPkgIds[0] || '',
           client_residence_address: createForm.client_residence_address,
           city: createForm.city,
@@ -5120,6 +5131,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         await updateLead(createdLeadId!, {
           budget: Number(createForm.budget),
           remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
+            next_follow_up_date: followUpDate || null,
+            follow_up_notes: internalNotes || null,
           client_residence_address: createForm.client_residence_address,
           city: createForm.city,
           state: createForm.state,
@@ -5169,6 +5182,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         pincode: createForm.pincode,
         desired_event_shoot_type: createForm.desired_event_shoot_type,
         remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
+            next_follow_up_date: followUpDate || null,
+            follow_up_notes: internalNotes || null,
         Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
       });
       showToastMsg("Lead created successfully.", "success");
@@ -7962,8 +7977,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     <th className="p-3.5">Event Date</th>
                     <th className="p-3.5">Current Stage</th>
                     <th className="p-3.5">Current Status</th>
-                    <th className="p-3.5">Next Follow-up Date</th>
-                    <th className="p-3.5">Follow-up Notes</th>
                     <th className="p-3.5">Payment Status</th>
                     <th className="p-3.5">Created Date</th>
                     <th className="p-3.5 text-right pr-5 w-[160px] min-w-[160px]">Action</th>
@@ -8014,12 +8027,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </td>
                           <td className="p-3.5">
                             <StatusText status={leadStatus} />
-                          </td>
-                          <td className="p-3.5 font-mono text-zinc-350">
-                            {lead.Next_Follow_up_Date ? lead.Next_Follow_up_Date : 'N/A'}
-                          </td>
-                          <td className="p-3.5 text-zinc-400 max-w-[150px] truncate" title={lead["Follow-up_Notes"] || ''}>
-                            {lead["Follow-up_Notes"] ? lead["Follow-up_Notes"] : 'N/A'}
                           </td>
                           <td className="p-3.5">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
