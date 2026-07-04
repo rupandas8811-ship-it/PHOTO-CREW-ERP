@@ -193,6 +193,10 @@ export interface Lead {
   lead_score?: number;
   booking_status?: string;
   google_maps_link?: string;
+  sales_staff_name?: string;
+  sales_staff_mobile?: string;
+  guest_pax?: number;
+  staff_pax?: number;
 }
 
 export interface LeadPackage {

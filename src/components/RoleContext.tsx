@@ -4968,7 +4968,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const notesToUse = finalUpdates.notes_special_customizations !== undefined 
         ? finalUpdates.notes_special_customizations 
         : (prevLead?.notes_special_customizations || '');
-      finalUpdates.notes_special_customizations = notesToUse;
+      // Serialize events to notes_special_customizations to prevent losing them during local cache updates or db falls
+      finalUpdates.notes_special_customizations = serializeLeadEvents(updatedEvents || [], deserializeLeadEvents(notesToUse).notes);
       delete finalUpdates.events;
     }
     

@@ -3647,6 +3647,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           }
         }
 
+        if (!salesStaffName || !salesStaffName.trim()) {
+          showToastMsg("Please enter Sales Staff Name.", "error");
+          setIsSaving(false);
+          return;
+        }
+        if (!salesStaffMobile || !salesStaffMobile.trim() || salesStaffMobile.trim().length !== 10 || !/^\d+$/.test(salesStaffMobile.trim())) {
+          showToastMsg("Please enter a valid 10-digit Sales Staff Mobile Number.", "error");
+          setIsSaving(false);
+          return;
+        }
+
         // Open Step 2 Follow-up details modal before moving to Step 3
         setStep2FollowUpDate('');
         setStep2FollowUpNotes('');
@@ -4422,7 +4433,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     setEventForm(prev => ({
                       ...prev,
                       event_type: val,
-                      event_name: prev.event_name || (val === 'Other' ? '' : val)
+                      event_name: prev.event_name || ''
                     }));
                   }}
                   className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all cursor-pointer font-bold"
