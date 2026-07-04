@@ -532,7 +532,6 @@ const generateQuotationPDF = (
     pageDoc.setFont('helvetica', 'normal');
     pageDoc.setFontSize(7.5);
     pageDoc.setTextColor(240, 240, 240);
-    pageDoc.text(`No: ${quoteNum}`, 90, 35);
     pageDoc.text(`Date: ${formatDate(lead.quotation_date || new Date().toISOString().split('T')[0])}`, 130, 35);
     pageDoc.text(`Validity: 15 Days`, 168, 35);
   };
@@ -651,8 +650,7 @@ const generateQuotationPDF = (
   const leftLabels = [
     { label: 'Customer Name', val: wrapCustName, isWrapped: true },
     { label: 'Mobile Number', val: lead.mobile || 'N/A' },
-    { label: 'Email Address', val: wrapEmail, isWrapped: true },
-    { label: 'Quotation No',  val: quoteNum }
+    { label: 'Email Address', val: wrapEmail, isWrapped: true }
   ];
 
   if (lead.sales_staff_name) {
@@ -2198,6 +2196,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   );
   const [generatedPDFBlobUrl, setGeneratedPDFBlobUrl] = useState<string>('');
   const [activeQuoteNum, setActiveQuoteNum] = useState<string>('');
+  const [showStep3Popup, setShowStep3Popup] = useState<boolean>(false);
+  const [step3Option, setStep3Option] = useState<'negotiation' | 'quotation_send'>('negotiation');
 
   // Customizable inclusions, deliverables, discount, and additional charges states
   const [editableInclusions, setEditableInclusions] = useState<Record<string, string[]>>({});
@@ -2608,10 +2608,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   }, [showConfirmModal]);
 
   React.useEffect(() => {
-    if ((wizardStep === 4 || crmWizardStep === 4) && !activeQuoteNum) {
-      const randomID = Math.floor(1000 + Math.random() * 9000);
-      setActiveQuoteNum(`QT-2026-${randomID}`);
-    }
+    // Completely removed automated quotation number generation as per instructions
   }, [wizardStep, crmWizardStep, activeQuoteNum]);
 
   const getSelectedPkgsInfo = (isEdit: boolean) => {
@@ -2931,8 +2928,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         return;
       }
 
-      const quotNum = activeQuoteNum || `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-      
       let currentLogo = logoBase64;
       let currentAspect = logoAspectRatio;
       try {
@@ -2947,14 +2942,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const doc = generateQuotationPDF(
         leadObj,
         activePkgs,
-        quotNum,
+        "",
         quotationTerms,
         currentLogo,
         currentAspect,
         editableInclusions,
         editableDeliverables,
-        quoteDiscount,
-        quoteAdditional,
+        Number(quoteDiscount || 0),
+        Number(quoteAdditional || 0),
         quoteServices
       );
       
@@ -2969,9 +2964,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleDownloadQuotePDF = async (isEdit: boolean) => {
     try {
-      const generatedQuotNum = await handleGenerateQuote(isEdit);
-      if (!generatedQuotNum) return;
-
       console.log("✔ Generating PDF...");
       const leadObj = getLeadInfoForQuote(isEdit);
       const activePkgs = getSelectedPkgsInfo(isEdit);
@@ -2979,24 +2971,24 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const doc = generateQuotationPDF(
         leadObj,
         activePkgs,
-        generatedQuotNum,
+        "",
         quotationTerms,
         logoBase64,
         logoAspectRatio,
         editableInclusions,
         editableDeliverables,
-        quoteDiscount,
-        quoteAdditional,
+        Number(quoteDiscount || 0),
+        Number(quoteAdditional || 0),
         quoteServices
       );
       
       console.log("✔ PDF generated");
-      doc.save(`Quotation_${generatedQuotNum}.pdf`);
+      doc.save(`Quotation.pdf`);
       
       if (!isEdit) {
         setWizardStep(4);
       } else {
-        showToastMsg("Quotation successfully generated and saved to CRM!", "success");
+        showToastMsg("Quotation successfully generated!", "success");
       }
     } catch (err: any) {
       showErrorHelper(
@@ -3012,26 +3004,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleSendWhatsAppQuote = async (isEdit: boolean) => {
     try {
-      const generatedQuotNum = await handleGenerateQuote(isEdit);
-      if (!generatedQuotNum) return;
-
       console.log("✔ Generating PDF...");
       const leadObj = getLeadInfoForQuote(isEdit);
       const activePkgs = getSelectedPkgsInfo(isEdit);
-      const basePkgSum = dynamicBaseSum;
       const finalAmt = dynamicFinalAmt;
 
       const doc = generateQuotationPDF(
         leadObj,
         activePkgs,
-        generatedQuotNum,
+        "",
         quotationTerms,
         logoBase64,
         logoAspectRatio,
         editableInclusions,
         editableDeliverables,
-        quoteDiscount,
-        quoteAdditional,
+        Number(quoteDiscount || 0),
+        Number(quoteAdditional || 0),
         quoteServices
       );
       
@@ -3041,10 +3029,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setGeneratedPDFBlobUrl(blobUrl);
 
       // Download the PDF automatically as requested
-      doc.save(`Quotation_${generatedQuotNum}.pdf`);
+      doc.save(`Quotation.pdf`);
 
       console.log("✔ Opening WhatsApp...");
-      const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
       const rawPhone = leadObj.whatsapp_number || leadObj.mobile || '';
       const phoneStr = typeof rawPhone === 'string' ? rawPhone : String(rawPhone);
       
@@ -3052,12 +3039,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const safeEventType = String(leadObj.event_type || 'Event');
       const safeEventDate = String(leadObj.event_date || 'N/A');
       const safeEventLocation = String(leadObj.event_location || leadObj.location || 'N/A');
-      const safeQuotNum = String(generatedQuotNum || '');
 
       const message = `Hello *${safeCustomerName}*,\n\n` +
         `Thank you for choosing *PhotoCrew Pictures*.\n\n` +
         `Please find your quotation details below:\n\n` +
-        `📄 Quotation No: ${safeQuotNum}\n` +
         `🎉 Event: ${safeEventType}\n` +
         `📅 Event Date: ${safeEventDate}\n` +
         `📍 Event Address: ${safeEventLocation}\n` +
@@ -3079,7 +3064,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
 
-      if (!isEdit) { setWizardStep(4); } else { showToastMsg("Quotation downloaded and WhatsApp prepared!", "success"); }
+      if (!isEdit) { 
+        setWizardStep(4); 
+      } else { 
+        showToastMsg("Quotation downloaded and WhatsApp prepared!", "success"); 
+      }
       console.log("✔ Process completed");
     } catch (err: any) {
       showErrorHelper(
@@ -3095,14 +3084,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleSendEmailQuote = async (isEdit: boolean) => {
     try {
-      const generatedQuotNum = await handleGenerateQuote(isEdit);
-      if (!generatedQuotNum) return;
-
       const leadObj = getLeadInfoForQuote(isEdit);
       const activePkgs = getSelectedPkgsInfo(isEdit);
       const basePkgSum = dynamicBaseSum;
       const finalAmt = dynamicFinalAmt;
-      const quotNum = generatedQuotNum;
       
       const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
       const email = leadObj.email || '';
@@ -3110,14 +3095,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const safeCustomerName = String(leadObj.customer_name || 'Client');
       const safeEventType = String(leadObj.event_type || 'Event');
 
-      const subject = `Photocrew Pictures - Custom Quotation Details (${quotNum})`;
+      const subject = `Photocrew Pictures - Custom Quotation Details`;
       const body = `Dear ${safeCustomerName},\n\n` +
         `Thank you for reach out to us! We are pleased to provide the custom quotation details for your upcoming ${safeEventType} shoot.\n\n` +
-        `Quotation Number: ${quotNum}\n` +
         `Selected Package: ${pkgNames}\n` +
         `Package Amount: Rs. ${basePkgSum.toLocaleString('en-IN')}\n` +
-        `Discount Applied: Rs. ${quoteDiscount.toLocaleString('en-IN')}\n` +
-        `Additional Services: Rs. ${quoteAdditional.toLocaleString('en-IN')}\n` +
+        `Discount Applied: Rs. ${(quoteDiscount || 0).toLocaleString('en-IN')}\n` +
+        `Additional Services: Rs. ${(quoteAdditional || 0).toLocaleString('en-IN')}\n` +
         `Final Quotation Amount: Rs. ${finalAmt.toLocaleString('en-IN')}\n\n` +
         `We will follow up shortly to discuss any specific adjustments you might need.\n\n` +
         `Warm regards,\n` +
@@ -3126,16 +3110,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       window.open(`mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
     } catch (err: any) {
-      showErrorHelper(
-        "Email Redirect Failed",
-        err.message || "Failed to prepare email message.",
-        "handleSendEmailQuote()",
-        isEdit && selectedLead ? selectedLead.lead_id : (createdLeadId || 'UNKNOWN'),
-        "Check console logs.",
-        err
-      );
+      showToastMsg("Failed to open email client.", "error");
     }
   };
+
   const renderQuotationAndStep4Section = (isEdit: boolean) => {
     const activePkgs = getSelectedPkgsInfo(isEdit);
     const basePkgSum = dynamicBaseSum;
@@ -3205,19 +3183,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           </h4>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Quotation Number */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Quotation Number (Auto-Generated)
-              </label>
-              <input
-                type="text"
-                value={activeQuoteNum}
-                onChange={(e) => setActiveQuoteNum(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 font-mono transition-all"
-              />
-            </div>
-
             {/* Package Amount (Read-only Display representing Base Price) */}
             <div>
               <label className="block text-xs font-semibold text-slate-400 mb-1.5">
@@ -3679,10 +3644,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           }]);
         }
         const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
-        let finalStatus = selectedLead.status || 'Negotiation';
-        if (finalStatus === 'New Lead' || finalStatus === 'Follow-up' || finalStatus === 'Follow Up') {
-          finalStatus = 'Negotiation';
-        }
+        
         await updateLead(selectedLead.lead_id, {
           budget: Number(wizardLeadData.package_cost),
           package_price: Number(wizardLeadData.package_cost),
@@ -3693,8 +3655,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           client_residence_address: wizardLeadData.client_residence_address,
           city: wizardLeadData.city,
           state: wizardLeadData.state,
-          pincode: wizardLeadData.pincode,
-          status: finalStatus
+          pincode: wizardLeadData.pincode
         });
 
         const newCompleted = Math.max(crmHighestStep, 3);
@@ -3705,12 +3666,24 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           if (!prev) return null;
           return {
             ...prev,
-            status: finalStatus,
-            remarks: updatedRemarks
+            budget: Number(wizardLeadData.package_cost),
+            package_price: Number(wizardLeadData.package_cost),
+            deliverables_description: wizardLeadData.deliverables,
+            notes_special_customizations: wizardLeadData.notes,
+            remarks: updatedRemarks,
+            Select_Package_Option: wizardLeadData.selected_package_id,
+            client_residence_address: wizardLeadData.client_residence_address,
+            city: wizardLeadData.city,
+            state: wizardLeadData.state,
+            pincode: wizardLeadData.pincode
           };
         });
 
-        showToastMsg(`CRM Updated Successfully.`, "success");
+        showToastMsg(`CRM Changes Saved.`, "success");
+        setShowStep3Popup(true);
+        setStep3Option('negotiation');
+        setIsSaving(false);
+        return; // Halt here to wait for popup selection!
       }
 
       if (step < 3) {
@@ -3752,6 +3725,88 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         suggestedFix: parsed.suggestedFix
       });
       showToastMsg(parsed.reason, "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleConfirmStep3Proceed = async () => {
+    if (!selectedLead) return;
+    setIsSaving(true);
+    try {
+      if (step3Option === 'negotiation') {
+        await updateLead(selectedLead.lead_id, {
+          status: 'Negotiation' as CurrentStage
+        });
+        showToastMsg("Lead status updated to Negotiation.", "success");
+        setShowStep3Popup(false);
+        setSelectedLead(null);
+      } else if (step3Option === 'quotation_send') {
+        // Automatically:
+        // 1. Update Lead Status to Quotation Sent.
+        // 2. Save the updated Lead Status in table.
+        await updateLead(selectedLead.lead_id, {
+          status: 'Quotation Sent' as CurrentStage
+        });
+        
+        // 3. Generate the latest quotation PDF using live CRM data.
+        // 4. Download the PDF.
+        // 5. Open WhatsApp with the customer's number and a pre-filled quotation message.
+        // 6. Return to the Leads Directory after completion.
+        console.log("✔ Generating PDF and preparing WhatsApp...");
+        const leadObj = getLeadInfoForQuote(true);
+        const activePkgs = getSelectedPkgsInfo(true);
+        const finalAmt = dynamicFinalAmt;
+
+        const doc = generateQuotationPDF(
+          leadObj,
+          activePkgs,
+          "", // no quotation number
+          quotationTerms,
+          logoBase64,
+          logoAspectRatio,
+          editableInclusions,
+          editableDeliverables,
+          Number(quoteDiscount || 0),
+          Number(quoteAdditional || 0),
+          quoteServices
+        );
+        
+        // Download the PDF automatically
+        doc.save(`Quotation.pdf`);
+
+        const rawPhone = leadObj.whatsapp_number || leadObj.mobile || '';
+        const phoneStr = typeof rawPhone === 'string' ? rawPhone : String(rawPhone);
+        
+        const safeCustomerName = String(leadObj.customer_name || 'Client');
+        const safeEventType = String(leadObj.event_type || 'Event');
+        const safeEventDate = String(leadObj.event_date || 'N/A');
+        const safeEventLocation = String(leadObj.event_location || leadObj.location || 'N/A');
+
+        const message = `Hello *${safeCustomerName}*,\n\n` +
+          `Thank you for choosing *PhotoCrew Pictures*.\n\n` +
+          `Please find your quotation details below:\n\n` +
+          `🎉 Event: ${safeEventType}\n` +
+          `📅 Event Date: ${safeEventDate}\n` +
+          `📍 Event Address: ${safeEventLocation}\n` +
+          `💰 Final Amount: ₹${finalAmt.toLocaleString('en-IN')}\n\n` +
+          `Thank you.\nPhotoCrew Pictures`;
+
+        const cleanPhone = phoneStr.replace(/[^0-9]/g, '');
+        if (cleanPhone) {
+          const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+          window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
+        } else {
+          showToastMsg("Customer has no valid mobile/WhatsApp number. Opened without redirect.", "error");
+        }
+
+        showToastMsg("Lead updated to Quotation Sent. PDF downloaded and WhatsApp opened.", "success");
+        setShowStep3Popup(false);
+        setSelectedLead(null);
+      }
+    } catch (err: any) {
+      console.error("Failed to proceed with Step 3 option:", err);
+      showToastMsg(err.message || String(err), "error");
     } finally {
       setIsSaving(false);
     }
@@ -9121,12 +9176,90 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   {isSaving ? (
                     <span className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
                   ) : null}
-                  <span>{isSaving ? 'Saving...' : crmWizardStep === 3 ? 'Save & Close' : 'Save & Next'}</span>
+                  <span>{isSaving ? 'Saving...' : crmWizardStep === 3 ? 'Save & Proceed' : 'Save & Next'}</span>
                 </button>
               </div>
             </div>
           </div>
         )}
+
+      {/* MODAL: Proceed Status Pop-up */}
+      {showStep3Popup && (
+        <div id="modal_step3_proceed_status" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-4 animate-fade-in text-left">
+          <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-indigo-500/30 rounded-2xl w-full max-w-md shadow-2xl relative p-6 space-y-5">
+            <div className="absolute top-0 left-12 w-48 h-48 bg-indigo-500/[0.03] rounded-full blur-[60px] pointer-events-none" />
+
+            <div className="flex items-start justify-between border-b border-slate-800 pb-3 relative z-10">
+              <div>
+                <h3 className="text-sm font-bold text-white tracking-widest font-mono flex items-center gap-1.5 animate-pulse">
+                  <span>STATUS</span>
+                </h3>
+                <p className="text-[11px] text-indigo-300 mt-0.5 font-sans">
+                  How would you like to proceed?
+                </p>
+              </div>
+              <button 
+                onClick={() => setShowStep3Popup(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 relative z-10 text-slate-300">
+              <div className="space-y-3">
+                <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-800/80 bg-slate-950/20 hover:bg-slate-950/40 cursor-pointer transition-colors">
+                  <input
+                    type="radio"
+                    name="step3Option"
+                    value="negotiation"
+                    checked={step3Option === 'negotiation'}
+                    onChange={() => setStep3Option('negotiation')}
+                    className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-slate-750 bg-slate-900 cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-sm font-bold text-white">Mark as Negotiation</span>
+                    <p className="text-[11px] text-zinc-400 mt-0.5 font-sans">Update lead status to Negotiation and return to Leads Directory.</p>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-800/80 bg-slate-950/20 hover:bg-slate-950/40 cursor-pointer transition-colors">
+                  <input
+                    type="radio"
+                    name="step3Option"
+                    value="quotation_send"
+                    checked={step3Option === 'quotation_send'}
+                    onChange={() => setStep3Option('quotation_send')}
+                    className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-slate-750 bg-slate-900 cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-sm font-bold text-white">Quotation Send</span>
+                    <p className="text-[11px] text-zinc-400 mt-0.5 font-sans">Update status to Quotation Sent, download PDF, and open WhatsApp.</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800/80 relative z-10">
+              <button
+                onClick={() => setShowStep3Popup(false)}
+                className="px-4 py-1.5 rounded bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmStep3Proceed}
+                disabled={isSaving}
+                className="px-4 py-1.5 rounded bg-indigo-650 hover:bg-indigo-600 text-white text-xs font-mono font-bold uppercase transition-all shadow-md flex items-center gap-1.5"
+              >
+                {isSaving && <span className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>}
+                <span>Continue</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 {/* MODAL: Existing Customer Detection Pop-up */}
       {showDetectionPopup && detectedCustomer && (
         <div id="modal_existing_customer_detection" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-4 animate-fade-in text-left">
