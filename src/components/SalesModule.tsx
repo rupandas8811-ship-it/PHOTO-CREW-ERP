@@ -9958,11 +9958,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       // "Save the Reporting Date to the related lead."
                       const firstDate = reportingPopupData[0]?.date;
                       if (firstDate) {
-                        const { error: leadErr } = await supabaseClient
-                          .from('leads')
-                          .update({ Reporting_date: firstDate })
-                          .eq('lead_id', targetLeadId);
-                        if (leadErr) throw leadErr;
+                        await updateLead(targetLeadId, { Reporting_date: firstDate });
                       }
 
                       // Save reporting_time for each event in lead_events
