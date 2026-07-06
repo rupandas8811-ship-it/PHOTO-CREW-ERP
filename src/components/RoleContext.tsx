@@ -2671,25 +2671,40 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return leadId;
   };
 
-  const saveLeadPackages = async (
+    const saveLeadPackages = async (
     leadId: string,
     packagesSelected: Omit<LeadPackage, 'lead_package_id' | 'lead_id'>[]
   ) => {
-    await pushDelete('lead_packages', 'lead_id', leadId);
+    const existing = leadPackages.filter(lp => lp.lead_id === leadId);
 
     if (packagesSelected && packagesSelected.length > 0) {
-      const formattedPackages: LeadPackage[] = packagesSelected.map((pkg, index) => ({
-        ...pkg,
-        lead_package_id: `LP-${leadId}-${index}-${Math.floor(100 + Math.random() * 900)}`,
-        lead_id: leadId,
-        created_at: new Date().toISOString()
-      }));
-      for (const p of formattedPackages) {
-        await pushInsert('lead_packages', p);
-      }
-    }
+      const newPkgIds = new Set(packagesSelected.map(p => p.package_id));
 
-    //  // Disabled to prevent full reload
+      for (const ex of existing) {
+        if (!newPkgIds.has(ex.package_id)) {
+          await pushDelete('lead_packages', 'lead_package_id', ex.lead_package_id);
+        }
+      }
+
+      for (const [index, pkg] of packagesSelected.entries()) {
+        const existingPkg = existing.find(ex => ex.package_id === pkg.package_id);
+        
+        if (existingPkg) {
+          await pushUpdate('lead_packages', 'lead_package_id', existingPkg.lead_package_id, {
+            ...pkg
+          });
+        } else {
+          await pushInsert('lead_packages', {
+            ...pkg,
+            lead_package_id: `LP-${leadId}-${index}-${Math.floor(100 + Math.random() * 900)}`,
+            lead_id: leadId,
+            created_at: new Date().toISOString()
+          } as LeadPackage);
+        }
+      }
+    } else {
+      await pushDelete('lead_packages', 'lead_id', leadId);
+    }
   };
 
   // 2. Lead Follow-Up (Screen 3)

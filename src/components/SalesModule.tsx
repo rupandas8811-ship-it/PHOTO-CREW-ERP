@@ -2882,18 +2882,46 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       if (isEdit) {
         if (wizardLeadData.selected_package_id) {
           const selectedPkg = packages.find((p) => p.package_id === wizardLeadData.selected_package_id);
-          await saveLeadPackages(leadObj.lead_id, [{
-            package_id: wizardLeadData.selected_package_id,
-            package_name: selectedPkg?.package_name || 'Selected Package',
-            package_cost: Number(wizardLeadData.package_cost),
-            quantity: 1,
-            total_amount: Number(wizardLeadData.package_cost),
-            discount: 0,
-            final_amount: Number(wizardLeadData.package_cost),
-            deliverables_description: wizardLeadData.deliverables,
-            notes_special_customizations: wizardLeadData.notes,
-            additional_services_cost: 0
-          }]);
+          const activePackagesList = (leadPackages || []).filter(lp => lp.lead_id === selectedLead.lead_id);
+          
+          if (!activePackagesList.some(lp => lp.package_id === wizardLeadData.selected_package_id)) {
+            activePackagesList.push({
+              package_id: wizardLeadData.selected_package_id,
+              package_name: selectedPkg?.package_name || 'Selected Package',
+              package_cost: Number(wizardLeadData.package_cost),
+              quantity: 1,
+              total_amount: Number(wizardLeadData.package_cost),
+              discount: 0,
+              final_amount: Number(wizardLeadData.package_cost),
+              deliverables_description: wizardLeadData.deliverables,
+              notes_special_customizations: wizardLeadData.notes,
+              additional_services_cost: 0,
+              team_members: '',
+              deliverables: ''
+            } as any);
+          }
+          
+          const payloadToSave = activePackagesList.map(lp => {
+            const isPrimary = lp.package_id === wizardLeadData.selected_package_id;
+            const incStr = (editableInclusions[lp.package_id!] || []).join(', ');
+            const delStr = (editableDeliverables[lp.package_id!] || []).join(', ');
+            return {
+              package_id: lp.package_id!,
+              package_name: lp.package_name || 'Selected Package',
+              package_cost: isPrimary ? Number(wizardLeadData.package_cost) : lp.package_cost,
+              quantity: lp.quantity || 1,
+              total_amount: isPrimary ? Number(wizardLeadData.package_cost) : lp.total_amount,
+              discount: lp.discount || 0,
+              final_amount: isPrimary ? Number(wizardLeadData.package_cost) : lp.final_amount,
+              deliverables_description: isPrimary ? wizardLeadData.deliverables : lp.deliverables_description,
+              notes_special_customizations: isPrimary ? wizardLeadData.notes : lp.notes_special_customizations,
+              additional_services_cost: lp.additional_services_cost || 0,
+              team_members: incStr || lp.team_members || '',
+              deliverables: delStr || lp.deliverables || ''
+            };
+          });
+
+          await saveLeadPackages(selectedLead.lead_id, payloadToSave);
         }
 
         const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
@@ -3719,18 +3747,47 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         }
         if (wizardLeadData.selected_package_id) {
           const selectedPkg = packages.find((p) => p.package_id === wizardLeadData.selected_package_id);
-          await saveLeadPackages(selectedLead.lead_id, [{
-            package_id: wizardLeadData.selected_package_id,
-            package_name: selectedPkg?.package_name || 'Selected Package',
-            package_cost: Number(wizardLeadData.package_cost),
-            quantity: 1,
-            total_amount: Number(wizardLeadData.package_cost),
-            discount: 0,
-            final_amount: Number(wizardLeadData.package_cost),
-            deliverables_description: wizardLeadData.deliverables,
-            notes_special_customizations: wizardLeadData.notes,
-            additional_services_cost: 0
-          }]);
+          const activePackagesList = (leadPackages || []).filter(lp => lp.lead_id === selectedLead.lead_id);
+          
+          // Ensure the actively selected package is included and updated
+          if (!activePackagesList.some(lp => lp.package_id === wizardLeadData.selected_package_id)) {
+            activePackagesList.push({
+              package_id: wizardLeadData.selected_package_id,
+              package_name: selectedPkg?.package_name || 'Selected Package',
+              package_cost: Number(wizardLeadData.package_cost),
+              quantity: 1,
+              total_amount: Number(wizardLeadData.package_cost),
+              discount: 0,
+              final_amount: Number(wizardLeadData.package_cost),
+              deliverables_description: wizardLeadData.deliverables,
+              notes_special_customizations: wizardLeadData.notes,
+              additional_services_cost: 0,
+              team_members: '',
+              deliverables: ''
+            } as any);
+          }
+          
+          const payloadToSave = activePackagesList.map(lp => {
+            const isPrimary = lp.package_id === wizardLeadData.selected_package_id;
+            const incStr = (editableInclusions[lp.package_id!] || []).join(', ');
+            const delStr = (editableDeliverables[lp.package_id!] || []).join(', ');
+            return {
+              package_id: lp.package_id!,
+              package_name: lp.package_name || 'Selected Package',
+              package_cost: isPrimary ? Number(wizardLeadData.package_cost) : lp.package_cost,
+              quantity: lp.quantity || 1,
+              total_amount: isPrimary ? Number(wizardLeadData.package_cost) : lp.total_amount,
+              discount: lp.discount || 0,
+              final_amount: isPrimary ? Number(wizardLeadData.package_cost) : lp.final_amount,
+              deliverables_description: isPrimary ? wizardLeadData.deliverables : lp.deliverables_description,
+              notes_special_customizations: isPrimary ? wizardLeadData.notes : lp.notes_special_customizations,
+              additional_services_cost: lp.additional_services_cost || 0,
+              team_members: incStr || lp.team_members || '',
+              deliverables: delStr || lp.deliverables || ''
+            };
+          });
+
+          await saveLeadPackages(selectedLead.lead_id, payloadToSave);
         }
         const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
         
@@ -5147,7 +5204,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           final_amount: pkgPrices[pkg.id] !== undefined ? pkgPrices[pkg.id] : pkg.cost,
           deliverables_description: pkgDeliverables[pkg.id] || pkg.deliverables || 'N/A',
           notes_special_customizations: pkgNotes[pkg.id] || '',
-          additional_services_cost: 0
+          additional_services_cost: 0,
+          team_members: pkg.team_members || '',
+          deliverables: pkg.deliverables || ''
         }));
         await saveLeadPackages(createdLeadId!, packagesPayload);
       }

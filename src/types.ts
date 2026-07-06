@@ -226,6 +226,8 @@ export interface LeadPackage {
   deliverables_description?: string;
   notes_special_customizations?: string;
   additional_services_cost?: number;
+  team_members?: string;
+  deliverables?: string;
 }
 
 export interface Order {
