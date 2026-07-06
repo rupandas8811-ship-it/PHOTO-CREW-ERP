@@ -193,8 +193,6 @@ export interface Lead {
   notes_special_customizations?: string;
   quotation_discount?: number;
   additional_services_cost?: number;
-  Add_Deliverable?: string;
-  Add_Member?: string;
   Additional_Services_Cost?: number | null;
   Quotation_Discount?: number | null;
   Final_Quotation_Amount?: number | null;
