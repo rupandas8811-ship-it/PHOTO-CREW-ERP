@@ -142,6 +142,7 @@ export interface LeadEvent {
   google_maps_link?: string;
   assigned_staff_names?: string;
   assigned_staff_mobiles?: string;
+  reporting_time?: string;
 }
 
 export interface Lead {
@@ -161,6 +162,7 @@ export interface Lead {
   event_date: string;
   event_time: string;
   reporting_time?: string;
+  Reporting_date?: string;
   event_location: string;
   budget: number;
   sales_person: string;
@@ -238,6 +240,7 @@ export interface Order {
   event_date: string;
   event_time: string;
   reporting_time?: string;
+  Reporting_date?: string;
   event_location: string;
   package_name: string;
   quotation_amount: number;

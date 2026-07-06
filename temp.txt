@@ -1,0 +1,361 @@
+
+      const targetLd = leads.find(l => l.lead_id === createdLeadId);
+      const oldStatus = targetLd ? (targetLd.current_status || targetLd.status || 'New Lead') : null;
+      const newStatus = salesStatus || null;
+
+      logStatusUpdateError({
+        leadId: createdLeadId || null,
+        orderId: null,
+        oldStatus,
+        newStatus,
+        updatePayload: {
+          status: salesStatus,
+          budget: finalTotal,
+          package_price: finalTotal,
+          Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
+          Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
+          Final_Quotation_Amount: finalTotal,
+          Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
+        },
+        insertPayload: null,
+        dbResponse: null,
+        fullError: err
+      });
+
+      setStatusError({
+        title: "Lead Stage Transition Failed",
+        reason: parsed.reason,
+        suggestedFix: parsed.suggestedFix
+      });
+      alert(parsed.reason);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleOrderConfirmedSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (isSaving) return;
+    if (!confirmedEventDate) {
+      alert("Please select Confirmed Event Date.");
+      return;
+    }
+    if (!confirmedEventTime) {
+      alert("Please select Confirmed Event Time.");
+      return;
+    }
+    if (finalPackageAmount === undefined || finalPackageAmount === 0 || isNaN(finalPackageAmount)) {
+      alert("Please enter Final Amount.");
+      return;
+    }
+    if (advanceReceived === undefined || isNaN(advanceReceived)) {
+      alert("Please enter Advance Paid Amount.");
+      return;
+    }
+
+    executeWithReportingPopup(async () => {
+      try {
+      setIsSaving(true);
+      const selectedPkgsNames = selectedPkgs.map(p => p.name).join(' + ') || 'Custom Configured Coverage';
+      await confirmOrder(
+        createdLeadId!,
+        selectedPkgsNames,
+        finalPackageAmount,
+        advanceReceived,
+        confirmedEventDate,
+        confirmedEventTime,
+        'UPI / Cash / Bank Transfer',
+        getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
+        reportingTime
+      );
+      
+      showToastMsg("Lead created successfully.", "success");
+      resetForm();
+      setActiveTab('list');
+    } catch (err: any) {
+      console.error("Failed to commit confirmed order details:", err);
+      const errMsg = err?.message || String(err);
+      const parsed = parseStatusUpdateError(errMsg);
+
+      const targetLd = leads.find(l => l.lead_id === createdLeadId);
+      const oldStatus = targetLd ? (targetLd.current_status || targetLd.status || 'New Lead') : null;
+
+      logStatusUpdateError({
+        leadId: createdLeadId || null,
+        orderId: null,
+        oldStatus,
+        newStatus: 'Order Confirmed',
+        updatePayload: {
+          status: 'Order Confirmed',
+          event_date: confirmedEventDate,
+          event_time: confirmedEventTime,
+          reporting_time: reportingTime,
+        },
+        insertPayload: {
+          order_status: 'Confirmed',
+          current_stage: 'Order Confirmed',
+          package_name: selectedPkgs.map(p => p.name).join(' + ') || 'Custom Configured Coverage',
+          quotation_amount: finalPackageAmount,
+          advance_received: advanceReceived,
+        },
+        dbResponse: null,
+        fullError: err
+      });
+
+      setStatusError({
+        title: "Order Confirmation Pipeline Transition Failed",
+        reason: parsed.reason,
+        suggestedFix: parsed.suggestedFix
+      });
+      alert(parsed.reason);
+    } finally {
+      setIsSaving(false);
+    }
+    });
+  };
+
+  // Handle follow up submit
+  const handleFollowUpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLead || isSaving) return;
+
+    if (followUpForm.status === 'Order Confirmed') {
+      if (!followUpForm.event_date) {
+        alert("Please select Confirmed Event Date.");
+        return;
+      }
+      if (!followUpForm.event_time) {
+        alert("Please select Confirmed Event Time.");
+        return;
+      }
+      if (followUpForm.quotation_amount === undefined || followUpForm.quotation_amount === 0 || isNaN(followUpForm.quotation_amount)) {
+        alert("Please enter Final Amount.");
+        return;
+      }
+      if (followUpForm.advance_received === undefined || isNaN(followUpForm.advance_received)) {
+        alert("Please enter Advance Paid Amount.");
+        return;
+      }
+
+      executeWithReportingPopup(async () => {
+        try {
+        setIsSaving(true);
+        await confirmOrder(
+          selectedLead.lead_id,
+          selectedLead.event_type + ' Premium Package',
+          Number(followUpForm.quotation_amount),
+          Number(followUpForm.advance_received),
+          followUpForm.event_date,
+          followUpForm.event_time,
+          followUpForm.payment_mode || 'UPI',
+          followUpForm.call_notes || 'Confirmed from CRM activity logger',
+          followUpForm.reporting_time || '08:00'
+        );
+
+        setSelectedLead(null);
+        alert("Order Confirmed Successfully.");
+      } catch (err: any) {
+        console.error("Failed to convert lead:", err);
+        const errMsg = err?.message || String(err);
+        const parsed = parseStatusUpdateError(errMsg);
+
+        const oldStatus = selectedLead ? (selectedLead.current_status || selectedLead.status || 'New Lead') : null;
+
+        logStatusUpdateError({
+          leadId: selectedLead?.lead_id || null,
+          orderId: null,
+          oldStatus,
+          newStatus: 'Order Confirmed',
+          updatePayload: {
+            status: 'Order Confirmed',
+            remarks: followUpForm.call_notes
+          },
+          insertPayload: {
+            order_status: 'Confirmed',
+            current_stage: 'Order Confirmed',
+            package_name: selectedLead.event_type + ' Premium Package',
+            quotation_amount: Number(followUpForm.quotation_amount),
+            advance_received: Number(followUpForm.advance_received),
+          },
+          dbResponse: null,
+          fullError: err
+        });
+
+        setStatusError({
+          title: "Follow-up Transition to Order Confirmed Failed",
+          reason: parsed.reason,
+          suggestedFix: parsed.suggestedFix
+        });
+        alert(parsed.reason);
+      } finally {
+        setIsSaving(false);
+      }
+      });
+      return;
+    }
+
+    if (!followUpForm.call_notes) {
+      alert('Please fill in some Call Notes to update lead follow-up.');
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      await updateLeadFollowUp(
+        selectedLead.lead_id,
+        followUpForm.status,
+        followUpForm.call_notes,
+        followUpForm.next_follow_up_date || '',
+        Number(followUpForm.quotation_amount),
+        followUpForm.negotiation_notes
+      );
+
+      // Refresh selected lead state
+      setSelectedLead((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          status: followUpForm.status,
+          budget: Number(followUpForm.quotation_amount),
+        };
+      });
+
+      // Clear follow up text
+      setFollowUpForm(prev => ({ ...prev, call_notes: '', negotiation_notes: '' }));
+      alert('CRM Updated Successfully.');
+    } catch (err: any) {
+      console.error("Failed to update follow-up:", err);
+      const errMsg = err?.message || String(err);
+      const parsed = parseStatusUpdateError(errMsg);
+
+      const oldStatus = selectedLead ? (selectedLead.current_status || selectedLead.status || 'New Lead') : null;
+
+      logStatusUpdateError({
+        leadId: selectedLead?.lead_id || null,
+        orderId: null,
+        oldStatus,
+        newStatus: followUpForm.status,
+        updatePayload: {
+          status: followUpForm.status,
+          budget: Number(followUpForm.quotation_amount),
+          remarks: followUpForm.call_notes
+        },
+        insertPayload: null,
+        dbResponse: null,
+        fullError: err
+      });
+
+      setStatusError({
+        title: "Follow-up Pipeline Status Update Failed",
+        reason: parsed.reason,
+        suggestedFix: parsed.suggestedFix
+      });
+      alert(parsed.reason);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handle Order Confirmation Process
+  const handleConfirmOrderSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLead || isSaving) return;
+
+    if (!confirmForm.event_date) {
+      alert("Please select Confirmed Event Date.");
+      return;
+    }
+    if (!confirmForm.event_time) {
+      alert("Please select Confirmed Event Time.");
+      return;
+    }
+    if (confirmForm.quotation_amount === undefined || confirmForm.quotation_amount === 0 || isNaN(confirmForm.quotation_amount)) {
+      alert("Please enter Final Amount.");
+      return;
+    }
+    if (confirmForm.advance_received === undefined || isNaN(confirmForm.advance_received)) {
+      alert("Please enter Advance Paid Amount.");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      await confirmOrder(
+        selectedLead.lead_id,
+        confirmForm.package_name,
+        Number(confirmForm.quotation_amount),
+        Number(confirmForm.advance_received),
+        confirmForm.event_date,
+        confirmForm.event_time,
+        confirmForm.payment_mode,
+        confirmForm.notes,
+        undefined,
+        confirmForm.transaction_id
+      );
+
+      setShowConfirmModal(false);
+      setSelectedLead(null);
+      alert("Order Confirmed Successfully.");
+    } catch (err: any) {
+      console.error("Failed to convert order:", err);
+      const errMsg = err?.message || String(err);
+      const parsed = parseStatusUpdateError(errMsg);
+
+      const oldStatus = selectedLead ? (selectedLead.current_status || selectedLead.status || 'New Lead') : null;
+
+      logStatusUpdateError({
+        leadId: selectedLead?.lead_id || null,
+        orderId: null,
+        oldStatus,
+        newStatus: 'Order Confirmed',
+        updatePayload: {
+          status: 'Order Confirmed',
+          event_date: confirmForm.event_date,
+          event_time: confirmForm.event_time,
+          reporting_time: undefined,
+        },
+        insertPayload: {
+          order_status: 'Confirmed',
+          current_stage: 'Order Confirmed',
+          package_name: confirmForm.package_name,
+          quotation_amount: Number(confirmForm.quotation_amount),
+          advance_received: Number(confirmForm.advance_received),
+        },
+        dbResponse: null,
+        fullError: err
+      });
+
+      setStatusError({
+        title: "Action Button Order Confirmation Failed",
+        reason: parsed.reason,
+        suggestedFix: parsed.suggestedFix
+      });
+      alert(parsed.reason);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Companion lead metadata parse
+  const getFollowUpDate = (remarks?: string) => {
+    if (!remarks) return null;
+    const match = remarks.match(/Next follow-up:\s*(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : null;
+  };
+
+  const todayStr = '2026-06-10';
+
+  const statNewLeads = leads.filter(l => getLeadCurrentStatus(l) === 'New Lead').length;
+  const statTodayFollowups = leads.filter(l => getLeadCurrentStatus(l) === 'Follow Up' && getFollowUpDate(l.remarks) === todayStr).length;
+  const statOverdueFollowups = leads.filter(l => {
+    if (getLeadCurrentStatus(l) !== 'Follow Up') return false;
+    const fDate = getFollowUpDate(l.remarks);
+    return fDate ? fDate < todayStr : false;
+  }).length;
+  const statQuotesSent = leads.filter(l => getLeadCurrentStatus(l) === 'Quotation Sent').length;
+  const statNegotiations = leads.filter(l => getLeadCurrentStatus(l) === 'Negotiation').length;
+  const statConfirmedOrders = leads.filter(l => getLeadCurrentStatus(l) === 'Order Confirmed').length;
+
+  // Filter Leads List
+  const filteredLeads = leads.filter((lead) => {
+    const matchesSearch = 

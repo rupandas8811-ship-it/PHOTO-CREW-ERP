@@ -893,7 +893,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'assigned_editor', 'assigned_editors', 'production_role', 'delivery_target_date', 'current_status',
         'whatsapp_number', 'address', 'client_residence_address', 'city', 'state', 'pincode', 'desired_event_shoot_type', 'Select_Package_Option',
         'total_pax', 'reference_source', 
-        'lead_value', 'lead_score', 'booking_status', 'reporting_time', 'package_price', 'deliverables_description', 
+        'lead_value', 'lead_score', 'booking_status', 'reporting_time', 'Reporting_date', 'package_price', 'deliverables_description', 
         'notes_special_customizations', 'quotation_discount', 'additional_services_cost', 'Quotation_Discount', 'Additional_Services_Cost', 'Specify_Custom_Lead_Source_Name', 'Final_Quotation_Amount', 'Quotation_Discount', 'Additional_Services_Cost', 'Specify_Custom_Lead_Source_Name', 'Final_Quotation_Amount'
       ],
       orders: [
@@ -901,7 +901,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'event_time', 'event_location', 'package_name', 'quotation_amount', 'advance_received', 
         'balance_amount', 'order_status', 'current_stage', 'sales_person', 'created_at', 
         'updated_by', 'updated_at', 'whatsapp_number', 'client_residence_address', 'city', 'state', 'pincode', 'Select_Package_Option', 
-        'desired_event_shoot_type', 'reporting_time', 'package_price', 'deliverables_description', 
+        'desired_event_shoot_type', 'reporting_time', 'Reporting_date', 'package_price', 'deliverables_description', 
         'notes_special_customizations', 'quotation_discount', 'additional_services_cost', 'Quotation_Discount', 'Additional_Services_Cost', 'Specify_Custom_Lead_Source_Name', 'Final_Quotation_Amount',
         'total_pax', 'reference_source', 'lead_value', 'lead_score', 'booking_status'
       ],
