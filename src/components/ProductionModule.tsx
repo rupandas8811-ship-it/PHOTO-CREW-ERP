@@ -5731,7 +5731,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     <div className="space-y-2 mb-4">
                                       <div className="bg-zinc-900/40 p-3 rounded-xl border border-zinc-800 mb-3">
                                         <div className="text-white font-bold">{selectedWfEditor.name}</div>
-                                        <div className="text-purple-400 text-xs font-mono mb-1">{selectedWfEditor.production_role_speciality || selectedWfEditor.role || 'Editor'}</div>
+                                        <div className="text-purple-400 text-xs font-mono mb-1">{(Array.isArray(selectedWfEditor.Skill) && selectedWfEditor.Skill.length > 0) ? selectedWfEditor.Skill.join(' • ') : 'No Skills Defined'}</div>
                                         <div className="text-zinc-400 text-[11px] font-mono">{activeTasks.length} Active Task{activeTasks.length !== 1 ? 's' : ''}</div>
                                       </div>
                                       
@@ -5749,7 +5749,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                              return (
                                                <div key={task.assignment_id} className="bg-zinc-950 border border-zinc-800 p-3 rounded-xl text-xs font-sans text-zinc-300">
                                                  <div className="grid grid-cols-2 gap-y-2 gap-x-4">
-                                                   <div><span className="text-[9px] text-zinc-500 block uppercase font-mono tracking-wider">Assigned Task</span><span className="font-semibold text-white">{task.speciality}</span></div>
                                                    <div><span className="text-[9px] text-zinc-500 block uppercase font-mono tracking-wider">Assigned Date</span><span>{task.assigned_date || 'N/A'}</span></div>
                                                    <div><span className="text-[9px] text-zinc-500 block uppercase font-mono tracking-wider">Delivery Target</span><span>{task.target_finish_date || 'N/A'}</span></div>
                                                    <div><span className="text-[9px] text-zinc-500 block uppercase font-mono tracking-wider">Task Status</span><span className="text-amber-400 font-medium">{task.status}</span></div>
@@ -5811,7 +5810,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       try {
                                         setIsSaving(true);
                                         
-                                        const determinedSpeciality = selectedWfEditor.production_role_speciality?.split(',')[0]?.trim() || 'Editor';
+                                        const determinedSpeciality = (Array.isArray(selectedWfEditor.Skill) && selectedWfEditor.Skill.length > 0) 
+                                          ? selectedWfEditor.Skill.join(', ') 
+                                          : (selectedWfEditor.production_role_speciality || selectedWfEditor.role || 'Editor');
 
                                         // 1. Save new editor assignment to the local state & backend
                                         await assignEditorToProject({

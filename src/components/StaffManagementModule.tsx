@@ -36,7 +36,9 @@ export const StaffManagementModule: React.FC = () => {
 
   // Specialties & experience fields
   const [prodSpeciality, setProdSpeciality] = useState('');
+  const [skills, setSkills] = useState<string[]>([]);
   const [experience, setExperience] = useState('Junior Editor (1-2 Years)');
+  const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
 
   // Specialty manager inline form states
   const [newSpecName, setNewSpecName] = useState('');
@@ -99,7 +101,7 @@ export const StaffManagementModule: React.FC = () => {
       return;
     }
 
-    addStaff({
+    const payload: any = {
       name,
       mobile,
       whatsapp_number: whatsappNumber || mobile,
@@ -111,8 +113,18 @@ export const StaffManagementModule: React.FC = () => {
       profile_photo: profilePhoto || undefined,
       notes: notes || undefined,
       production_role_speciality: prodSpeciality,
-      experience: experience
-    });
+      experience: experience,
+      Skill: skills
+    };
+
+    if (editingStaffId) {
+      updateStaff(editingStaffId, payload);
+      alert('Staff member updated successfully!');
+      setEditingStaffId(null);
+    } else {
+      addStaff(payload);
+      alert('Staff member registered successfully in ERP system!');
+    }
 
     // Reset Form
     setName('');
@@ -126,10 +138,31 @@ export const StaffManagementModule: React.FC = () => {
     setProfilePhoto('');
     setNotes('');
     setProdSpeciality('');
+    setSkills([]);
     setExperience('Junior Editor (1-2 Years)');
 
-    alert('Staff member registered successfully in ERP system!');
     setActiveSubTab('list');
+  };
+
+  const handleEditStaffClick = (member: Staff) => {
+    setEditingStaffId(member.staff_id);
+    setName(member.name);
+    setMobile(member.mobile);
+    setWhatsappNumber(member.whatsapp_number || '');
+    setEmail(member.email);
+    setRole(member.role);
+    setDepartment(member.department);
+    setStatus(member.status);
+    setJoiningDate(member.joining_date);
+    setProfilePhoto(member.profile_photo || '');
+    setNotes(member.notes || '');
+    setProdSpeciality(member.production_role_speciality || '');
+    setSkills(Array.isArray(member.Skill) ? member.Skill : []);
+    setExperience(member.experience || 'Junior Editor (1-3 Years)');
+    setActiveSubTab('add');
+    setTimeout(() => {
+      triggerAutoScrollAndFocus('#add_staff_form', 150);
+    }, 50);
   };
 
   const handleToggleStatus = (member: Staff) => {
@@ -428,7 +461,7 @@ export const StaffManagementModule: React.FC = () => {
                       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-zinc-400 font-sans">
                         <span className="flex items-center gap-1">
                           <Award className="w-3.5 h-3.5 text-violet-400 flex-shrink-0" />
-                          <span>{member.production_role_speciality || member.role}</span>
+                          <span>{(Array.isArray(member.Skill) && member.Skill.length > 0) ? member.Skill.join(' • ') : 'No Skills Defined'}</span>
                         </span>
                         {member.experience && (
                           <>
@@ -496,6 +529,12 @@ export const StaffManagementModule: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleEditStaffClick(member)}
+                        className="p-1 px-2.5 text-[9px] font-mono font-bold border border-zinc-800 hover:border-zinc-650 bg-zinc-900 text-zinc-300 rounded-lg cursor-pointer select-none transition-colors"
+                      >
+                        Edit
+                      </button>
                       <button
                         onClick={() => handleToggleStatus(member)}
                         title="Toggle Active/Inactive Staff member Status"
@@ -622,23 +661,32 @@ export const StaffManagementModule: React.FC = () => {
               />
             </div>
 
-            {/* Production Role Speciality Dropdown */}
+            {/* Skills / Specialities Checkboxes */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-mono text-zinc-400 uppercase font-bold flex items-center gap-1">
-                <span>Production Role Speciality</span>
+                <span>Skills / Specialities</span>
                 <span className="text-rose-500">*</span>
               </label>
-              <select
-                required
-                value={prodSpeciality}
-                onChange={(e) => setProdSpeciality(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-300 focus:border-violet-500 outline-none cursor-pointer font-mono"
-              >
-                <option value="">-- Select Specialty --</option>
+              <div className="grid grid-cols-2 gap-2 bg-zinc-900 border border-zinc-800 rounded-xl p-3 max-h-48 overflow-y-auto">
                 {specialities.filter(s => s.active).map(spec => (
-                  <option key={spec.speciality_id} value={spec.name}>{spec.name}</option>
+                  <label key={spec.speciality_id} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      value={spec.name}
+                      checked={skills.includes(spec.name)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSkills([...skills, spec.name]);
+                        } else {
+                          setSkills(skills.filter(s => s !== spec.name));
+                        }
+                      }}
+                      className="w-3.5 h-3.5 accent-violet-500"
+                    />
+                    <span className="text-xs text-zinc-300 font-mono">{spec.name}</span>
+                  </label>
                 ))}
-              </select>
+              </div>
             </div>
 
             {/* Experience Level */}

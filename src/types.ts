@@ -393,6 +393,7 @@ export interface Staff {
   experience?: string;
   employee_id?: string;
   city?: string;
+  Skill?: string[];
   created_by?: string;
   updated_by?: string;
   created_at?: string;

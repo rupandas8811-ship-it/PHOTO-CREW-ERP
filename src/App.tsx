@@ -22,8 +22,7 @@ import {
   OwnerRevenueAnalytics, 
   OwnerEventCalendar, 
   OwnerSalesReport, 
-  OwnerOperationsReport, 
-  OwnerProductionReport 
+  OwnerStaffPerformanceReport
 } from './components/OwnerModule';
 import { AppLogo } from './components/AppLogo';
 import { motion, AnimatePresence } from 'motion/react';
@@ -91,20 +90,10 @@ const MainAppContent: React.FC = () => {
   const isTabAllowed = (tab: string): boolean => {
     if (currentRole === 'Business Owner') {
       return [
-        'dashboard',
-        'sales',
-        'operations',
-        'production',
         'owner_revenue',
         'owner_calendar',
         'owner_sales_report',
-        'owner_operations_report',
-        'owner_production_report',
-        'notifications',
-        'search',
-        'users',
-        'diagnostics',
-        'pending_payments'
+        'owner_staff_performance'
       ].includes(tab);
     }
 
@@ -208,7 +197,7 @@ const MainAppContent: React.FC = () => {
       if (user.role === 'Operations Team') return 'operations';
       if (user.role === 'Production Team') return 'production';
     }
-    return 'dashboard';
+    return 'owner_revenue';
   });
 
   // Responsive tab toggles that collapse sidebar automatically on Tablet / Mobile sizes
@@ -260,7 +249,7 @@ const MainAppContent: React.FC = () => {
           setActiveTab('production');
           setActiveSubTab('production_leads');
         } else {
-          setActiveTab('dashboard');
+          setActiveTab('owner_revenue');
         }
       }
     };
@@ -280,7 +269,7 @@ const MainAppContent: React.FC = () => {
       // 1. Detect fresh login/session recovery and direct to appropriate landing tab
       if (!prevUserRef.current) {
         if (currentRole === 'Business Owner') {
-          setActiveTab('dashboard');
+          setActiveTab('owner_revenue');
         } else if (currentRole === 'Sales Team') {
           setActiveTab('sales');
         } else if (currentRole === 'Operations Team') {
@@ -295,7 +284,7 @@ const MainAppContent: React.FC = () => {
       if (prevRoleRef.current !== currentRole) {
         prevRoleRef.current = currentRole;
         if (currentRole === 'Business Owner') {
-          setActiveTab('dashboard');
+          setActiveTab('owner_revenue');
           return;
         }
       }
@@ -621,13 +610,10 @@ const MainAppContent: React.FC = () => {
           </div>
           <nav className="space-y-1.5">
             {[
-              { id: 'dashboard', label: 'Executive Dashboard', icon: Target, color: 'text-amber-500' },
-              { id: 'owner_revenue', label: '1. Revenue Analytics', icon: Landmark, color: 'text-emerald-400' },
-              { id: 'owner_calendar', label: '2. Event Calendar', icon: Calendar, color: 'text-purple-400' },
-              { id: 'owner_sales_report', label: '3. Sales Report & Analytics', icon: TrendingUp, color: 'text-indigo-400' },
-              { id: 'owner_operations_report', label: '4. Operations Report & Analytics', icon: Briefcase, color: 'text-emerald-400' },
-              { id: 'owner_production_report', label: '5. Production Report & Analytics', icon: Video, color: 'text-purple-400' },
-              { id: 'notifications', label: '6. Notifications', icon: Bell, color: 'text-rose-400' }
+              { id: 'owner_revenue', label: 'Revenue Analytics', icon: Landmark, color: 'text-emerald-400' },
+              { id: 'owner_calendar', label: 'Event Calendar', icon: Calendar, color: 'text-purple-400' },
+              { id: 'owner_sales_report', label: 'Leads Reports', icon: TrendingUp, color: 'text-indigo-400' },
+              { id: 'owner_staff_performance', label: 'Staff Performance Report', icon: Users, color: 'text-amber-500' }
             ].map((tab) => {
               const IconComponent = tab.icon;
               const isSelected = activeTab === tab.id;
@@ -816,8 +802,7 @@ const MainAppContent: React.FC = () => {
                     {activeTab === 'owner_revenue' && <OwnerRevenueAnalytics />}
                     {activeTab === 'owner_calendar' && <OwnerEventCalendar />}
                     {activeTab === 'owner_sales_report' && <OwnerSalesReport />}
-                    {activeTab === 'owner_operations_report' && <OwnerOperationsReport />}
-                    {activeTab === 'owner_production_report' && <OwnerProductionReport />}
+                    {activeTab === 'owner_staff_performance' && <OwnerStaffPerformanceReport />}
                     {activeTab === 'sales_analytics' && <SalesAnalytics />}
                     {activeTab === 'pending_payments' && (currentRole === 'Business Owner' || currentRole === 'Sales Team') && <PendingPaymentsReport />}
                     {activeTab === 'operations_analytics' && <OperationsAnalytics />}

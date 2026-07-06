@@ -1,8 +1,7 @@
 import React from 'react';
 import { OwnerRevenueDetailed } from './analytics/owner/OwnerRevenueDetailed';
 import { OwnerSalesDetailed } from './analytics/owner/OwnerSalesDetailed';
-import { OwnerOperationsDetailed } from './analytics/owner/OwnerOperationsDetailed';
-import { OwnerProductionDetailed } from './analytics/owner/OwnerProductionDetailed';
+import { OwnerStaffPerformanceDetailed } from './analytics/owner/OwnerStaffPerformanceDetailed';
 import { BusinessOwnerCalendar } from './BusinessOwnerCalendar';
 
 // --- 1. REVENUE ANALYTICS ---
@@ -32,20 +31,11 @@ export const OwnerSalesReport = () => {
   );
 };
 
-// --- 4. OPERATIONS REPORT & ANALYTICS ---
-export const OwnerOperationsReport = () => {
+// --- 4. STAFF PERFORMANCE REPORT ---
+export const OwnerStaffPerformanceReport = () => {
   return (
     <div className="animate-in fade-in duration-300">
-      <OwnerOperationsDetailed />
-    </div>
-  );
-};
-
-// --- 5. PRODUCTION REPORT & ANALYTICS ---
-export const OwnerProductionReport = () => {
-  return (
-    <div className="animate-in fade-in duration-300">
-      <OwnerProductionDetailed />
+      <OwnerStaffPerformanceDetailed />
     </div>
   );
 };

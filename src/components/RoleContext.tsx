@@ -984,7 +984,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const merged = existing ? { ...existing, ...cloned } : cloned;
       
       const extra: any = {};
-      const localKeys = ['whatsapp_number', 'production_role_speciality', 'custom_role_specialty', 'experience', 'employee_id', 'address', 'city', 'phone', 'commission_rate', 'rating', 'bio'];
+      const localKeys = ['whatsapp_number', 'production_role_speciality', 'custom_role_specialty', 'experience', 'employee_id', 'address', 'city', 'phone', 'commission_rate', 'rating', 'bio', 'Skill'];
       for (const k of localKeys) {
         if (k in merged) {
           extra[k] = merged[k];
@@ -1115,7 +1115,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ],
       operations_staff: [
         'staff_id', 'name', 'mobile', 'whatsapp_number', 'email', 'role', 'department', 'status', 'joining_date', 
-        'profile_photo', 'notes', 'production_role_speciality', 'experience', 'employee_id', 'city',
+        'profile_photo', 'notes', 'production_role_speciality', 'experience', 'employee_id', 'city', 'Skill',
         'created_by', 'updated_by', 'created_at', 'updated_at'
       ]
     };

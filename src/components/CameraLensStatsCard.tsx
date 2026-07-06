@@ -61,7 +61,7 @@ export const LiveAnimateCounter: React.FC<{ value: number }> = ({ value }) => {
   return <span className="font-mono font-black">{count}</span>;
 };
 
-export type CameraLensTheme = 'purple' | 'blue' | 'cyan' | 'green' | 'gold' | 'orange' | 'red';
+export type CameraLensTheme = 'purple' | 'blue' | 'cyan' | 'green' | 'gold' | 'orange' | 'red' | 'amber' | 'emerald' | 'indigo';
 
 export interface CameraLensStatsCardProps {
   label: string;
@@ -94,7 +94,7 @@ export const CameraLensStatsCard: React.FC<CameraLensStatsCardProps> = ({
   onClick,
   lensLabel = 'PRIME 50mm'
 }) => {
-  const themeConfig = {
+  const themeConfig: Record<CameraLensTheme, { color: string; borderClass: string; textClass: string; innerGlow: string; sparkColor: string; ringColor: string }> = {
     purple: {
       color: '#a855f7',
       borderClass: 'hover:border-purple-500/40 hover:shadow-[0_0_30px_rgba(168,85,247,0.18)]',
@@ -150,8 +150,34 @@ export const CameraLensStatsCard: React.FC<CameraLensStatsCardProps> = ({
       innerGlow: 'from-rose-950/80 via-zinc-950 to-red-900/30',
       sparkColor: '#f43f5e',
       ringColor: 'border-rose-500/20'
+    },
+    amber: {
+      color: '#f59e0b',
+      borderClass: 'hover:border-amber-500/40 hover:shadow-[0_0_30px_rgba(245,158,11,0.18)]',
+      textClass: 'text-amber-400',
+      innerGlow: 'from-amber-950/80 via-zinc-950 to-orange-950/30',
+      sparkColor: '#f59e0b',
+      ringColor: 'border-amber-500/20'
+    },
+    emerald: {
+      color: '#10b981',
+      borderClass: 'hover:border-emerald-500/40 hover:shadow-[0_0_30px_rgba(16,185,129,0.18)]',
+      textClass: 'text-emerald-400',
+      innerGlow: 'from-emerald-950/80 via-zinc-950 to-green-950/30',
+      sparkColor: '#10b981',
+      ringColor: 'border-emerald-500/20'
+    },
+    indigo: {
+      color: '#6366f1',
+      borderClass: 'hover:border-indigo-500/40 hover:shadow-[0_0_30px_rgba(99,102,241,0.18)]',
+      textClass: 'text-indigo-400',
+      innerGlow: 'from-indigo-950/80 via-zinc-950 to-purple-950/30',
+      sparkColor: '#6366f1',
+      ringColor: 'border-indigo-500/20'
     }
-  }[theme];
+  };
+
+  const currentTheme = themeConfig[theme] || themeConfig['purple'];
 
   const displayVal = isCurrency && currencyFormatter
     ? currencyFormatter(val)
@@ -175,13 +201,13 @@ export const CameraLensStatsCard: React.FC<CameraLensStatsCardProps> = ({
   return (
     <div 
       onClick={onClick}
-      className={`bg-zinc-950/65 backdrop-blur-xl border ${isFiltered ? 'border-zinc-500 shadow-[0_0_20px_rgba(255,255,255,0.08)] scale-[0.98]' : 'border-zinc-900'} rounded-2xl p-4 sm:p-5 flex flex-col justify-between transition-all duration-500 hover:-translate-y-1.5 select-none ${themeConfig.borderClass} group/card cursor-pointer relative overflow-hidden h-auto min-h-[160px] gap-4`}
+      className={`bg-zinc-950/65 backdrop-blur-xl border ${isFiltered ? 'border-zinc-500 shadow-[0_0_20px_rgba(255,255,255,0.08)] scale-[0.98]' : 'border-zinc-900'} rounded-2xl p-4 sm:p-5 flex flex-col justify-between transition-all duration-500 hover:-translate-y-1.5 select-none ${currentTheme.borderClass} group/card cursor-pointer relative overflow-hidden h-auto min-h-[160px] gap-4`}
     >
       {/* Premium subtle glass light strike overlay */}
       <div className="absolute inset-0 bg-gradient-to-tr from-white/[0.01] to-white/[0.04] opacity-50 pointer-events-none" />
       
       {/* Interactive underlying neon spot glow */}
-      <div className="absolute -right-6 -bottom-6 w-24 h-24 rounded-full blur-[28px] pointer-events-none opacity-10 transition-all duration-500 group-hover/card:scale-150 group-hover/card:opacity-20" style={{ backgroundColor: themeConfig.color }} />
+      <div className="absolute -right-6 -bottom-6 w-24 h-24 rounded-full blur-[28px] pointer-events-none opacity-10 transition-all duration-500 group-hover/card:scale-150 group-hover/card:opacity-20" style={{ backgroundColor: currentTheme.color }} />
 
       {/* Main Grid: Left Lens Representation & Right Metrics Section */}
       <div className="flex flex-col sm:flex-row items-center sm:items-start md:items-center gap-3.5 sm:gap-4 z-10 w-full text-center sm:text-left">
@@ -192,7 +218,7 @@ export const CameraLensStatsCard: React.FC<CameraLensStatsCardProps> = ({
           <div className="absolute inset-0 rounded-full border border-zinc-800 bg-gradient-to-b from-zinc-900 to-zinc-950 flex items-center justify-center p-0.5 shadow-xl ring-1 ring-white/5 transition-all duration-700 group-hover/card:scale-105 group-hover/card:border-zinc-700">
             
             {/* Physical outer focus notched ring elements */}
-            <div className={`absolute inset-0.5 rounded-full border border-dashed animate-[spin_50s_linear_infinite] group-hover/card:rotate-90 group-hover/card:duration-1000 transition-all duration-700 ${themeConfig.ringColor}`} />
+            <div className={`absolute inset-0.5 rounded-full border border-dashed animate-[spin_50s_linear_infinite] group-hover/card:rotate-90 group-hover/card:duration-1000 transition-all duration-700 ${currentTheme.ringColor}`} />
             
             {/* Core focusing notch ticks */}
             <div className="absolute inset-1 rounded-full border border-zinc-900/70 opacity-60 flex items-center justify-center">
@@ -218,7 +244,7 @@ export const CameraLensStatsCard: React.FC<CameraLensStatsCardProps> = ({
               </div>
 
               {/* Glass reflection gradient theme */}
-              <div className={`absolute inset-1.5 sm:inset-2 rounded-full bg-gradient-to-br transition-all duration-500 flex items-center justify-center ${themeConfig.innerGlow}`}>
+              <div className={`absolute inset-1.5 sm:inset-2 rounded-full bg-gradient-to-br transition-all duration-500 flex items-center justify-center ${currentTheme.innerGlow}`}>
                 
                 {/* Viewfinder crosshairs */}
                 <div className="absolute inset-0 pointer-events-none opacity-20 group-hover/card:opacity-40 transition-opacity">
@@ -276,10 +302,10 @@ export const CameraLensStatsCard: React.FC<CameraLensStatsCardProps> = ({
       {/* BOTTOM SEGMENT: SPARKLINE TREND GRAPH & CALIBRATION CODES */}
       <div className="mt-auto pt-2 border-t border-zinc-900/55 flex flex-col xs:flex-row items-center justify-between gap-3 z-10 w-full text-center xs:text-left">
         <div className="w-full xs:w-auto xs:max-w-[130px] flex-grow max-w-full overflow-hidden">
-          <MicroSparkline points={chartPoints} color={themeConfig.sparkColor} />
+          <MicroSparkline points={chartPoints} color={currentTheme.sparkColor} />
         </div>
         <div className="flex items-center justify-center xs:justify-start gap-1 shrink-0 text-[8px] font-mono font-medium text-zinc-500 uppercase tracking-widest py-0.5">
-          <span className="w-1 h-1 rounded-full animate-ping shrink-0" style={{ backgroundColor: themeConfig.color }} />
+          <span className="w-1 h-1 rounded-full animate-ping shrink-0" style={{ backgroundColor: currentTheme.color }} />
           <span className="break-words max-w-[120px]">{trendText}</span>
         </div>
       </div>

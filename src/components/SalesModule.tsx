@@ -6885,13 +6885,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <div className="flex flex-col gap-3 pt-2.5 border-t border-slate-900/80">
                             <div className="flex items-center justify-between">
                               <span className="font-mono text-xs font-bold text-emerald-400">₹{pkg.price.toLocaleString('en-IN')}</span>
-                              <button
-                                type="button"
-                                onClick={() => setViewingPkgDetails(pkg)}
-                                className="text-[10px] font-mono font-bold tracking-tight text-slate-405 hover:text-emerald-400 cursor-pointer flex items-center gap-1 transition-all"
-                              >
-                                🔍 View specifications
-                              </button>
                             </div>
                             
                             {canEdit && (
