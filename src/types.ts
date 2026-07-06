@@ -190,6 +190,9 @@ export interface Lead {
   notes_special_customizations?: string;
   quotation_discount?: number;
   additional_services_cost?: number;
+  Additional_Services_Cost?: number | null;
+  Quotation_Discount?: number | null;
+  Final_Quotation_Amount?: number | null;
   total_pax?: number;
   reference_source?: string;
   lead_value?: number;

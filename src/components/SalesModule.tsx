@@ -2828,6 +2828,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         terms_conditions: quotationTerms,
         deliverables_description: leadObj.deliverables_description,
         notes_special_customizations: leadObj.notes_special_customizations,
+          Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
+          Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
+          Final_Quotation_Amount: finalAmt === "" ? null : Number(finalAmt),
         client_residence_address: leadObj.client_residence_address,
         city: leadObj.city,
         state: leadObj.state,
@@ -2875,8 +2878,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           package_price: basePkgSum,
           deliverables_description: leadObj.deliverables_description,
           notes_special_customizations: leadObj.notes_special_customizations,
-          quotation_discount: quoteDiscount,
-          additional_services_cost: quoteAdditional,
+          Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
+          Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
+          Final_Quotation_Amount: finalAmt === "" ? null : Number(finalAmt),
+          
           client_residence_address: leadObj.client_residence_address,
           city: leadObj.city,
           state: leadObj.state,
@@ -2906,8 +2911,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           package_price: basePkgSum,
           deliverables_description: leadObj.deliverables_description,
           notes_special_customizations: leadObj.notes_special_customizations,
-          quotation_discount: quoteDiscount,
-          additional_services_cost: quoteAdditional,
+          Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
+          Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
+          Final_Quotation_Amount: finalAmt === "" ? null : Number(finalAmt),
+          
           client_residence_address: leadObj.client_residence_address,
           city: leadObj.city,
           state: leadObj.state,
@@ -3370,10 +3377,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     setCrmWizardStep(startStep);
 
+    setQuoteDiscount(lead.Quotation_Discount ?? latestQuote?.discount_amount ?? 0);
+    setQuoteAdditional(lead.Additional_Services_Cost ?? latestQuote?.additional_services_cost ?? 0);
     if (latestQuote) {
       setActiveQuoteNum(latestQuote.quotation_number || '');
-      setQuoteDiscount(latestQuote.discount_amount || 0);
-      setQuoteAdditional(latestQuote.additional_services_cost || 0);
       setSalesStaffName(latestQuote.sales_staff_name || lead.sales_staff_name || evtStaffName || '');
       setSalesStaffMobile(latestQuote.sales_staff_mobile || lead.sales_staff_mobile || evtStaffMobile || '');
       if (latestQuote.editableInclusions) {
@@ -4849,6 +4856,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             total_pax: createForm.total_pax !== '' ? Number(createForm.total_pax) : undefined,
             reference_source: createForm.reference_source,
             booking_status: createForm.booking_status || undefined,
+            Additional_Services_Cost: null,
+            Quotation_Discount: null,
+            Final_Quotation_Amount: null,
             event_type: createForm.event_type || '',
             event_date: createForm.event_date || '',
             event_time: createForm.event_time || '',
@@ -4880,6 +4890,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             total_pax: createForm.total_pax !== '' ? Number(createForm.total_pax) : undefined,
             reference_source: createForm.reference_source,
             booking_status: createForm.booking_status || undefined,
+            Additional_Services_Cost: null,
+            Quotation_Discount: null,
+            Final_Quotation_Amount: null,
             remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
             next_follow_up_date: followUpDate || null,
             follow_up_notes: internalNotes || null,
@@ -4912,6 +4925,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           event_time: createForm.event_time || '12:00',
           event_location: createForm.event_location || 'TBD',
           budget: Number(createForm.budget) || 0,
+            Additional_Services_Cost: null,
+            Quotation_Discount: null,
+            Final_Quotation_Amount: null,
           remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
             next_follow_up_date: followUpDate || null,
             follow_up_notes: internalNotes || null,
@@ -5053,14 +5069,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
     }
 
-    else if (wizardStep === 3) {
-      if (!selectedPkgIds || selectedPkgIds.length === 0) {
-        showToastMsg("Please select a package before continuing.", "error");
-        return;
-      }
-      try {
-        setIsSaving(true);
-        const selectedPkgs = PACKAGES_LIST.flatMap(cat => cat.items).filter(item => selectedPkgIds.includes(item.id));
+  };
+
+  const handleStatusSave = async () => {
+    if (isSaving) return;
+    if (!salesStatus) {
+      showToastMsg("Please select a CRM Sales Funnel Pipeline Stage before saving.", "error");
+      return;
+    }
+    try {
+      setIsSaving(true);
+
+      // Save Packages
+      const selectedPkgs = PACKAGES_LIST.flatMap(cat => cat.items).filter(item => selectedPkgIds.includes(item.id));
+      if (selectedPkgIds.length > 0) {
         const packagesPayload = selectedPkgs.map(pkg => ({
           package_id: pkg.id,
           package_name: pkg.name,
@@ -5074,108 +5096,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           additional_services_cost: 0
         }));
         await saveLeadPackages(createdLeadId!, packagesPayload);
-
-        const finalStatus = (salesStatus === 'Quotation Sent') ? 'Quotation Sent' : 'Negotiation';
-        if (salesStatus !== 'Quotation Sent') {
-          setSalesStatus('Negotiation');
-        }
-
-        await updateLead(createdLeadId!, {
-          budget: finalTotal,
-          package_price: finalTotal,
-          deliverables_description: selectedPkgs.map(p => pkgDeliverables[p.id] || p.deliverables || 'N/A').join('\n'),
-          notes_special_customizations: selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
-          remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
-            next_follow_up_date: followUpDate || null,
-            follow_up_notes: internalNotes || null,
-          Select_Package_Option: selectedPkgIds[0] || '',
-          client_residence_address: createForm.client_residence_address,
-          city: createForm.city,
-          state: createForm.state,
-          pincode: createForm.pincode,
-          status: finalStatus
-        });
-
-        // Sync local states
-        setCreateForm(prev => ({ 
-          ...prev, 
-          budget: finalTotal,
-          Select_Package_Option: selectedPkgIds[0] || ''
-        }));
-        setFinalPackageAmount(finalTotal);
-
-        setWizardStep(4);
-        showToastMsg("Package selection saved successfully.", "success");
-        setTimeout(() => {
-          autoScrollToFormHeader();
-          document.getElementById('wizard_create_step4_first_field')?.focus();
-        }, 100);
-      } catch (err: any) {
-        console.error("Step 3 saving failed:", err);
-        const errMsg = err.message || String(err);
-        let displayedMsg = errMsg;
-        if (errMsg.toLowerCase().includes("database") || errMsg.toLowerCase().includes("connection") || errMsg.toLowerCase().includes("failed to fetch") || errMsg.toLowerCase().includes("supabase")) {
-          displayedMsg = "Database save failed: connection error.";
-        } else {
-          displayedMsg = `Unable to save packages: ${errMsg}`;
-        }
-        showToastMsg(displayedMsg, "error");
-      } finally {
-        setIsSaving(false);
       }
-    }
 
-    else if (wizardStep === 4) {
-      try {
-        setIsSaving(true);
-        await updateLead(createdLeadId!, {
-          budget: Number(createForm.budget),
-          remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
-            next_follow_up_date: followUpDate || null,
-            follow_up_notes: internalNotes || null,
-          client_residence_address: createForm.client_residence_address,
-          city: createForm.city,
-          state: createForm.state,
-          pincode: createForm.pincode,
-          Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
-        });
-        setWizardStep(5);
-        showToastMsg("Proposed budget and remarks saved successfully.", "success");
-        setTimeout(() => {
-          autoScrollToFormHeader();
-        }, 100);
-      } catch (err: any) {
-        console.error("Step 4 saving failed:", err);
-        const errMsg = err.message || String(err);
-        let displayedMsg = errMsg;
-        if (errMsg.toLowerCase().includes("database") || errMsg.toLowerCase().includes("connection") || errMsg.toLowerCase().includes("failed to fetch") || errMsg.toLowerCase().includes("supabase")) {
-          displayedMsg = "Database save failed: connection error.";
-        } else {
-          displayedMsg = `Unable to save budget: ${errMsg}`;
-        }
-        showToastMsg(displayedMsg, "error");
-      } finally {
-        setIsSaving(false);
-      }
-    }
-  };
-
-  const handleStatusSave = async () => {
-    if (isSaving) return;
-    if (!salesStatus) {
-      showToastMsg("Please select a CRM Sales Funnel Pipeline Stage before saving.", "error");
-      return;
-    }
-    try {
-      setIsSaving(true);
       await updateLead(createdLeadId!, {
         status: salesStatus as CurrentStage,
         budget: finalTotal,
-        package_price: finalTotal,
+          package_price: finalTotal,
+          Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
+          Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
+          Final_Quotation_Amount: finalTotal,
         deliverables_description: selectedPkgs.map(p => pkgDeliverables[p.id] || p.deliverables || 'N/A').join('\n'),
         notes_special_customizations: selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
-        quotation_discount: quoteDiscount,
-        additional_services_cost: quoteAdditional,
+        
         client_residence_address: createForm.client_residence_address,
         city: createForm.city,
         state: createForm.state,
@@ -5207,6 +5139,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           status: salesStatus,
           budget: finalTotal,
           package_price: finalTotal,
+          Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
+          Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
+          Final_Quotation_Amount: finalTotal,
           Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
         },
         insertPayload: null,
@@ -7000,13 +6935,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
             {/* Wizard Progress Bar */}
             <div className="bg-slate-955/30 px-4 sm:px-6 py-1.5 border-b border-slate-800/50 shrink-0">
-              <div className="grid grid-cols-5 gap-1.5 sm:gap-3">
+              <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
                 {[
                   { step: 1, label: 'Customer' },
                   { step: 2, label: 'Event Info' },
-                  { step: 3, label: 'Packages' },
-                  { step: 4, label: 'Budget/Notes' },
-                  { step: 5, label: 'Finalize' }
+                  { step: 3, label: 'CRM & Quotation' }
                 ].map((item) => {
                   const isActive = wizardStep === item.step;
                   const isCompleted = wizardStep > item.step;
@@ -7520,7 +7453,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4.5 space-y-4">
                     <div className="flex items-center gap-2 border-b border-slate-800/50 pb-2 mb-1">
                       <Check className="w-4 h-4 text-emerald-400 stroke-[3px]" />
-                      <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">5. Review & Finalize Lead</span>
+                      <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">Review 5. Review & Finalize Lead Finalize Lead</span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
@@ -7710,7 +7643,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               )}
 
               {/* Next or Save */}
-              {wizardStep < 5 ? (
+              {wizardStep < 3 ? (
                 <button
                   type="button"
                   onClick={handleWizardNext}
