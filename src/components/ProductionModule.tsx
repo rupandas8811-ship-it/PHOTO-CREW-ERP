@@ -1083,6 +1083,7 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     { speciality: '', staffId: '', staffName: '' }
   ]);
   const [wfError, setWfError] = useState('');
+  const [wfSuccess, setWfSuccess] = useState('');
 
   // Step 4: Send For Review Form
   const [wfReviewLink, setWfReviewLink] = useState('');
@@ -5767,6 +5768,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   const selectedId = e.target.value;
                                   const editor = activeProductionStaff.find(s => s.staff_id === selectedId);
                                   setSelectedWfEditor(editor || null);
+                                  setWfSuccess('');
                                 }}
                                 className="w-full bg-zinc-950 border border-zinc-850 hover:border-zinc-800 text-xs text-zinc-100 rounded-xl px-3.5 py-2.5 font-sans focus:outline-none focus:border-purple-500 cursor-pointer"
                               >
@@ -5781,12 +5783,64 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 })}
                               </select>
                             </div>
+                            
+                            {/* Warnings & Errors & Success (Global to the Assignment) */}
+                            {wfError && (
+                              <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[11px] font-mono rounded-xl flex items-start gap-2">
+                                <span className="font-bold">⚠️ Warning:</span>
+                                <span>{wfError}</span>
+                              </div>
+                            )}
+                            {wfSuccess && (
+                              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-mono rounded-xl flex items-start gap-2">
+                                <span className="font-bold">✅ Success:</span>
+                                <span>{wfSuccess}</span>
+                              </div>
+                            )}
 
                             {/* Automatically displayed fields upon selecting editor */}
                             {selectedWfEditor && (
-                              <div className="space-y-4 pt-4 border-t border-zinc-900/60">
+                              <div className="space-y-4 pt-4 border-t border-zinc-900/60 animate-fade-in">
+                                {/* NEW: Editor's Current Workload */}
+                                {(() => {
+                                  const activeTasks = editorAssignments.filter(a => 
+                                    a.staff_name.toLowerCase() === selectedWfEditor.name.toLowerCase() && 
+                                    a.status !== 'Completed'
+                                  );
+                                  
+                                  return (
+                                    <div className="space-y-2 mb-4">
+                                      <label className="text-[10px] text-zinc-400 uppercase font-black tracking-wider block font-mono">
+                                        Current Workload for {selectedWfEditor.name}
+                                      </label>
+                                      {activeTasks.length === 0 ? (
+                                        <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] px-3 py-2.5 rounded-xl font-mono">
+                                          Available - No active tasks.
+                                        </div>
+                                      ) : (
+                                        <div className="space-y-2">
+                                          {activeTasks.map(task => {
+                                             const relatedProd = production.find(p => p.production_id === task.production_id);
+                                             return (
+                                               <div key={task.assignment_id} className="bg-zinc-950 border border-zinc-800 p-3 rounded-xl text-xs font-sans text-zinc-300">
+                                                 <div className="grid grid-cols-2 gap-y-2 gap-x-4">
+                                                   <div><span className="text-[9px] text-zinc-500 block uppercase font-mono tracking-wider">Assigned Task</span><span className="font-semibold text-white">{task.speciality}</span></div>
+                                                   <div><span className="text-[9px] text-zinc-500 block uppercase font-mono tracking-wider">Assigned Date</span><span>{task.assigned_date || 'N/A'}</span></div>
+                                                   <div><span className="text-[9px] text-zinc-500 block uppercase font-mono tracking-wider">Delivery Target</span><span>{task.target_finish_date || 'N/A'}</span></div>
+                                                   <div><span className="text-[9px] text-zinc-500 block uppercase font-mono tracking-wider">Task Status</span><span className="text-amber-400 font-medium">{task.status}</span></div>
+                                                   <div className="col-span-2"><span className="text-[9px] text-zinc-500 block uppercase font-mono tracking-wider">Production Stage</span><span className="text-purple-400 font-mono font-bold">{relatedProd?.production_status || relatedProd?.editing_status || 'Unknown'}</span></div>
+                                                 </div>
+                                               </div>
+                                             );
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                                
                                 {/* Assigned Task */}
-                                <div className="space-y-1.5">
+                                <div className="space-y-1.5 border-t border-zinc-900/60 pt-4">
                                   <label className="text-[10px] text-zinc-400 uppercase font-black tracking-wider block font-mono">
                                     Assigned Task <span className="text-rose-500">*</span>
                                   </label>
@@ -5814,14 +5868,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   />
                                 </div>
 
-                                {/* Warnings & Errors */}
-                                {wfError && (
-                                  <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-mono rounded-xl flex items-start gap-2">
-                                    <span className="font-bold">⚠️ Warning:</span>
-                                    <span>{wfError}</span>
-                                  </div>
-                                )}
-
                                 {/* Add Editor Action Buttons */}
                                 <div className="pt-2 flex items-center gap-2">
                                   <button
@@ -5829,19 +5875,20 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     onClick={() => {
                                       setSelectedWfEditor(null);
                                       setWfSpeciality('');
-                                      setActiveWorkflowProd(null);
-                                      setWorkflowActionType(null);
+                                      setWfTargetDeliveryDate('');
                                       setWfError('');
+                                      setWfSuccess('');
                                     }}
                                     className="flex-1 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-zinc-400 hover:text-white text-xs font-mono font-bold rounded-xl transition-colors cursor-pointer text-center"
                                   >
-                                    Cancel
+                                    Clear Selection
                                   </button>
                                   <button
                                     type="button"
                                     disabled={isSaving}
                                     onClick={async () => {
                                       setWfError('');
+                                      setWfSuccess('');
                                       if (!selectedWfEditor) {
                                         setWfError('At least one editor must be selected.');
                                         return;
@@ -5895,13 +5942,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                           assigned_role: rolesJoined
                                         } as any);
 
-                                        // 3. Close the assignment form (closes modal and returns to main list showing Roster)
+                                        // 3. Keep modal open, allow adding another editor
+                                        const editorName = selectedWfEditor.name;
                                         setSelectedWfEditor(null);
                                         setWfSpeciality('');
-                                        setActiveWorkflowProd(null);
-                                        setWorkflowActionType(null);
+                                        setWfTargetDeliveryDate('');
                                         setWfError('');
-                                        alert(`Successfully added ${selectedWfEditor.name} to the Staff Roster.`);
+                                        setWfSuccess(`Successfully added ${editorName} to the Team Assignment.`);
                                       } catch (err: any) {
                                         console.error("Failed to assign editor:", err);
                                         setWfError("Failed to save assignment. " + (err.message || "Please try again."));
