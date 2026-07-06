@@ -56,6 +56,35 @@ export const OperationsLeads: React.FC = () => {
   
   const todayStr = getLocalDateStr(systemToday);
 
+  // Helper to parse date and time into a single comparable Date object
+  const parseDateTime = (dateStr: string, timeStr: string): Date | null => {
+    if (!dateStr) return null;
+    
+    let hours = 0;
+    let minutes = 0;
+    const normalizedTime = (timeStr || '00:00').trim();
+    
+    const ampmMatch = normalizedTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    const hourMinMatch = normalizedTime.match(/(\d+):(\d+)/);
+    
+    if (ampmMatch) {
+      hours = parseInt(ampmMatch[1], 10);
+      minutes = parseInt(ampmMatch[2], 10);
+      const ampm = ampmMatch[3].toUpperCase();
+      if (ampm === 'PM' && hours < 12) hours += 12;
+      if (ampm === 'AM' && hours === 12) hours = 0;
+    } else if (hourMinMatch) {
+      hours = parseInt(hourMinMatch[1], 10);
+      minutes = parseInt(hourMinMatch[2], 10);
+    }
+    
+    const parsedDate = new Date(dateStr);
+    if (isNaN(parsedDate.getTime())) return null;
+    
+    parsedDate.setHours(hours, minutes, 0, 0);
+    return parsedDate;
+  };
+
   // Search/Filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState<string>('All');
@@ -503,21 +532,18 @@ export const OperationsLeads: React.FC = () => {
     }
 
     // NEW: Equipment Validation
-    if (!assignForm.equipment_kit) {
-      alert('Please select at least one equipment kit/item.');
-      return;
-    }
-    
-    const kitsToAssign = assignForm.equipment_kit.split(',').map(s => s.trim()).filter(Boolean);
-    for (const kitName of kitsToAssign) {
-      const found = equipment.find(eq => eq.equipment_name === kitName);
-      if (!found) {
-        alert(`Equipment "${kitName}" not found in inventory.`);
-        return;
-      }
-      if (found.status !== 'Available') {
-        alert(`Equipment "${kitName}" is currently ${found.status} and cannot be assigned.`);
-        return;
+    if (assignForm.equipment_kit) {
+      const kitsToAssign = assignForm.equipment_kit.split(',').map(s => s.trim()).filter(Boolean);
+      for (const kitName of kitsToAssign) {
+        const found = equipment.find(eq => eq.equipment_name === kitName);
+        if (!found) {
+          alert(`Equipment "${kitName}" not found in inventory.`);
+          return;
+        }
+        if (found.status !== 'Available') {
+          alert(`Equipment "${kitName}" is currently ${found.status} and cannot be assigned.`);
+          return;
+        }
       }
     }
 
@@ -1552,73 +1578,217 @@ export const OperationsLeads: React.FC = () => {
                            </button>
                         </div>
                         
-                        {/* Member Information Panel */}
+                        {/* Staff Schedule Card */}
                         {(() => {
-                           const selectedStaff = selectedStaffByEvent[evId];
-                           if (!selectedStaff) return null;
-                           const memberInfo = staff?.find(st => st.name === selectedStaff);
-                           if (!memberInfo) return null;
-                           
-                           let isConflict = false;
-                           let conflictEventName = '';
-                           let conflictDate = '';
-                           let conflictTime = '';
-                           
-                           leads?.forEach(l => {
-                             l.events?.forEach(e => {
-                               if (e.id === evId) return;
-                               const assignedNames = e.assigned_staff_names ? e.assigned_staff_names.split(', ') : [];
-                               if (assignedNames.includes(selectedStaff)) {
-                                 const eDate = l.Reporting_date || e.event_date;
-                                 const eTime = e.reporting_time;
-                                 if (eDate === allocation.reporting_date && eDate) {
-                                   isConflict = true;
-                                   conflictEventName = e.event_name || e.event_type || 'Event';
-                                   conflictDate = eDate;
-                                   conflictTime = eTime || '';
-                                 }
-                               }
-                             });
+                           const staffNamesToCheck: string[] = [];
+                           const currentDropdownStaff = selectedStaffByEvent[evId];
+                           if (currentDropdownStaff) {
+                             staffNamesToCheck.push(currentDropdownStaff);
+                           }
+                           allocStaff.forEach(s => {
+                             if (s.staff_name && !staffNamesToCheck.includes(s.staff_name)) {
+                               staffNamesToCheck.push(s.staff_name);
+                             }
                            });
 
+                           if (staffNamesToCheck.length === 0) return null;
+
                            return (
-                             <div className="mt-3 p-3 bg-zinc-900 border border-zinc-750 rounded-lg space-y-2">
-                               {isConflict && (
-                                 <div className="bg-red-500/10 border border-red-500/30 p-2 rounded text-red-400 text-xs mb-2">
-                                   <div className="font-bold flex items-center gap-1">
-                                     <span>⚠️</span> This member is already assigned to another event.
+                             <div className="space-y-4">
+                               {staffNamesToCheck.map(staffName => {
+                                 const memberInfo = staff?.find(st => st.name === staffName);
+                                 if (!memberInfo) return null;
+
+                                 // Find all active and upcoming events assigned to this staff member
+                                 const staffEvents: any[] = [];
+                                 leads?.forEach(otherLead => {
+                                   otherLead.events?.forEach(otherEv => {
+                                     // Skip current event we are scheduling
+                                     if (otherEv.id === evId) return;
+
+                                     const assignedNames = otherEv.assigned_staff_names
+                                       ? otherEv.assigned_staff_names.split(',').map((s: string) => s.trim())
+                                       : [];
+                                     if (assignedNames.includes(staffName)) {
+                                       const otherOrder = orders.find(o => o.lead_id === otherLead.lead_id || o.order_id === otherLead.lead_id);
+                                       const isCompleted = otherOrder ? isCompletedEvent(otherOrder) : false;
+
+                                       if (!isCompleted && otherLead.status !== 'Lost Lead') {
+                                         staffEvents.push({
+                                           lead: otherLead,
+                                           event: otherEv,
+                                           order: otherOrder,
+                                           dateValue: otherEv.event_date || otherLead.Reporting_date || ''
+                                         });
+                                       }
+                                     }
+                                   });
+                                 });
+
+                                 // Sort chronologically by date
+                                 staffEvents.sort((a, b) => {
+                                   const dateA = new Date(a.dateValue).getTime();
+                                   const dateB = new Date(b.dateValue).getTime();
+                                   if (isNaN(dateA)) return 1;
+                                   if (isNaN(dateB)) return -1;
+                                   return dateA - dateB;
+                                 });
+
+                                 // Compare current scheduling event's time coordinates with existing assignments
+                                 const currentEvDate = allocation.reporting_date || ev.event_date;
+                                 const currentEvRepTime = allocation.reporting_time || ev.reporting_time;
+                                 const currentEvStartTime = allocation.event_start_time || ev.event_start_time;
+                                 const currentEvEndTime = allocation.event_end_time || ev.event_end_time;
+
+                                 const evStart = parseDateTime(currentEvDate, currentEvRepTime || currentEvStartTime || '08:00');
+                                 const evEnd = parseDateTime(currentEvDate, currentEvEndTime || currentEvStartTime || '17:00');
+
+                                 const conflictingEvents: any[] = [];
+                                 staffEvents.forEach(se => {
+                                   const seRepDate = se.lead.Reporting_date || se.event.event_date;
+                                   const seRepTime = se.event.reporting_time || se.lead.reporting_time || se.event.event_start_time || '08:00';
+                                   const seEndTime = se.event.event_end_time || se.event.event_start_time || '17:00';
+
+                                   const otherStart = parseDateTime(seRepDate, seRepTime);
+                                   const otherEnd = parseDateTime(se.event.event_date || seRepDate, seEndTime);
+
+                                   let isOverlap = false;
+                                   if (evStart && evEnd && otherStart && otherEnd) {
+                                     isOverlap = evStart < otherEnd && otherStart < evEnd;
+                                   } else {
+                                     if (currentEvDate && se.event.event_date && currentEvDate === se.event.event_date) {
+                                       isOverlap = true;
+                                     }
+                                   }
+
+                                   if (isOverlap) {
+                                     conflictingEvents.push(se);
+                                   }
+                                 });
+
+                                 const hasConflict = conflictingEvents.length > 0;
+
+                                 return (
+                                   <div key={staffName} className="mt-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl space-y-4 text-left shadow-md">
+                                     {/* Header */}
+                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+                                       <div>
+                                         <span className="text-[10px] text-zinc-500 uppercase font-mono block">👤 Staff Name</span>
+                                         <span className="text-sm font-bold text-white font-sans">{staffName}</span>
+                                         <span className="text-[10px] text-zinc-400 font-mono block mt-0.5">{memberInfo.role}</span>
+                                       </div>
+                                       <div className="flex flex-col items-start sm:items-end">
+                                         <span className="text-[10px] text-zinc-500 uppercase font-mono block">Status</span>
+                                         {hasConflict ? (
+                                           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20">
+                                             🔴 Busy
+                                           </span>
+                                         ) : (
+                                           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                             🟢 Available
+                                           </span>
+                                         )}
+                                       </div>
+                                     </div>
+
+                                     {/* Conflict Warning */}
+                                     {hasConflict && (
+                                       <div className="bg-red-500/10 border border-red-500/30 p-3 rounded-lg text-red-400 text-xs space-y-1">
+                                         <div className="font-bold flex items-center gap-1.5">
+                                           <span>⚠️</span> Schedule Conflict
+                                         </div>
+                                         <div>
+                                           This staff member is already assigned during the selected time.
+                                         </div>
+                                       </div>
+                                     )}
+
+                                     {/* Schedule Detail Section */}
+                                     <div className="space-y-3">
+                                       <span className="text-[10px] text-zinc-500 uppercase font-mono block font-bold tracking-wider">
+                                         {hasConflict ? 'Conflicting & Upcoming Events' : 'Upcoming Assigned Events'}
+                                       </span>
+
+                                       {staffEvents.length === 0 ? (
+                                         <div className="text-zinc-500 text-xs italic font-mono pl-1">
+                                           No other scheduled events found.
+                                         </div>
+                                       ) : (
+                                         <div className="space-y-3 divide-y divide-zinc-850/60">
+                                           {staffEvents.map((se, idx) => {
+                                             const isSeConflicting = conflictingEvents.some(c => c.event.id === se.event.id);
+                                             return (
+                                               <div key={se.event.id || idx} className={`pt-3 first:pt-0 space-y-2 ${isSeConflicting ? 'border-l-2 border-red-500 pl-3 bg-red-500/5 p-2 rounded-r-lg' : ''}`}>
+                                                 <div className="flex justify-between items-start gap-2">
+                                                   <div>
+                                                     <span className="text-xs font-bold text-zinc-100 font-sans block">
+                                                       • Event Name: {se.event.event_name || se.event.event_type || 'Unnamed Event'}
+                                                     </span>
+                                                     <span className="text-[10px] text-zinc-400 font-sans">
+                                                       Event Type: {se.event.event_type || 'N/A'} | Shoot Type: {se.event.event_shoot_type || 'N/A'}
+                                                     </span>
+                                                   </div>
+                                                   {isSeConflicting && (
+                                                     <span className="text-[10px] font-mono font-bold uppercase text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">
+                                                       Conflict
+                                                     </span>
+                                                   )}
+                                                 </div>
+
+                                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-[11px] font-mono text-zinc-300">
+                                                   <div>
+                                                     <span className="text-[9px] text-zinc-500 uppercase block">Reporting Date</span>
+                                                     <span>{se.lead.Reporting_date || se.event.event_date || 'N/A'}</span>
+                                                   </div>
+                                                   <div>
+                                                     <span className="text-[9px] text-zinc-500 uppercase block">Reporting Time</span>
+                                                     <span>{se.event.reporting_time || 'N/A'}</span>
+                                                   </div>
+                                                   <div>
+                                                     <span className="text-[9px] text-zinc-500 uppercase block">Event Date</span>
+                                                     <span>{se.event.event_date || 'N/A'}</span>
+                                                   </div>
+                                                   <div>
+                                                     <span className="text-[9px] text-zinc-500 uppercase block">Event Start Time</span>
+                                                     <span>{se.event.event_start_time || 'N/A'}</span>
+                                                   </div>
+                                                   <div>
+                                                     <span className="text-[9px] text-zinc-500 uppercase block">Event End Time</span>
+                                                     <span>{se.event.event_end_time || 'N/A'}</span>
+                                                   </div>
+                                                   <div>
+                                                     <span className="text-[9px] text-zinc-500 uppercase block">Lead ID</span>
+                                                     <span>{se.lead.lead_id || 'N/A'}</span>
+                                                   </div>
+                                                 </div>
+
+                                                 <div className="text-[11px] font-sans text-zinc-300">
+                                                   <span className="text-[9px] text-zinc-500 uppercase font-mono block">Event Location</span>
+                                                   <span>{se.event.event_location || se.lead.event_location || se.lead.address || 'N/A'}</span>
+                                                 </div>
+
+                                                 {se.event.google_maps_link && (
+                                                   <div className="text-[11px] font-sans">
+                                                     <span className="text-[9px] text-zinc-500 uppercase font-mono block">Google Maps Link</span>
+                                                     <a 
+                                                       href={se.event.google_maps_link} 
+                                                       target="_blank" 
+                                                       rel="noopener noreferrer" 
+                                                       className="text-blue-400 hover:text-blue-300 underline break-all"
+                                                     >
+                                                       {se.event.google_maps_link}
+                                                     </a>
+                                                   </div>
+                                                 )}
+                                               </div>
+                                             );
+                                           })}
+                                         </div>
+                                       )}
+                                     </div>
                                    </div>
-                                   <div className="mt-1 font-mono text-[10px]">
-                                     <div>Event: {conflictEventName}</div>
-                                     <div>Reporting Date: {conflictDate}</div>
-                                     <div>Reporting Time: {conflictTime}</div>
-                                   </div>
-                                 </div>
-                               )}
-                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px]">
-                                 <div>
-                                   <span className="text-zinc-500 uppercase font-mono block">Member Name</span>
-                                   <span className="text-zinc-200 font-bold">{memberInfo.name}</span>
-                                 </div>
-                                 <div>
-                                   <span className="text-zinc-500 uppercase font-mono block">Skill / Specialization</span>
-                                   <span className="text-zinc-200">{memberInfo.role}</span>
-                                 </div>
-                                 <div>
-                                   <span className="text-zinc-500 uppercase font-mono block">Reporting Date</span>
-                                   <span className="text-zinc-200">{allocation.reporting_date || 'Not set'}</span>
-                                 </div>
-                                 <div>
-                                   <span className="text-zinc-500 uppercase font-mono block">Reporting Time</span>
-                                   <span className="text-zinc-200">{allocation.reporting_time || 'Not set'}</span>
-                                 </div>
-                                 <div>
-                                   <span className="text-zinc-500 uppercase font-mono block">Availability Status</span>
-                                   <span className={isConflict ? "text-red-400 font-bold" : "text-emerald-400 font-bold"}>
-                                     {isConflict ? 'Already Assigned' : 'Available'}
-                                   </span>
-                                 </div>
-                               </div>
+                                 );
+                               })}
                              </div>
                            );
                         })()}

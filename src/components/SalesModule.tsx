@@ -5130,10 +5130,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleStatusSave = async () => {
     if (isSaving) return;
-    if (!salesStatus) {
-      showToastMsg("Please select a CRM Sales Funnel Pipeline Stage before saving.", "error");
-      return;
-    }
+    const finalStatus = salesStatus || 'New Lead';
     try {
       setIsSaving(true);
 
@@ -5156,7 +5153,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
 
       await updateLead(createdLeadId!, {
-        status: salesStatus as CurrentStage,
+        status: finalStatus as CurrentStage,
         budget: finalTotal,
           package_price: finalTotal,
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
@@ -5185,7 +5182,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       const targetLd = leads.find(l => l.lead_id === createdLeadId);
       const oldStatus = targetLd ? (targetLd.current_status || targetLd.status || 'New Lead') : null;
-      const newStatus = salesStatus || null;
+      const newStatus = finalStatus || null;
 
       logStatusUpdateError({
         leadId: createdLeadId || null,
@@ -5193,7 +5190,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         oldStatus,
         newStatus,
         updatePayload: {
-          status: salesStatus,
+          status: finalStatus,
           budget: finalTotal,
           package_price: finalTotal,
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
@@ -7496,190 +7493,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   )}
                 </div>
               )}
-
-              {/* STEP 4: BUDGET & REMARKS */}
-              {wizardStep === 4 && (
-                <div className="bg-slate-950/30 border border-slate-800/60 rounded-xl p-4.5 space-y-4 shadow-sm pb-6 animate-fade-in text-left">
-                  <div className="flex items-center gap-2 border-b border-slate-800/50 pb-2 mb-1">
-                    <Edit className="w-4 h-4 text-cyan-410" />
-                    <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">4. Proposed Budget & Remarks</span>
-                  </div>
-
-                  {renderQuotationAndStep4Section(false)}
-                </div>
-              )}
-
-              {/* STEP 5 INTEGRATED: REVIEW & FINALIZE */}
-                  <div className="space-y-4 animate-fade-in text-left mt-6">
-                  {/* Summary Overview Panel */}
-                  <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4.5 space-y-4">
-                    <div className="flex items-center gap-2 border-b border-slate-800/50 pb-2 mb-1">
-                      <Check className="w-4 h-4 text-emerald-400 stroke-[3px]" />
-                      <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">Review & Finalize Lead</span>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                      {/* Customer Summary */}
-                      <div className="bg-slate-955/40 p-3 rounded-lg border border-slate-850/60 space-y-2">
-                        <span className="text-[10px] uppercase font-bold text-slate-450 tracking-wider font-mono block border-b border-slate-850 pb-1">👤 Customer Information</span>
-                        <div className="space-y-1">
-                          <p className="text-slate-300">Name: <strong className="text-white">{createForm.customer_name}</strong></p>
-                          <p className="text-slate-300">Mobile: <span className="font-mono text-cyan-400 font-semibold">{createForm.mobile}</span> {createForm.whatsapp_number && <span className="text-[10px] text-emerald-500 bg-emerald-950/40 px-1 py-0.5 rounded font-mono font-medium ml-1">WhatsApp synced</span>}</p>
-                          {createForm.email && <p className="text-slate-300">Email: <span className="text-slate-200">{createForm.email}</span></p>}
-                          {createForm.client_residence_address && (
-                            <p className="text-slate-300">Residence: <span className="text-slate-300">{createForm.client_residence_address}</span></p>
-                          )}
-                          {(createForm.address || createForm.city) && (
-                            <p className="text-slate-300">Event City/State: <span className="text-slate-300">{[createForm.city, createForm.state].filter(Boolean).join(', ')}</span></p>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Event Summary */}
-                      <div className="bg-slate-955/40 p-3 rounded-lg border border-slate-850/60 space-y-2">
-                        <span className="text-[10px] uppercase font-bold text-slate-450 tracking-wider font-mono block border-b border-slate-850 pb-1">🗓️ Event Details</span>
-                        <div className="space-y-1">
-                          <p className="text-slate-300">Event: <strong className="text-amber-400">{createForm.event_type === 'Other' ? createForm.custom_event_name : createForm.event_type}</strong></p>
-                          <p className="text-slate-300">Shoot Type: <span className="text-white font-medium">{createForm.desired_event_shoot_type || createForm.shoot_type}</span></p>
-                          <p className="text-slate-300">Date/Time: <span className="font-mono text-slate-200">{createForm.event_date || 'TBD'} @ {createForm.event_time || 'TBD'}</span> {reportingTime && <span className="text-slate-400 font-mono text-[10px]">(Report: {reportingTime})</span>}</p>
-                          <p className="text-slate-300">Venue Address: <span className="text-slate-300">{createForm.event_location || createForm.address || 'TBD'}</span></p>
-                        </div>
-                      </div>
-
-                      {/* Packages & Financial Summary */}
-                      <div className="bg-slate-955/40 p-3 rounded-lg border border-slate-850/60 space-y-2 md:col-span-2">
-                        <span className="text-[10px] uppercase font-bold text-slate-450 tracking-wider font-mono block border-b border-slate-850 pb-1">💰 Configured Packages & Value</span>
-                        <div className="space-y-2">
-                          {selectedPkgIds.length > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                              {selectedPkgIds.map((id) => {
-                                const pkg = PACKAGES_LIST.flatMap(cat => cat.items).find(item => item.id === id);
-                                if (!pkg) return null;
-                                return (
-                                  <span key={id} className="bg-slate-900 border border-slate-800 text-slate-300 px-2.5 py-1 rounded text-[11px] font-medium flex items-center gap-1.5">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-                                    {pkg.name} (₹{pkg.cost.toLocaleString('en-IN')})
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <p className="text-slate-400 italic">No custom packages selected.</p>
-                          )}
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-850/65 text-slate-300 font-mono text-[11px]">
-                            <div>Subtotal: <strong className="text-slate-200">₹{subtotal.toLocaleString('en-IN')}</strong></div>
-                            {leadDiscount > 0 && <div>Discount: <strong className="text-rose-455">₹{leadDiscount.toLocaleString('en-IN')}</strong></div>}
-                            <div className="text-amber-400 font-bold">Total Quote: ₹{finalTotal.toLocaleString('en-IN')}</div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Notes Summary */}
-                      {(createForm.remarks || internalNotes) && (
-                        <div className="bg-slate-955/40 p-3 rounded-lg border border-slate-850/60 space-y-2 md:col-span-2">
-                          <span className="text-[10px] uppercase font-bold text-slate-450 tracking-wider font-mono block border-b border-slate-850 pb-1">📝 Notes & Follow-ups</span>
-                          <div className="space-y-1">
-                            {createForm.remarks && <p className="text-slate-350"><strong className="text-slate-450">Inbound Scope:</strong> {createForm.remarks}</p>}
-                            {internalNotes && <p className="text-slate-350"><strong className="text-slate-450">Private Team Notes:</strong> {internalNotes}</p>}
-                            {followUpDate && <p className="text-cyan-405 font-mono">📅 Planned Next Call: {followUpDate}</p>}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Stage Setup */}
-                  <div className="bg-slate-950/30 border border-slate-800/60 rounded-xl p-4.5 space-y-4">
-                    <label className="block text-xs font-extrabold text-slate-300 uppercase tracking-wider font-mono mb-1.5">
-                      Set CRM Sales Funnel Pipeline Stage *
-                    </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                      {[
-                        { id: 'New Lead', label: 'New Lead ✍️', style: 'border-amber-500/20 text-amber-300' },
-                        { id: 'Follow Up', label: 'Follow Up 📞', style: 'border-[#38bdf8]/20 text-[#38bdf8]' },
-                        { id: 'Quotation Sent', label: 'Quote Sent 📄', style: 'border-purple-500/20 text-purple-300' },
-                        { id: 'Negotiation', label: 'Negotiating 🤝', style: 'border-blue-500/20 text-blue-300' },
-                        { id: 'Order Confirmed', label: 'Confirmed 🎉', style: 'border-emerald-500/20 text-emerald-300' }
-                      ].map((stage) => {
-                        const isSel = salesStatus === stage.id;
-                        return (
-                          <button
-                            type="button"
-                            key={stage.id}
-                            onClick={() => {
-                              setSalesStatus(stage.id as CurrentStage);
-                            }}
-                            className={`px-3 py-2 text-center text-xs font-bold rounded-lg border cursor-pointer transition-all ${
-                              isSel 
-                                ? 'bg-slate-900 border-indigo-500 text-indigo-400 ring-1 ring-indigo-500/25 shadow-lg' 
-                                : `bg-[#131b2e]/60 ${stage.style} opacity-70 hover:opacity-100 hover:bg-[#1b253f]`
-                            }`}
-                          >
-                            {stage.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Conditional Fields: If Order Confirmed, request date, time, and advance receipt */}
-                    {salesStatus === 'Order Confirmed' && (
-                      <div className="mt-4 p-4 bg-emerald-990/10 border border-emerald-500/25 rounded-xl space-y-4 animate-fade-in text-left">
-                        <div className="flex items-center gap-2 border-b border-emerald-900/30 pb-2 mb-2">
-                          <Package className="w-4 h-4 text-emerald-450" />
-                          <span className="text-[11px] font-black font-mono text-emerald-400 uppercase tracking-wider">🔒 Mandatory Operations Order Configuration</span>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-xs font-semibold text-slate-350 mb-1.5">Confirmed Event Date *</label>
-                            <input
-                              type="date"
-                              required
-                              value={confirmedEventDate}
-                              onChange={(e) => setConfirmedEventDate(e.target.value)}
-                              className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg py-2 px-3 text-xs text-slate-100 font-mono focus:outline-none transition-all"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-semibold text-slate-350 mb-1.5">Confirmed Event Starts At *</label>
-                            <input
-                              type="time"
-                              required
-                              value={confirmedEventTime}
-                              onChange={(e) => setConfirmedEventTime(e.target.value)}
-                              className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg py-2 px-3 text-xs text-slate-100 font-mono focus:outline-none transition-all"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-semibold text-slate-350 mb-1.5">Final Settled Value (₹) *</label>
-                            <input
-                              type="number"
-                              required
-                              min="1"
-                              value={finalPackageAmount}
-                              onChange={(e) => setFinalPackageAmount(Number(e.target.value))}
-                              className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg py-2 px-3 text-xs text-slate-100 font-mono focus:outline-none transition-all"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-semibold text-slate-350 mb-1.5">Advance Deposit Received (₹) *</label>
-                            <input
-                              type="number"
-                              required
-                              min="0"
-                              value={advanceReceived}
-                              onChange={(e) => setAdvanceReceived(Number(e.target.value))}
-                              className="w-full bg-slate-955 border border-slate-800 focus:border-emerald-500 rounded-lg py-2 px-3 text-xs text-slate-100 font-mono focus:outline-none transition-all"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
             </div>
 
             {/* Sticky Footer */}
