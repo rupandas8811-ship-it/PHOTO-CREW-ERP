@@ -224,7 +224,7 @@ export const CameraLensGraphic: React.FC<{
 };
 
 export interface ProductionModuleProps {
-  activeSubTab: 'pipeline' | 'production_leads' | 'project_queue' | 'assignments' | 'tracker' | 'delivery' | 'resources' | 'analytics' | 'staff_performance' | 'overall_performance' | 'deliveries_desk' | 'staff_management' | 'notifications' | 'crew_roster' | 'production_staff_directory' | 'production_role_specialities';
+  activeSubTab: 'pipeline' | 'production_leads' | 'project_queue' | 'assignments' | 'tracker' | 'delivery' | 'resources' | 'analytics' | 'staff_performance' | 'overall_performance' | 'deliveries_desk' | 'staff_management' | 'notifications' | 'crew_roster' | 'staff_roster' | 'production_staff_directory' | 'production_role_specialities';
   setActiveSubTab: (tab: any) => void;
 }
 
@@ -1126,6 +1126,10 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
   const [crewSearch, setCrewSearch] = useState('');
   const [crewSpecialityFilter, setCrewSpecialityFilter] = useState('All');
   const [crewStatusFilter, setCrewStatusFilter] = useState('All');
+
+  // Staff Roster Filter state
+  const [rosterSearch, setRosterSearch] = useState('');
+  const [rosterStatusFilter, setRosterStatusFilter] = useState('All');
 
   // Assign Editor Popup states
   const [selectedEditors, setSelectedEditors] = useState<Staff[]>([]);
@@ -3948,15 +3952,15 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 </form>
               </div>
 
-              {/* SECTION 2: STAFF ROSTER */}
+              {/* SECTION 2: STAFF DIRECTORY */}
               <div className="lg:col-span-8 bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-4 shadow-xl">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-zinc-900 pb-4">
                   <div>
                     <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
-                      <Users className="w-4 h-4 text-purple-400" /> Staff Roster
+                      <Users className="w-4 h-4 text-purple-400" /> Staff Directory
                     </h3>
                     <p className="text-[11px] text-zinc-400 mt-1">
-                      Displaying active assigned production staff details, tracking order IDs, assignment timelines, target dates, and statuses.
+                      Displaying all production staff with their basic details, contact information, and current availability status.
                     </p>
                   </div>
                 </div>
@@ -3964,136 +3968,195 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 {/* Search & Filter Bar */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-zinc-900/10 p-3 rounded-xl border border-zinc-900">
                   <div>
-                    <label className="block text-[8px] uppercase tracking-wider font-bold text-zinc-500 mb-1 font-mono">Search Staff / Order ID / Speciality</label>
+                    <label className="block text-[8px] uppercase tracking-wider font-bold text-zinc-500 mb-1 font-mono">Search Staff / Specialty / Contact</label>
                     <input
                       type="text"
                       value={crewSearch}
                       onChange={(e) => setCrewSearch(e.target.value)}
-                      placeholder="e.g. Rahul, ORD-1234, Editing..."
+                      placeholder="e.g. Rahul, Editing, 98765..."
                       className="w-full bg-zinc-950 border border-zinc-850 hover:border-zinc-800 text-xs text-white rounded-lg px-3 py-1.5 focus:outline-none focus:border-purple-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-[8px] uppercase tracking-wider font-bold text-zinc-500 mb-1 font-mono">Status Filter</label>
+                    <label className="block text-[8px] uppercase tracking-wider font-bold text-zinc-500 mb-1 font-mono">Availability / Status Filter</label>
                     <select
                       value={crewStatusFilter}
                       onChange={(e) => setCrewStatusFilter(e.target.value)}
                       className="w-full bg-zinc-950 border border-zinc-850 hover:border-zinc-800 text-xs text-white rounded-lg px-3 py-1.5 focus:outline-none focus:border-purple-500 cursor-pointer"
                     >
-                      <option value="All">All Statuses</option>
-                      <option value="Assigned">Assigned</option>
-                      <option value="Editing Started">Editing Started</option>
-                      <option value="In Progress">In Progress</option>
-                      <option value="Review Pending">Review Pending</option>
-                      <option value="Revision">Revision</option>
-                      <option value="Completed">Completed</option>
+                      <option value="All">All Staff</option>
+                      <option value="Active">Active Status</option>
+                      <option value="Inactive">Inactive Status</option>
+                      <option value="Available">Available (0 Active Tasks)</option>
+                      <option value="Busy">Busy (1+ Active Tasks)</option>
                     </select>
                   </div>
                 </div>
 
                 {/* Responsive Table Container */}
                 <div className="overflow-x-auto w-full rounded-xl border border-zinc-900 bg-zinc-950">
-                  <table className="w-full text-left border-collapse min-w-[600px]">
+                  <table className="w-full text-left border-collapse min-w-[700px]">
                     <thead>
                       <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
-                        <th className="px-4 py-3 font-bold">Staff Name</th>
-                        <th className="px-4 py-3 font-bold">Order ID</th>
-                        <th className="px-4 py-3 font-bold">Date Assigned</th>
-                        <th className="px-4 py-3 font-bold">Delivery Target Date</th>
+                        <th className="px-4 py-3 font-bold">Staff Name & Role</th>
+                        <th className="px-4 py-3 font-bold">Contact Details</th>
+                        <th className="px-4 py-3 font-bold">Availability</th>
                         <th className="px-4 py-3 font-bold">Status</th>
+                        <th className="px-4 py-3 font-bold text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-900 font-sans text-xs text-zinc-300">
                       {(() => {
-                        // Build integrated roster rows for the Staff Roster table from assigned editors
-                        const rosterRows = [...editorAssignments].map(assign => {
-                          const correlatedProj = production.find(p => p.production_id === assign.production_id);
-                          const trackingId = correlatedProj?.tracking_id;
-                          const linkedOrder = orders.find(o => o.order_id === trackingId || o.lead_id === trackingId);
-                          const orderId = linkedOrder?.order_id || 'N/A';
-                          
-                          return {
-                            assignmentId: assign.assignment_id,
-                            staffName: assign.staff_name,
-                            orderId: orderId,
-                            dateAssigned: assign.assigned_date || '—',
-                            deliveryTargetDate: assign.target_finish_date || '—',
-                            status: assign.status,
-                            speciality: assign.speciality || 'Editor',
-                            eventName: linkedOrder?.event_type || linkedOrder?.custom_event_name || 'Project',
-                          };
-                        });
-
-                        // Filter roster rows by search query and status dropdown
-                        const filteredRosterRows = rosterRows.filter(row => {
+                        const filteredStaff = productionStaffList.filter(member => {
                           const searchLower = crewSearch.toLowerCase();
-                          const matchesSearch = !crewSearch || 
-                            row.staffName.toLowerCase().includes(searchLower) ||
-                            row.orderId.toLowerCase().includes(searchLower) ||
-                            row.speciality.toLowerCase().includes(searchLower) ||
-                            row.eventName.toLowerCase().includes(searchLower);
+                          const matchesSearch = !crewSearch ||
+                            member.name.toLowerCase().includes(searchLower) ||
+                            (member.production_role_speciality || '').toLowerCase().includes(searchLower) ||
+                            member.email.toLowerCase().includes(searchLower) ||
+                            member.mobile.includes(searchLower) ||
+                            (member.whatsapp_number || '').includes(searchLower);
 
-                          const matchesStatus = crewStatusFilter === 'All' || 
-                            row.status.toLowerCase() === crewStatusFilter.toLowerCase();
+                          const activeAssignments = editorAssignments.filter(a =>
+                            a.staff_name.toLowerCase() === member.name.toLowerCase() &&
+                            a.status !== 'Completed'
+                          );
+                          const isAvailable = activeAssignments.length === 0;
 
-                          return matchesSearch && matchesStatus;
+                          let matchesFilter = true;
+                          if (crewStatusFilter === 'Active') {
+                            matchesFilter = member.status === 'Active';
+                          } else if (crewStatusFilter === 'Inactive') {
+                            matchesFilter = member.status === 'Inactive';
+                          } else if (crewStatusFilter === 'Available') {
+                            matchesFilter = isAvailable;
+                          } else if (crewStatusFilter === 'Busy') {
+                            matchesFilter = !isAvailable;
+                          }
+
+                          return matchesSearch && matchesFilter;
                         });
 
-                        // Sort: Latest assigned staff at the top (descending by date/ID)
-                        const sortedRosterRows = [...filteredRosterRows].sort((a, b) => {
-                          const dateA = a.dateAssigned !== '—' ? new Date(a.dateAssigned).getTime() : 0;
-                          const dateB = b.dateAssigned !== '—' ? new Date(b.dateAssigned).getTime() : 0;
-                          if (dateA !== dateB) return dateB - dateA;
-                          return String(b.assignmentId).localeCompare(String(a.assignmentId));
-                        });
-
-                        if (sortedRosterRows.length === 0) {
+                        if (filteredStaff.length === 0) {
                           return (
                             <tr>
                               <td colSpan={5} className="px-4 py-8 text-center text-zinc-500 font-mono text-xs">
-                                No matching roster entries found.
+                                No matching staff members found.
                               </td>
                             </tr>
                           );
                         }
 
-                        return sortedRosterRows.map((row) => {
+                        return filteredStaff.map((member) => {
+                          const activeAssignments = editorAssignments.filter(a =>
+                            a.staff_name.toLowerCase() === member.name.toLowerCase() &&
+                            a.status !== 'Completed'
+                          );
+                          const isAvailable = activeAssignments.length === 0;
+
                           return (
-                            <tr key={`assign-${row.assignmentId}`} className="hover:bg-zinc-900/30 transition-colors">
-                              {/* Staff Name */}
+                            <tr key={`staff-${member.staff_id}`} className="hover:bg-zinc-900/30 transition-colors">
+                              {/* Staff Name & Role */}
                               <td className="px-4 py-3 font-medium text-white">
                                 <div className="flex flex-col">
-                                  <span>{row.staffName}</span>
-                                  <span className="text-[9px] text-zinc-550 font-mono">{row.speciality}</span>
+                                  <span className="font-bold text-sm text-zinc-100">{member.name}</span>
+                                  <span className="text-[10px] text-purple-400 font-mono mt-0.5">{member.production_role_speciality || 'Editor'}</span>
+                                  <span className="text-[9px] text-zinc-500 font-mono">{member.email}</span>
                                 </div>
                               </td>
 
-                              {/* Order ID */}
-                              <td className="px-4 py-3 font-mono text-xs font-bold text-violet-400">
-                                {row.orderId}
+                              {/* Contact Details */}
+                              <td className="px-4 py-3">
+                                <div className="flex flex-col text-zinc-400 font-mono text-[10px] space-y-0.5">
+                                  <span>📞 {member.mobile}</span>
+                                  {member.whatsapp_number && (
+                                    <span className="text-emerald-400">💬 {member.whatsapp_number}</span>
+                                  )}
+                                </div>
                               </td>
 
-                              {/* Date Assigned */}
-                              <td className="px-4 py-3 font-mono text-[10px] text-zinc-400">
-                                {row.dateAssigned}
-                              </td>
-
-                              {/* Delivery Target Date */}
-                              <td className="px-4 py-3 font-mono text-[10px] text-zinc-400">
-                                {row.deliveryTargetDate}
+                              {/* Availability */}
+                              <td className="px-4 py-3">
+                                {isAvailable ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                    Available
+                                  </span>
+                                ) : (
+                                  <div className="flex flex-col gap-1 items-start">
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                                      Busy
+                                    </span>
+                                    <span className="text-[9px] text-zinc-500 font-mono">
+                                      {activeAssignments.length} active task{activeAssignments.length > 1 ? 's' : ''}
+                                    </span>
+                                  </div>
+                                )}
                               </td>
 
                               {/* Status */}
                               <td className="px-4 py-3">
                                 <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider ${
-                                  row.status === 'Completed'
+                                  member.status === 'Active'
                                     ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
-                                    : row.status === 'Revision'
-                                      ? 'bg-rose-500/10 text-rose-400 border border-rose-500/15'
-                                      : 'bg-amber-500/10 text-amber-400 border border-amber-500/15'
+                                    : 'bg-zinc-800 text-zinc-450 border border-zinc-700/30'
                                 }`}>
-                                  {row.status}
+                                  {member.status}
                                 </span>
+                              </td>
+
+                              {/* Actions */}
+                              <td className="px-4 py-3 text-right">
+                                <div className="flex items-center justify-end gap-2 flex-wrap">
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      const nextStatus = member.status === 'Active' ? 'Inactive' : 'Active';
+                                      try {
+                                        await updateProductionStaff(member.staff_id, { status: nextStatus });
+                                      } catch (err: any) {
+                                        alert("Failed to update staff status: " + (err.message || err));
+                                      }
+                                    }}
+                                    className={`px-2 py-1 rounded text-[10px] font-mono font-bold transition-all border cursor-pointer ${
+                                      member.status === 'Active'
+                                        ? 'bg-zinc-900 text-zinc-400 hover:text-white border-zinc-800'
+                                        : 'bg-purple-950/20 text-purple-400 hover:bg-purple-950/45 border-purple-900/30'
+                                    }`}
+                                  >
+                                    {member.status === 'Active' ? 'Set Inactive' : 'Set Active'}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingStaffId(member.staff_id);
+                                      setNewStaffName(member.name);
+                                      setNewStaffMobile(member.mobile);
+                                      setNewStaffWhatsapp(member.whatsapp_number || '');
+                                      setNewStaffSkills(member.production_role_speciality ? member.production_role_speciality.split(',').map(s => s.trim()).filter(Boolean) : []);
+                                    }}
+                                    className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-amber-500 hover:text-amber-400 border border-zinc-850 rounded font-bold cursor-pointer transition-colors text-[10px] font-mono"
+                                  >
+                                    Edit
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (window.confirm(`Are you sure you want to delete ${member.name}?`)) {
+                                        try {
+                                          await deleteProductionStaff(member.staff_id);
+                                        } catch (err: any) {
+                                          alert("Failed to delete staff: " + (err.message || err));
+                                        }
+                                      }
+                                    }}
+                                    className="px-2 py-1 bg-rose-950/10 hover:bg-rose-950/25 border border-rose-950/30 text-rose-500 hover:text-rose-400 rounded text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -4107,6 +4170,185 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           </div>
         );
       })()}
+
+      {/* STAFF ROSTER TAB */}
+      {activeSubTab === 'staff_roster' && (
+        <div className="space-y-6 animate-fade-in">
+          {/* Header section with real-time sync badge */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-950/70 border border-zinc-900 p-5 rounded-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-purple-500 to-pink-500" />
+            <div>
+              <h1 className="text-xl font-black text-white tracking-tight uppercase font-mono flex items-center gap-2">
+                <span>📋</span> Staff Roster
+              </h1>
+              <p className="text-xs text-zinc-400 mt-1 font-sans">
+                Track production editor assignments, order IDs, assigned timelines, target finished dates, and current project workflows.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 self-start sm:self-center">
+              <span className="flex items-center gap-1.5 font-mono text-[9px] px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full font-bold border border-emerald-500/15 animate-pulse">
+                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
+                Live Syncing Active
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-4 shadow-xl">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-zinc-900 pb-4">
+              <div>
+                <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                  <Users className="w-4 h-4 text-purple-400" /> Assigned Editor Roster
+                </h3>
+                <p className="text-[11px] text-zinc-400 mt-1">
+                  Displaying active assigned production staff details, tracking order IDs, assignment timelines, target dates, and statuses.
+                </p>
+              </div>
+            </div>
+
+            {/* Search & Filter Bar */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-zinc-900/10 p-3 rounded-xl border border-zinc-900">
+              <div>
+                <label className="block text-[8px] uppercase tracking-wider font-bold text-zinc-500 mb-1 font-mono">Search Staff / Order ID / Specialty</label>
+                <input
+                  type="text"
+                  value={rosterSearch}
+                  onChange={(e) => setRosterSearch(e.target.value)}
+                  placeholder="e.g. Rahul, ORD-1234, Editing..."
+                  className="w-full bg-zinc-950 border border-zinc-850 hover:border-zinc-800 text-xs text-white rounded-lg px-3 py-1.5 focus:outline-none focus:border-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-[8px] uppercase tracking-wider font-bold text-zinc-500 mb-1 font-mono">Status Filter</label>
+                <select
+                  value={rosterStatusFilter}
+                  onChange={(e) => setRosterStatusFilter(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-850 hover:border-zinc-800 text-xs text-white rounded-lg px-3 py-1.5 focus:outline-none focus:border-purple-500 cursor-pointer"
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="Assigned">Assigned</option>
+                  <option value="Editing Started">Editing Started</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Review Pending">Review Pending</option>
+                  <option value="Revision">Revision</option>
+                  <option value="Completed">Completed</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Responsive Table Container */}
+            <div className="overflow-x-auto w-full rounded-xl border border-zinc-900 bg-zinc-950">
+              <table className="w-full text-left border-collapse min-w-[600px]">
+                <thead>
+                  <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
+                    <th className="px-4 py-3 font-bold">Staff Name</th>
+                    <th className="px-4 py-3 font-bold">Order ID</th>
+                    <th className="px-4 py-3 font-bold">Date Assigned</th>
+                    <th className="px-4 py-3 font-bold">Delivery Target Date</th>
+                    <th className="px-4 py-3 font-bold">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-900 font-sans text-xs text-zinc-300">
+                  {(() => {
+                    // Build integrated roster rows for the Staff Roster table from assigned editors
+                    const rosterRows = [...editorAssignments].map(assign => {
+                      const correlatedProj = production.find(p => p.production_id === assign.production_id);
+                      const trackingId = correlatedProj?.tracking_id;
+                      const linkedOrder = orders.find(o => o.order_id === trackingId || o.lead_id === trackingId);
+                      const orderId = linkedOrder?.order_id || 'N/A';
+                      
+                      return {
+                        assignmentId: assign.assignment_id,
+                        staffName: assign.staff_name,
+                        orderId: orderId,
+                        dateAssigned: assign.assigned_date || '—',
+                        deliveryTargetDate: assign.target_finish_date || '—',
+                        status: assign.status,
+                        speciality: assign.speciality || 'Editor',
+                        eventName: linkedOrder?.event_type || linkedOrder?.custom_event_name || 'Project',
+                      };
+                    });
+
+                    // Filter roster rows by search query and status dropdown
+                    const filteredRosterRows = rosterRows.filter(row => {
+                      const searchLower = rosterSearch.toLowerCase();
+                      const matchesSearch = !rosterSearch || 
+                        row.staffName.toLowerCase().includes(searchLower) ||
+                        row.orderId.toLowerCase().includes(searchLower) ||
+                        row.speciality.toLowerCase().includes(searchLower) ||
+                        row.eventName.toLowerCase().includes(searchLower);
+
+                      const matchesStatus = rosterStatusFilter === 'All' || 
+                        row.status.toLowerCase() === rosterStatusFilter.toLowerCase();
+
+                      return matchesSearch && matchesStatus;
+                    });
+
+                    // Sort: Latest assigned staff at the top (descending by date/ID)
+                    const sortedRosterRows = [...filteredRosterRows].sort((a, b) => {
+                      const dateA = a.dateAssigned !== '—' ? new Date(a.dateAssigned).getTime() : 0;
+                      const dateB = b.dateAssigned !== '—' ? new Date(b.dateAssigned).getTime() : 0;
+                      if (dateA !== dateB) return dateB - dateA;
+                      return String(b.assignmentId).localeCompare(String(a.assignmentId));
+                    });
+
+                    if (sortedRosterRows.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-8 text-center text-zinc-500 font-mono text-xs">
+                            No matching roster entries found.
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return sortedRosterRows.map((row) => {
+                      return (
+                        <tr key={`assign-${row.assignmentId}`} className="hover:bg-zinc-900/30 transition-colors">
+                          {/* Staff Name */}
+                          <td className="px-4 py-3 font-medium text-white">
+                            <div className="flex flex-col">
+                              <span>{row.staffName}</span>
+                              <span className="text-[9px] text-zinc-550 font-mono">{row.speciality}</span>
+                            </div>
+                          </td>
+
+                          {/* Order ID */}
+                          <td className="px-4 py-3 font-mono text-xs font-bold text-violet-400">
+                            {row.orderId}
+                          </td>
+
+                          {/* Date Assigned */}
+                          <td className="px-4 py-3 font-mono text-[10px] text-zinc-400">
+                            {row.dateAssigned}
+                          </td>
+
+                          {/* Delivery Target Date */}
+                          <td className="px-4 py-3 font-mono text-[10px] text-zinc-400">
+                            {row.deliveryTargetDate}
+                          </td>
+
+                          {/* Status */}
+                          <td className="px-4 py-3">
+                            <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider ${
+                              row.status === 'Completed'
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
+                                : row.status === 'Revision'
+                                  ? 'bg-rose-500/10 text-rose-400 border border-rose-500/15'
+                                  : 'bg-amber-500/10 text-amber-400 border border-amber-500/15'
+                            }`}>
+                              {row.status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* EDITING TRACKER TAB (KANBAN) */}
       {activeSubTab === 'tracker' && (

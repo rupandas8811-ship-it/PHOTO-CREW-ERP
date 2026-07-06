@@ -161,7 +161,7 @@ const MainAppContent: React.FC = () => {
   const [activeSalesSubTab, setActiveSalesSubTab] = useState<'list' | 'profiles' | 'packages' | 'calendar' | 'create'>('list');
 
   // Sub-tab selection state for production suite
-  const [activeSubTab, setActiveSubTab] = useState<'pipeline' | 'production_leads' | 'production_calendar' | 'project_queue' | 'assignments' | 'tracker' | 'delivery' | 'resources' | 'analytics' | 'staff_performance' | 'overall_performance' | 'deliveries_desk' | 'staff_management' | 'notifications' | 'crew_roster' | 'production_staff_directory' | 'production_role_specialities'>('production_leads');
+  const [activeSubTab, setActiveSubTab] = useState<'pipeline' | 'production_leads' | 'production_calendar' | 'project_queue' | 'assignments' | 'tracker' | 'delivery' | 'resources' | 'analytics' | 'staff_performance' | 'overall_performance' | 'deliveries_desk' | 'staff_management' | 'notifications' | 'crew_roster' | 'staff_roster' | 'production_staff_directory' | 'production_role_specialities'>('production_leads');
 
   // Sub-tab selection state for operations suite
   const [activeOpSubTab, setActiveOpSubTab] = useState<
@@ -316,7 +316,7 @@ const MainAppContent: React.FC = () => {
         if (!['production', 'notifications', 'staff_management'].includes(activeTab)) {
           setActiveTab('production');
         }
-        if (!['production_leads', 'production_calendar', 'crew_roster'].includes(activeSubTab)) {
+        if (!['production_leads', 'production_calendar', 'crew_roster', 'staff_roster'].includes(activeSubTab)) {
           setActiveSubTab('production_leads');
         }
       }
@@ -469,6 +469,7 @@ const MainAppContent: React.FC = () => {
               { id: 'production_calendar', label: 'Production Calendar', icon: Calendar },
               { id: 'staff_management', label: 'Staff Management', icon: UserPlus },
               { id: 'crew_roster', label: 'Crew Roster', icon: Users },
+              { id: 'staff_roster', label: 'Staff Roster', icon: Users },
               { id: 'staff_performance', label: 'Staff Performance', icon: Users },
               { id: 'overall_performance', label: 'Overall Performance', icon: BarChart3 },
               { id: 'deliveries_desk', label: 'Deliveries Desk', icon: Truck },
@@ -481,7 +482,7 @@ const MainAppContent: React.FC = () => {
               { id: 'analytics', label: 'Studio Analytics', icon: BarChart3 }
             ].filter(tab => {
               if (currentRole === 'Production Team') {
-                return ['production_leads', 'production_calendar', 'crew_roster'].includes(tab.id);
+                return ['production_leads', 'production_calendar', 'crew_roster', 'staff_roster'].includes(tab.id);
               }
               return true;
             }).map((tab) => {
