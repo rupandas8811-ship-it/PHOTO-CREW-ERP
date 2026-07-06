@@ -7,11 +7,6 @@ export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
   auth: { persistSession: true }
 });
 
-// Auth Debugger
-supabaseClient.auth.onAuthStateChange((event, session) => {
-  console.log(`[Supabase Auth Event] ${event} | User: ${session?.user?.email || 'None'}`);
-});
-
 // Diagnostic Metrics Store
 export interface DiagnosticReport {
   connection: 'connected' | 'disconnected' | 'error' | 'checking';

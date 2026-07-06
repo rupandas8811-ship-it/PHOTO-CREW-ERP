@@ -107,8 +107,6 @@ async function startServer() {
       'lead_score',
       'booking_status',
       'reporting_time',
-      'reporting_date',
-      'Reporting_date',
       'quotation_discount',
       'additional_services_cost',
       'whatsapp_number',
