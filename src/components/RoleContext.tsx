@@ -908,7 +908,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       operations: [
         'operation_id', 'order_id', 'photographer_assigned', 'videographer_assigned', 
         'drone_operator_assigned', 'assistant_assigned', 'equipment_kit', 'reporting_time', 
-        'event_status', 'remarks', 'updated_by'
+        'event_status', 'remarks', 'updated_by', 'Upload_Notes_Remarks', 'upload_notes_remarks'
       ],
       quotations: [
         'quotation_id', 'lead_id', 'quotation_number', 'quotation_amount', 'discount_amount', 
@@ -3790,8 +3790,25 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error("Failed to update lead status: " + rLead?.error);
     }
 
-    // Also update event_status of corresponding Operations record to 'Completed' (which satisfies DB constraint ('Assigned', 'Completed')) if exists
-    await pushUpdate('operations', 'order_id', orderId, { event_status: 'Completed' });
+    // Also update event_status of corresponding Operations record to 'Completed' (which satisfies DB constraint ('Assigned', 'Completed')) if exists, and store raw footage upload notes/remarks.
+    await pushUpdate('operations', 'order_id', orderId, { 
+      event_status: 'Completed',
+      Upload_Notes_Remarks: uploadNotes || '',
+      upload_notes_remarks: uploadNotes || ''
+    });
+
+    // Directly update local state for operations
+    setOperations(prev => prev.map(op => {
+      if (op.order_id === orderId) {
+        return {
+          ...op,
+          event_status: 'Completed',
+          Upload_Notes_Remarks: uploadNotes || '',
+          upload_notes_remarks: uploadNotes || ''
+        };
+      }
+      return op;
+    }));
 
     let existingRf = rawFootage.find(f => f.order_id === orderId);
     let trackingId = existingRf?.tracking_id || `TRK-${Math.floor(2012 + Math.random() * 850)}`;

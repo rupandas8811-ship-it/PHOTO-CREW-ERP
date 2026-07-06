@@ -1886,12 +1886,10 @@ export const OperationsLeads: React.FC = () => {
               e.preventDefault();
               if (isSaving) return;
 
-              const hasHardDisk = !!hardDiskReceived;
-              const hasMemoryCard = !!memoryCardReceived;
               const hasCloudLink = !!(footageForm.footage_link && footageForm.footage_link.trim());
 
-              if (!hasHardDisk && !hasMemoryCard && !hasCloudLink) {
-                alert("Please provide at least one raw footage source: Hard Disk, Memory Card, or Cloud/Drive Link.");
+              if (!hasCloudLink) {
+                alert("Please provide Raw Footage Drive Link.");
                 return;
               }
 
@@ -1922,36 +1920,24 @@ export const OperationsLeads: React.FC = () => {
                   }
                 }
 
-                // Combine physical storage states into the upload notes column
-                const hardDiskStr = hardDiskReceived ? 'YES' : 'NO';
-                const memoryCardStr = memoryCardReceived ? 'YES' : 'NO';
-                const compositeNotes = [
-                  `Hard Disk Received: ${hardDiskStr}`,
-                  `Memory Card Received: ${memoryCardStr}`,
-                  footageForm.upload_notes ? `Notes: ${footageForm.upload_notes}` : null
-                ].filter(Boolean).join(' | ');
-
                 await confirmRawFootageReceived(
                   receivingFootageOrderId,
                   footageForm.footage_link,
-                  footageForm.storage_type,
-                  compositeNotes,
-                  paymentCollectionStatus,
-                  additionalReceived,
-                  transactionId
+                  'Google Drive',
+                  footageForm.upload_notes,
+                  undefined,
+                  undefined,
+                  undefined
                 );
                 
                 setReceivingFootageOrderId(null);
                 setFootageForm({ footage_link: '', storage_type: 'Google Drive', upload_notes: '' });
-                setHardDiskReceived(false);
-                setMemoryCardReceived(false);
                 alert("Raw Footage Handover Complete");
               } catch (err: any) {
                 console.error("Failed to receive raw footage:", err);
                 alert("Failed to save and move raw footage. Error: " + (err.message || "Please try again."));
               } finally {
                 setIsSaving(false);
-                // Reset state to ensure next is clean
               }
             }} className="space-y-4 text-left">
               <div>
@@ -1967,52 +1953,7 @@ export const OperationsLeads: React.FC = () => {
                 />
               </div>
 
-              {/* Physical Storage media checkboxes requested by user */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-zinc-950 p-3 rounded-xl border border-zinc-850">
-                <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={hardDiskReceived}
-                    onChange={(e) => setHardDiskReceived(e.target.checked)}
-                    className="w-4 h-4 rounded border-zinc-800 text-purple-600 focus:ring-purple-500 bg-zinc-900"
-                  />
-                  <div className="flex flex-col">
-                    <span className="text-[11px] font-bold text-zinc-300">Hard Disk Received</span>
-                    <span className="text-[9px] text-zinc-500">Physical storage turned in</span>
-                  </div>
-                </label>
 
-                <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={memoryCardReceived}
-                    onChange={(e) => setMemoryCardReceived(e.target.checked)}
-                    className="w-4 h-4 rounded border-zinc-800 text-purple-600 focus:ring-purple-500 bg-zinc-900"
-                  />
-                  <div className="flex flex-col">
-                    <span className="text-[11px] font-bold text-zinc-300">Memory Card Received</span>
-                    <span className="text-[9px] text-zinc-500">Camera SD/CFexpress card returned</span>
-                  </div>
-                </label>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
-                  Storage Type *
-                </label>
-                <select
-                  required
-                  value={footageForm.storage_type}
-                  onChange={(e) => setFootageForm({ ...footageForm, storage_type: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100"
-                >
-                  <option value="Google Drive">Google Drive</option>
-                  <option value="Dropbox">Dropbox</option>
-                  <option value="OneDrive">OneDrive</option>
-                  <option value="Supabase Storage">Supabase Storage</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
 
               <div>
                 <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
@@ -2080,140 +2021,7 @@ export const OperationsLeads: React.FC = () => {
                 </div>
               )}
 
-              {/* Popup Section: Payment Collection Status */}
-              {(() => {
-                const targetOrder = orders.find(o => o.order_id === receivingFootageOrderId);
-                if (!targetOrder) return null;
 
-                const totalAmount = targetOrder.quotation_amount || targetOrder.budget || 0;
-                const advanceReceived = targetOrder.advance_received || 0;
-                const calculatedRemaining = Math.max(0, totalAmount - advanceReceived - additionalReceived);
-
-                return (
-                  <div className="bg-zinc-950 p-4 rounded-xl border border-amber-500/10 space-y-3.5 my-3 text-xs">
-                    <h4 className="text-[10px] font-bold text-amber-500 uppercase tracking-widest font-mono flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                      Payment Collection Status
-                    </h4>
-                    
-                    <div className="flex flex-col gap-2">
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        {(['Full Payment Received', 'Partial Payment Received', 'Payment Pending'] as const).map(opt => (
-                          <button
-                            key={opt}
-                            type="button"
-                            onClick={() => {
-                              setPaymentCollectionStatus(opt);
-                              if (opt === 'Full Payment Received') {
-                                setAdditionalReceived(totalAmount - advanceReceived);
-                              } else if (opt === 'Payment Pending') {
-                                setAdditionalReceived(0);
-                              }
-                            }}
-                            className={`px-1 py-2 text-[9px] rounded font-black uppercase transition-all border text-center cursor-pointer ${
-                              paymentCollectionStatus === opt
-                                ? 'bg-amber-500/15 border-amber-500/40 text-amber-400 font-extrabold'
-                                : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
-                            }`}
-                          >
-                            {opt === 'Full Payment Received' ? 'Full' : opt === 'Partial Payment Received' ? 'Partial' : 'Pending'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Conditional inputs and displays based on chosen Option */}
-                    {paymentCollectionStatus === 'Full Payment Received' && (
-                      <div className="space-y-1.5 pt-2 border-t border-zinc-900 font-mono text-zinc-300">
-                        <div className="flex justify-between">
-                          <span className="text-zinc-450 text-[10px]">Total Amount:</span>
-                          <span className="font-bold text-white">₹{totalAmount.toLocaleString('en-IN')}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-zinc-450 text-[10px]">Amount Received:</span>
-                          <span className="font-bold text-emerald-450">₹{totalAmount.toLocaleString('en-IN')}</span>
-                        </div>
-                        <div className="flex justify-between pt-1 border-t border-zinc-900">
-                          <span className="text-zinc-450 text-[10px]">Payment Status:</span>
-                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[9px] font-extrabold uppercase">Paid</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {paymentCollectionStatus === 'Partial Payment Received' && (
-                      <div className="space-y-2 pt-2 border-t border-zinc-900 font-mono text-zinc-300">
-                        <div className="flex justify-between">
-                          <span className="text-zinc-450 text-[10px]">Total Amount:</span>
-                          <span className="font-bold text-white">₹{totalAmount.toLocaleString('en-IN')}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-zinc-450 text-[10px]">Advance Amount:</span>
-                          <span className="font-bold text-zinc-400">₹{advanceReceived.toLocaleString('en-IN')}</span>
-                        </div>
-                        
-                        <div className="flex flex-col gap-1.5 pt-1">
-                          <label className="text-[10px] text-zinc-400 uppercase font-sans font-bold">Additional Amount Received (₹)</label>
-                          <input
-                            type="number"
-                            min={0}
-                            max={totalAmount - advanceReceived}
-                            value={additionalReceived || ''}
-                            onChange={(e) => {
-                              const val = Math.min(Number(e.target.value), totalAmount - advanceReceived);
-                              setAdditionalReceived(val);
-                            }}
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
-                            placeholder="e.g. 10000"
-                          />
-                        </div>
-
-                        <div className="flex justify-between pt-1 border-t border-zinc-900">
-                          <span className="text-zinc-450 text-[10px]">Remaining Amount:</span>
-                          <span className="font-bold text-amber-500">₹{calculatedRemaining.toLocaleString('en-IN')}</span>
-                        </div>
-                        <div className="flex justify-between pt-1">
-                          <span className="text-zinc-450 text-[10px]">Status:</span>
-                          <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-300/15 text-[9px] font-extrabold uppercase">Partial Payment</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {paymentCollectionStatus === 'Payment Pending' && (
-                      <div className="space-y-1.5 pt-2 border-t border-zinc-900 font-mono text-zinc-300">
-                        <div className="flex justify-between">
-                          <span className="text-zinc-450 text-[10px]">Total Amount:</span>
-                          <span className="font-bold text-white">₹{totalAmount.toLocaleString('en-IN')}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-zinc-450 text-[10px]">Advance Received:</span>
-                          <span className="font-bold text-zinc-400">₹{advanceReceived.toLocaleString('en-IN')}</span>
-                        </div>
-                        <div className="flex justify-between pt-1 border-t border-zinc-900 text-red-450">
-                          <span className="text-zinc-450 text-[10px]">Remaining Amount Pending:</span>
-                          <span className="font-bold text-red-400">₹{(totalAmount - advanceReceived).toLocaleString('en-IN')}</span>
-                        </div>
-                        <div className="flex justify-between pt-1">
-                          <span className="text-zinc-450 text-[10px]">Status:</span>
-                          <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 text-[9px] font-extrabold uppercase font-mono">Payment Pending</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {paymentCollectionStatus !== 'Payment Pending' && (
-                      <div className="space-y-1.5 pt-3 border-t border-zinc-900">
-                        <label className="text-[10px] text-zinc-400 uppercase font-sans font-bold">Transaction ID (Optional)</label>
-                        <input
-                          type="text"
-                          value={transactionId}
-                          onChange={(e) => setTransactionId(e.target.value)}
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                          placeholder="UPI ID, Bank Ref, IMPS, RTGS, Card Txn etc."
-                        />
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
 
               <div className="flex justify-end gap-2 pt-2 border-t border-zinc-850">
                 <button

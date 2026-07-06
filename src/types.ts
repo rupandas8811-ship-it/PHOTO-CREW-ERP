@@ -305,6 +305,8 @@ export interface Operation {
   event_status: 'Assigned' | 'Completed' | 'Event Scheduled' | 'Event Completed' | 'Raw Footage Received' | string;
   remarks?: string;
   updated_by: string;
+  Upload_Notes_Remarks?: string;
+  upload_notes_remarks?: string;
 }
 
 export interface RawFootage {
