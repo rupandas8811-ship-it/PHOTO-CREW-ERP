@@ -5,7 +5,7 @@ import {
   Aperture, Camera, FolderOpen, Image, ShieldCheck
 } from 'lucide-react';
 import { CurrentStage } from '../types';
-import { CameraLensGraphic, LiveAnimateCounter, MicroSparkline } from './ProductionModule';
+import { CameraLensGraphic } from './ProductionModule';
 import { formatINR, formatTime12Hour, getCustomers } from '../utils';
 import { ProjectDetailModal } from './ProjectDetailModal';
 import { AppLogo } from './AppLogo';

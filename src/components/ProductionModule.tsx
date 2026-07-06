@@ -23,67 +23,7 @@ import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
 import { ProductionStaffDirectoryModule } from './ProductionStaffDirectoryModule';
 import { ProductionRoleSpecialitiesModule } from './ProductionRoleSpecialitiesModule';
 
-export const MicroSparkline: React.FC<{ points: number[]; color: string }> = ({ points, color }) => {
-  const width = 120;
-  const height = 18;
-  const max = Math.max(...points, 1);
-  const min = Math.min(...points, 0);
-  const range = max - min || 1;
-  
-  const widthStep = width / (points.length - 1);
-  const svgPoints = points.map((p, i) => {
-    const x = i * widthStep;
-    const y = height - ((p - min) / range) * (height - 4) - 2;
-    return { x, y };
-  });
 
-  const pathD = svgPoints.reduce((acc, p, i) => {
-    return i === 0 ? `M ${p.x} ${p.y}` : `${acc} L ${p.x} ${p.y}`;
-  }, '');
-
-  const areaD = `${pathD} L ${width} ${height} L 0 ${height} Z`;
-
-  return (
-    <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="overflow-visible opacity-45 group-hover/card:opacity-90 transition-opacity duration-300">
-      <defs>
-        <linearGradient id={`spark-glow-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={areaD} fill={`url(#spark-glow-${color.replace('#', '')})`} />
-      <path d={pathD} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-};
-
-export const LiveAnimateCounter: React.FC<{ value: number }> = ({ value }) => {
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    let start = 0;
-    const end = value;
-    if (end === 0) {
-      setCount(0);
-      return;
-    }
-    const duration = 1200; // ms
-    const increment = Math.max(1, Math.ceil(end / (duration / 16)));
-    const timer = setInterval(() => {
-      start += increment;
-      if (start >= end) {
-        setCount(end);
-        clearInterval(timer);
-      } else {
-        setCount(start);
-      }
-    }, 16);
-
-    return () => clearInterval(timer);
-  }, [value]);
-
-  return <span className="font-mono font-black">{count}</span>;
-};
 
 export const CameraLensGraphic: React.FC<{
   type: 'total_leads' | 'new_projects' | 'in_editing' | 'in_review' | 'approved' | 'delivered' | 'overdue';
