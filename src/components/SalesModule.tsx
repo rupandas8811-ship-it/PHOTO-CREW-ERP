@@ -9953,24 +9953,29 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   setIsReportingSaving(true);
                   try {
                     const targetLeadId = selectedLead?.lead_id || createdLeadId;
-                    if (targetLeadId && supabaseClient) {
-                      // Save to leads (just the first event's reporting date to satisfy lead-level field, or all if we can)
-                      // "Save the Reporting Date to the related lead."
+                    if (targetLeadId) {
+                      const targetLead = leads.find(l => l.lead_id === targetLeadId);
                       const firstDate = reportingPopupData[0]?.date;
-                      if (firstDate) {
-                        await updateLead(targetLeadId, { Reporting_date: firstDate });
+                      const firstTime = reportingPopupData[0]?.time;
+                      
+                      // Build the updated events array safely to pass to updateLead
+                      let updatedEvents: LeadEvent[] | undefined;
+                      if (targetLead?.events && targetLead.events.length > 0) {
+                        updatedEvents = targetLead.events.map(ev => {
+                          const popupEv = reportingPopupData.find(p => p.eventId === ev.id);
+                          return {
+                            ...ev,
+                            reporting_time: popupEv ? popupEv.time : ev.reporting_time
+                          };
+                        });
                       }
 
-                      // Save reporting_time for each event in lead_events
-                      for (const ev of reportingPopupData) {
-                        if (ev.eventId !== 'default') {
-                          const { error: evErr } = await supabaseClient
-                            .from('lead_events')
-                            .update({ reporting_time: ev.time })
-                            .eq('id', ev.eventId);
-                          if (evErr) throw evErr;
-                        }
-                      }
+                      // Save both lead-level Reporting_date, reporting_time, and sub-events safely using the updateLead proxy
+                      await updateLead(targetLeadId, { 
+                        Reporting_date: firstDate,
+                        reporting_time: firstTime,
+                        ...(updatedEvents ? { events: updatedEvents } : {})
+                      });
                     }
                     
                     // Proceed with original action
@@ -9982,7 +9987,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     setPendingConfirmAction(null);
                   } catch (err: any) {
                     console.error("Reporting details save failed:", err);
-                    showToastMsg("Failed to save Reporting details: " + err.message, "error");
+                    const errMsg = err?.message || String(err);
+                    const parsed = parseStatusUpdateError(errMsg);
+                    
+                    setStatusError({
+                      title: "Reporting Details Submission Failed",
+                      reason: `Failed Function: Save Reporting Details\nDatabase Table: leads / lead_events\nSupabase Error: ${errMsg}`,
+                      suggestedFix: parsed.suggestedFix
+                    });
+                    showToastMsg("Failed to save Reporting details: " + errMsg, "error");
                   } finally {
                     setIsReportingSaving(false);
                   }
