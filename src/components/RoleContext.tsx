@@ -77,7 +77,9 @@ interface RoleContextType {
     paymentMode?: string,
     notes?: string,
     reportingTime?: string,
-    transactionId?: string
+    transactionId?: string,
+    reportingDate?: string,
+    events?: any[]
   ) => string;
   assignOperations: (
     orderId: string, 
@@ -1073,7 +1075,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       lead_packages: [
         'lead_package_id', 'lead_id', 'package_id', 'package_name', 'package_cost', 'quantity', 
         'total_amount', 'discount', 'final_amount', 'deliverables_description', 
-        'notes_special_customizations', 'additional_services_cost', 'created_at'
+        'notes_special_customizations', 'additional_services_cost', 'created_at',
+        'team_members', 'deliverables'
       ],
       raw_footage: [
         'tracking_id', 'order_id', 'event_completed_date', 'raw_received', 'server_path', 
@@ -2826,7 +2829,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     paymentMode?: string,
     notes?: string,
     reportingTime?: string,
-    transactionId?: string
+    transactionId?: string,
+    reportingDate?: string,
+    events?: any[]
   ) => {
     if (!leadId || typeof leadId !== 'string' || leadId.trim() === '') {
       throw new Error('lead_id is missing or invalid.');
@@ -2848,7 +2853,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const resolvedRemarks = `${targetLead.remarks || ''}\n[Booking Confirmed Update ${new Date().toISOString().split('T')[0]}]: ${notes || 'No extra notes'}. Payment Mode: ${paymentMode || 'N/A'}`;
     const timestamp = new Date().toISOString();
 
-    const resLead = await pushUpdate('leads', 'lead_id', leadId, { 
+    await updateLead(leadId, { 
       status: 'Order Confirmed', 
       current_status: 'Order Confirmed', 
       booking_status: 'Confirmed',
@@ -2863,14 +2868,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       event_date: eventDate || targetLead.event_date,
       event_time: eventTime || targetLead.event_time,
       reporting_time: reportingTime || targetLead.reporting_time,
+      Reporting_date: reportingDate || targetLead.Reporting_date,
+      events: events || targetLead.events,
       remarks: resolvedRemarks,
       updated_by: currentUserName, 
       updated_at: timestamp
     });
-
-    if (!resLead?.success) {
-      throw new Error(resLead?.error || "Failed to update lead during order confirmation.");
-    }
 
     // Step 3: Check Supabase directly for existing order
     let masterOrderId = '';

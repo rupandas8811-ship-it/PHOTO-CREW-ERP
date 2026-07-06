@@ -1747,10 +1747,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   // Interception Popup for Reporting Date & Time
   const [showReportingPopup, setShowReportingPopup] = useState(false);
   const [reportingPopupData, setReportingPopupData] = useState<{ eventId: string; eventName: string; date: string; time: string; }[]>([]);
-  const [pendingConfirmAction, setPendingConfirmAction] = useState<(() => Promise<void>) | null>(null);
+  const [pendingConfirmAction, setPendingConfirmAction] = useState<((reportingData?: any) => Promise<void>) | null>(null);
   const [isReportingSaving, setIsReportingSaving] = useState(false);
 
-  const executeWithReportingPopup = (action: () => Promise<void>) => {
+  const executeWithReportingPopup = (action: (reportingData?: any) => Promise<void>) => {
     const targetLeadId = selectedLead?.lead_id || createdLeadId;
     const targetLead = leads.find(l => l.lead_id === targetLeadId);
     
@@ -5350,7 +5350,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return;
     }
 
-    executeWithReportingPopup(async () => {
+    executeWithReportingPopup(async (reportingData: any = {}) => {
       try {
       setIsSaving(true);
       const selectedPkgsNames = selectedPkgs.map(p => p.name).join(' + ') || 'Custom Configured Coverage';
@@ -5363,7 +5363,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         confirmedEventTime,
         'UPI / Cash / Bank Transfer',
         getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
-        reportingTime
+        reportingData.reporting_time || reportingTime,
+        undefined,
+        reportingData.Reporting_date,
+        reportingData.events
       );
       
       showToastMsg("Lead created successfully.", "success");
@@ -5434,7 +5437,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         return;
       }
 
-      executeWithReportingPopup(async () => {
+      executeWithReportingPopup(async (reportingData: any = {}) => {
         try {
         setIsSaving(true);
         await confirmOrder(
@@ -5446,7 +5449,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           followUpForm.event_time,
           followUpForm.payment_mode || 'UPI',
           followUpForm.call_notes || 'Confirmed from CRM activity logger',
-          followUpForm.reporting_time || '08:00'
+          reportingData.reporting_time || followUpForm.reporting_time || '08:00',
+          undefined,
+          reportingData.Reporting_date,
+          reportingData.events
         );
 
         setSelectedLead(null);
@@ -5575,7 +5581,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return;
     }
 
-    executeWithReportingPopup(async () => {
+    executeWithReportingPopup(async (reportingData: any = {}) => {
       try {
       setIsSaving(true);
       await confirmOrder(
@@ -5587,8 +5593,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         confirmForm.event_time,
         confirmForm.payment_mode,
         confirmForm.notes,
-        undefined,
-        confirmForm.transaction_id
+        reportingData.reporting_time,
+        confirmForm.transaction_id,
+        reportingData.Reporting_date,
+        reportingData.events
       );
 
       setShowConfirmModal(false);
@@ -10079,17 +10087,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         });
                       }
 
-                      // Save both lead-level Reporting_date, reporting_time, and sub-events safely using the updateLead proxy
-                      await updateLead(targetLeadId, { 
-                        Reporting_date: firstDate,
-                        reporting_time: firstTime,
-                        ...(updatedEvents ? { events: updatedEvents } : {})
-                      });
-                    }
-                    
-                    // Proceed with original action
-                    if (pendingConfirmAction) {
-                      await pendingConfirmAction();
+                      // Pass data to the action to save in a single transaction
+                      if (pendingConfirmAction) {
+                        await pendingConfirmAction({
+                          Reporting_date: firstDate,
+                          reporting_time: firstTime,
+                          ...(updatedEvents ? { events: updatedEvents } : {})
+                        });
+                      }
                     }
                     
                     setShowReportingPopup(false);
