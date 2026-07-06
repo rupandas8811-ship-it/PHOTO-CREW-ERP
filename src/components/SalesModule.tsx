@@ -3422,9 +3422,29 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         });
       }
     });
+
+    let loadedInclusions = { ...initialInclusions };
+    let loadedDeliverables = { ...initialDeliverables };
+
+    if (lead.Add_Member) {
+      try {
+        const parsed = JSON.parse(lead.Add_Member);
+        loadedInclusions = { ...loadedInclusions, ...parsed };
+      } catch (e) {
+        console.error("Failed to parse Add_Member", e);
+      }
+    }
+    if (lead.Add_Deliverable) {
+      try {
+        const parsed = JSON.parse(lead.Add_Deliverable);
+        loadedDeliverables = { ...loadedDeliverables, ...parsed };
+      } catch (e) {
+        console.error("Failed to parse Add_Deliverable", e);
+      }
+    }
     
-    setEditableInclusions(initialInclusions);
-    setEditableDeliverables(initialDeliverables);
+    setEditableInclusions(loadedInclusions);
+    setEditableDeliverables(loadedDeliverables);
     // Extract staff info from events if not directly on lead
     let evtStaffName = '';
     let evtStaffMobile = '';
@@ -3868,7 +3888,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
           Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
           Final_Quotation_Amount: Math.max(0, Number(wizardLeadData.package_cost) + Number(quoteAdditional || 0) - Number(quoteDiscount || 0)),
-          events: updatedEvents
+          events: updatedEvents,
+          Add_Member: JSON.stringify(editableInclusions),
+          Add_Deliverable: JSON.stringify(editableDeliverables)
         });
 
         const newCompleted = Math.max(crmHighestStep, 3);
