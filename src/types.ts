@@ -94,6 +94,7 @@ export type CurrentStage =
   | 'Approved'
   | 'Delivered'
   | 'Payment Pending'
+  | 'Event Cancelled'
   | 'Closed';
 
 export type EditingStatus =

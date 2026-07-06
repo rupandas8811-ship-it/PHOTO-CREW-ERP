@@ -5273,7 +5273,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (module === 'Sales') {
       const lead = leads.find(l => l.lead_id === recordId);
       if (!lead) return false;
-      return lead.status === 'Order Confirmed';
+      const salesStages = ['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Lost Lead'];
+      return !salesStages.includes(lead.status);
     }
 
     if (module === 'Operations') {

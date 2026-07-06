@@ -154,6 +154,19 @@ export const OperationsLeads: React.FC = () => {
     return activeOrderInstance ? (leads || []).find((l) => l.lead_id === activeOrderInstance.lead_id) : null;
   }, [activeOrderInstance, leads]);
 
+  const googleMapsLocationLink = useMemo(() => {
+    if (parentLeadInstance?.google_maps_link) {
+      return parentLeadInstance.google_maps_link;
+    }
+    if (parentLeadInstance?.events && parentLeadInstance.events.length > 0) {
+      const eventWithLink = parentLeadInstance.events.find((ev: any) => ev.google_maps_link);
+      if (eventWithLink) {
+        return eventWithLink.google_maps_link;
+      }
+    }
+    return null;
+  }, [parentLeadInstance]);
+
   const selectedLeadPkgs = useMemo(() => {
     return activeOrderInstance && leadPackages 
       ? leadPackages.filter((lp) => lp.lead_id === (activeOrderInstance.lead_id || activeOrderInstance.order_id)) 
@@ -253,7 +266,7 @@ export const OperationsLeads: React.FC = () => {
   } | null>(null);
 
   // Filter orders to show confirmed ones for Operations
-  const allowedStages = ['Order Confirmed', 'New Order Received', 'Operations Assigned', 'Event Scheduled', 'Staff Assigned', 'Event Completed', 'Raw Footage Received'];
+  const allowedStages = ['Order Confirmed', 'New Order Received', 'Operations Assigned', 'Event Scheduled', 'Staff Assigned', 'Event Completed', 'Raw Footage Received', 'Event Cancelled'];
   const operationsOrders = orders.filter(o => {
     return allowedStages.includes(o.current_stage);
   });
@@ -428,30 +441,16 @@ export const OperationsLeads: React.FC = () => {
     // Check if this is a brand new assignment (Order Confirmed stage means it has not been assigned yet)
     const isNewAssignment = order.current_stage === 'Order Confirmed';
 
-    // Load existing staff assignments for this order EXCEPT if starting a fresh allocation
-    const existing = isNewAssignment ? [] : (staffAssignments ? staffAssignments.filter(sa => sa.order_id === order.order_id) : []);
-    setActiveAssignments(existing.map(e => ({
-      staff_role: e.staff_role,
-      staff_id: e.staff_id,
-      staff_name: e.staff_name
-    })));
+    // REQUIRED FIX: Do NOT pre-select any staff. Staff selection must always be blank.
+    setActiveAssignments([]);
 
     const targetLead = leads?.find(l => l.lead_id === order.lead_id);
     const initialAllocations: Record<string, any> = {};
     if (targetLead?.events && targetLead.events.length > 0) {
       targetLead.events.forEach((ev, index) => {
         const evId = ev.id || `EV-N/A-${index}`;
-        const staffNames = ev.assigned_staff_names ? ev.assigned_staff_names.split(', ') : [];
-        const staffMobiles = ev.assigned_staff_mobiles ? ev.assigned_staff_mobiles.split(', ') : [];
-        const staffList = staffNames.map((name, i) => {
-          const st = staff?.find(s => s.name === name);
-          return {
-             staff_role: st?.role || 'Staff',
-             staff_id: st?.staff_id || 'MOCK',
-             staff_name: name,
-             mobile: staffMobiles[i] || ''
-          };
-        });
+        // REQUIRED FIX: Do NOT pre-select any staff. Staff selection must always be blank.
+        const staffList: any[] = [];
 
         initialAllocations[evId] = {
            reporting_date: targetLead.Reporting_date || ev.event_date || '',
@@ -469,15 +468,15 @@ export const OperationsLeads: React.FC = () => {
            event_end_time: '',
            staff: []
        };
-    }
+     }
     setEventAllocations(initialAllocations);
     setSelectedStaffByEvent({});
 
     setAssignForm({
-      photographer_assigned: isNewAssignment ? '' : (op?.photographer_assigned || ''),
-      videographer_assigned: isNewAssignment ? '' : (op?.videographer_assigned || ''),
-      drone_operator_assigned: isNewAssignment ? '' : (op?.drone_operator_assigned || ''),
-      assistant_assigned: isNewAssignment ? '' : (op?.assistant_assigned || ''),
+      photographer_assigned: '',
+      videographer_assigned: '',
+      drone_operator_assigned: '',
+      assistant_assigned: '',
       equipment_kit: isNewAssignment ? '' : (op?.equipment_kit || ''),
       reporting_time: order.reporting_time || op?.reporting_time || '08:00',
       remarks: isNewAssignment ? '' : (op?.remarks || ''),
@@ -1234,11 +1233,10 @@ export const OperationsLeads: React.FC = () => {
                             className="px-2 py-1 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/20 rounded-full text-[10px] font-mono font-bold cursor-pointer transition-all uppercase"
                           >
                             <option value="">▼ UPDATE STATUS</option>
-                            <option value="Operations Assigned">Operations Assigned</option>
-                            <option value="Staff Assigned">Staff Assigned</option>
                             <option value="Event Scheduled">Event Scheduled</option>
                             <option value="Event Completed">Event Completed</option>
                             <option value="Raw Footage Received">Raw Footage Received</option>
+                            <option value="Event Cancelled">Event Cancelled</option>
                           </select>
                         )}
 
@@ -1455,19 +1453,23 @@ export const OperationsLeads: React.FC = () => {
                         {parentLeadInstance?.event_location || activeOrderInstance?.event_location || parentLeadInstance?.address || 'N/A'}
                       </span>
                     </div>
-                    {parentLeadInstance?.google_maps_link && (
-                      <div className="col-span-1 sm:col-span-2 md:col-span-4">
-                        <span className="text-[10px] text-zinc-505 block uppercase font-mono">Google Maps Link</span>
+                    <div className="col-span-1 sm:col-span-2 md:col-span-4">
+                      <span className="text-[10px] text-zinc-505 block uppercase font-mono">Google Maps Location Link</span>
+                      {googleMapsLocationLink ? (
                         <a 
-                          href={parentLeadInstance.google_maps_link} 
+                          href={googleMapsLocationLink} 
                           target="_blank" 
                           rel="noopener noreferrer"
-                          className="text-blue-400 hover:text-blue-300 font-sans text-[11px] break-all block underline"
+                          className="text-blue-400 hover:text-blue-300 font-sans text-[11px] break-all block underline mt-0.5"
                         >
-                          {parentLeadInstance.google_maps_link}
+                          {googleMapsLocationLink}
                         </a>
-                      </div>
-                    )}
+                      ) : (
+                        <span className="text-zinc-500 font-sans text-[11px] block mt-0.5">
+                          No Google Maps Location Available.
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
