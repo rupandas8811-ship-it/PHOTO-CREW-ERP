@@ -3956,7 +3956,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       <Users className="w-4 h-4 text-purple-400" /> Staff Roster
                     </h3>
                     <p className="text-[11px] text-zinc-400 mt-1">
-                      Real-time interactive crew allocation dashboard. Sort, filter, and modify staff statuses instantly.
+                      Displaying active assigned production staff details, tracking order IDs, assignment timelines, target dates, and statuses.
                     </p>
                   </div>
                 </div>
@@ -3964,12 +3964,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 {/* Search & Filter Bar */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-zinc-900/10 p-3 rounded-xl border border-zinc-900">
                   <div>
-                    <label className="block text-[8px] uppercase tracking-wider font-bold text-zinc-500 mb-1 font-mono">Search Staff / Task / Event</label>
+                    <label className="block text-[8px] uppercase tracking-wider font-bold text-zinc-500 mb-1 font-mono">Search Staff / Order ID / Speciality</label>
                     <input
                       type="text"
                       value={crewSearch}
                       onChange={(e) => setCrewSearch(e.target.value)}
-                      placeholder="e.g. Rahul, Editing, Wedding..."
+                      placeholder="e.g. Rahul, ORD-1234, Editing..."
                       className="w-full bg-zinc-950 border border-zinc-850 hover:border-zinc-800 text-xs text-white rounded-lg px-3 py-1.5 focus:outline-none focus:border-purple-500"
                     />
                   </div>
@@ -3981,69 +3981,47 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       className="w-full bg-zinc-950 border border-zinc-850 hover:border-zinc-800 text-xs text-white rounded-lg px-3 py-1.5 focus:outline-none focus:border-purple-500 cursor-pointer"
                     >
                       <option value="All">All Statuses</option>
-                      <option value="Active">Active Staff</option>
-                      <option value="Inactive">Inactive Staff</option>
-                      <option value="Assigned">Task: Assigned</option>
-                      <option value="Editing Started">Task: Editing Started</option>
-                      <option value="In Progress">Task: In Progress</option>
-                      <option value="Review Pending">Task: Review Pending</option>
-                      <option value="Revision">Task: Revision</option>
-                      <option value="Completed">Task: Completed</option>
+                      <option value="Assigned">Assigned</option>
+                      <option value="Editing Started">Editing Started</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Review Pending">Review Pending</option>
+                      <option value="Revision">Revision</option>
+                      <option value="Completed">Completed</option>
                     </select>
                   </div>
                 </div>
 
                 {/* Responsive Table Container */}
                 <div className="overflow-x-auto w-full rounded-xl border border-zinc-900 bg-zinc-950">
-                  <table className="w-full text-left border-collapse min-w-[700px]">
+                  <table className="w-full text-left border-collapse min-w-[600px]">
                     <thead>
                       <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
                         <th className="px-4 py-3 font-bold">Staff Name</th>
-                        <th className="px-4 py-3 font-bold">Role</th>
-                        <th className="px-4 py-3 font-bold">Assigned Task</th>
-                        <th className="px-4 py-3 font-bold">Event Name</th>
-                        <th className="px-4 py-3 font-bold">Event Date</th>
+                        <th className="px-4 py-3 font-bold">Order ID</th>
+                        <th className="px-4 py-3 font-bold">Date Assigned</th>
                         <th className="px-4 py-3 font-bold">Delivery Target Date</th>
                         <th className="px-4 py-3 font-bold">Status</th>
-                        <th className="px-4 py-3 font-bold text-right">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-900 font-sans text-xs text-zinc-300">
                       {(() => {
-                        // Build integrated roster rows for the Staff Roster table
-                        const rosterRows: any[] = [];
-                        productionStaffList.forEach(member => {
-                          const activeTasks = getStaffActiveTasks(member.name);
-                          if (activeTasks.length === 0) {
-                            rosterRows.push({
-                              staffId: member.staff_id,
-                              staffName: member.name,
-                              role: member.production_role_speciality || member.role || 'Editor',
-                              assignedTask: '—',
-                              eventName: '—',
-                              eventDate: '—',
-                              deliveryTargetDate: '—',
-                              status: member.status,
-                              isAssignment: false,
-                              staffStatus: member.status
-                            });
-                          } else {
-                            activeTasks.forEach(task => {
-                              rosterRows.push({
-                                staffId: member.staff_id,
-                                staffName: member.name,
-                                role: member.production_role_speciality || member.role || 'Editor',
-                                assignedTask: task.speciality,
-                                eventName: getTaskEventName(task.production_id),
-                                eventDate: getTaskEventDate(task.production_id),
-                                deliveryTargetDate: task.target_finish_date,
-                                status: task.status,
-                                isAssignment: true,
-                                assignmentId: task.assignment_id,
-                                staffStatus: member.status
-                              });
-                            });
-                          }
+                        // Build integrated roster rows for the Staff Roster table from assigned editors
+                        const rosterRows = [...editorAssignments].map(assign => {
+                          const correlatedProj = production.find(p => p.production_id === assign.production_id);
+                          const trackingId = correlatedProj?.tracking_id;
+                          const linkedOrder = orders.find(o => o.order_id === trackingId || o.lead_id === trackingId);
+                          const orderId = linkedOrder?.order_id || 'N/A';
+                          
+                          return {
+                            assignmentId: assign.assignment_id,
+                            staffName: assign.staff_name,
+                            orderId: orderId,
+                            dateAssigned: assign.assigned_date || '—',
+                            deliveryTargetDate: assign.target_finish_date || '—',
+                            status: assign.status,
+                            speciality: assign.speciality || 'Editor',
+                            eventName: linkedOrder?.event_type || linkedOrder?.custom_event_name || 'Project',
+                          };
                         });
 
                         // Filter roster rows by search query and status dropdown
@@ -4051,63 +4029,53 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           const searchLower = crewSearch.toLowerCase();
                           const matchesSearch = !crewSearch || 
                             row.staffName.toLowerCase().includes(searchLower) ||
-                            row.role.toLowerCase().includes(searchLower) ||
-                            row.assignedTask.toLowerCase().includes(searchLower) ||
+                            row.orderId.toLowerCase().includes(searchLower) ||
+                            row.speciality.toLowerCase().includes(searchLower) ||
                             row.eventName.toLowerCase().includes(searchLower);
 
                           const matchesStatus = crewStatusFilter === 'All' || 
-                            row.status.toLowerCase() === crewStatusFilter.toLowerCase() ||
-                            row.staffStatus.toLowerCase() === crewStatusFilter.toLowerCase();
+                            row.status.toLowerCase() === crewStatusFilter.toLowerCase();
 
                           return matchesSearch && matchesStatus;
                         });
 
-                        if (filteredRosterRows.length === 0) {
+                        // Sort: Latest assigned staff at the top (descending by date/ID)
+                        const sortedRosterRows = [...filteredRosterRows].sort((a, b) => {
+                          const dateA = a.dateAssigned !== '—' ? new Date(a.dateAssigned).getTime() : 0;
+                          const dateB = b.dateAssigned !== '—' ? new Date(b.dateAssigned).getTime() : 0;
+                          if (dateA !== dateB) return dateB - dateA;
+                          return String(b.assignmentId).localeCompare(String(a.assignmentId));
+                        });
+
+                        if (sortedRosterRows.length === 0) {
                           return (
                             <tr>
-                              <td colSpan={8} className="px-4 py-8 text-center text-zinc-500 font-mono text-xs">
+                              <td colSpan={5} className="px-4 py-8 text-center text-zinc-500 font-mono text-xs">
                                 No matching roster entries found.
                               </td>
                             </tr>
                           );
                         }
 
-                        return filteredRosterRows.map((row) => {
-                          const rowKey = row.isAssignment ? `assign-${row.assignmentId}` : `staff-${row.staffId}`;
+                        return sortedRosterRows.map((row) => {
                           return (
-                            <tr key={rowKey} className="hover:bg-zinc-900/30 transition-colors">
+                            <tr key={`assign-${row.assignmentId}`} className="hover:bg-zinc-900/30 transition-colors">
                               {/* Staff Name */}
                               <td className="px-4 py-3 font-medium text-white">
                                 <div className="flex flex-col">
                                   <span>{row.staffName}</span>
-                                  {row.isAssignment && (
-                                    <span className="text-[9px] text-purple-400 font-mono">Assignment Mode</span>
-                                  )}
+                                  <span className="text-[9px] text-zinc-550 font-mono">{row.speciality}</span>
                                 </div>
                               </td>
 
-                              {/* Role */}
+                              {/* Order ID */}
+                              <td className="px-4 py-3 font-mono text-xs font-bold text-violet-400">
+                                {row.orderId}
+                              </td>
+
+                              {/* Date Assigned */}
                               <td className="px-4 py-3 font-mono text-[10px] text-zinc-400">
-                                {row.role}
-                              </td>
-
-                              {/* Assigned Task */}
-                              <td className="px-4 py-3">
-                                {row.isAssignment ? (
-                                  <span className="text-purple-400 font-medium">{row.assignedTask}</span>
-                                ) : (
-                                  <span className="text-zinc-500 italic font-mono text-[10px]">{row.assignedTask}</span>
-                                )}
-                              </td>
-
-                              {/* Event Name */}
-                              <td className="px-4 py-3 font-medium text-zinc-300">
-                                {row.eventName}
-                              </td>
-
-                              {/* Event Date */}
-                              <td className="px-4 py-3 font-mono text-[10px] text-zinc-400">
-                                {row.eventDate}
+                                {row.dateAssigned}
                               </td>
 
                               {/* Delivery Target Date */}
@@ -4117,114 +4085,15 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                               {/* Status */}
                               <td className="px-4 py-3">
-                                {row.isAssignment ? (
-                                  <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider ${
-                                    row.status === 'Completed'
-                                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
-                                      : row.status === 'Revision'
-                                        ? 'bg-rose-500/10 text-rose-400 border border-rose-500/15'
-                                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/15'
-                                  }`}>
-                                    {row.status}
-                                  </span>
-                                ) : (
-                                  <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider ${
-                                    row.status === 'Active'
-                                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                      : 'bg-zinc-800 text-zinc-400'
-                                  }`}>
-                                    {row.status}
-                                  </span>
-                                )}
-                              </td>
-
-                              {/* Action */}
-                              <td className="px-4 py-3 text-right">
-                                <div className="flex items-center justify-end gap-2 flex-wrap">
-                                  {/* Change Status Select Dropdown in Action column */}
-                                  {row.isAssignment ? (
-                                    <div className="flex items-center gap-1.5">
-                                      <select
-                                        value={row.status}
-                                        onChange={async (e) => {
-                                          try {
-                                            await updateEditorAssignmentStatus(row.assignmentId, e.target.value as any);
-                                          } catch (err: any) {
-                                            alert("Failed to update task status: " + (err.message || err));
-                                          }
-                                        }}
-                                        className="bg-zinc-900 border border-zinc-800 hover:border-zinc-750 text-[10px] font-mono font-bold text-zinc-300 rounded px-1.5 py-1 focus:outline-none cursor-pointer max-w-[125px]"
-                                      >
-                                        <option value="Assigned">Assigned</option>
-                                        <option value="Editing Started">Editing Started</option>
-                                        <option value="In Progress">In Progress</option>
-                                        <option value="Review Pending">Review Pending</option>
-                                        <option value="Revision">Revision</option>
-                                        <option value="Completed">Completed</option>
-                                      </select>
-                                      
-                                      <button
-                                        type="button"
-                                        onClick={async () => {
-                                          if (window.confirm(`Are you sure you want to remove assignment for ${row.staffName}?`)) {
-                                            await deleteEditorAssignment(row.assignmentId);
-                                          }
-                                        }}
-                                        className="px-2 py-1 bg-rose-950/10 hover:bg-rose-950/25 border border-rose-950/30 text-rose-500 hover:text-rose-400 rounded text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                                        title="Remove Task"
-                                      >
-                                        Remove Task
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center gap-1.5">
-                                      <button
-                                        type="button"
-                                        onClick={async () => {
-                                          const nextStatus = row.staffStatus === 'Active' ? 'Inactive' : 'Active';
-                                          await updateProductionStaff(row.staffId, { status: nextStatus as any });
-                                        }}
-                                        className={`px-2 py-1 rounded text-[10px] font-mono font-bold transition-all border cursor-pointer ${
-                                          row.staffStatus === 'Active'
-                                            ? 'bg-zinc-900 text-zinc-400 hover:text-white border-zinc-800'
-                                            : 'bg-purple-950/20 text-purple-400 hover:bg-purple-950/45 border-purple-900/30'
-                                        }`}
-                                      >
-                                        {row.staffStatus === 'Active' ? 'Set Inactive' : 'Set Active'}
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setEditingStaffId(row.staffId);
-                                          setNewStaffName(row.staffName);
-                                          // find member
-                                          const member = productionStaffList.find(s => s.staff_id === row.staffId);
-                                          if (member) {
-                                            setNewStaffMobile(member.mobile);
-                                            setNewStaffWhatsapp(member.whatsapp_number || '');
-                                            setNewStaffSkills(member.production_role_speciality ? member.production_role_speciality.split(',').map(s => s.trim()).filter(Boolean) : []);
-                                          }
-                                        }}
-                                        className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-amber-500 hover:text-amber-400 border border-zinc-850 rounded font-bold cursor-pointer transition-colors text-[10px] font-mono"
-                                      >
-                                        Edit
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        onClick={async () => {
-                                          if (window.confirm(`Are you sure you want to delete ${row.staffName}?`)) {
-                                            await deleteProductionStaff(row.staffId);
-                                          }
-                                        }}
-                                        className="px-2 py-1 bg-rose-950/10 hover:bg-rose-950/25 border border-rose-950/30 text-rose-500 hover:text-rose-400 rounded text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                                      >
-                                        Delete
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
+                                <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider ${
+                                  row.status === 'Completed'
+                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
+                                    : row.status === 'Revision'
+                                      ? 'bg-rose-500/10 text-rose-400 border border-rose-500/15'
+                                      : 'bg-amber-500/10 text-amber-400 border border-amber-500/15'
+                                }`}>
+                                  {row.status}
+                                </span>
                               </td>
                             </tr>
                           );
