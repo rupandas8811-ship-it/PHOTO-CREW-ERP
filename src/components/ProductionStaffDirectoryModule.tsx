@@ -12,10 +12,10 @@ import * as XLSX from 'xlsx';
 
 export const ProductionStaffDirectoryModule: React.FC = () => {
   const { 
-    staff = [], 
-    addStaff, 
-    updateStaff, 
-    deleteStaff, 
+    productionStaff: staff = [], 
+    addProductionStaff: addStaff, 
+    updateProductionStaff: updateStaff, 
+    deleteProductionStaff: deleteStaff, 
     production = [], 
     specialities = [],
     editorAssignments = [],

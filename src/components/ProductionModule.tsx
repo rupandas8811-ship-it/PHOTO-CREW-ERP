@@ -238,6 +238,7 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     orders, 
     rawFootage, 
     staff,
+    productionStaff,
     payments,
     operations,
     staffAssignments,
@@ -252,6 +253,9 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     addStaff,
     updateStaff,
     deleteStaff,
+    addProductionStaff,
+    updateProductionStaff,
+    deleteProductionStaff,
     addSpeciality,
     isDepartmentAllowedToEdit,
     deleteRawFootage,
@@ -1138,6 +1142,7 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
   const [addStaffError, setAddStaffError] = useState('');
   const [addStaffSuccess, setAddStaffSuccess] = useState('');
   const [isSubmittingStaff, setIsSubmittingStaff] = useState(false);
+  const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
 
   // Editing timeline dates inside detailed modal
   const [dateFootageReceived, setDateFootageReceived] = useState('');
@@ -3669,35 +3674,46 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           const skillsString = newStaffSkills.join(', ');
 
           try {
-            // Check if duplicate exists (name or mobile matching)
-            const existingStaff = staff.find(
-              (s) =>
-                s.name.toLowerCase() === name.toLowerCase() ||
-                s.mobile === mobile
-            );
-
-            if (existingStaff) {
-              // Update existing staff
-              await updateStaff(existingStaff.staff_id, {
+            if (editingStaffId) {
+              // Update explicit record being edited
+              await updateProductionStaff(editingStaffId, {
+                name,
                 mobile,
                 whatsapp_number: whatsapp,
                 production_role_speciality: skillsString
               });
-              setAddStaffSuccess('Staff details updated successfully in the Production Staff table.');
+              setAddStaffSuccess('Staff details updated successfully.');
             } else {
-              // Create new staff record
-              await addStaff({
-                name,
-                mobile,
-                whatsapp_number: whatsapp,
-                production_role_speciality: skillsString,
-                email: `${name.toLowerCase().replace(/\s+/g, '')}@photocrew.com`,
-                role: 'Editor',
-                department: 'Post-Production',
-                status: 'Active',
-                joining_date: new Date().toISOString().split('T')[0]
-              });
-              setAddStaffSuccess('Staff member onboarded successfully.');
+              // Check if duplicate exists (name or mobile matching)
+              const existingStaff = productionStaff.find(
+                (s) =>
+                  s.name.toLowerCase() === name.toLowerCase() ||
+                  s.mobile === mobile
+              );
+
+              if (existingStaff) {
+                // Update existing staff
+                await updateProductionStaff(existingStaff.staff_id, {
+                  mobile,
+                  whatsapp_number: whatsapp,
+                  production_role_speciality: skillsString
+                });
+                setAddStaffSuccess('Staff details updated successfully.');
+              } else {
+                // Create new staff record in production_staff table
+                await addProductionStaff({
+                  name,
+                  mobile,
+                  whatsapp_number: whatsapp,
+                  production_role_speciality: skillsString,
+                  email: `${name.toLowerCase().replace(/\s+/g, '')}@photocrew.com`,
+                  role: 'Editor',
+                  department: 'Post-Production',
+                  status: 'Active',
+                  joining_date: new Date().toISOString().split('T')[0]
+                });
+                setAddStaffSuccess('Staff member onboarded successfully.');
+              }
             }
 
             // Reset form
@@ -3705,6 +3721,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             setNewStaffMobile('');
             setNewStaffWhatsapp('');
             setNewStaffSkills([]);
+            setEditingStaffId(null);
           } catch (err: any) {
             setAddStaffError(err.message || 'Failed to save staff details.');
           } finally {
@@ -3720,11 +3737,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           setNewSkillText('');
         };
 
-        // Filter staff list to only show Production Team staff (department Post-Production, Production, role Editor, or has skills/speciality)
-        const productionStaffList = staff.filter(s => {
-          const isProd = s.department === 'Post-Production' || s.department === 'Production' || s.role === 'Editor' || s.production_role_speciality;
-          return isProd;
-        });
+        // Use productionStaff directly from the dedicated production_staff database table
+        const productionStaffList = productionStaff;
 
         return (
           <div className="space-y-6 animate-fade-in">
@@ -3753,10 +3767,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 <form onSubmit={handleSaveStaff} className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-4 shadow-xl">
                   <div>
                     <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
-                      <Plus className="w-4 h-4 text-purple-400" /> Add Staff
+                      <Plus className="w-4 h-4 text-purple-400" /> {editingStaffId ? 'Edit Staff details' : 'Add Staff'}
                     </h3>
                     <p className="text-[11px] text-zinc-400 mt-1">
-                      Onboard a new production specialist or update skills.
+                      {editingStaffId ? 'Update details of this production specialist.' : 'Onboard a new production specialist or update skills.'}
                     </p>
                   </div>
 
@@ -3872,8 +3886,23 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     disabled={isSubmittingStaff}
                     className="w-full mt-4 py-3 bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
                   >
-                    {isSubmittingStaff ? 'Saving...' : '💾 Save Staff Details'}
+                    {isSubmittingStaff ? 'Saving...' : editingStaffId ? '💾 Update Staff Details' : '💾 Save Staff Details'}
                   </button>
+                  {editingStaffId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingStaffId(null);
+                        setNewStaffName('');
+                        setNewStaffMobile('');
+                        setNewStaffWhatsapp('');
+                        setNewStaffSkills([]);
+                      }}
+                      className="w-full mt-2 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      Cancel Edit
+                    </button>
+                  )}
                 </form>
               </div>
 
@@ -3961,6 +3990,49 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               })}
                             </ul>
                           )}
+                        </div>
+
+                        <div className="pt-3.5 border-t border-zinc-900 flex justify-between items-center text-[11px] font-mono gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const nextStatus = member.status === 'Active' ? 'Inactive' : 'Active';
+                              await updateProductionStaff(member.staff_id, { status: nextStatus as any });
+                            }}
+                            className={`px-2.5 py-1 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                              member.status === 'Active'
+                                ? 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+                                : 'bg-purple-950/20 text-purple-400 hover:bg-purple-950/40 border border-purple-900/30'
+                            }`}
+                          >
+                            {member.status === 'Active' ? 'Set Inactive' : 'Set Active'}
+                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingStaffId(member.staff_id);
+                                setNewStaffName(member.name);
+                                setNewStaffMobile(member.mobile);
+                                setNewStaffWhatsapp(member.whatsapp_number || '');
+                                setNewStaffSkills(member.production_role_speciality ? member.production_role_speciality.split(',').map(s => s.trim()).filter(Boolean) : []);
+                              }}
+                              className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-amber-500 hover:text-amber-400 border border-zinc-850 rounded font-bold cursor-pointer transition-colors"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (window.confirm(`Are you sure you want to delete ${member.name}?`)) {
+                                  await deleteProductionStaff(member.staff_id);
+                                }
+                              }}
+                              className="px-2.5 py-1 bg-rose-950/10 hover:bg-rose-950/20 text-rose-500 hover:text-rose-400 border border-rose-950/35 rounded font-bold cursor-pointer transition-colors"
+                            >
+                              Delete
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -5381,9 +5453,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       </div>
 
                       {(() => {
-                        const activeProductionStaff = staff.filter(s => {
-                          const isProd = s.department === 'Post-Production' || s.department === 'Production' || s.role === 'Editor' || s.production_role_speciality;
-                          return s.status === 'Active' && isProd;
+                        const activeProductionStaff = productionStaff.filter(s => {
+                          return s.status === 'Active';
                         });
 
                         const getStaffWorkload = (staffName: string) => {

@@ -26,6 +26,10 @@ interface RoleContextType {
   addStaff: (member: Omit<Staff, 'staff_id'>) => Promise<void>;
   updateStaff: (staffId: string, updates: Partial<Staff>) => Promise<void>;
   deleteStaff: (staffId: string) => Promise<void>;
+  productionStaff: Staff[];
+  addProductionStaff: (member: Omit<Staff, 'staff_id'>) => Promise<any>;
+  updateProductionStaff: (staffId: string, updates: Partial<Staff>) => Promise<any>;
+  deleteProductionStaff: (staffId: string) => Promise<any>;
   equipment: Equipment[];
   addEquipment: (equip: Omit<Equipment, 'equipment_id'>) => Promise<void>;
   updateEquipment: (equipmentId: string, updates: Partial<Equipment>) => Promise<void>;
@@ -497,6 +501,151 @@ export const validatePackagesDatabase = async (operation: 'SELECT' | 'INSERT' | 
   }
 };
 
+let cachedProdStaffColumns: string[] | null = null;
+
+export const getProductionStaffColumns = async (): Promise<string[]> => {
+  if (cachedProdStaffColumns) return cachedProdStaffColumns;
+  try {
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/`, {
+      headers: {
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY
+      }
+    });
+    if (res.ok) {
+      const spec = await res.json();
+      const props = spec.definitions?.production_staff?.properties;
+      if (props) {
+        cachedProdStaffColumns = Object.keys(props);
+        console.log('[RoleContext] Detected live production_staff columns:', cachedProdStaffColumns);
+        return cachedProdStaffColumns;
+      }
+    }
+  } catch (err) {
+    console.error('[RoleContext] Error detecting production_staff columns:', err);
+  }
+  return ['staff_id', 'name', 'mobile', 'email', 'role', 'department', 'status', 'joining_date', 'notes', 'created_at', "'production_role_speciality"];
+};
+
+export const mapProductionStaffFromDb = (item: any): Staff => {
+  let extra: any = {};
+  if (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) {
+    try { extra = JSON.parse(item.notes); } catch (e) {}
+  }
+  
+  const name = item.staff_name || item.name || '';
+  const mobile = item.mobile_number || item.mobile || '';
+  const whatsapp_number = item.whatsapp_number || extra.whatsapp_number || item.mobile_number || item.mobile || '';
+  
+  let production_role_speciality = item.production_role_speciality || item["'production_role_speciality"] || extra.production_role_speciality || '';
+  if (typeof production_role_speciality === 'string' && production_role_speciality.startsWith('[') && production_role_speciality.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(production_role_speciality);
+      if (Array.isArray(parsed)) {
+        production_role_speciality = parsed.join(', ');
+      }
+    } catch (e) {}
+  }
+  
+  return {
+    ...item,
+    ...extra,
+    staff_id: item.staff_id,
+    name,
+    mobile,
+    whatsapp_number,
+    production_role_speciality,
+    email: item.email || `${name.toLowerCase().replace(/\s+/g, '')}@photocrew.com`,
+    role: item.role || 'Editor',
+    department: item.department || 'Post-Production',
+    status: item.status || 'Active',
+    joining_date: item.joining_date || new Date().toISOString().split('T')[0],
+    notes: (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) ? (extra.notes || '') : item.notes
+  };
+};
+
+export const mapProductionStaffToDb = async (member: Staff | Partial<Staff>) => {
+  const cols = await getProductionStaffColumns();
+  const dbRecord: any = {};
+  const extra: any = {};
+
+  if (member.staff_id) dbRecord.staff_id = member.staff_id;
+
+  if (member.name !== undefined) {
+    if (cols.includes('staff_name')) {
+      dbRecord.staff_name = member.name;
+    }
+    if (cols.includes('name')) {
+      dbRecord.name = member.name;
+    }
+  }
+
+  if (member.mobile !== undefined) {
+    if (cols.includes('mobile_number')) {
+      dbRecord.mobile_number = member.mobile;
+    }
+    if (cols.includes('mobile')) {
+      dbRecord.mobile = member.mobile;
+    }
+  }
+
+  if (member.whatsapp_number !== undefined) {
+    if (cols.includes('whatsapp_number')) {
+      dbRecord.whatsapp_number = member.whatsapp_number;
+    } else {
+      extra.whatsapp_number = member.whatsapp_number;
+    }
+  }
+
+  if (member.production_role_speciality !== undefined) {
+    const skillsVal = member.production_role_speciality;
+    if (cols.includes('production_role_speciality')) {
+      dbRecord.production_role_speciality = skillsVal;
+    } else if (cols.includes("'production_role_speciality")) {
+      dbRecord["'production_role_speciality"] = skillsVal;
+    } else {
+      extra.production_role_speciality = skillsVal;
+    }
+  }
+
+  const standardFields = ['email', 'role', 'department', 'status', 'joining_date', 'profile_photo'];
+  for (const field of standardFields) {
+    if ((member as any)[field] !== undefined) {
+      if (cols.includes(field)) {
+        dbRecord[field] = (member as any)[field];
+      } else {
+        extra[field] = (member as any)[field];
+      }
+    }
+  }
+
+  if (!member.staff_id) {
+    if (cols.includes('email') && !dbRecord.email) {
+      dbRecord.email = `${(member.name || '').toLowerCase().replace(/\s+/g, '') || 'staff'}@photocrew.com`;
+    }
+    if (cols.includes('role') && !dbRecord.role) {
+      dbRecord.role = member.role || 'Editor';
+    }
+    if (cols.includes('department') && !dbRecord.department) {
+      dbRecord.department = member.department || 'Post-Production';
+    }
+    if (cols.includes('status') && !dbRecord.status) {
+      dbRecord.status = member.status || 'Active';
+    }
+    if (cols.includes('joining_date') && !dbRecord.joining_date) {
+      dbRecord.joining_date = member.joining_date || new Date().toISOString().split('T')[0];
+    }
+  }
+
+  if (member.notes !== undefined) {
+    extra.notes = member.notes;
+  }
+  if (Object.keys(extra).length > 0) {
+    dbRecord.notes = JSON.stringify(extra);
+  }
+
+  return dbRecord;
+};
+
 export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [globalModalAlert, setGlobalModalAlert] = useState<{ message: string; title: string } | null>(null);
 
@@ -574,6 +723,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
+  const [productionStaff, setProductionStaff] = useState<Staff[]>([]);
 
   const [equipment, setEquipment] = useState<Equipment[]>([]);
 
@@ -1597,7 +1747,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         supabaseClient.from('lead_events').select('*').order('created_at', { ascending: true }),
         supabaseClient.from('equipment_handovers').select('*').order('created_at', { ascending: false }),
         supabaseClient.from('production_specialties').select('*'),
-        supabaseClient.from('editor_assignments').select('*')
+        supabaseClient.from('editor_assignments').select('*'),
+        supabaseClient.from('production_staff').select('*')
       ]);
 
       const tables = [
@@ -1606,7 +1757,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'equipment', 'lead_packages', 'packages', 'staff_assignments', 
         'quotations', 'lead_status_history', 'lead_staff_assignment_history', 
         'lead_equipment_history', 'lead_events', 'equipment_handovers', 
-        'production_specialties', 'editor_assignments'
+        'production_specialties', 'editor_assignments', 'production_staff'
       ];
       
       let hasError = false;
@@ -1647,7 +1798,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         { data: dbLeadEvents },
         { data: dbHandovers },
         { data: dbSpecList },
-        { data: dbAssignList }
+        { data: dbAssignList },
+        { data: dbProdStaff }
       ] = results;
 
       if (dbUsers && dbUsers.length === 0) {
@@ -1720,6 +1872,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
               notes: (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) ? (extra.notes || '') : item.notes
             };
          }));
+      }
+
+      if (dbProdStaff) {
+         setProductionStaff(dbProdStaff.map(mapProductionStaffFromDb));
       }
       
       if (dbNotifications) {
@@ -1897,6 +2053,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       { table: 'production', key: 'production_id', setter: setProduction },
       { table: 'payments', key: 'payment_id', setter: setPayments },
       { table: 'operations_staff', key: 'staff_id', setter: setStaff },
+      { table: 'production_staff', key: 'staff_id', setter: setProductionStaff },
       { table: 'activity_logs', key: 'log_id', setter: setLogs },
       { table: 'notifications', key: 'notification_id', setter: setNotifications },
       { table: 'equipment', key: 'equipment_id', setter: setEquipment },
@@ -1942,6 +2099,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try { extra = JSON.parse(item.notes); } catch (e) {}
     }
     mappedItem = { ...item, ...extra, staff_id: mapFromDbStaffId(item.staff_id), notes: extra.notes || item.notes };
+  }
+  if (table === 'production_staff') {
+    mappedItem = mapProductionStaffFromDb(item);
   }
   if (table === 'packages') mappedItem = mapDbRecordToPackage(item);
   if (table === 'equipment') mappedItem = { ...item, equipment_id: mapFromDbEquipmentId(item.equipment_id) };
@@ -4173,6 +4333,66 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const addProductionStaff = async (member: Omit<Staff, "staff_id">) => {
+    const staffId = `STF-${Math.floor(10000 + Math.random() * 90000)}`;
+    const timestamp = new Date().toISOString();
+    const newStaff: Staff = {
+      ...member,
+      staff_id: staffId,
+      created_by: currentUserName,
+      updated_by: currentUserName,
+      created_at: timestamp,
+      updated_at: timestamp
+    };
+
+    setProductionStaff((prev) => [newStaff, ...prev]);
+
+    const dbPayload = await mapProductionStaffToDb(newStaff);
+    const res = await pushInsert('production_staff', dbPayload);
+    if (res.success) {
+      logActivity(`Added Production Staff Member: ${newStaff.name}`, 'StaffManagement', staffId);
+    } else {
+      setProductionStaff((prev) => prev.filter(s => s.staff_id !== staffId));
+      throw new Error(res.error || 'Failed to add production staff');
+    }
+    return res;
+  };
+
+  const updateProductionStaff = async (staffId: string, updates: Partial<Staff>) => {
+    const prevStaffList = [...productionStaff];
+    const timestamp = new Date().toISOString();
+    const updatedWithMetadata = {
+      ...updates,
+      updated_by: currentUserName,
+      updated_at: timestamp
+    };
+
+    setProductionStaff((prev) => prev.map((s) => s.staff_id === staffId ? { ...s, ...updatedWithMetadata } : s));
+
+    const dbUpdates = await mapProductionStaffToDb(updatedWithMetadata);
+    const res = await pushUpdate('production_staff', 'staff_id', staffId, dbUpdates);
+    if (res.success) {
+      logActivity(`Updated Production Staff Member details: ${staffId}`, 'StaffManagement', staffId);
+    } else {
+      setProductionStaff(prevStaffList);
+      throw new Error(res.error || 'Failed to update production staff');
+    }
+    return res;
+  };
+
+  const deleteProductionStaff = async (staffId: string) => {
+    const prevStaffList = [...productionStaff];
+    setProductionStaff((prev) => prev.filter((s) => s.staff_id !== staffId));
+    const res = await pushDelete('production_staff', 'staff_id', staffId);
+    if (res.success) {
+      logActivity(`Deleted Production Staff Member: ${staffId}`, 'StaffManagement', staffId);
+    } else {
+      setProductionStaff(prevStaffList);
+      throw new Error(res.error || 'Failed to delete production staff');
+    }
+    return res;
+  };
+
   const addEquipment = async (equip: Omit<Equipment, 'equipment_id'>) => {
     const equipmentId = `EQ-${Math.floor(1000 + Math.random() * 9000)}`;
     const now = new Date().toISOString();
@@ -5757,6 +5977,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addStaff,
         updateStaff,
         deleteStaff,
+        productionStaff,
+        addProductionStaff,
+        updateProductionStaff,
+        deleteProductionStaff,
         equipment,
         addEquipment,
         updateEquipment,
