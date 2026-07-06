@@ -316,7 +316,7 @@ const MainAppContent: React.FC = () => {
         if (!['production', 'notifications', 'staff_management'].includes(activeTab)) {
           setActiveTab('production');
         }
-        if (!['production_leads', 'production_calendar', 'crew_roster', 'staff_performance', 'analytics', 'notifications'].includes(activeSubTab)) {
+        if (!['production_leads', 'production_calendar', 'crew_roster'].includes(activeSubTab)) {
           setActiveSubTab('production_leads');
         }
       }
@@ -481,7 +481,7 @@ const MainAppContent: React.FC = () => {
               { id: 'analytics', label: 'Studio Analytics', icon: BarChart3 }
             ].filter(tab => {
               if (currentRole === 'Production Team') {
-                return ['production_leads', 'production_calendar', 'crew_roster', 'staff_performance', 'analytics', 'notifications'].includes(tab.id);
+                return ['production_leads', 'production_calendar', 'crew_roster'].includes(tab.id);
               }
               return true;
             }).map((tab) => {
@@ -489,8 +489,7 @@ const MainAppContent: React.FC = () => {
               const isSelected = activeSubTab === tab.id;
               let label = tab.label;
               if (currentRole === 'Production Team') {
-                if (tab.id === 'staff_performance') label = 'Editor Performance';
-                if (tab.id === 'analytics') label = 'Production Analytics';
+                if (tab.id === 'crew_roster') label = 'Production Staff';
               }
               return (
                 <button
