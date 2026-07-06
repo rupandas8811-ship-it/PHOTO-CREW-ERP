@@ -7515,7 +7515,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4.5 space-y-4">
                     <div className="flex items-center gap-2 border-b border-slate-800/50 pb-2 mb-1">
                       <Check className="w-4 h-4 text-emerald-400 stroke-[3px]" />
-                      <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">Review 5. Review & Finalize Lead Finalize Lead</span>
+                      <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">Review & Finalize Lead</span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
