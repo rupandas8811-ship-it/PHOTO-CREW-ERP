@@ -800,7 +800,7 @@ export const OperationsLeads: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* 1. Results Summary Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
         {[
           { label: "Total Operations Leads", val: stats.totalLeads, theme: 'purple' as CameraLensTheme, filterValue: 'All', trendText: 'Active', chartPoints: [10, 18, 14, 25, 20, 31, 35] },
           { label: "Scheduled Events", val: stats.scheduled, theme: 'cyan' as CameraLensTheme, filterValue: 'Event Scheduled', trendText: 'Rostered', chartPoints: [5, 9, 7, 14, 11, 16, 15] },
@@ -1398,7 +1398,7 @@ export const OperationsLeads: React.FC = () => {
                   <h4 className="text-[11px] font-mono font-bold uppercase text-amber-500 tracking-wider">
                     Customer Information
                   </h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                     <div>
                       <span className="text-[10px] text-zinc-500 block uppercase font-mono">Customer Name</span>
                       <span className="font-bold text-white font-sans text-xs block">
@@ -1423,14 +1423,14 @@ export const OperationsLeads: React.FC = () => {
                         {parentLeadInstance?.email || 'N/A'}
                       </span>
                     </div>
-                    <div className="col-span-2 md:col-span-4">
+                    <div className="col-span-1 sm:col-span-2 md:col-span-4">
                       <span className="text-[10px] text-zinc-505 block uppercase font-mono">Event Address</span>
                       <span className="text-zinc-200 font-sans text-[11px] block leading-tight">
                         {parentLeadInstance?.event_location || activeOrderInstance?.event_location || parentLeadInstance?.address || 'N/A'}
                       </span>
                     </div>
                     {parentLeadInstance?.google_maps_link && (
-                      <div className="col-span-2 md:col-span-4">
+                      <div className="col-span-1 sm:col-span-2 md:col-span-4">
                         <span className="text-[10px] text-zinc-505 block uppercase font-mono">Google Maps Link</span>
                         <a 
                           href={parentLeadInstance.google_maps_link} 
@@ -1462,7 +1462,7 @@ export const OperationsLeads: React.FC = () => {
                         <h4 className="text-[11px] font-mono font-bold uppercase text-amber-500 tracking-wider">
                           Event & Package Coordinates
                         </h4>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                           <div>
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono">Event Type</span>
                             <span className="font-semibold text-white uppercase text-[11px] block">
@@ -1485,7 +1485,7 @@ export const OperationsLeads: React.FC = () => {
                           </div>
                           
                           {/* 8. Reporting Information (Read-only) */}
-                          <div className="col-span-2 md:col-span-4 grid grid-cols-2 md:grid-cols-4 gap-4 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800">
+                          <div className="col-span-1 sm:col-span-2 md:col-span-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800">
                             <div>
                               <span className="text-[10px] text-zinc-505 block uppercase font-mono">Reporting Date</span>
                               <span className="text-zinc-200 text-xs font-mono block mt-1">{allocation.reporting_date || 'N/A'}</span>
@@ -1546,7 +1546,7 @@ export const OperationsLeads: React.FC = () => {
                                });
                                setSelectedStaffByEvent(prev => ({ ...prev, [evId]: '' }));
                              }}
-                             className="px-3 py-2 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 text-xs font-mono font-bold rounded-lg border border-sky-500/30 transition-all uppercase"
+                             className="px-3 py-2 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 text-xs font-mono font-bold rounded-lg border border-sky-500/30 transition-all uppercase w-full sm:w-auto"
                            >
                              + Add
                            </button>
@@ -1595,7 +1595,7 @@ export const OperationsLeads: React.FC = () => {
                                    </div>
                                  </div>
                                )}
-                               <div className="grid grid-cols-2 gap-2 text-[10px]">
+                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px]">
                                  <div>
                                    <span className="text-zinc-500 uppercase font-mono block">Member Name</span>
                                    <span className="text-zinc-200 font-bold">{memberInfo.name}</span>
@@ -1680,18 +1680,18 @@ export const OperationsLeads: React.FC = () => {
                 
               </div>
               
-              <div className="p-4 border-t border-zinc-800 flex justify-end gap-3 bg-zinc-950/40">
+              <div className="p-4 border-t border-zinc-800 flex flex-col sm:flex-row justify-end gap-3 bg-zinc-950/40">
                 <button
                   type="button"
                   onClick={() => setAssigningOrderId(null)}
-                  className="px-4 py-2 text-xs font-mono font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                  className="px-4 py-2 text-xs font-mono font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer w-full sm:w-auto"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-black text-xs font-mono font-bold uppercase rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                  className="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-black text-xs font-mono font-bold uppercase rounded-lg transition-colors cursor-pointer disabled:opacity-50 w-full sm:w-auto"
                 >
                   {isSaving ? 'Saving Assignments...' : 'Save All Assignments'}
                 </button>
@@ -1798,7 +1798,7 @@ export const OperationsLeads: React.FC = () => {
               </div>
 
               {/* Physical Storage media checkboxes requested by user */}
-              <div className="grid grid-cols-2 gap-3 bg-zinc-950 p-3 rounded-xl border border-zinc-850">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-zinc-950 p-3 rounded-xl border border-zinc-850">
                 <label className="flex items-center gap-2.5 cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -1880,7 +1880,7 @@ export const OperationsLeads: React.FC = () => {
                             {details.return_status}
                           </span>
                         </div>
-                        <div className="grid grid-cols-2 gap-1.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                           {(['Returned', 'Missing', 'Damaged', 'Not Returned'] as const).map(statusOpt => (
                             <button
                               key={statusOpt}
@@ -1927,7 +1927,7 @@ export const OperationsLeads: React.FC = () => {
                     </h4>
                     
                     <div className="flex flex-col gap-2">
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         {(['Full Payment Received', 'Partial Payment Received', 'Payment Pending'] as const).map(opt => (
                           <button
                             key={opt}
@@ -2049,14 +2049,14 @@ export const OperationsLeads: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setReceivingFootageOrderId(null)}
-                  className="px-4 py-2 bg-zinc-800 text-zinc-300 text-xs rounded-xl cursor-pointer hover:bg-zinc-700 transition"
+                  className="px-4 py-2 bg-zinc-800 text-zinc-300 text-xs rounded-xl cursor-pointer hover:bg-zinc-700 transition w-full sm:w-auto"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-4 py-2 bg-purple-650 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold text-xs rounded-xl cursor-pointer flex items-center gap-1.5"
+                  className="px-4 py-2 bg-purple-650 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold text-xs rounded-xl cursor-pointer flex justify-center items-center gap-1.5 w-full sm:w-auto"
                 >
                   {isSaving ? 'Saving...' : 'Save & Move to Production'}
                 </button>
