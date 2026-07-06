@@ -1724,6 +1724,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     } else if (msg.includes("network error") || msg.includes("failed to fetch") || msg.includes("database connection failed")) {
       reason = `Network error or failed to reach the database connection.`;
       suggestedFix = "Please check your internet connection or verify if your server/Supabase instances are active.";
+    } else if (msg.includes("order_id") && (msg.includes("required") || msg.includes("missing"))) {
+      reason = `"order_id" is required for "Order Confirmed" status, but it was not found.`;
+      suggestedFix = "The system failed to generate or retrieve an order ID. Please ensure the lead transition logic correctly handles order creation.";
     } else if (msg.includes("required field") || msg.includes("null value in column")) {
       reason = `Required database field is missing. Details: ${errorMsg}`;
       suggestedFix = "Ensure all required fields are filled and not null before submitting.";
@@ -1742,15 +1745,24 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   };
 
 
-  const [statusError, setStatusError] = useState<{ title: string; reason: string; suggestedFix: string } | null>(null);
+  const [statusError, setStatusError] = useState<{ 
+    title: string; 
+    reason: string; 
+    suggestedFix: string;
+    failedFunction?: string;
+    failedTable?: string;
+    missingField?: string;
+    supabaseError?: string;
+  } | null>(null);
   
   // Interception Popup for Reporting Date & Time
   const [showReportingPopup, setShowReportingPopup] = useState(false);
   const [reportingPopupData, setReportingPopupData] = useState<{ eventId: string; eventName: string; date: string; time: string; }[]>([]);
-  const [pendingConfirmAction, setPendingConfirmAction] = useState<(() => Promise<void>) | null>(null);
+  const [bookingTransactionId, setBookingTransactionId] = useState('');
+  const [pendingConfirmAction, setPendingConfirmAction] = useState<((reportingData?: any) => Promise<void>) | null>(null);
   const [isReportingSaving, setIsReportingSaving] = useState(false);
 
-  const executeWithReportingPopup = (action: () => Promise<void>) => {
+  const executeWithReportingPopup = (action: (reportingData?: any) => Promise<void>) => {
     const targetLeadId = selectedLead?.lead_id || createdLeadId;
     const targetLead = leads.find(l => l.lead_id === targetLeadId);
     
@@ -1772,6 +1784,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
     
     setPendingConfirmAction(() => action);
+    setBookingTransactionId('');
     setShowReportingPopup(true);
   };
 
@@ -1783,6 +1796,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   // Step 2 Follow-up and Lost Lead states
   const [showStep2Popup, setShowStep2Popup] = useState(false);
+  const [showStep3StatusPopup, setShowStep3StatusPopup] = useState(false);
   const [step2FollowUpDate, setStep2FollowUpDate] = useState('');
   const [step2FollowUpNotes, setStep2FollowUpNotes] = useState('');
 
@@ -5008,7 +5022,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
             next_follow_up_date: followUpDate || null,
             follow_up_notes: internalNotes || null,
-            Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
+            Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || '',
+            status: 'New Lead'
           });
           setCreatedLeadId(newId);
           finalId = newId;
@@ -5037,7 +5052,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
             next_follow_up_date: followUpDate || null,
             follow_up_notes: internalNotes || null,
-            Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
+            Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || '',
+            status: 'New Lead'
           });
         }
         const isEdit = !!createdLeadId;
@@ -5242,9 +5258,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   };
 
-  const handleStatusSave = async () => {
+  const handleStatusSave = async (overrideStatus?: CurrentStage) => {
     if (isSaving) return;
-    const finalStatus = salesStatus || 'New Lead';
+    const finalStatus = overrideStatus || salesStatus || 'New Lead';
     try {
       setIsSaving(true);
 
@@ -5350,7 +5366,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return;
     }
 
-    executeWithReportingPopup(async () => {
+    executeWithReportingPopup(async (reportingData: any = {}) => {
       try {
       setIsSaving(true);
       const selectedPkgsNames = selectedPkgs.map(p => p.name).join(' + ') || 'Custom Configured Coverage';
@@ -5363,7 +5379,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         confirmedEventTime,
         'UPI / Cash / Bank Transfer',
         getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
-        reportingTime
+        reportingData.reporting_time || reportingTime,
+        reportingData.transaction_id || undefined,
+        reportingData.Reporting_date,
+        reportingData.events
       );
       
       showToastMsg("Lead created successfully.", "success");
@@ -5402,7 +5421,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setStatusError({
         title: "Order Confirmation Pipeline Transition Failed",
         reason: parsed.reason,
-        suggestedFix: parsed.suggestedFix
+        suggestedFix: parsed.suggestedFix,
+        failedFunction: "handleOrderConfirmedSubmit / confirmOrder",
+        failedTable: "leads / orders / operations",
+        supabaseError: errMsg,
+        missingField: errMsg.includes("order_id") ? "order_id" : undefined
       });
       alert(parsed.reason);
     } finally {
@@ -5434,7 +5457,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         return;
       }
 
-      executeWithReportingPopup(async () => {
+      executeWithReportingPopup(async (reportingData: any = {}) => {
         try {
         setIsSaving(true);
         await confirmOrder(
@@ -5446,7 +5469,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           followUpForm.event_time,
           followUpForm.payment_mode || 'UPI',
           followUpForm.call_notes || 'Confirmed from CRM activity logger',
-          followUpForm.reporting_time || '08:00'
+          reportingData.reporting_time || followUpForm.reporting_time || '08:00',
+          reportingData.transaction_id || undefined,
+          reportingData.Reporting_date,
+          reportingData.events
         );
 
         setSelectedLead(null);
@@ -5481,7 +5507,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         setStatusError({
           title: "Follow-up Transition to Order Confirmed Failed",
           reason: parsed.reason,
-          suggestedFix: parsed.suggestedFix
+          suggestedFix: parsed.suggestedFix,
+          failedFunction: "handleFollowUpSubmit / confirmOrder",
+          failedTable: "leads / orders / operations",
+          supabaseError: errMsg,
+          missingField: errMsg.includes("order_id") ? "order_id" : undefined
         });
         alert(parsed.reason);
       } finally {
@@ -5575,7 +5605,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return;
     }
 
-    executeWithReportingPopup(async () => {
+    executeWithReportingPopup(async (reportingData: any = {}) => {
       try {
       setIsSaving(true);
       await confirmOrder(
@@ -5587,8 +5617,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         confirmForm.event_time,
         confirmForm.payment_mode,
         confirmForm.notes,
-        undefined,
-        confirmForm.transaction_id
+        reportingData.reporting_time,
+        confirmForm.transaction_id,
+        reportingData.Reporting_date,
+        reportingData.events
       );
 
       setShowConfirmModal(false);
@@ -5727,15 +5759,36 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
             
             <div className="p-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {statusError.failedFunction && (
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-slate-500 font-mono uppercase tracking-wider block font-bold">Failed Function:</span>
+                    <span className="text-[11px] text-slate-300 font-mono">{statusError.failedFunction}</span>
+                  </div>
+                )}
+                {statusError.failedTable && (
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-slate-500 font-mono uppercase tracking-wider block font-bold">Database Table:</span>
+                    <span className="text-[11px] text-slate-300 font-mono">{statusError.failedTable}</span>
+                  </div>
+                )}
+                {statusError.missingField && (
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-slate-500 font-mono uppercase tracking-wider block font-bold">Missing Field:</span>
+                    <span className="text-[11px] text-amber-400 font-mono font-bold">{statusError.missingField}</span>
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-1.5">
-                <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider block">Reason:</span>
+                <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider block">Exact Error Message / Supabase Error:</span>
                 <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3 text-xs text-red-300 font-mono leading-relaxed whitespace-pre-wrap max-h-36 overflow-y-auto">
-                  {statusError.reason}
+                  {statusError.supabaseError || statusError.reason}
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider block">Suggested Fix / Schema Migration:</span>
+                <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider block">Suggested Fix:</span>
                 <div className="bg-emerald-950/20 border border-emerald-500/25 rounded-xl p-3 text-xs text-emerald-300 font-sans leading-relaxed whitespace-pre-wrap max-h-36 overflow-y-auto">
                   {statusError.suggestedFix}
                 </div>
@@ -7646,13 +7699,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     if (salesStatus === 'Order Confirmed') {
                       handleOrderConfirmedSubmit(e);
                     } else {
-                      handleStatusSave();
+                      setShowStep3StatusPopup(true);
                     }
                   }}
                   disabled={isSaving}
                   className="px-5.5 py-2 text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl shadow-lg shadow-emerald-500/10 cursor-pointer border border-transparent transition-colors flex items-center gap-1.5"
                 >
-                  {isSaving ? 'Saving...' : salesStatus === 'Order Confirmed' ? '�� Confirm Order & Transition' : '✍️ Create Lead'}
+                  {isSaving ? 'Saving...' : salesStatus === 'Order Confirmed' ? '�� Confirm Order & Transition' : 'Save & Finish →'}
                 </button>
               )}
             </div>
@@ -8341,6 +8394,46 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showStep3StatusPopup && (
+        <div className="fixed inset-0 bg-black/85 z-60 flex items-center justify-center p-4 backdrop-blur-md">
+          <div className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-sm w-full shadow-2xl p-6 text-center animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-bold text-slate-100 mb-2">Select Next Action</h3>
+            <p className="text-slate-400 text-sm mb-6">Choose the current status for this lead to finish the creation process.</p>
+            
+            <div className="grid grid-cols-1 gap-3">
+              <button
+                onClick={() => {
+                  setSalesStatus('Quotation Sent');
+                  setShowStep3StatusPopup(false);
+                  handleStatusSave('Quotation Sent');
+                }}
+                className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl cursor-pointer transition-colors flex items-center justify-center gap-2"
+              >
+                <span>📄</span> Quotation Sent
+              </button>
+              
+              <button
+                onClick={() => {
+                  setSalesStatus('Negotiation');
+                  setShowStep3StatusPopup(false);
+                  handleStatusSave('Negotiation');
+                }}
+                className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl cursor-pointer transition-colors flex items-center justify-center gap-2"
+              >
+                <span>🤝</span> Negotiation
+              </button>
+              
+              <button
+                onClick={() => setShowStep3StatusPopup(false)}
+                className="mt-2 text-slate-500 hover:text-slate-300 text-xs py-2 cursor-pointer"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>
@@ -10029,6 +10122,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   </div>
                 </div>
               ))}
+
+              <div className="p-4 bg-slate-900/50 border border-slate-800 rounded-xl space-y-3">
+                <h5 className="font-bold text-emerald-400 text-xs uppercase tracking-wider mb-2 border-b border-slate-800/50 pb-2">
+                  Transaction Information
+                </h5>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Transaction ID (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="Enter Payment Transaction Reference"
+                    value={bookingTransactionId}
+                    onChange={(e) => setBookingTransactionId(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono text-sm"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 border-t border-slate-800 p-5 shrink-0 bg-slate-900">
@@ -10079,17 +10188,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         });
                       }
 
-                      // Save both lead-level Reporting_date, reporting_time, and sub-events safely using the updateLead proxy
-                      await updateLead(targetLeadId, { 
-                        Reporting_date: firstDate,
-                        reporting_time: firstTime,
-                        ...(updatedEvents ? { events: updatedEvents } : {})
-                      });
-                    }
-                    
-                    // Proceed with original action
-                    if (pendingConfirmAction) {
-                      await pendingConfirmAction();
+                      // Pass data to the action to save in a single transaction
+                      if (pendingConfirmAction) {
+                        await pendingConfirmAction({
+                          Reporting_date: firstDate,
+                          reporting_time: firstTime,
+                          transaction_id: bookingTransactionId,
+                          ...(updatedEvents ? { events: updatedEvents } : {})
+                        });
+                      }
                     }
                     
                     setShowReportingPopup(false);

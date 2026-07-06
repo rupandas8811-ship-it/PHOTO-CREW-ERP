@@ -89,7 +89,7 @@ async function startServer() {
   // Helper to dynamically strip stale/missing columns that cause schema cache mismatch errors
   const healPayload = (table: string, payload: any, errorMsg: string): any | null => {
     if (!payload || typeof payload !== 'object') return null;
-    if (table !== 'leads' && table !== 'orders' && table !== 'quotations' && table !== 'lead_packages') return null;
+    if (table !== 'leads' && table !== 'orders' && table !== 'quotations' && table !== 'lead_packages' && table !== 'lead_events') return null;
     
     const lowerMsg = errorMsg.toLowerCase();
     let healed = false;
@@ -107,6 +107,8 @@ async function startServer() {
       'lead_score',
       'booking_status',
       'reporting_time',
+      'reporting_date',
+      'Reporting_date',
       'quotation_discount',
       'additional_services_cost',
       'whatsapp_number',

@@ -77,7 +77,9 @@ interface RoleContextType {
     paymentMode?: string,
     notes?: string,
     reportingTime?: string,
-    transactionId?: string
+    transactionId?: string,
+    reportingDate?: string,
+    events?: any[]
   ) => string;
   assignOperations: (
     orderId: string, 
@@ -1075,6 +1077,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'total_amount', 'discount', 'final_amount', 'deliverables_description', 
         'notes_special_customizations', 'additional_services_cost', 'created_at'
       ],
+      lead_events: [
+        'id', 'lead_id', 'event_type', 'event_name', 'event_shoot_type', 'event_date', 
+        'event_start_time', 'event_end_time', 'event_location', 'google_maps_link', 
+        'reporting_time', 'guest_pax', 'staff_pax', 'assigned_staff_names', 'assigned_staff_mobiles',
+        'created_at', 'updated_at'
+      ],
       raw_footage: [
         'tracking_id', 'order_id', 'event_completed_date', 'raw_received', 'server_path', 
         'uploaded_by', 'uploaded_date', 'status'
@@ -1162,8 +1170,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    const timeFields = ['event_time', 'reporting_time', 'confirmed_event_time'];
-    const dateFields = ['event_date', 'booking_date', 'event_start_date', 'event_end_date', 'delivery_target_date'];
+    const timeFields = ['event_time', 'reporting_time', 'confirmed_event_time', 'event_start_time', 'event_end_time'];
+    const dateFields = ['event_date', 'booking_date', 'event_start_date', 'event_end_date', 'delivery_target_date', 'Reporting_date', 'reporting_date'];
     
     for (const field of dateFields) {
       if (field in clone) {
@@ -1222,6 +1230,23 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Synchronous CRUD wrappers for updating Supabase in backgrounds
   const pushInsert = async (table: string, record: any): Promise<{ success: boolean; error?: string; localFallback?: boolean }> => {
     if (!supabaseClient) return { success: true };
+
+    // Authentication Validation as requested by user
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    
+    console.log(`[DEBUG AUTH] Table: ${table} | Action: INSERT`);
+    console.log(`[DEBUG AUTH] Session Valid: ${!!session}`);
+    console.log(`[DEBUG AUTH] User ID: ${user?.id || 'NULL'}`);
+    console.log(`[DEBUG AUTH] auth.uid() equivalent: ${user?.id || 'NULL'}`);
+
+    if (!session || !user) {
+      console.error(`[AUTH ERROR] Attempted insert on ${table} without valid session. Redirecting to login.`);
+      setCurrentUser(null);
+      localStorage.removeItem('erp_current_user');
+      return { success: false, error: 'Authentication session expired. Please log in again.' };
+    }
+
     try {
       if (table === 'leads') {
         if (!('total_pax' in record)) {
@@ -1248,9 +1273,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       // Try sending to server-side proxy first to bypass client RLS issues
       try {
+        const { data: { session: currentSession } } = await supabaseClient.auth.getSession();
         const response = await fetch('/api/db/insert', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentSession?.access_token}`
+          },
           body: JSON.stringify({ table, record: sanitized })
         });
         if (response.ok) {
@@ -1332,6 +1361,24 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const pushUpdate = async (table: string, matchColumn: string, matchValue: any, updates: any): Promise<{ success: boolean; error?: string; localFallback?: boolean }> => {
     if (!supabaseClient) return { success: true };
+    
+    // Authentication Validation as requested by user
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    
+    console.log(`[DEBUG AUTH] Table: ${table} | Action: UPDATE`);
+    console.log(`[DEBUG AUTH] Session Valid: ${!!session}`);
+    console.log(`[DEBUG AUTH] User ID: ${user?.id || 'NULL'}`);
+    console.log(`[DEBUG AUTH] auth.uid() equivalent: ${user?.id || 'NULL'}`);
+
+    if (!session || !user) {
+      console.error(`[AUTH ERROR] Attempted update on ${table} without valid session. Redirecting to login.`);
+      // We don't have a direct "redirect" function here, but we can set currentUser to null to trigger LoginScreen
+      setCurrentUser(null);
+      localStorage.removeItem('erp_current_user');
+      return { success: false, error: 'Authentication session expired. Please log in again.' };
+    }
+
     try {
       const sanitized = sanitizeTimeFieldsForDb(stripClientOnlyFields(table, updates), table);
       let finalMatchValue = matchValue;
@@ -1407,9 +1454,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Try sending to server-side proxy first to bypass client RLS issues
       try {
+        const { data: { session: currentSession } } = await supabaseClient.auth.getSession();
         const response = await fetch('/api/db/update', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentSession?.access_token}`
+          },
           body: JSON.stringify({ table, matchColumn, matchValue: finalMatchValue, updates: sanitized })
         });
         if (response.ok) {
@@ -1587,6 +1638,23 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const pushDelete = async (table: string, matchColumn: string, matchValue: any): Promise<{ success: boolean; error?: string }> => {
     if (!supabaseClient) return { success: true };
+
+    // Authentication Validation as requested by user
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    
+    console.log(`[DEBUG AUTH] Table: ${table} | Action: DELETE`);
+    console.log(`[DEBUG AUTH] Session Valid: ${!!session}`);
+    console.log(`[DEBUG AUTH] User ID: ${user?.id || 'NULL'}`);
+    console.log(`[DEBUG AUTH] auth.uid() equivalent: ${user?.id || 'NULL'}`);
+
+    if (!session || !user) {
+      console.error(`[AUTH ERROR] Attempted delete on ${table} without valid session. Redirecting to login.`);
+      setCurrentUser(null);
+      localStorage.removeItem('erp_current_user');
+      return { success: false, error: 'Authentication session expired. Please log in again.' };
+    }
+
     try {
       let finalMatchValue = matchValue;
       if (table === 'operations_staff' && matchColumn === 'staff_id' && matchValue) {
@@ -1608,9 +1676,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Try sending to server-side proxy first to bypass client RLS issues
       try {
+        const { data: { session: currentSession } } = await supabaseClient.auth.getSession();
         const response = await fetch('/api/db/delete', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentSession?.access_token}`
+          },
           body: JSON.stringify({ table, matchColumn, matchValue: finalMatchValue })
         });
         if (response.ok) {
@@ -2011,10 +2083,19 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Check initial session
     supabaseClient.auth.getSession().then(({ data: { session } }) => {
       if (session) {
+        console.log(`[AUTH] Session found on mount for: ${session.user.email}`);
         syncProfileAndSession(session);
+      } else {
+        console.log("[AUTH] No session found on mount. Clearing stale local state.");
+        setCurrentUser(null);
+        localStorage.removeItem('erp_current_user');
+        localStorage.removeItem('erp_role');
+        localStorage.removeItem('erp_user_name');
       }
     }).catch(e => {
       console.warn("Supabase getSession failed:", e?.message || String(e));
+      // Even if it fails, we should consider the user logged out if we can't verify the session
+      setCurrentUser(null);
     });
 
     // Subscribe to auth state changes
@@ -2631,6 +2712,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           event_end_time: ev.event_end_time || '',
           event_location: ev.event_location || '',
           google_maps_link: ev.google_maps_link || '',
+          reporting_time: ev.reporting_time || '',
           guest_pax: String(ev.guest_pax) !== '' && ev.guest_pax != null ? Number(ev.guest_pax) : null,
           staff_pax: String(ev.staff_pax) !== '' && ev.staff_pax != null ? Number(ev.staff_pax) : null,
           assigned_staff_names: ev.assigned_staff_names || '',
@@ -2764,7 +2846,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (normalizedStatus !== previousStage) {
       const linkedOrder = orders.find(o => o.lead_id === leadId);
-      const orderId = linkedOrder?.order_id || null;
+      const orderId = (updatesPayload as any).order_id || linkedOrder?.order_id || null;
 
       if (normalizedStatus === 'Order Confirmed' && !orderId) {
         throw new Error(`"order_id" is required for "Order Confirmed" status, but it was not found or is missing.`);
@@ -2826,10 +2908,30 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     paymentMode?: string,
     notes?: string,
     reportingTime?: string,
-    transactionId?: string
+    transactionId?: string,
+    reportingDate?: string,
+    events?: any[]
   ) => {
     if (!leadId || typeof leadId !== 'string' || leadId.trim() === '') {
       throw new Error('lead_id is missing or invalid.');
+    }
+
+    // Authentication Validation as requested by user
+    if (!supabaseClient) throw new Error('Database client not initialized');
+    
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    
+    console.log(`[DEBUG AUTH] Confirm Order Workflow`);
+    console.log(`[DEBUG AUTH] Session Valid: ${!!session}`);
+    console.log(`[DEBUG AUTH] User ID: ${user?.id || 'NULL'}`);
+    console.log(`[DEBUG AUTH] auth.uid() equivalent: ${user?.id || 'NULL'}`);
+
+    if (!session || !user) {
+      console.error(`[AUTH ERROR] Attempted Confirm Order without valid session.`);
+      setCurrentUser(null);
+      localStorage.removeItem('erp_current_user');
+      throw new Error('Authentication session expired. Please log in again.');
     }
 
     const targetLead = leads.find((ld) => ld.lead_id === leadId);
@@ -2848,31 +2950,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const resolvedRemarks = `${targetLead.remarks || ''}\n[Booking Confirmed Update ${new Date().toISOString().split('T')[0]}]: ${notes || 'No extra notes'}. Payment Mode: ${paymentMode || 'N/A'}`;
     const timestamp = new Date().toISOString();
 
-    const resLead = await pushUpdate('leads', 'lead_id', leadId, { 
-      status: 'Order Confirmed', 
-      current_status: 'Order Confirmed', 
-      booking_status: 'Confirmed',
-      booking_date: new Date().toISOString().split('T')[0],
-      booking_time: new Date().toLocaleTimeString(),
-      package_name: packageName,
-      final_package_amount: quotationAmount,
-      advance_collected: advanceReceived,
-      payment_mode: paymentMode || 'N/A',
-      transaction_id: transactionId || 'N/A',
-      contract_notes: notes || 'No extra notes',
-      event_date: eventDate || targetLead.event_date,
-      event_time: eventTime || targetLead.event_time,
-      reporting_time: reportingTime || targetLead.reporting_time,
-      remarks: resolvedRemarks,
-      updated_by: currentUserName, 
-      updated_at: timestamp
-    });
-
-    if (!resLead?.success) {
-      throw new Error(resLead?.error || "Failed to update lead during order confirmation.");
-    }
-
-    // Step 3: Check Supabase directly for existing order
+    // Step 2: Generate or Find order_id BEFORE updating lead status to satisfy history validation
     let masterOrderId = '';
     let existingOrder = augmentedOrders.find(o => o.lead_id === leadId);
     let orderExistsInDb = false;
@@ -2892,7 +2970,31 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!masterOrderId) {
       throw new Error(`"order_id" could not be generated or found for Order Confirmation.`);
     }
-    
+
+    await updateLead(leadId, { 
+      status: 'Order Confirmed', 
+      current_status: 'Order Confirmed', 
+      booking_status: 'Confirmed',
+      booking_date: new Date().toISOString().split('T')[0],
+      booking_time: new Date().toLocaleTimeString(),
+      package_name: packageName,
+      final_package_amount: quotationAmount,
+      advance_collected: advanceReceived,
+      payment_mode: paymentMode || 'N/A',
+      transaction_id: transactionId || 'N/A',
+      contract_notes: notes || 'No extra notes',
+      event_date: eventDate || targetLead.event_date,
+      event_time: eventTime || targetLead.event_time,
+      reporting_time: reportingTime || targetLead.reporting_time,
+      Reporting_date: reportingDate || targetLead.Reporting_date,
+      events: events || targetLead.events,
+      remarks: resolvedRemarks,
+      updated_by: currentUserName, 
+      updated_at: timestamp,
+      order_id: masterOrderId // Add this as hint for updateLead history check
+    } as any);
+
+    // Step 3: Handle Orders table
     if (orderExistsInDb) {
       const rOrd = await pushUpdate('orders', 'order_id', masterOrderId, {
         customer_name: targetLead.customer_name,
@@ -2903,6 +3005,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         event_date: eventDate || targetLead.event_date,
         event_time: eventTime || targetLead.event_time,
         reporting_time: reportingTime || targetLead.reporting_time || '',
+        Reporting_date: reportingDate || targetLead.Reporting_date || '',
         event_location: targetLead.event_location,
         package_name: packageName,
         quotation_amount: quotationAmount,
@@ -2938,6 +3041,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         event_date: eventDate || targetLead.event_date,
         event_time: eventTime || targetLead.event_time,
         reporting_time: reportingTime || '',
+        Reporting_date: reportingDate || '',
         event_location: targetLead.event_location,
         package_name: packageName,
         quotation_amount: quotationAmount,
@@ -5344,6 +5448,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           event_end_time: ev.event_end_time || '',
           event_location: ev.event_location || '',
           google_maps_link: ev.google_maps_link || '',
+          reporting_time: ev.reporting_time || '',
           guest_pax: String(ev.guest_pax) !== '' && ev.guest_pax != null ? Number(ev.guest_pax) : null,
           staff_pax: String(ev.staff_pax) !== '' && ev.staff_pax != null ? Number(ev.staff_pax) : null,
           assigned_staff_names: ev.assigned_staff_names || '',
@@ -5379,7 +5484,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newStatus = finalUpdates.current_status;
     if (newStatus && newStatus !== oldStatus) {
       const linkedOrder = orders.find(o => o.lead_id === leadId);
-      const orderId = linkedOrder?.order_id || null;
+      const orderId = (updates as any).order_id || linkedOrder?.order_id || null;
 
       if (newStatus === 'Order Confirmed' && !orderId) {
         throw new Error(`"order_id" is required for "Order Confirmed" status, but it was not found or is missing.`);
