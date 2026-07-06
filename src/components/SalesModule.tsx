@@ -2305,14 +2305,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   
   // Synchronize/initialize services on entering Step 4
   React.useEffect(() => {
-    const isStep4Active = wizardStep === 4 || crmWizardStep === 4;
+    const isStep4Active = wizardStep === 3 || crmWizardStep === 3;
     if (!isStep4Active) {
       setEditingServiceId(null);
       setIsAddingInline(false);
       return;
     }
 
-    const activePkgs = getSelectedPkgsInfo(crmWizardStep === 4);
+    const activePkgs = getSelectedPkgsInfo(crmWizardStep === 3);
     const activePkgIds = activePkgs.map(lp => lp.package_id).filter(Boolean);
 
     // Build expected list of base deliverables from active packages directly from packages table
@@ -2350,7 +2350,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
     });
 
-    const leadId = crmWizardStep === 4 ? (selectedLead?.lead_id || 'edit') : (createdLeadId || 'create');
+    const leadId = crmWizardStep === 3 ? (selectedLead?.lead_id || 'edit') : (createdLeadId || 'create');
     const storageKey = `erp_quote_services_${leadId}`;
     const cached = localStorage.getItem(storageKey);
     let cacheIsValid = false;
@@ -2459,9 +2459,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   // Save services to local storage whenever they change
   React.useEffect(() => {
-    const isStep4Active = wizardStep === 4 || crmWizardStep === 4;
+    const isStep4Active = wizardStep === 3 || crmWizardStep === 3;
     if (!isStep4Active) return;
-    const leadId = crmWizardStep === 4 ? (selectedLead?.lead_id || 'edit') : (createdLeadId || 'create');
+    const leadId = crmWizardStep === 3 ? (selectedLead?.lead_id || 'edit') : (createdLeadId || 'create');
     localStorage.setItem(`erp_quote_services_${leadId}`, JSON.stringify(quoteServices));
   }, [quoteServices, selectedLead, createdLeadId, crmWizardStep, wizardStep]);
 
@@ -3054,11 +3054,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       console.log("✔ PDF generated");
       doc.save(`Quotation.pdf`);
       
-      if (!isEdit) {
-        setWizardStep(4);
-      } else {
-        showToastMsg("Quotation successfully generated!", "success");
-      }
+      showToastMsg("Quotation successfully generated!", "success");
     } catch (err: any) {
       showErrorHelper(
         "PDF Generation Failed",
@@ -3133,11 +3129,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
 
-      if (!isEdit) { 
-        setWizardStep(4); 
-      } else { 
-        showToastMsg("Quotation downloaded and WhatsApp prepared!", "success"); 
-      }
+      showToastMsg("Quotation downloaded and WhatsApp prepared!", "success");
       console.log("✔ Process completed");
     } catch (err: any) {
       showErrorHelper(
@@ -7517,9 +7509,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 </div>
               )}
 
-              {/* STEP 5: REVIEW & FINALIZE */}
-              {wizardStep === 5 && (
-                <div className="space-y-4 animate-fade-in text-left">
+              {/* STEP 5 INTEGRATED: REVIEW & FINALIZE */}
+                  <div className="space-y-4 animate-fade-in text-left mt-6">
                   {/* Summary Overview Panel */}
                   <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4.5 space-y-4">
                     <div className="flex items-center gap-2 border-b border-slate-800/50 pb-2 mb-1">
@@ -7689,7 +7680,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     )}
                   </div>
                 </div>
-              )}
             </div>
 
             {/* Sticky Footer */}
@@ -9092,8 +9082,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     </div>
                   )}
 
-                  {crmWizardStep === 5 && (
-                    <div className="space-y-4 animate-fade-in text-left">
+                  {/* STEP 5 INTEGRATED (CRM): Status Update */}
+                  <div className="space-y-4 animate-fade-in text-left mt-6">
                       <div className="border-b border-slate-800 pb-1.5">
                         <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
                           <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">4</span>
@@ -9185,7 +9175,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         )}
                       </div>
                     </div>
-                  )}
                 </form>
               </div>
             </div>
