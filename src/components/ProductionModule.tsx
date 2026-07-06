@@ -1076,7 +1076,6 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
   const [wfEditor, setWfEditor] = useState('Unassigned');
   const [wfTargetDeliveryDate, setWfTargetDeliveryDate] = useState('');
   const [wfPriority, setWfPriority] = useState<'Low' | 'Medium' | 'High' | 'Critical'>('Medium');
-  const [wfSpeciality, setWfSpeciality] = useState('');
   const [wfProjectNotes, setWfProjectNotes] = useState('');
   const [wfInternalComments, setWfInternalComments] = useState('');
   const [assignmentRows, setAssignmentRows] = useState<{ speciality: string; staffId: string; staffName: string }[]>([
@@ -1219,11 +1218,10 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
         setClosingNotes('');
       } else if (workflowActionType === 'assign_editor') {
         const assignedForThis = activeWorkflowProd ? editorAssignments.filter(a => a.production_id === activeWorkflowProd.production_id) : [];
-        setWfTargetDeliveryDate(activeWorkflowProd?.target_delivery_date || '');
+        setWfTargetDeliveryDate('');
         if (assignedForThis.length === 0) {
           setWfEditor('');
           setWfPriority('Medium');
-          setWfSpeciality('');
           setWfProjectNotes('');
           setWfInternalComments('');
           setAssignmentRows([{ speciality: '', staffId: '', staffName: '' }]);
@@ -1279,24 +1277,9 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
   useEffect(() => {
     if (workflowActionType === 'assign_editor' && activeWorkflowProd) {
       setSelectedWfEditor(null);
-      setWfSpeciality('');
-      setWfTargetDeliveryDate(activeWorkflowProd.target_delivery_date || '');
+      setWfTargetDeliveryDate('');
     }
   }, [workflowActionType, activeWorkflowProd]);
-
-  useEffect(() => {
-    if (selectedWfEditor) {
-      const skill = selectedWfEditor.production_role_speciality?.split(',')[0]?.trim() || selectedWfEditor.role || 'Editor';
-      setWfSpeciality(skill);
-      if (activeWorkflowProd && activeWorkflowProd.target_delivery_date) {
-        setWfTargetDeliveryDate(activeWorkflowProd.target_delivery_date);
-      } else {
-        const fallbackDate = new Date();
-        fallbackDate.setDate(fallbackDate.getDate() + 7);
-        setWfTargetDeliveryDate(fallbackDate.toISOString().split('T')[0]);
-      }
-    }
-  }, [selectedWfEditor, activeWorkflowProd]);
 
   const getRawFootageStatus = (prod: Production) => {
     if (prod.raw_footage_status) return prod.raw_footage_status;
@@ -1900,7 +1883,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 onClick={() => {
                                   setActiveWorkflowProd(prod);
                                   setWfEditor(prod.editor_assigned || 'Unassigned');
-                                  setWfTargetDeliveryDate(prod.target_delivery_date || '');
+                                  setWfTargetDeliveryDate('');
                                   setWfPriority(prod.project_priority || 'Medium');
                                   setWfProjectNotes(prod.project_notes || prod.remarks || '');
                                   setWfInternalComments(prod.internal_comments || '');
@@ -1909,14 +1892,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   const assignedForThis = editorAssignments.filter(a => a.production_id === prod.production_id);
                                   setSelectedStaffIds(assignedForThis.map(a => a.staff_id));
                                   if (assignedForThis.length > 0) {
-                                    setWfSpeciality(assignedForThis[0].speciality);
                                     setAssignmentRows(assignedForThis.map(a => ({
                                       speciality: a.speciality,
                                       staffId: a.staff_id,
                                       staffName: a.staff_name
                                     })));
                                   } else {
-                                    setWfSpeciality('');
                                     setAssignmentRows([{ speciality: '', staffId: '', staffName: '' }]);
                                   }
                                   
@@ -2215,7 +2196,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   onClick={() => {
                                     setActiveWorkflowProd(prod);
                                     setWfEditor(prod.editor_assigned || 'Unassigned');
-                                    setWfTargetDeliveryDate(prod.target_delivery_date || '');
+                                    setWfTargetDeliveryDate('');
                                     setWfPriority(prod.project_priority || 'Medium');
                                     setWfProjectNotes(prod.project_notes || prod.remarks || '');
                                     setWfInternalComments(prod.internal_comments || '');
@@ -2224,14 +2205,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     const assignedForThis = editorAssignments.filter(a => a.production_id === prod.production_id);
                                     setSelectedStaffIds(assignedForThis.map(a => a.staff_id));
                                     if (assignedForThis.length > 0) {
-                                      setWfSpeciality(assignedForThis[0].speciality);
                                       setAssignmentRows(assignedForThis.map(a => ({
                                         speciality: a.speciality,
                                         staffId: a.staff_id,
                                         staffName: a.staff_name
                                       })));
                                     } else {
-                                      setWfSpeciality('');
                                       setAssignmentRows([{ speciality: '', staffId: '', staffName: '' }]);
                                     }
                                     
@@ -5839,23 +5818,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   );
                                 })()}
                                 
-                                {/* Assigned Task */}
-                                <div className="space-y-1.5 border-t border-zinc-900/60 pt-4">
-                                  <label className="text-[10px] text-zinc-400 uppercase font-black tracking-wider block font-mono">
-                                    Assigned Task <span className="text-rose-500">*</span>
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={wfSpeciality}
-                                    onChange={(e) => setWfSpeciality(e.target.value)}
-                                    placeholder="e.g. Video Editing, Teaser Cut..."
-                                    className="w-full bg-zinc-950 border border-zinc-850 hover:border-zinc-800 text-xs text-zinc-100 rounded-xl px-3.5 py-2.5 font-sans focus:outline-none focus:border-purple-500"
-                                    required
-                                  />
-                                </div>
-
+                                
                                 {/* Delivery Target Date */}
-                                <div className="space-y-1.5">
+                                <div className="space-y-1.5 border-t border-zinc-900/60 pt-4">
                                   <label className="text-[10px] text-zinc-400 uppercase font-black tracking-wider block font-mono">
                                     Delivery Target Date <span className="text-rose-500">*</span>
                                   </label>
@@ -5874,7 +5839,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     type="button"
                                     onClick={() => {
                                       setSelectedWfEditor(null);
-                                      setWfSpeciality('');
                                       setWfTargetDeliveryDate('');
                                       setWfError('');
                                       setWfSuccess('');
@@ -5893,10 +5857,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                         setWfError('At least one editor must be selected.');
                                         return;
                                       }
-                                      if (!wfSpeciality.trim()) {
-                                        setWfError('Assigned Task is required.');
-                                        return;
-                                      }
                                       if (!wfTargetDeliveryDate) {
                                         setWfError('Delivery Target Date is mandatory.');
                                         return;
@@ -5904,13 +5864,15 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                                       try {
                                         setIsSaving(true);
+                                        
+                                        const determinedSpeciality = selectedWfEditor.production_role_speciality?.split(',')[0]?.trim() || 'Editor';
 
                                         // 1. Save new editor assignment to the local state & backend
                                         await assignEditorToProject({
                                           production_id: activeWorkflowProd.production_id,
                                           staff_id: selectedWfEditor.staff_id,
                                           staff_name: selectedWfEditor.name,
-                                          speciality: wfSpeciality,
+                                          speciality: determinedSpeciality,
                                           target_finish_date: wfTargetDeliveryDate
                                         });
 
@@ -5922,7 +5884,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                             production_id: activeWorkflowProd.production_id,
                                             staff_id: selectedWfEditor.staff_id,
                                             staff_name: selectedWfEditor.name,
-                                            speciality: wfSpeciality,
+                                            speciality: determinedSpeciality,
                                             target_finish_date: wfTargetDeliveryDate,
                                             status: 'Assigned'
                                           }
@@ -5945,7 +5907,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                         // 3. Keep modal open, allow adding another editor
                                         const editorName = selectedWfEditor.name;
                                         setSelectedWfEditor(null);
-                                        setWfSpeciality('');
                                         setWfTargetDeliveryDate('');
                                         setWfError('');
                                         setWfSuccess(`Successfully added ${editorName} to the Team Assignment.`);
