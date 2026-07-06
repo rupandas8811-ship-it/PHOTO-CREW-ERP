@@ -2830,7 +2830,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         notes_special_customizations: leadObj.notes_special_customizations,
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
           Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
-          Final_Quotation_Amount: finalAmt === "" ? null : Number(finalAmt),
+          Final_Quotation_Amount: finalAmt,
         client_residence_address: leadObj.client_residence_address,
         city: leadObj.city,
         state: leadObj.state,
@@ -2880,7 +2880,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           notes_special_customizations: leadObj.notes_special_customizations,
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
           Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
-          Final_Quotation_Amount: finalAmt === "" ? null : Number(finalAmt),
+          Final_Quotation_Amount: finalAmt,
           
           client_residence_address: leadObj.client_residence_address,
           city: leadObj.city,
@@ -2913,7 +2913,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           notes_special_customizations: leadObj.notes_special_customizations,
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
           Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
-          Final_Quotation_Amount: finalAmt === "" ? null : Number(finalAmt),
+          Final_Quotation_Amount: finalAmt,
           
           client_residence_address: leadObj.client_residence_address,
           city: leadObj.city,
@@ -3726,7 +3726,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           city: wizardLeadData.city,
           state: wizardLeadData.state,
           pincode: wizardLeadData.pincode,
-          
+          Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
+          Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
+          Final_Quotation_Amount: Math.max(0, Number(wizardLeadData.package_cost) + Number(quoteAdditional || 0) - Number(quoteDiscount || 0)),
           events: updatedEvents
         });
 
@@ -4944,7 +4946,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         showToastMsg("Inbound lead created successfully! Continuing to Step 2.", "success");
       } catch (err: any) {
         console.error("Step 1 saving failed:", err);
-        const errMsg = err.message || String(err);
+  
+      const errMsg = err.message || String(err);
+      
+      if (errMsg.includes('FATAL_MISSING_COLUMN')) {
+        const parts = errMsg.split('||');
+        const table = parts[1] || 'leads';
+        const col = parts[2] || 'Unknown';
+        const sql = `ALTER TABLE "${table}" ADD COLUMN "${col}" numeric;`;
+        const colType = col === 'Specify_Custom_Lead_Source_Name' ? 'text' : 'numeric';
+        const properSql = `ALTER TABLE "${table}" ADD COLUMN "${col}" ${colType};`;
+        
+        showToastMsg(`CRITICAL DB ERROR:\nTable: ${table}\nMissing Column: ${col}\nSuggested SQL: ${properSql}`, "error");
+        setIsSaving(false);
+        return;
+      }
+
         let displayedMsg = errMsg;
         
         const lowerMsg = errMsg.toLowerCase();
@@ -5056,7 +5073,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         setIsSaving(false);
       } catch (err: any) {
         console.error("Step 2 saving failed:", err);
-        const errMsg = err.message || String(err);
+  
+      const errMsg = err.message || String(err);
+      
+      if (errMsg.includes('FATAL_MISSING_COLUMN')) {
+        const parts = errMsg.split('||');
+        const table = parts[1] || 'leads';
+        const col = parts[2] || 'Unknown';
+        const sql = `ALTER TABLE "${table}" ADD COLUMN "${col}" numeric;`;
+        const colType = col === 'Specify_Custom_Lead_Source_Name' ? 'text' : 'numeric';
+        const properSql = `ALTER TABLE "${table}" ADD COLUMN "${col}" ${colType};`;
+        
+        showToastMsg(`CRITICAL DB ERROR:\nTable: ${table}\nMissing Column: ${col}\nSuggested SQL: ${properSql}`, "error");
+        setIsSaving(false);
+        return;
+      }
+
         let displayedMsg = errMsg;
         if (errMsg.toLowerCase().includes("database") || errMsg.toLowerCase().includes("connection") || errMsg.toLowerCase().includes("failed to fetch") || errMsg.toLowerCase().includes("supabase")) {
           displayedMsg = "Database save failed: connection error.";
@@ -6929,7 +6961,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   : 'bg-red-950/90 border border-red-500/20 text-red-400'
               }`}>
                 <span>{crmToast.type === 'success' ? '⚡' : '⚠️'}</span>
-                <span className="text-[11px] font-mono font-bold">{crmToast.message}</span>
+                <span className="text-[11px] font-mono font-bold whitespace-pre-wrap">{crmToast.message}</span>
               </div>
             )}
 
@@ -8531,7 +8563,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   : 'bg-red-950 border border-red-500/20 text-red-400'
               }`}>
                 <span>{crmToast.type === 'success' ? '⚡' : '⚠️'}</span>
-                <span className="text-[11px] font-mono font-bold">{crmToast.message}</span>
+                <span className="text-[11px] font-mono font-bold whitespace-pre-wrap">{crmToast.message}</span>
               </div>
             )}
 
