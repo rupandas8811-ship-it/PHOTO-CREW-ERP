@@ -26,6 +26,14 @@ import { formatINR, formatTime12Hour } from '../utils';
 import { EVENT_TYPES } from '../types';
 
 interface UnifiedCalendarProps {
+  ownerFilters?: {
+    search: string;
+    status: string;
+    startDate: string;
+    endDate: string;
+    dateRange: string;
+  };
+
   role: 'sales' | 'operations' | 'production' | 'owner' | 'worker';
 }
 
@@ -83,7 +91,7 @@ const parseLocalDate = (dateStr: string | Date | null | undefined): Date => {
   return new Date(dateStr);
 };
 
-export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
+export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, ownerFilters }) => {
   const { 
     leads, 
     orders, 
@@ -459,31 +467,56 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   }, [allEvents, role]);
 
   // Inline filter by search, type, and classes
+  
   const filteredEvents = useMemo(() => {
-    return roleFilteredEvents.filter(ev => {
-      // Search text query
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        const matchesName = ev.customerName.toLowerCase().includes(query);
-        const matchesLoc = ev.eventLocation.toLowerCase().includes(query);
-        const matchesType = ev.eventType.toLowerCase().includes(query);
-        const matchesNotes = ev.notes?.toLowerCase().includes(query) || false;
-        if (!matchesName && !matchesLoc && !matchesType && !matchesNotes) return false;
+    let result = roleFilteredEvents.filter(ev => {
+      // Internal filters
+      if (searchQuery && !ev.customerName.toLowerCase().includes(searchQuery.toLowerCase()) 
+          && !ev.eventType.toLowerCase().includes(searchQuery.toLowerCase())) {
+        return false;
       }
-
-      // Event Status (Class) filter
-      if (statusFilter !== 'All') {
-        if (ev.eventClass !== statusFilter) return false;
+      if (statusFilter !== 'All' && ev.eventClass !== statusFilter) {
+        return false;
       }
-
-      // Event Type filter
-      if (eventTypeFilter !== 'All') {
-        if (ev.eventType !== eventTypeFilter) return false;
+      if (eventTypeFilter !== 'All' && ev.eventType !== eventTypeFilter) {
+        return false;
       }
-
       return true;
     });
-  }, [roleFilteredEvents, searchQuery, statusFilter, eventTypeFilter]);
+
+    if (role === 'owner' && ownerFilters) {
+      result = result.filter(ev => {
+        // 1. Date
+        if (ownerFilters.dateRange !== 'All Time') {
+          if (ev.date < ownerFilters.startDate || ev.date > ownerFilters.endDate) return false;
+        }
+        // 2. Search
+        if (ownerFilters.search) {
+          const s = ownerFilters.search.toLowerCase();
+          const matchCust = ev.customerName.toLowerCase().includes(s);
+          const matchEvent = ev.eventType.toLowerCase().includes(s);
+          const matchId = ev.orderId?.toLowerCase().includes(s) || ev.id.toLowerCase().includes(s);
+          if (!matchCust && !matchEvent && !matchId) return false;
+        }
+        // 3. Status filter
+        if (ownerFilters.status !== 'All') {
+          const isCompleted = ['Event Completed', 'Raw Footage Received', 'Delivered', 'Paid', 'Closed'].includes(ev.currentStage);
+          const isCancelled = ev.currentStage === 'Cancelled' || ev.currentStage === 'Lost';
+          const isUpcoming = ev.date > todayStr;
+          const isOngoing = ev.date === todayStr;
+          
+          if (ownerFilters.status === 'Upcoming' && !isUpcoming) return false;
+          if (ownerFilters.status === 'Ongoing' && !isOngoing) return false;
+          if (ownerFilters.status === 'Completed' && !isCompleted) return false;
+          if (ownerFilters.status === 'Cancelled' && !isCancelled) return false;
+        }
+        return true;
+      });
+    }
+
+    return result;
+  }, [roleFilteredEvents, searchQuery, statusFilter, eventTypeFilter, ownerFilters, todayStr]);
+
 
   // Unique Event Type tags for filtering dropdown
   const uniqueEventTypes = useMemo(() => {

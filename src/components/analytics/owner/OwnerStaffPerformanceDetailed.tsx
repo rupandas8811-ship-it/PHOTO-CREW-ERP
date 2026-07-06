@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useRole } from '../../RoleContext';
 import { CameraLensStatsCard } from '../../CameraLensStatsCard';
+import { DashboardFilterBar, FilterState } from './DashboardFilterBar';
+import { exportReport } from './exportUtils';
 import { Users, Award, Briefcase, Activity, Filter, CheckCircle2, AlertCircle, Search } from 'lucide-react';
 import { Staff } from '../../../types';
 

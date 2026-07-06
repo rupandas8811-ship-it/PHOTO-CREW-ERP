@@ -10,16 +10,79 @@ import {
   CartesianGrid, Legend, BarChart, Bar, Cell, PieChart, Pie, LineChart, Line
 } from 'recharts';
 import { CameraLensStatsCard } from '../../CameraLensStatsCard';
+import { DashboardFilterBar, FilterState } from './DashboardFilterBar';
+import { exportReport } from './exportUtils';
 
 export const OwnerSalesDetailed: React.FC = () => {
   const { leads, orders, quotations } = useRole();
 
+  
+  const [filters, setFilters] = React.useState<FilterState>({
+    search: '',
+    status: 'All',
+    dateRange: 'All Time',
+    startDate: '',
+    endDate: ''
+  });
+
+  const filteredLeads = useMemo(() => {
+    return leads.filter(l => {
+      // 1. Date
+      if (filters.dateRange !== 'All Time') {
+        if (!l.created_date || l.created_date < filters.startDate || l.created_date > filters.endDate) return false;
+      }
+      // 2. Search
+      if (filters.search) {
+        const s = filters.search.toLowerCase();
+        const matchId = l.lead_id.toLowerCase().includes(s);
+        const matchCust = l.customer_name?.toLowerCase().includes(s);
+        const matchStaff = l.sales_staff_name?.toLowerCase().includes(s);
+        if (!matchId && !matchCust && !matchStaff) return false;
+      }
+      // 3. Status filter
+      if (filters.status !== 'All') {
+        const statusMap: any = {
+          'New': ['New Lead'],
+          'Follow-up': ['Follow Up', 'Quotation Sent', 'Negotiation'],
+          'Converted': ['Order Confirmed', 'Operations Assigned', 'Event Scheduled', 'Event Completed', 'Raw Footage Received', 'Editor Assigned', 'Editing Started', 'Customer Review', 'Revision Required', 'Approved', 'Delivered', 'Closed', 'Payment Pending'],
+          'Lost': ['Lost']
+        };
+        const allowed = statusMap[filters.status] || [];
+        if (!allowed.includes(l.status)) return false;
+      }
+      return true;
+    });
+  }, [leads, filters]);
+
+  const handleDownload = (format: 'csv' | 'xlsx' | 'pdf') => {
+    const reportData = filteredLeads.map(l => ({
+      leadId: l.lead_id,
+      customerName: l.customer_name || 'N/A',
+      salesStaff: l.sales_staff_name || 'N/A',
+      status: l.status,
+      date: l.created_date || 'N/A',
+      budget: l.budget || 0
+    }));
+
+    const columns = [
+      { header: 'Lead ID', key: 'leadId' },
+      { header: 'Customer', key: 'customerName' },
+      { header: 'Sales Staff', key: 'salesStaff' },
+      { header: 'Status', key: 'status' },
+      { header: 'Date', key: 'date' },
+      { header: 'Budget', key: 'budget' }
+    ];
+
+    exportReport(format, 'Leads Analytics Report', reportData, columns, filters);
+  };
+
   const metrics = useMemo(() => {
-    const totalLeads = leads.length;
+    const dataToUse = filteredLeads;
+    const totalLeads = dataToUse.length;
     const qualifiedLeads = leads.filter(l => ['Contacted', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Order Confirmed', 'Approved'].includes(l.status)).length;
-    const quotationsSent = leads.filter(l => l.status === 'Quotation Sent').length;
+    const quotationsSent = dataToUse.filter(l => l.status === 'Quotation Sent').length;
     const confirmedOrders = orders.length;
-    const lostLeads = leads.filter(l => l.status === 'Lost').length;
+    const lostLeads = dataToUse.filter(l => l.status === 'Lost').length;
     const pendingFollowups = leads.filter(l => l.status === 'Follow-up').length;
     const convertedLeads = orders.length;
     const conversionRate = totalLeads > 0 ? ((convertedLeads / totalLeads) * 100).toFixed(1) : '0';

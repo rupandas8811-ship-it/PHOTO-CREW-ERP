@@ -10,17 +10,87 @@ import {
   CartesianGrid, Legend, BarChart, Bar, Cell, PieChart, Pie, LineChart, Line
 } from 'recharts';
 import { CameraLensStatsCard } from '../../CameraLensStatsCard';
+import { DashboardFilterBar, FilterState } from './DashboardFilterBar';
+import { exportReport } from './exportUtils';
 
 export const OwnerRevenueDetailed: React.FC = () => {
   const { leads, orders, payments, quotations, globalDateRange } = useRole();
 
+  
+  const [filters, setFilters] = React.useState<FilterState>({
+    search: '',
+    status: 'All',
+    dateRange: 'All Time',
+    startDate: '',
+    endDate: ''
+  });
+
+  const filteredData = useMemo(() => {
+    return payments.filter(p => {
+      // 1. Date filter
+      if (filters.dateRange !== 'All Time') {
+        const pDate = p.created_at ? p.created_at.split('T')[0] : '';
+        if (pDate < filters.startDate || pDate > filters.endDate) return false;
+      }
+      
+      // 2. Search (Order ID, Customer Name, Event Name)
+      if (filters.search) {
+        const s = filters.search.toLowerCase();
+        const o = orders.find(ord => ord.order_id === p.order_id);
+        const matchOrderId = p.order_id?.toLowerCase().includes(s);
+        const matchCust = o?.customer_name?.toLowerCase().includes(s);
+        const matchEvent = o?.event_type?.toLowerCase().includes(s);
+        if (!matchOrderId && !matchCust && !matchEvent) return false;
+      }
+      
+      // 3. Status filter
+      if (filters.status !== 'All') {
+        const status = p.payment_status || 'No Payment';
+        if (filters.status === 'Paid' && status !== 'Fully Paid') return false;
+        if (filters.status === 'Pending' && status !== 'No Payment') return false;
+        if (filters.status === 'Partially Paid' && status !== 'Partially Paid' && status !== 'Advance Received') return false;
+      }
+      
+      return true;
+    });
+  }, [payments, orders, filters]);
+
+  const handleDownload = (format: 'csv' | 'xlsx' | 'pdf') => {
+    const reportData = filteredData.map(p => {
+      const o = orders.find(ord => ord.order_id === p.order_id);
+      return {
+        orderId: p.order_id,
+        customerName: o?.customer_name || 'N/A',
+        eventName: o?.event_type || 'N/A',
+        totalAmount: (p.advance_received || 0) + (p.final_payment_received || 0) + (p.balance_due || 0),
+        collected: (p.advance_received || 0) + (p.final_payment_received || 0),
+        pending: p.balance_due || 0,
+        status: p.payment_status || 'No Payment',
+        date: p.created_at ? p.created_at.split('T')[0] : 'N/A'
+      };
+    });
+
+    const columns = [
+      { header: 'Order ID', key: 'orderId' },
+      { header: 'Customer', key: 'customerName' },
+      { header: 'Event', key: 'eventName' },
+      { header: 'Total', key: 'totalAmount' },
+      { header: 'Collected', key: 'collected' },
+      { header: 'Pending', key: 'pending' },
+      { header: 'Status', key: 'status' },
+      { header: 'Date', key: 'date' }
+    ];
+
+    exportReport(format, 'Revenue Analytics Report', reportData, columns, filters);
+  };
+
   const metrics = useMemo(() => {
-    const totalCollected = payments.reduce((sum, p) => sum + (p.advance_received || 0) + (p.final_payment_received || 0), 0);
-    const totalPending = payments.reduce((sum, p) => sum + (p.balance_due || 0), 0);
+    const totalCollected = filteredData.reduce((sum, p) => sum + (p.advance_received || 0) + (p.final_payment_received || 0), 0);
+    const totalPending = filteredData.reduce((sum, p) => sum + (p.balance_due || 0), 0);
     const totalQuotation = quotations.reduce((sum, q) => sum + (q.grand_total || 0), 0);
-    const totalAdvance = payments.reduce((sum, p) => sum + (p.advance_received || 0), 0);
-    const totalFinal = payments.reduce((sum, p) => sum + (p.final_payment_received || 0), 0);
-    const outstandingBalance = payments.reduce((sum, p) => sum + (p.balance_due || 0), 0);
+    const totalAdvance = filteredData.reduce((sum, p) => sum + (p.advance_received || 0), 0);
+    const totalFinal = filteredData.reduce((sum, p) => sum + (p.final_payment_received || 0), 0);
+    const outstandingBalance = filteredData.reduce((sum, p) => sum + (p.balance_due || 0), 0);
     const totalConfirmed = orders.length;
     const totalPipeline = leads.length;
 

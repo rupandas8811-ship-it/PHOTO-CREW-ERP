@@ -1060,45 +1060,61 @@ const generateQuotationPDF = (
   doc.text('PRICING SUMMARY & ESTIMATES', 15, currentY);
   currentY += 4.5;
 
+  const pricingRowH = cfg.pricingCardHeight / 4;
+  const baseSumVal = baseServices.reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
+  // Instead of additionalServices calculation, we use additionalCharges which corresponds to quoteAdditional
+  const addlSumVal = additionalCharges || 0;
+  
+  const hasAddl = addlSumVal > 0;
+  const hasDiscount = discountValue > 0;
+  let rows = 2; // base cost + final amount
+  if (hasAddl) rows++;
+  if (hasDiscount) rows++;
+  
+  const dynamicCardHeight = pricingRowH * rows;
+
   doc.setFillColor(248, 250, 252);
-  doc.rect(15, currentY, 180, cfg.pricingCardHeight, 'F');
+  doc.rect(15, currentY, 180, dynamicCardHeight, 'F');
   doc.setDrawColor(226, 232, 240);
   doc.setLineWidth(0.2);
-  doc.rect(15, currentY, 180, cfg.pricingCardHeight, 'D');
+  doc.rect(15, currentY, 180, dynamicCardHeight, 'D');
 
-  const pricingRowH = cfg.pricingCardHeight / 4;
-  doc.line(15, currentY + pricingRowH, 195, currentY + pricingRowH);
-  doc.line(15, currentY + (pricingRowH * 2), 195, currentY + (pricingRowH * 2));
-  doc.line(15, currentY + (pricingRowH * 3), 195, currentY + (pricingRowH * 3));
-  doc.line(115, currentY, 115, currentY + cfg.pricingCardHeight);
+  for (let i = 1; i < rows; i++) {
+    doc.line(15, currentY + (pricingRowH * i), 195, currentY + (pricingRowH * i));
+  }
+  doc.line(115, currentY, 115, currentY + dynamicCardHeight);
 
-  const baseSumVal = baseServices.reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
-  const addlSumVal = additionalServices.reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
   const finalAmountSum = Math.max(0, baseSumVal + addlSumVal - discountValue);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(71, 85, 105);
   
-  doc.text('Package Base Cost', 19, currentY + pricingRowH - 2);
-  doc.text('Additional Services & Add-ons', 19, currentY + (pricingRowH * 2) - 2);
-  doc.text('Quotation Discount (Applied)', 19, currentY + (pricingRowH * 3) - 2);
+  let rowIdx = 1;
+  doc.text('Package Base Cost', 19, currentY + (pricingRowH * rowIdx) - 2);
+  doc.text(baseSumVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * rowIdx) - 2, { align: 'right' });
+  rowIdx++;
+  
+  if (hasAddl) {
+    doc.text('Additional Services & Add-ons', 19, currentY + (pricingRowH * rowIdx) - 2);
+    doc.text(addlSumVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * rowIdx) - 2, { align: 'right' });
+    rowIdx++;
+  }
+  
+  if (hasDiscount) {
+    doc.text('Quotation Discount (Applied)', 19, currentY + (pricingRowH * rowIdx) - 2);
+    doc.text('- ' + discountValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * rowIdx) - 2, { align: 'right' });
+    rowIdx++;
+  }
   
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(15, 23, 42);
-  doc.text('FINAL ESTIMATED COMMERCIAL AMOUNT', 19, currentY + (pricingRowH * 4) - 2);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(51, 65, 85);
-  doc.text(baseSumVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + pricingRowH - 2, { align: 'right' });
-  doc.text(addlSumVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 2) - 2, { align: 'right' });
-  doc.text('- ' + discountValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 3) - 2, { align: 'right' });
-
-  doc.setFont('helvetica', 'bold');
+  doc.text('FINAL ESTIMATED COMMERCIAL AMOUNT', 19, currentY + (pricingRowH * rowIdx) - 2);
+  
   doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
-  doc.text(finalAmountSum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 4) - 2, { align: 'right' });
+  doc.text(finalAmountSum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * rowIdx) - 2, { align: 'right' });
 
-  currentY += cfg.pricingCardHeight + cfg.secSpacing;
+  currentY += dynamicCardHeight + cfg.secSpacing;
 
   // 6. PAYMENT DETAILS CARD
   const paymentCardTotalH = 4.5 + cfg.paymentCardHeight;
@@ -2903,8 +2919,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           
           const payloadToSave = activePackagesList.map(lp => {
             const isPrimary = lp.package_id === wizardLeadData.selected_package_id;
-            const incStr = (editableInclusions[lp.package_id!] || []).join(', ');
-            const delStr = (editableDeliverables[lp.package_id!] || []).join(', ');
+            const incKeys = Object.keys(editableInclusions).filter(k => k === lp.package_id || k.startsWith(lp.package_id + '_'));
+            let allInc: string[] = [];
+            incKeys.forEach(k => { allInc = allInc.concat(editableInclusions[k]); });
+            const incStr = Array.from(new Set(allInc.filter(Boolean))).join(', ');
+            
+            const delStr = (editableDeliverables[lp.package_id!] || []).filter(Boolean).join(', ');
             return {
               package_id: lp.package_id!,
               package_name: lp.package_name || 'Selected Package',
@@ -2915,7 +2935,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               final_amount: isPrimary ? Number(wizardLeadData.package_cost) : lp.final_amount,
               deliverables_description: isPrimary ? wizardLeadData.deliverables : lp.deliverables_description,
               notes_special_customizations: isPrimary ? wizardLeadData.notes : lp.notes_special_customizations,
-              additional_services_cost: lp.additional_services_cost || 0,
+              additional_services_cost: isPrimary ? Number(quoteAdditional || 0) : (lp.additional_services_cost || 0),
               team_members: incStr || lp.team_members || '',
               deliverables: delStr || lp.deliverables || ''
             };
@@ -3046,7 +3066,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         editableInclusions,
         editableDeliverables,
         Number(quoteDiscount || 0),
-        0, // Extra charges removed
+        Number(quoteAdditional || 0), // Extra charges included
         quoteServices
       );
       
@@ -3075,7 +3095,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         editableInclusions,
         editableDeliverables,
         Number(quoteDiscount || 0),
-        0, // Extra charges removed
+        Number(quoteAdditional || 0), // Extra charges included
         quoteServices
       );
       
@@ -3112,7 +3132,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         editableInclusions,
         editableDeliverables,
         Number(quoteDiscount || 0),
-        0, // Extra charges removed
+        Number(quoteAdditional || 0), // Extra charges included
         quoteServices
       );
       
@@ -3136,10 +3156,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const message = `Hello *${safeCustomerName}*,\n\n` +
         `Thank you for choosing *PhotoCrew Pictures*.\n\n` +
         `Please find your quotation details below:\n\n` +
-        `🎉 Event: ${safeEventType}\n` +
-        `📅 Event Date: ${safeEventDate}\n` +
-        `📍 Event Address: ${safeEventLocation}\n` +
-        `💰 Final Amount: ₹${finalAmt.toLocaleString('en-IN')}\n\n` +
+        `�� Event: ${safeEventType}\n` +
+        `�� Event Date: ${safeEventDate}\n` +
+        `�� Event Address: ${safeEventLocation}\n` +
+        `�� Final Amount: ₹${finalAmt.toLocaleString('en-IN')}\n\n` +
         `Thank you.\nPhotoCrew Pictures`;
 
       const cleanPhone = phoneStr.replace(/[^0-9]/g, '');
@@ -3185,13 +3205,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const safeEventType = String(leadObj.event_type || 'Event');
 
       const subject = `Photocrew Pictures - Custom Quotation Details`;
-      const body = `Dear ${safeCustomerName},\n\n` +
+      let body = `Dear ${safeCustomerName},\n\n` +
         `Thank you for reach out to us! We are pleased to provide the custom quotation details for your upcoming ${safeEventType} shoot.\n\n` +
         `Selected Package: ${pkgNames}\n` +
-        `Package Amount: Rs. ${basePkgSum.toLocaleString('en-IN')}\n` +
-        `Discount Applied: Rs. ${(quoteDiscount || 0).toLocaleString('en-IN')}\n` +
-        `Additional Services: Rs. ${(quoteAdditional || 0).toLocaleString('en-IN')}\n` +
-        `Final Quotation Amount: Rs. ${finalAmt.toLocaleString('en-IN')}\n\n` +
+        `Package Base Cost: Rs. ${basePkgSum.toLocaleString('en-IN')}\n`;
+      
+      if (quoteAdditional && quoteAdditional > 0) {
+        body += `Additional Services: Rs. ${(quoteAdditional).toLocaleString('en-IN')}\n`;
+      }
+      if (quoteDiscount && quoteDiscount > 0) {
+        body += `Discount Applied: Rs. ${(quoteDiscount).toLocaleString('en-IN')}\n`;
+      }
+      
+      body += `Final Quotation Amount: Rs. ${finalAmt.toLocaleString('en-IN')}\n\n` +
         `We will follow up shortly to discuss any specific adjustments you might need.\n\n` +
         `Warm regards,\n` +
         `The Photocrew Pictures Team\n` +
@@ -3268,7 +3294,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         {/* Section 2: Quotation Details */}
         <div className="bg-slate-900/50 border border-slate-805/40 rounded-xl p-4.5 space-y-3.5 shadow-sm">
           <h4 className="text-xs font-bold text-amber-500 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-2">
-            <span>📋</span> Section 2: Quotation Details
+            <span>��</span> Section 2: Quotation Details
           </h4>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -3343,7 +3369,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               disabled={isSaving}
               className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-red-950/40 hover:bg-red-900/50 text-red-300 rounded-lg transition-all border border-red-900/40 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span>📄</span> {isSaving ? 'Processing...' : 'Download PDF Document'}
+              <span>��</span> {isSaving ? 'Processing...' : 'Download PDF Document'}
             </button>
 
             {/* Send WhatsApp */}
@@ -3353,7 +3379,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               disabled={isSaving}
               className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 rounded-lg transition-all border border-emerald-900/40 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span>💬</span> {isSaving ? 'Processing...' : 'Send Quotation via WhatsApp'}
+              <span>��</span> {isSaving ? 'Processing...' : 'Send Quotation via WhatsApp'}
             </button>
           </div>
         </div>
@@ -3369,9 +3395,36 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setActiveQuoteNum('');
     setQuoteDiscount(0);
     setQuoteAdditional(0);
-    // Explicitly reset on new lead selection
-    setEditableInclusions({});
-    setEditableDeliverables({});
+    // Immediately populate inclusions/deliverables from lead_packages to prevent flicker
+    const actPkgs = (leadPackages || []).filter(lp => lp.lead_id === lead.lead_id);
+    const initialInclusions: Record<string, string[]> = {};
+    const initialDeliverables: Record<string, string[]> = {};
+    
+    actPkgs.forEach(lp => {
+      const pkgKey = lp.package_id;
+      const pObj = (packages || []).find(p => p.package_id === lp.package_id);
+      
+      const incStr = lp.team_members || pObj?.team_members || '';
+      const delStr = lp.deliverables || lp.deliverables_description || pObj?.deliverables || '';
+      
+      const parsedInc = parseTeamMembers(incStr);
+      const incList = parsedInc.length > 0 ? parsedInc : ['1 Professional Photographer'];
+      
+      const delList = delStr ? delStr.split(/[,\n]/).map((s: any) => s.trim()).filter(Boolean) : ['Standard Deliverables'];
+      
+      initialInclusions[pkgKey] = incList;
+      initialDeliverables[pkgKey] = delList;
+      
+      // Also populate event specific keys if needed
+      if (lead.events && lead.events.length > 0) {
+        lead.events.forEach(ev => {
+          initialInclusions[`${pkgKey}_${ev.id}`] = [...incList];
+        });
+      }
+    });
+    
+    setEditableInclusions(initialInclusions);
+    setEditableDeliverables(initialDeliverables);
     // Extract staff info from events if not directly on lead
     let evtStaffName = '';
     let evtStaffMobile = '';
@@ -3431,7 +3484,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setCrmWizardStep(startStep);
 
     setQuoteDiscount(lead.Quotation_Discount ?? latestQuote?.discount_amount ?? 0);
-    setQuoteAdditional(lead.Additional_Services_Cost ?? latestQuote?.additional_services_cost ?? 0);
+    setQuoteAdditional((actPkgs.reduce((acc, curr) => acc + (Number(curr.additional_services_cost) || 0), 0) || lead.Additional_Services_Cost) ?? (latestQuote?.additional_services_cost ?? 0));
     if (latestQuote) {
       setActiveQuoteNum(latestQuote.quotation_number || '');
       setSalesStaffName(latestQuote.sales_staff_name || lead.sales_staff_name || evtStaffName || '');
@@ -3769,8 +3822,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           
           const payloadToSave = activePackagesList.map(lp => {
             const isPrimary = lp.package_id === wizardLeadData.selected_package_id;
-            const incStr = (editableInclusions[lp.package_id!] || []).join(', ');
-            const delStr = (editableDeliverables[lp.package_id!] || []).join(', ');
+            const incKeys = Object.keys(editableInclusions).filter(k => k === lp.package_id || k.startsWith(lp.package_id + '_'));
+            let allInc = [];
+            incKeys.forEach(k => { allInc = allInc.concat(editableInclusions[k]); });
+            const incStr = Array.from(new Set(allInc.filter(Boolean))).join(', ');
+            
+            const delStr = (editableDeliverables[lp.package_id!] || []).filter(Boolean).join(', ');
             return {
               package_id: lp.package_id!,
               package_name: lp.package_name || 'Selected Package',
@@ -3781,7 +3838,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               final_amount: isPrimary ? Number(wizardLeadData.package_cost) : lp.final_amount,
               deliverables_description: isPrimary ? wizardLeadData.deliverables : lp.deliverables_description,
               notes_special_customizations: isPrimary ? wizardLeadData.notes : lp.notes_special_customizations,
-              additional_services_cost: lp.additional_services_cost || 0,
+              additional_services_cost: isPrimary ? Number(quoteAdditional || 0) : (lp.additional_services_cost || 0),
               team_members: incStr || lp.team_members || '',
               deliverables: delStr || lp.deliverables || ''
             };
@@ -5720,7 +5777,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            👥 Customer Profiles
+            �� Customer Profiles
           </button>
 
           <button
@@ -5871,14 +5928,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           {/* Column B: Follow-up Activity Logger */}
           <div className="lg:col-span-8 bg-slate-850 rounded-xl border border-slate-800 p-5">
             <h3 className="text-sm font-semibold text-slate-100 flex items-center gap-1.5 pb-2.5 border-b border-slate-800 mb-4">
-              <span>📝</span> Log Lead Follow-up activity & CRM notes
+              <span>��</span> Log Lead Follow-up activity & CRM notes
             </h3>
 
             {selectedLead && isLeadLocked && (
               <div className="p-4 mb-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-left animate-fade-in relative z-10">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-wider font-mono">
-                    <span className="animate-pulse">🔒</span> Stage-Locked: Order Confirmed
+                    <span className="animate-pulse">��</span> Stage-Locked: Order Confirmed
                   </div>
                   <p className="text-[11px] text-slate-350 leading-relaxed font-sans">
                     This lead is lock-protected due to having officially transitioned to operations. Only payment schedules are editable.
@@ -5893,7 +5950,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     }}
                     className="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-lg transition-all cursor-pointer font-mono font-extrabold uppercase tracking-wide border border-amber-500/20 shadow-lg"
                   >
-                    🔓 Owner Override
+                    �� Owner Override
                   </button>
                 )}
               </div>
@@ -6087,7 +6144,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       : 'bg-indigo-650 hover:bg-indigo-550 text-white border-indigo-500/10 cursor-pointer text-shadow'
                     }`}
                   >
-                    {isSaving ? 'Saving...' : (isLeadLocked ? '🔒 Locked' : followUpForm.status === 'Order Confirmed' ? '💍 Confirm Order booking' : 'Save Follow-up Notes')}
+                    {isSaving ? 'Saving...' : (isLeadLocked ? '�� Locked' : followUpForm.status === 'Order Confirmed' ? '�� Confirm Order booking' : 'Save Follow-up Notes')}
                   </button>
                 </div>
               </form>
@@ -6115,7 +6172,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             <div className="lg:col-span-4 bg-slate-850 rounded-xl border border-slate-800 p-4 space-y-4 text-left">
               <div className="border-b border-slate-800 pb-3">
                 <h3 className="text-sm font-bold text-slate-100 flex items-center gap-1.5 font-mono">
-                  <span>👥</span> CLIENT ACCOUNTS ({getCustomers(leads, orders, payments).length})
+                  <span>��</span> CLIENT ACCOUNTS ({getCustomers(leads, orders, payments).length})
                 </h3>
                 <p className="text-[11px] text-slate-400 mt-0.5">
                   Unified customer profiles compiled via CRM phone & email graphs.
@@ -6182,7 +6239,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </span>
                           {cust.totalOrders >= 2 && (
                             <span className="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-black uppercase">
-                              🔥 REPEAT ({cust.totalOrders})
+                              �� REPEAT ({cust.totalOrders})
                             </span>
                           )}
                         </div>
@@ -7463,7 +7520,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   onClick={() => setViewingPkgDetails(pkgObj)}
                                   className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg border border-slate-800 hover:border-slate-700 font-semibold cursor-pointer transition-all flex items-center gap-1 text-[11px]"
                                 >
-                                  📋 View Specification
+                                  �� View Specification
                                 </button>
                                 <button
                                   type="button"
@@ -7471,7 +7528,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   className="px-2.5 py-1.5 bg-rose-950/20 hover:bg-rose-950/40 text-rose-400 border border-rose-900/30 hover:border-rose-900/50 rounded-lg font-semibold cursor-pointer transition-all flex items-center gap-1 text-[11px]"
                                   title="Remove Package"
                                 >
-                                  🗑️ Remove
+                                  ��️ Remove
                                 </button>
                               </div>
                             </div>
@@ -7595,7 +7652,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   disabled={isSaving}
                   className="px-5.5 py-2 text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl shadow-lg shadow-emerald-500/10 cursor-pointer border border-transparent transition-colors flex items-center gap-1.5"
                 >
-                  {isSaving ? 'Saving...' : salesStatus === 'Order Confirmed' ? '🎉 Confirm Order & Transition' : '✍️ Create Lead'}
+                  {isSaving ? 'Saving...' : salesStatus === 'Order Confirmed' ? '�� Confirm Order & Transition' : '✍️ Create Lead'}
                 </button>
               )}
             </div>
@@ -7633,7 +7690,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           {/* Leads Directory Title & Export Utility Panel */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-900/60 p-4 rounded-2xl border border-zinc-850 shadow-xl">
             <div className="flex items-center gap-2">
-              <span className="text-xl">📁</span>
+              <span className="text-xl">��</span>
               <div>
                 <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">Leads Directory</h3>
                 <p className="text-[10px] text-zinc-400">Export active pipeline registers using start and end filters</p>
@@ -7646,7 +7703,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
                 title="Print lead report to paper"
               >
-                <span>🖨️</span> Print Report
+                <span>��️</span> Print Report
               </button>
               
               <button
@@ -7654,7 +7711,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-rose-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
                 title="Download report as PDF format"
               >
-                <span>📄</span> Download PDF
+                <span>��</span> Download PDF
               </button>
               
               <button
@@ -7662,7 +7719,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-emerald-450 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
                 title="Download report as Excel spreadsheet"
               >
-                <span>📊</span> Excel (.xlsx)
+                <span>��</span> Excel (.xlsx)
               </button>
 
               <button
@@ -7670,7 +7727,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-indigo-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
                 title="Download report as CSV file"
               >
-                <span>📝</span> CSV
+                <span>��</span> CSV
               </button>
             </div>
           </div>
@@ -8065,7 +8122,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
-                <span>💍</span> Booking Confirmation & Contract Form
+                <span>��</span> Booking Confirmation & Contract Form
               </h4>
               <button 
                 onClick={() => setShowConfirmModal(false)}
@@ -8223,7 +8280,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           <div id="step2_followup_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
-                <span>📅</span> Log Mandatory Follow-up Details
+                <span>��</span> Log Mandatory Follow-up Details
               </h4>
               <button 
                 onClick={() => setShowStep2Popup(false)}
@@ -8340,7 +8397,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           <div id="lost_lead_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
-                <span>💔</span> Mark Lead as Lost
+                <span>��</span> Mark Lead as Lost
               </h4>
               <button 
                 onClick={() => setShowLostModal(false)}
@@ -8437,7 +8494,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             <div className="py-2.5 px-4 sm:px-5 border-b border-slate-850 flex items-center justify-between bg-slate-950/40 sticky top-0 z-10 backdrop-blur-sm shrink-0">
               <div className="flex items-center gap-2 text-left">
                 <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5 font-mono uppercase tracking-wider">
-                  <span>💍</span> Digital Lead CRM Workspace — Client Board
+                  <span>��</span> Digital Lead CRM Workspace — Client Board
                 </h3>
                 <span className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded font-mono font-bold">Code: {selectedLead.lead_id}</span>
               </div>
@@ -8500,7 +8557,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             {/* If locked, display banner */}
             {isLeadLocked && (
               <div className="mx-4 sm:mx-5 mt-2 bg-amber-950/25 border border-amber-500/20 p-2.5 rounded-xl flex items-start gap-3 text-left shadow-lg">
-                <span className="text-amber-500 text-base mt-0.5">🔒</span>
+                <span className="text-amber-500 text-base mt-0.5">��</span>
                 <div>
                   <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wide">Record Lock Active (CRM Closed)</h4>
                   <p className="text-[10px] text-zinc-400 leading-relaxed mt-0.5">
@@ -8667,7 +8724,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               {/* Sales Executive Details */}
                               <div className="bg-slate-900/50 border border-slate-805/40 rounded-lg p-3 space-y-2.5 shadow-sm mt-3">
                                 <h4 className="text-[11px] font-bold text-indigo-400 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-1">
-                                  <span>👤</span> Sales Executive Details
+                                  <span>��</span> Sales Executive Details
                                 </h4>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                                   <div>
@@ -8747,7 +8804,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                     return (
                                       <div key={event.id} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-3 mt-3 mb-4">
                                         <h4 className="text-xs sm:text-sm font-bold text-slate-100 uppercase tracking-wider font-mono border-b border-slate-800/40 pb-1.5 flex items-center justify-between">
-                                          <span>🎬 {event.event_name || event.event_type || 'Unnamed Event'}</span>
+                                          <span>�� {event.event_name || event.event_type || 'Unnamed Event'}</span>
                                         </h4>
                                         <div>
                                           <div className="flex items-center justify-between mb-2">
@@ -8978,7 +9035,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         {wizardLeadData.status === 'Order Confirmed' && (
                           <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
                             <div className="border-b border-emerald-500/20 pb-1.5">
-                              <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest font-mono">💍 Configure Confirmed Order & Booking Contract</h4>
+                              <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest font-mono">�� Configure Confirmed Order & Booking Contract</h4>
                               <p className="text-[10px] text-zinc-400 mt-0.5">Confirming this order locks the CRM profile and creates a real-time production entry. Only payment configurations remain editable.</p>
                             </div>
 
@@ -9454,7 +9511,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   type="submit"
                   className="px-4 py-2 text-xs bg-amber-600 hover:bg-amber-500 text-white rounded-lg shadow-sm cursor-pointer font-extrabold uppercase tracking-wide font-mono border border-amber-500/20"
                 >
-                  🔓 Confirm Unlock
+                  �� Confirm Unlock
                 </button>
               </div>
             </form>
@@ -9692,7 +9749,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         ID: {viewingPkgDetails.package_id || 'Dynamic Link'}
                       </span>
                       <h4 className="text-sm sm:text-base font-extrabold text-slate-100 font-sans tracking-tight">
-                        📋 {viewingPkgDetails.package_name || 'Package Specifications'}
+                        �� {viewingPkgDetails.package_name || 'Package Specifications'}
                       </h4>
                     </div>
                     <div className="flex items-center gap-2">
@@ -9756,7 +9813,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     {/* Deliverables Panel */}
                     <div className="bg-slate-950/20 border border-slate-850 p-3.5 rounded-xl space-y-2.5">
                       <span className="text-[10px] font-bold text-slate-400 font-mono tracking-wider uppercase block border-b border-slate-850 pb-1.5 flex items-center gap-1.5">
-                        📦 Key Deliverables Included
+                        �� Key Deliverables Included
                       </span>
                       <div className="space-y-2 text-xs">
                         <div className="flex flex-col bg-slate-900/40 p-1.5 rounded border border-transparent hover:border-slate-800/60">
@@ -9787,7 +9844,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       {/* Crew Members */}
                       <div className="bg-slate-950/20 border border-slate-850 p-3.5 rounded-xl space-y-2.5">
                         <span className="text-[10px] font-bold text-slate-400 font-mono tracking-wider uppercase block border-b border-slate-850 pb-1.5 flex items-center gap-1.5">
-                          👥 Team Members Included
+                          �� Team Members Included
                         </span>
                         <div className="grid grid-cols-2 gap-2 text-xs">
                           <div className="bg-slate-900/40 p-1.5 rounded">
@@ -9812,7 +9869,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       {/* Coverage details */}
                       <div className="bg-slate-950/20 border border-slate-850 p-3.5 rounded-xl space-y-2.5">
                         <span className="text-[10px] font-bold text-slate-400 font-mono tracking-wider uppercase block border-b border-slate-850 pb-1.5 flex items-center gap-1.5">
-                          📸 Coverage Details
+                          �� Coverage Details
                         </span>
                         <div className="space-y-2 text-xs">
                           <div className="flex justify-between items-center bg-slate-900/40 p-2 rounded">
@@ -9835,7 +9892,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   {/* Offers & Perks */}
                   <div className="bg-indigo-950/15 border border-indigo-900/40 p-3.5 rounded-xl space-y-2 text-xs">
                     <span className="text-[10px] font-bold text-indigo-400 font-mono tracking-wider uppercase block border-b border-indigo-950 pb-1">
-                      🎁 Package Offers & complimentary Items
+                      �� Package Offers & complimentary Items
                     </span>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
                       <div>
@@ -9852,7 +9909,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   {/* Terms & Conditions */}
                   <div className="bg-slate-950/30 border border-slate-850 rounded-xl p-3.5 space-y-1.5 text-xs">
                     <span className="text-slate-505 block font-bold text-[9px] uppercase font-mono tracking-wider">
-                      📑 Contractual Terms & conditions
+                      �� Contractual Terms & conditions
                     </span>
                     <div className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-850 max-h-24 overflow-y-auto leading-relaxed text-slate-350">
                       {viewingPkgDetails.terms_conditions || (
@@ -9920,7 +9977,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           <div className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-lg w-full shadow-2xl flex flex-col max-h-[90vh]">
             <div className="flex items-center justify-between border-b border-slate-800 p-5 shrink-0">
               <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
-                <span>📅</span> Reporting Details for Events
+                <span>��</span> Reporting Details for Events
               </h4>
               <button 
                 onClick={() => {
@@ -10102,7 +10159,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[20001] flex items-center justify-center p-4 overflow-y-auto animate-fade-in text-left text-xs bg-black/60">
             <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-5 shadow-2xl relative text-slate-355">
               <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
-                <span className="text-xl">🗑️</span>
+                <span className="text-xl">��️</span>
                 <h3 className="text-base font-bold text-white">Delete Package</h3>
               </div>
 
@@ -10221,7 +10278,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 <tbody>
                   {/* Category Row */}
                   <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
-                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">🏷️ Category</td>
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">��️ Category</td>
                     {selectedPkgIds.map((id) => {
                       const pkg = packages.find(p => p.package_id === id);
                       return (
@@ -10234,7 +10291,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                   {/* Pricing Row */}
                   <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
-                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">💰 Price Rate</td>
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">�� Price Rate</td>
                     {selectedPkgIds.map((id) => {
                       const pkg = packages.find(p => p.package_id === id);
                       return (
@@ -10247,7 +10304,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                   {/* Row: Deliverables */}
                   <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
-                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">📦 Core Deliverables</td>
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">�� Core Deliverables</td>
                     {selectedPkgIds.map((id) => {
                       const pkg = packages.find(p => p.package_id === id);
                       return (
@@ -10262,7 +10319,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                   {/* Row: Team Members */}
                   <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
-                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">👥 Crew Required</td>
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">�� Crew Required</td>
                     {selectedPkgIds.map((id) => {
                       const pkg = packages.find(p => p.package_id === id);
                       return (
@@ -10275,7 +10332,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                   {/* Row: Seasonal Offers */}
                   <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
-                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">🎁 Seasonal offers</td>
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">�� Seasonal offers</td>
                     {selectedPkgIds.map((id) => {
                       const pkg = packages.find(p => p.package_id === id);
                       return (
@@ -10303,7 +10360,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                   {/* Row: Scope Condition */}
                   <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
-                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">📷 Shoot Scope</td>
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">�� Shoot Scope</td>
                     {selectedPkgIds.map((id) => {
                       const pkg = packages.find(p => p.package_id === id);
                       return (
@@ -10318,7 +10375,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                   {/* Row: Terms & Conditions */}
                   <tr className="hover:bg-slate-950/20 text-[11px]">
-                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">📑 Terms & Conditions</td>
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">�� Terms & Conditions</td>
                     {selectedPkgIds.map((id) => {
                       const pkg = packages.find(p => p.package_id === id);
                       return (
