@@ -5756,7 +5756,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   const wl = getStaffWorkload(s.name);
                                   return (
                                     <option key={s.staff_id} value={s.staff_id}>
-                                      {s.name} ({s.production_role_speciality || s.role || 'Editor'} — {wl.activeCount} active tasks)
+                                      {s.name} ({wl.activeCount} Active Task{wl.activeCount !== 1 ? 's' : ''})
                                     </option>
                                   );
                                 })}
@@ -5789,8 +5789,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   
                                   return (
                                     <div className="space-y-2 mb-4">
+                                      <div className="bg-zinc-900/40 p-3 rounded-xl border border-zinc-800 mb-3">
+                                        <div className="text-white font-bold">{selectedWfEditor.name}</div>
+                                        <div className="text-purple-400 text-xs font-mono mb-1">{selectedWfEditor.production_role_speciality || selectedWfEditor.role || 'Editor'}</div>
+                                        <div className="text-zinc-400 text-[11px] font-mono">{activeTasks.length} Active Task{activeTasks.length !== 1 ? 's' : ''}</div>
+                                      </div>
+                                      
                                       <label className="text-[10px] text-zinc-400 uppercase font-black tracking-wider block font-mono">
-                                        Current Workload for {selectedWfEditor.name}
+                                        Active Assignments
                                       </label>
                                       {activeTasks.length === 0 ? (
                                         <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] px-3 py-2.5 rounded-xl font-mono">
