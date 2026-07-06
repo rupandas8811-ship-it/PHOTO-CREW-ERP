@@ -908,7 +908,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       operations: [
         'operation_id', 'order_id', 'photographer_assigned', 'videographer_assigned', 
         'drone_operator_assigned', 'assistant_assigned', 'equipment_kit', 'reporting_time', 
-        'event_status', 'remarks', 'updated_by', 'Upload_Notes_Remarks', 'upload_notes_remarks'
+        'event_status', 'remarks', 'updated_by', 'Upload_Notes_Remarks', 'upload_notes_remarks',
+        'Raw_Footage_Drive_Link', 'raw_footage_drive_link'
       ],
       quotations: [
         'quotation_id', 'lead_id', 'quotation_number', 'quotation_amount', 'discount_amount', 
@@ -3794,7 +3795,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await pushUpdate('operations', 'order_id', orderId, { 
       event_status: 'Completed',
       Upload_Notes_Remarks: uploadNotes || '',
-      upload_notes_remarks: uploadNotes || ''
+      upload_notes_remarks: uploadNotes || '',
+      Raw_Footage_Drive_Link: footageLink || '',
+      raw_footage_drive_link: footageLink || ''
     });
 
     // Directly update local state for operations
@@ -3804,7 +3807,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ...op,
           event_status: 'Completed',
           Upload_Notes_Remarks: uploadNotes || '',
-          upload_notes_remarks: uploadNotes || ''
+          upload_notes_remarks: uploadNotes || '',
+          Raw_Footage_Drive_Link: footageLink || '',
+          raw_footage_drive_link: footageLink || ''
         };
       }
       return op;

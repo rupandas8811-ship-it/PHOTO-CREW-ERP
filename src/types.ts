@@ -307,6 +307,8 @@ export interface Operation {
   updated_by: string;
   Upload_Notes_Remarks?: string;
   upload_notes_remarks?: string;
+  Raw_Footage_Drive_Link?: string;
+  raw_footage_drive_link?: string;
 }
 
 export interface RawFootage {

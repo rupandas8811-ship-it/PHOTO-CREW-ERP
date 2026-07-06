@@ -1201,13 +1201,13 @@ export const OperationsLeads: React.FC = () => {
                               } else if (newStatus === 'Raw Footage Received') {
                                 setReceivingFootageOrderId(ord.order_id);
                                 const existingRf = rawFootage?.find(f => f.order_id === ord.order_id);
+                                const op = getOpDetails(ord.order_id);
                                 setFootageForm({
-                                  footage_link: (existingRf && (existingRf.raw_received || existingRf.status === 'Received')) ? (existingRf.server_path || '') : '',
+                                  footage_link: op?.Raw_Footage_Drive_Link || op?.raw_footage_drive_link || ((existingRf && (existingRf.raw_received || existingRf.status === 'Received')) ? (existingRf.server_path || '') : ''),
                                   storage_type: 'Google Drive',
                                   upload_notes: ''
                                 });
                                 // Initialize footageHandoverStates for each assigned equipment item
-                                const op = getOpDetails(ord.order_id);
                                 const kits = op?.equipment_kit ? op.equipment_kit.split(',').map((sName: string) => sName.trim()).filter(Boolean) : [];
                                 const initialHandovers: any = {};
                                 kits.forEach((k: string) => {
@@ -1285,14 +1285,14 @@ export const OperationsLeads: React.FC = () => {
                             onClick={() => {
                               setReceivingFootageOrderId(ord.order_id);
                               const existingRf = rawFootage?.find(f => f.order_id === ord.order_id);
+                              const op = getOpDetails(ord.order_id);
                               setFootageForm({
-                                footage_link: (existingRf && (existingRf.raw_received || existingRf.status === 'Received')) ? (existingRf.server_path || '') : '',
+                                footage_link: op?.Raw_Footage_Drive_Link || op?.raw_footage_drive_link || ((existingRf && (existingRf.raw_received || existingRf.status === 'Received')) ? (existingRf.server_path || '') : ''),
                                 storage_type: 'Google Drive',
                                 upload_notes: ''
                               });
 
                               // Initialize footageHandoverStates for each assigned equipment item
-                              const op = getOpDetails(ord.order_id);
                               const kits = op?.equipment_kit ? op.equipment_kit.split(',').map((sName: string) => sName.trim()).filter(Boolean) : [];
                               const initialHandovers: Record<string, {
                                 return_status: 'Returned' | 'Not Returned' | 'Damaged' | 'Missing';
@@ -1885,13 +1885,6 @@ export const OperationsLeads: React.FC = () => {
             <form onSubmit={async (e) => {
               e.preventDefault();
               if (isSaving) return;
-
-              const hasCloudLink = !!(footageForm.footage_link && footageForm.footage_link.trim());
-
-              if (!hasCloudLink) {
-                alert("Please provide Raw Footage Drive Link.");
-                return;
-              }
 
               try {
                 setIsSaving(true);
