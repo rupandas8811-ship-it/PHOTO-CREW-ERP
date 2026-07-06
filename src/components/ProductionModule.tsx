@@ -1123,6 +1123,22 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
   const [crewSpecialityFilter, setCrewSpecialityFilter] = useState('All');
   const [crewStatusFilter, setCrewStatusFilter] = useState('All');
 
+  // Assign Editor Popup states
+  const [selectedEditors, setSelectedEditors] = useState<Staff[]>([]);
+  const [editorSearchQuery, setEditorSearchQuery] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [lastModalProdId, setLastModalProdId] = useState<string | null>(null);
+
+  // Simplified Add Staff Form states
+  const [newStaffName, setNewStaffName] = useState('');
+  const [newStaffMobile, setNewStaffMobile] = useState('');
+  const [newStaffWhatsapp, setNewStaffWhatsapp] = useState('');
+  const [newStaffSkills, setNewStaffSkills] = useState<string[]>([]);
+  const [newSkillText, setNewSkillText] = useState('');
+  const [addStaffError, setAddStaffError] = useState('');
+  const [addStaffSuccess, setAddStaffSuccess] = useState('');
+  const [isSubmittingStaff, setIsSubmittingStaff] = useState(false);
+
   // Editing timeline dates inside detailed modal
   const [dateFootageReceived, setDateFootageReceived] = useState('');
   const [dateEditingStarted, setDateEditingStarted] = useState('');
@@ -1192,14 +1208,23 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
         setClosingNotes('');
       } else if (workflowActionType === 'assign_editor') {
         const assignedForThis = activeWorkflowProd ? editorAssignments.filter(a => a.production_id === activeWorkflowProd.production_id) : [];
+        setWfTargetDeliveryDate(activeWorkflowProd?.target_delivery_date || '');
         if (assignedForThis.length === 0) {
           setWfEditor('');
-          setWfTargetDeliveryDate('');
           setWfPriority('Medium');
           setWfSpeciality('');
           setWfProjectNotes('');
           setWfInternalComments('');
           setAssignmentRows([{ speciality: '', staffId: '', staffName: '' }]);
+          setSelectedEditors([]);
+        } else {
+          const assignedStaffList = assignedForThis.map(a => staff.find(s => s.staff_id === a.staff_id)).filter((s): s is Staff => !!s);
+          setSelectedEditors(assignedStaffList);
+          setAssignmentRows(assignedForThis.map(a => ({
+            speciality: a.speciality,
+            staffId: a.staff_id,
+            staffName: a.staff_name
+          })));
         }
       }
 
@@ -3592,26 +3617,113 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
       {/* CREW ROSTER TAB */}
       {activeSubTab === 'crew_roster' && (() => {
-        const todayStr = new Date().toISOString().split('T')[0];
+        // Find tasks for a staff member that are not completed
+        const getStaffActiveTasks = (staffName: string) => {
+          return editorAssignments.filter(a => 
+            a.staff_name.toLowerCase() === staffName.toLowerCase() && 
+            a.status !== 'Completed'
+          );
+        };
 
-        // Overall Aggregate Metrics
-        const totalAssigned = editorAssignments.length;
-        const activeTasksCount = editorAssignments.filter(a => a.status !== 'Completed').length;
-        const completedTasksCount = editorAssignments.filter(a => a.status === 'Completed').length;
-        const overdueTasksCount = editorAssignments.filter(a => 
-          a.status !== 'Completed' && a.target_finish_date && a.target_finish_date < todayStr
-        ).length;
+        // Find event name for a production project
+        const getTaskEventName = (productionId: string) => {
+          const correlatedProj = production.find(p => p.production_id === productionId);
+          if (!correlatedProj) return 'Project';
+          const trackingId = correlatedProj.tracking_id;
+          
+          const linkedOrder = orders.find(o => o.order_id === trackingId || o.lead_id === trackingId);
+          if (linkedOrder) {
+            return linkedOrder.event_type || linkedOrder.custom_event_name || 'Project';
+          }
+          
+          const linkedLead = leadsData?.find(l => l.lead_id === trackingId);
+          if (linkedLead) {
+            return linkedLead.event_type || linkedLead.custom_event_name || 'Project';
+          }
 
-        // Only display active staff or staff matching production specialties
-        const activeStaffList = staff.filter(s => s.status === 'Active');
+          return 'Project';
+        };
 
-        // Filter assignments based on search and dropdown selections
-        const filteredAssignments = editorAssignments.filter(assign => {
-          const matchesSearch = assign.staff_name.toLowerCase().includes(crewSearch.toLowerCase()) || 
-                                assign.speciality.toLowerCase().includes(crewSearch.toLowerCase());
-          const matchesSpeciality = crewSpecialityFilter === 'All' || assign.speciality === crewSpecialityFilter;
-          const matchesStatus = crewStatusFilter === 'All' || assign.status === crewStatusFilter;
-          return matchesSearch && matchesSpeciality && matchesStatus;
+        const handleSaveStaff = async (e: React.FormEvent) => {
+          e.preventDefault();
+          setAddStaffError('');
+          setAddStaffSuccess('');
+          setIsSubmittingStaff(true);
+
+          const name = newStaffName.trim();
+          const mobile = newStaffMobile.trim();
+          const whatsapp = newStaffWhatsapp.trim();
+
+          if (!name) {
+            setAddStaffError('Staff Full Name is required.');
+            setIsSubmittingStaff(false);
+            return;
+          }
+          if (!mobile) {
+            setAddStaffError('Mobile Number is required.');
+            setIsSubmittingStaff(false);
+            return;
+          }
+
+          // Comma-separated skills
+          const skillsString = newStaffSkills.join(', ');
+
+          try {
+            // Check if duplicate exists (name or mobile matching)
+            const existingStaff = staff.find(
+              (s) =>
+                s.name.toLowerCase() === name.toLowerCase() ||
+                s.mobile === mobile
+            );
+
+            if (existingStaff) {
+              // Update existing staff
+              await updateStaff(existingStaff.staff_id, {
+                mobile,
+                whatsapp_number: whatsapp,
+                production_role_speciality: skillsString
+              });
+              setAddStaffSuccess('Staff details updated successfully in the Production Staff table.');
+            } else {
+              // Create new staff record
+              await addStaff({
+                name,
+                mobile,
+                whatsapp_number: whatsapp,
+                production_role_speciality: skillsString,
+                email: `${name.toLowerCase().replace(/\s+/g, '')}@photocrew.com`,
+                role: 'Editor',
+                department: 'Post-Production',
+                status: 'Active',
+                joining_date: new Date().toISOString().split('T')[0]
+              });
+              setAddStaffSuccess('Staff member onboarded successfully.');
+            }
+
+            // Reset form
+            setNewStaffName('');
+            setNewStaffMobile('');
+            setNewStaffWhatsapp('');
+            setNewStaffSkills([]);
+          } catch (err: any) {
+            setAddStaffError(err.message || 'Failed to save staff details.');
+          } finally {
+            setIsSubmittingStaff(false);
+          }
+        };
+
+        const addSkill = (skillName: string) => {
+          const trimmed = skillName.trim();
+          if (trimmed && !newStaffSkills.includes(trimmed)) {
+            setNewStaffSkills([...newStaffSkills, trimmed]);
+          }
+          setNewSkillText('');
+        };
+
+        // Filter staff list to only show Production Team staff (department Post-Production, Production, role Editor, or has skills/speciality)
+        const productionStaffList = staff.filter(s => {
+          const isProd = s.department === 'Post-Production' || s.department === 'Production' || s.role === 'Editor' || s.production_role_speciality;
+          return isProd;
         });
 
         return (
@@ -3621,10 +3733,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-purple-500 to-pink-500" />
               <div>
                 <h1 className="text-xl font-black text-white tracking-tight uppercase font-mono flex items-center gap-2">
-                  <span>👥</span> Crew Roster & Workspace Tasks Dashboard
+                  <span>👥</span> Production Staff Hub
                 </h1>
                 <p className="text-xs text-zinc-400 mt-1 font-sans">
-                  Real-time synchronization with Supabase DB. Assign multiple professional specialists, manage tasks, and track individual editor capacities.
+                  Real-time synchronization with Supabase DB. Manage crew directory, tag-based skills, and live task workloads.
                 </p>
               </div>
               <div className="flex items-center gap-2 self-start sm:self-center">
@@ -3635,313 +3747,231 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               </div>
             </div>
 
-            {/* Crew Workload Tracking Counters */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-[#040406] border border-zinc-900 rounded-2xl p-4.5 relative overflow-hidden group hover:border-zinc-800 transition-all">
-                <div className="absolute top-3 right-3 opacity-15">
-                  <PlusSquare className="w-8 h-8 text-violet-400" />
-                </div>
-                <div className="text-[10px] uppercase font-mono tracking-widest text-zinc-400 font-bold">Total Assigned Tasks</div>
-                <div className="text-3xl font-extrabold text-white mt-1.5 font-mono">{totalAssigned}</div>
-                <div className="text-[10px] text-zinc-550 mt-1 font-mono">Workspace Accumulation</div>
-              </div>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* SECTION 1: ADD STAFF FORM */}
+              <div className="lg:col-span-4">
+                <form onSubmit={handleSaveStaff} className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-4 shadow-xl">
+                  <div>
+                    <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                      <Plus className="w-4 h-4 text-purple-400" /> Add Staff
+                    </h3>
+                    <p className="text-[11px] text-zinc-400 mt-1">
+                      Onboard a new production specialist or update skills.
+                    </p>
+                  </div>
 
-              <div className="bg-[#040406] border border-zinc-900 rounded-2xl p-4.5 relative overflow-hidden group hover:border-zinc-800 transition-all">
-                <div className="absolute top-3 right-3 opacity-15">
-                  <Sliders className="w-8 h-8 text-blue-400 animate-pulse" />
-                </div>
-                <div className="text-[10px] uppercase font-mono tracking-widest text-zinc-400 font-bold">Active Ongoing Tasks</div>
-                <div className="text-3xl font-extrabold text-blue-400 mt-1.5 font-mono">{activeTasksCount}</div>
-                <div className="text-[10px] text-zinc-550 mt-1 font-mono">Work in Progress</div>
-              </div>
+                  {addStaffError && (
+                    <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs px-4 py-3 rounded-xl">
+                      {addStaffError}
+                    </div>
+                  )}
 
-              <div className="bg-[#040406] border border-zinc-900 rounded-2xl p-4.5 relative overflow-hidden group hover:border-zinc-800 transition-all">
-                <div className="absolute top-3 right-3 opacity-15">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-400" />
-                </div>
-                <div className="text-[10px] uppercase font-mono tracking-widest text-zinc-400 font-bold">Completed Tasks</div>
-                <div className="text-3xl font-extrabold text-emerald-400 mt-1.5 font-mono">{completedTasksCount}</div>
-                <div className="text-[10px] text-zinc-550 mt-1 font-mono">Successfully Reviewed</div>
-              </div>
+                  {addStaffSuccess && (
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs px-4 py-3 rounded-xl">
+                      {addStaffSuccess}
+                    </div>
+                  )}
 
-              <div className="bg-[#040406] border border-zinc-900 rounded-2xl p-4.5 relative overflow-hidden group hover:border-zinc-800 transition-all">
-                <div className="absolute top-3 right-3 opacity-15">
-                  <AlertTriangle className="w-8 h-8 text-rose-500 animate-[bounce_1.5s_infinite]" />
-                </div>
-                <div className="text-[10px] uppercase font-mono tracking-widest text-rose-500 font-black">Overdue Tasks</div>
-                <div className="text-3xl font-extrabold text-rose-500 mt-1.5 font-mono">{overdueTasksCount}</div>
-                <div className="text-[10px] text-rose-450 mt-1 font-mono">Missed Target Deadlines</div>
-              </div>
-            </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
+                        Staff Full Name <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newStaffName}
+                        onChange={(e) => setNewStaffName(e.target.value)}
+                        placeholder="e.g. Rahul Das"
+                        className="w-full bg-zinc-900 border border-zinc-850 px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans"
+                      />
+                    </div>
 
-            {/* Individual Editor Workload Capacity Roster */}
-            <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5 space-y-4 shadow-xl">
-              <h3 className="text-xs font-black text-zinc-350 uppercase tracking-widest border-b border-zinc-900 pb-2.5 font-mono">
-                Editor Workload & Performance KPIs
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {activeStaffList.map(member => {
-                  const wl = getStaffWorkload(member.name);
-                  return (
-                    <div key={member.staff_id} className="bg-zinc-900/20 border border-zinc-900 hover:border-zinc-800 rounded-xl p-4 transition-all">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="text-xs font-black text-white">{member.name}</div>
-                          <div className="text-[10px] text-zinc-500 font-mono mt-0.5 uppercase tracking-wide">
-                            {member.production_role_speciality || member.role || 'General Editor'}
-                          </div>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded text-[8px] font-mono tracking-widest font-black uppercase ${
-                          wl.activeCount >= 3 ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 
-                          wl.activeCount >= 1 ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 
-                          'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                        }`}>
-                          {wl.activeCount} Active
-                        </span>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
+                        Mobile Number <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        value={newStaffMobile}
+                        onChange={(e) => setNewStaffMobile(e.target.value)}
+                        placeholder="e.g. 9876543210"
+                        className="w-full bg-zinc-900 border border-zinc-850 px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
+                        WhatsApp Number
+                      </label>
+                      <input
+                        type="tel"
+                        value={newStaffWhatsapp}
+                        onChange={(e) => setNewStaffWhatsapp(e.target.value)}
+                        placeholder="e.g. 9876543210"
+                        className="w-full bg-zinc-900 border border-zinc-850 px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans"
+                      />
+                    </div>
+
+                    {/* Tag-based Skills input field */}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
+                        Skills / Specialities
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newSkillText}
+                          onChange={(e) => setNewSkillText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              addSkill(newSkillText);
+                            }
+                          }}
+                          placeholder="Type a skill"
+                          className="flex-1 bg-zinc-900 border border-zinc-850 px-3 py-2 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 transition-all font-sans"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => addSkill(newSkillText)}
+                          className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-white font-mono text-xs font-bold rounded-xl transition-all cursor-pointer border border-zinc-750 whitespace-nowrap"
+                        >
+                          + Add Skill
+                        </button>
                       </div>
 
-                      {/* Cumulative stats */}
-                      <div className="grid grid-cols-4 gap-2 text-center mt-3 pt-2.5 border-t border-zinc-900/60 font-mono text-[10px]">
-                        <div>
-                          <div className="font-bold text-zinc-300">{wl.totalCount}</div>
-                          <div className="text-[8px] text-zinc-550 uppercase">Total</div>
-                        </div>
-                        <div>
-                          <div className="font-bold text-blue-400">{wl.activeCount}</div>
-                          <div className="text-[8px] text-blue-500/80 uppercase">Active</div>
-                        </div>
-                        <div>
-                          <div className="font-bold text-emerald-400">{wl.completedCount}</div>
-                          <div className="text-[8px] text-emerald-500/80 uppercase">Done</div>
-                        </div>
-                        <div>
-                          <div className={`font-bold ${wl.overdueCount > 0 ? 'text-rose-500 font-black scale-105' : 'text-zinc-500'}`}>
-                            {wl.overdueCount}
-                          </div>
-                          <div className="text-[8px] text-rose-500/80 uppercase">Overdue</div>
-                        </div>
-                      </div>
-
-                      {/* Spark capacity slider */}
-                      <div className="mt-3.5">
-                        <div className="flex justify-between text-[8px] font-mono text-zinc-500 mb-1">
-                          <span>Capacity Meter</span>
-                          <span>{Math.min(100, Math.round((wl.activeCount / 4) * 100))}%</span>
-                        </div>
-                        <div className="w-full bg-zinc-950 h-1 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              wl.overdueCount > 0 ? 'bg-rose-500' : wl.activeCount >= 3 ? 'bg-rose-450' : wl.activeCount >= 1 ? 'bg-amber-500' : 'bg-emerald-400'
-                            }`}
-                            style={{ width: `${Math.min(100, (wl.activeCount / 4) * 100)}%` }}
-                          />
-                        </div>
+                      {/* Removable chips list */}
+                      <div className="flex flex-wrap gap-1.5 mt-2.5">
+                        {newStaffSkills.length === 0 ? (
+                          <span className="text-[10px] text-zinc-500 italic">No skills added yet.</span>
+                        ) : (
+                          newStaffSkills.map((skill, index) => (
+                            <span
+                              key={index}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-full text-[11px] font-sans font-medium"
+                            >
+                              <span>{skill}</span>
+                              <button
+                                type="button"
+                                onClick={() => setNewStaffSkills(newStaffSkills.filter((_, i) => i !== index))}
+                                className="text-purple-450 hover:text-purple-300 font-black focus:outline-none transition-colors"
+                              >
+                                ✕
+                              </button>
+                            </span>
+                          ))
+                        )}
                       </div>
                     </div>
-                  );
-                })}
-
-                {activeStaffList.length === 0 && (
-                  <div className="col-span-3 text-center py-6 text-zinc-500 font-mono text-xs">
-                    No active staff enrolled in the directory yet.
                   </div>
-                )}
-              </div>
-            </div>
 
-            {/* Master Crew Roster Table Container */}
-            <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5 space-y-4 shadow-xl">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-900 pb-4">
+                  <button
+                    type="submit"
+                    disabled={isSubmittingStaff}
+                    className="w-full mt-4 py-3 bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
+                  >
+                    {isSubmittingStaff ? 'Saving...' : '💾 Save Staff Details'}
+                  </button>
+                </form>
+              </div>
+
+              {/* SECTION 2: STAFF ROSTER */}
+              <div className="lg:col-span-8 bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-4 shadow-xl">
                 <div>
-                  <h3 className="text-xs font-black text-zinc-300 uppercase tracking-widest font-mono">
-                    Master Crew Tasks Table
+                  <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                    <Users className="w-4 h-4 text-purple-400" /> Staff Roster
                   </h3>
-                  <p className="text-[10px] text-zinc-500 mt-1 font-sans">
-                    Detailed task workflows. Perform one-click status overrides or mark tasks completed.
+                  <p className="text-[11px] text-zinc-400 mt-1">
+                    Displaying active staff details, tagged professional skills, and real-time task allocations.
                   </p>
                 </div>
 
-                {/* Filter and search controls row */}
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <input
-                    type="text"
-                    placeholder="Search crew name..."
-                    value={crewSearch}
-                    onChange={(e) => setCrewSearch(e.target.value)}
-                    className="bg-zinc-900 border border-zinc-850 px-3.5 py-1.5 rounded-lg text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 max-w-[150px] font-mono"
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {productionStaffList.map((member) => {
+                    const activeTasks = getStaffActiveTasks(member.name);
+                    const staffSkills = member.production_role_speciality
+                      ? member.production_role_speciality.split(',').map(s => s.trim()).filter(Boolean)
+                      : [];
 
-                  {/* Specialty selector dropdown */}
-                  <select
-                    value={crewSpecialityFilter}
-                    onChange={(e) => setCrewSpecialityFilter(e.target.value)}
-                    className="bg-zinc-900 border border-zinc-850 px-3 py-1.5 rounded-lg text-xs text-zinc-300 font-mono focus:outline-none focus:border-purple-500 cursor-pointer"
-                  >
-                    <option value="All">All Specialities</option>
-                    {specialities.map(s => (
-                      <option key={s.speciality_id} value={s.name}>{s.name}</option>
-                    ))}
-                  </select>
-
-                  {/* Status selector dropdown */}
-                  <select
-                    value={crewStatusFilter}
-                    onChange={(e) => setCrewStatusFilter(e.target.value)}
-                    className="bg-zinc-900 border border-zinc-850 px-3 py-1.5 rounded-lg text-xs text-zinc-300 font-mono focus:outline-none focus:border-purple-500 cursor-pointer"
-                  >
-                    <option value="All">All Task Stages</option>
-                    <option value="Assigned">Assigned</option>
-                    <option value="Editing Started">Editing Started</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Review Pending">Review Pending</option>
-                    <option value="Revision">Revision</option>
-                    <option value="Completed">Completed</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Responsive data table */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-zinc-900 text-[10px] font-mono text-zinc-500 uppercase tracking-wider">
-                      <th className="py-3.5 px-4 font-bold">Staff Name</th>
-                      <th className="py-3.5 px-4 font-bold font-mono">Production Speciality</th>
-                      <th className="py-3.5 px-4 font-bold text-center font-mono">Current Projects</th>
-                      <th className="py-3.5 px-4 font-bold text-center font-mono">Active Tasks</th>
-                      <th className="py-3.5 px-3 font-bold font-mono">Assigned Date</th>
-                      <th className="py-3.5 px-3 font-bold font-mono">Target Finish</th>
-                      <th className="py-3.5 px-4 font-bold font-mono">Current Status</th>
-                      <th className="py-3.5 px-4 font-bold text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-900/50">
-                    {filteredAssignments.map((assign) => {
-                      const correlatedProj = production.find(p => p.production_id === assign.production_id);
-                      const projectClient = correlatedProj ? (correlatedProj.couple_name || correlatedProj.tracking_id) : 'Unknown Project';
-
-                      // Find staff element to verify status
-                      const staffMember = staff.find(s => s.name.toLowerCase() === assign.staff_name.toLowerCase());
-                      const isStaffActive = staffMember ? staffMember.status === 'Active' : true;
-
-                      // Workload metrics for this editor
-                      const wl = getStaffWorkload(assign.staff_name);
-
-                      const isOverdue = assign.status !== 'Completed' && assign.target_finish_date && assign.target_finish_date < todayStr;
-
-                      return (
-                        <tr key={assign.assignment_id} className="hover:bg-zinc-900/15 group transition-colors">
-                          {/* Staff Name & Project Details */}
-                          <td className="py-3 px-4">
-                            <div className="font-black text-white hover:text-purple-400 transition-colors flex items-center gap-1.5">
-                              <span>{assign.staff_name}</span>
-                              <span className={`w-1.5 h-1.5 rounded-full ${isStaffActive ? 'bg-emerald-450' : 'bg-zinc-650'}`} title={isStaffActive ? 'Staff Active' : 'Staff Inactive/On Leave'} />
+                    return (
+                      <div
+                        key={member.staff_id}
+                        className="bg-[#050507] border border-zinc-900 hover:border-zinc-850 rounded-xl p-4.5 space-y-3.5 transition-all flex flex-col justify-between"
+                      >
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-start gap-2">
+                            <div>
+                              <h4 className="text-sm font-black text-white tracking-tight">{member.name}</h4>
+                              <p className="text-[10px] text-zinc-550 font-mono">ID: {member.staff_id}</p>
                             </div>
-                            <div className="text-[10px] text-zinc-500 mt-0.5 flex items-center gap-1.5">
-                              <span className="font-mono font-bold text-zinc-400 bg-zinc-900 px-1 py-0.2 rounded border border-zinc-850">{assign.production_id}</span>
-                              <span className="break-words max-w-[120px]">{projectClient}</span>
-                            </div>
-                          </td>
-
-                          {/* Production Role Speciality */}
-                          <td className="py-3 px-4">
-                            <span className="px-2 py-0.5 bg-purple-500/10 text-purple-400 border border-purple-500/15 rounded text-[10px] font-mono font-bold leading-none">
-                              {assign.speciality}
-                            </span>
-                          </td>
-
-                          {/* Project count */}
-                          <td className="py-3 px-4 text-center font-mono text-zinc-300 font-bold">
-                            {wl.totalCount}
-                          </td>
-
-                          {/* Active tasks count */}
-                          <td className="py-3 px-4 text-center font-mono">
-                            <span className={`px-2 py-0.5 rounded-[4px] font-bold text-[10px] ${
-                              wl.activeCount >= 3 ? 'bg-rose-500/10 text-rose-400' : 
-                              wl.activeCount >= 1 ? 'bg-amber-500/10 text-amber-400' : 
-                              'bg-emerald-500/10 text-emerald-400'
+                            <span className={`px-2 py-0.5 rounded text-[8px] font-mono font-black uppercase tracking-wider ${
+                              member.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-zinc-800 text-zinc-400'
                             }`}>
-                              {wl.activeCount} Active
+                              {member.status}
                             </span>
-                          </td>
+                          </div>
 
-                          {/* Assigned Date */}
-                          <td className="py-3 px-3 font-mono text-zinc-400">
-                            {assign.assigned_date}
-                          </td>
+                          <div className="grid grid-cols-2 gap-2 text-[11px] font-mono text-zinc-400">
+                            <div className="bg-zinc-900/50 border border-zinc-900/80 px-2 py-1.5 rounded-lg">
+                              <span className="text-[9px] text-zinc-550 block uppercase tracking-wider font-bold">Mobile</span>
+                              <span className="font-bold text-zinc-300">{member.mobile}</span>
+                            </div>
+                            <div className="bg-zinc-900/50 border border-zinc-900/80 px-2 py-1.5 rounded-lg">
+                              <span className="text-[9px] text-zinc-550 block uppercase tracking-wider font-bold">WhatsApp</span>
+                              <span className="font-bold text-zinc-300">{member.whatsapp_number || 'N/A'}</span>
+                            </div>
+                          </div>
 
-                          {/* Target Finish Date */}
-                          <td className="py-3 px-3 font-mono">
-                            <div className="flex items-center gap-1">
-                              <span className={isOverdue ? 'text-rose-500 font-extrabold animate-pulse' : 'text-zinc-300'}>
-                                {assign.target_finish_date}
-                              </span>
-                              {isOverdue && (
-                                <AlertTriangle className="w-3.5 h-3.5 text-rose-500" title="This task has exceeded the specified target finish date!" />
+                          <div className="space-y-1">
+                            <span className="text-[9px] text-zinc-500 block uppercase tracking-wider font-mono font-bold">Skills</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {staffSkills.length === 0 ? (
+                                <span className="text-zinc-550 italic text-[10px]">No skills listed</span>
+                              ) : (
+                                staffSkills.map((skill, sIdx) => (
+                                  <span key={sIdx} className="px-2 py-0.5 bg-zinc-900 text-zinc-400 border border-zinc-850 rounded text-[10px] font-medium">
+                                    {skill}
+                                  </span>
+                                ))
                               )}
                             </div>
-                          </td>
+                          </div>
+                        </div>
 
-                          {/* Current Status Selection Dropdown */}
-                          <td className="py-3 px-4">
-                            <div className="flex items-center gap-2">
-                              <select
-                                value={assign.status}
-                                onChange={(e) => {
-                                  updateEditorAssignmentStatus(assign.assignment_id, e.target.value as any);
-                                }}
-                                className={`bg-zinc-900 border text-[11px] font-mono rounded px-2 py-1 cursor-pointer transition-all ${
-                                  assign.status === 'Completed' ? 'border-emerald-500/30 text-emerald-400' :
-                                  assign.status === 'Revision' ? 'border-rose-500/30 text-rose-400 animate-pulse' :
-                                  'border-zinc-800 text-zinc-300 focus:border-purple-500'
-                                }`}
-                              >
-                                <option value="Assigned">Assigned</option>
-                                <option value="Editing Started">Editing Started</option>
-                                <option value="In Progress">In Progress</option>
-                                <option value="Review Pending">Review Pending</option>
-                                <option value="Revision">Revision</option>
-                                <option value="Completed">Completed</option>
-                              </select>
-                            </div>
-                          </td>
+                        <div className="pt-3.5 border-t border-zinc-900">
+                          <div className="text-[9px] uppercase font-mono tracking-wider font-bold text-zinc-550 mb-1.5">
+                            Assigned Tasks
+                          </div>
+                          {activeTasks.length === 0 ? (
+                            <div className="text-zinc-600 text-xs italic">No Active Tasks</div>
+                          ) : (
+                            <ul className="space-y-1.5 text-xs text-zinc-400">
+                              {activeTasks.map((task) => {
+                                const eventName = getTaskEventName(task.production_id);
+                                return (
+                                  <li key={task.assignment_id} className="flex items-start gap-1.5">
+                                    <span className="text-purple-500 text-[10px] mt-0.5">✦</span>
+                                    <span className="leading-tight">
+                                      <strong className="text-zinc-350 font-semibold">{eventName}</strong> - <span className="text-purple-400 font-medium">{task.speciality}</span>
+                                    </span>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
 
-                          {/* Actions layer */}
-                          <td className="py-3 px-4 text-right space-x-2">
-                            {assign.status !== 'Completed' ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  updateEditorAssignmentStatus(assign.assignment_id, 'Completed');
-                                }}
-                                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] font-bold rounded-lg transition-all cursor-pointer inline-flex items-center gap-1 shadow-sm hover:shadow-emerald-500/10"
-                              >
-                                <CheckCircle2 className="w-3 h-3" />
-                                <span>Complete</span>
-                              </button>
-                            ) : (
-                              <span className="font-mono text-[9px] text-zinc-550 inline-flex items-center gap-1 px-2.5 py-1 bg-zinc-900 rounded-lg border border-zinc-850">
-                                <CheckCircle2 className="w-3 h-3 text-zinc-600" />
-                                <span>No Actions</span>
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-
-                    {filteredAssignments.length === 0 && (
-                      <tr>
-                        <td colSpan={8} className="py-16 text-center text-zinc-500 font-mono uppercase bg-zinc-900/5 rounded-2xl border border-dashed border-zinc-900 text-xs">
-                          {crewSearch || crewSpecialityFilter !== 'All' || crewStatusFilter !== 'All' 
-                            ? 'No current tasks matched the specified query filter settings.' 
-                            : 'No professional editor task assignments registered in the workspace system.'}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                {productionStaffList.length === 0 && (
+                  <div className="text-center py-16 text-zinc-550 font-mono text-xs">
+                    No production staff registered in the workspace system.
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -5268,236 +5298,428 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                 {/* FORM: Assign Editor (Step 1) */}
                 {workflowActionType === 'assign_editor' && activeWorkflowProd && (
-                  <div className="space-y-3 font-sans text-left">
+                  <div className="space-y-5 font-sans text-left">
                     
-                    {/* Row 1: Product Role Specialities & Editors assignments */}
+                    {/* 1. Deliverable / Lead Details (Read-only) */}
+                    <div className="bg-zinc-900/40 border border-zinc-900 rounded-2xl p-4 space-y-3">
+                      <div className="border-b border-zinc-900 pb-2 flex items-center justify-between">
+                        <h4 className="text-[10px] text-[#a78bfa] uppercase font-black tracking-widest font-mono">
+                          1. Deliverable / Lead Details
+                        </h4>
+                        <span className="text-[9px] text-zinc-500 font-mono">Read-Only</span>
+                      </div>
+                      
+                      {(() => {
+                        const rf = rawFootage.find(f => f.tracking_id === activeWorkflowProd.tracking_id || f.order_id === activeWorkflowProd.tracking_id);
+                        const order = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === activeWorkflowProd.production_id.replace('PRD-', ''));
+                        const lead = leadsData?.find(l => l.lead_id === activeWorkflowProd.tracking_id || l.lead_id === order?.lead_id);
+                        
+                        const leadId = activeWorkflowProd.tracking_id || '—';
+                        const customerName = order?.customer_name || lead?.customer_name || '—';
+                        const eventName = order?.custom_event_name || lead?.custom_event_name || '—';
+                        const eventType = order?.event_type || lead?.event_type || '—';
+                        const eventShootType = order?.shoot_type || lead?.shoot_type || order?.desired_event_shoot_type || lead?.desired_event_shoot_type || '—';
+                        const packageName = order?.package_name || lead?.package_name || '—';
+                        const deliverables = order?.deliverables_description || lead?.deliverables_description || '—';
+                        const eventDate = order?.event_date || lead?.event_date || '—';
+                        const eventLocation = order?.event_location || lead?.event_location || '—';
+                        const currentStatus = activeWorkflowProd.editing_status || '—';
+
+                        return (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 text-xs font-sans">
+                            <div className="space-y-0.5">
+                              <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Lead ID</span>
+                              <span className="text-zinc-200 font-semibold block bg-zinc-950 px-2 py-1.5 rounded border border-zinc-900">{leadId}</span>
+                            </div>
+                            <div className="space-y-0.5">
+                              <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Customer Name</span>
+                              <span className="text-zinc-200 font-semibold block bg-zinc-950 px-2 py-1.5 rounded border border-zinc-900">{customerName}</span>
+                            </div>
+                            <div className="space-y-0.5">
+                              <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Event Name</span>
+                              <span className="text-zinc-200 font-semibold block bg-zinc-950 px-2 py-1.5 rounded border border-zinc-900">{eventName}</span>
+                            </div>
+                            <div className="space-y-0.5">
+                              <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Event Type</span>
+                              <span className="text-zinc-200 font-semibold block bg-zinc-950 px-2 py-1.5 rounded border border-zinc-900">{eventType}</span>
+                            </div>
+                            <div className="space-y-0.5">
+                              <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Event Shoot Type</span>
+                              <span className="text-zinc-200 font-semibold block bg-zinc-950 px-2 py-1.5 rounded border border-zinc-900">{eventShootType}</span>
+                            </div>
+                            <div className="space-y-0.5">
+                              <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Package Name</span>
+                              <span className="text-zinc-200 font-semibold block bg-zinc-950 px-2 py-1.5 rounded border border-zinc-900">{packageName}</span>
+                            </div>
+                            <div className="space-y-0.5 lg:col-span-2">
+                              <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Deliverables</span>
+                              <span className="text-zinc-200 font-semibold block bg-zinc-950 px-2 py-1.5 rounded border border-zinc-900 break-words">{deliverables}</span>
+                            </div>
+                            <div className="space-y-0.5">
+                              <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Event Date</span>
+                              <span className="text-zinc-200 font-semibold block bg-zinc-950 px-2 py-1.5 rounded border border-zinc-900">{eventDate}</span>
+                            </div>
+                            <div className="space-y-0.5">
+                              <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Event Location</span>
+                              <span className="text-zinc-200 font-semibold block bg-zinc-950 px-2 py-1.5 rounded border border-zinc-900 break-words">{eventLocation}</span>
+                            </div>
+                            <div className="space-y-0.5 md:col-span-2 lg:col-span-5">
+                              <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Current Production Status</span>
+                              <span className="text-violet-400 font-extrabold block bg-purple-950/20 px-2.5 py-1.5 rounded border border-purple-900/30 font-mono">{currentStatus}</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* 2. TEAM ASSIGNMENT */}
                     <div className="space-y-2">
-                      <span className="text-[10px] text-[#a78bfa] uppercase font-black tracking-wider block font-mono">
-                        Team Assignment Rosters *
-                      </span>
-                      {assignmentRows.map((row, index) => {
-                        const activeStaff = staff.filter(s => s.status === 'Active');
+                      <div className="border-b border-zinc-900 pb-2">
+                        <h4 className="text-[10px] text-[#a78bfa] uppercase font-black tracking-widest font-mono">
+                          2. Team Assignment
+                        </h4>
+                      </div>
+
+                      {(() => {
+                        const activeProductionStaff = staff.filter(s => {
+                          const isProd = s.department === 'Post-Production' || s.department === 'Production' || s.role === 'Editor' || s.production_role_speciality;
+                          return s.status === 'Active' && isProd;
+                        });
+
+                        const getStaffWorkload = (staffName: string) => {
+                          const active = editorAssignments.filter(a => 
+                            a.staff_name.toLowerCase() === staffName.toLowerCase() && 
+                            a.status !== 'Completed'
+                          );
+                          return { activeCount: active.length };
+                        };
 
                         return (
                           <div 
-                            key={index} 
-                            className="bg-zinc-950/40 border border-zinc-900 hover:border-zinc-850 p-2.5 rounded-xl transition-all duration-150 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-3 items-end"
+                            className="bg-zinc-900/20 border border-zinc-900 p-4 rounded-2xl relative"
+                            onBlur={(e) => {
+                              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                                setTimeout(() => setIsDropdownOpen(false), 200);
+                              }
+                            }}
                           >
-                            {/* Speciality Selection */}
-                            <div className="lg:col-span-5 space-y-1">
-                              <label className="text-[9px] text-zinc-500 uppercase font-black tracking-wider block font-mono">
-                                Role Speciality #{index + 1} *
-                              </label>
-                              <select
-                                value={row.speciality}
-                                onChange={(e) => {
-                                  const updated = [...assignmentRows];
-                                  updated[index].speciality = e.target.value;
-                                  updated[index].staffId = '';
-                                  updated[index].staffName = '';
-                                  setAssignmentRows(updated);
-                                }}
-                                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 rounded-xl px-2.5 h-9 cursor-pointer font-mono focus:outline-[#7c3aed]"
-                              >
-                                <option value="">-- Choose Speciality Role --</option>
-                                {specialities.filter(s => s.active).map(spec => (
-                                  <option key={spec.speciality_id} value={spec.name}>{spec.name}</option>
+                            <label className="text-[10px] text-zinc-400 uppercase font-black tracking-wider block font-mono mb-1.5">
+                              Assign Editor(s) <span className="text-rose-500">*</span>
+                            </label>
+
+                            {/* Chips of currently selected editors */}
+                            {selectedEditors.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 p-2 bg-zinc-950/60 border border-zinc-900 rounded-xl mb-3">
+                                {selectedEditors.map(editor => (
+                                  <span 
+                                    key={editor.staff_id}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-purple-500/15 text-purple-300 border border-purple-500/20 rounded-full text-xs font-medium"
+                                  >
+                                    <span>{editor.name}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedEditors(selectedEditors.filter(s => s.staff_id !== editor.staff_id));
+                                      }}
+                                      className="text-purple-400 hover:text-purple-200 font-bold text-xs transition-colors p-0.5"
+                                    >
+                                      ✕
+                                    </button>
+                                  </span>
                                 ))}
-                              </select>
-                            </div>
+                              </div>
+                            )}
 
-                            {/* Editor Selection */}
-                            <div className="lg:col-span-5 space-y-1">
-                              <label className="text-[9px] text-zinc-500 uppercase font-black tracking-wider block font-mono">
-                                Editor Assignment #{index + 1} *
-                              </label>
-                              <select
-                                disabled={!row.speciality}
-                                value={row.staffId ? `${row.staffId}|${row.staffName}` : ''}
+                            {/* Searchable input */}
+                            <div className="relative">
+                              <input
+                                type="text"
+                                placeholder="Type to search and select editor(s)..."
+                                value={editorSearchQuery}
                                 onChange={(e) => {
-                                  const val = e.target.value;
-                                  const updated = [...assignmentRows];
-                                  if (val) {
-                                    const [sId, sName] = val.split('|');
-                                    updated[index].staffId = sId;
-                                    updated[index].staffName = sName;
-                                  } else {
-                                    updated[index].staffId = '';
-                                    updated[index].staffName = '';
-                                  }
-                                  setAssignmentRows(updated);
+                                  setEditorSearchQuery(e.target.value);
+                                  setIsDropdownOpen(true);
                                 }}
-                                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 rounded-xl px-2.5 h-9 cursor-pointer font-mono disabled:opacity-30 disabled:cursor-not-allowed focus:outline-[#7c3aed]"
-                              >
-                                <option value="">
-                                  {row.speciality ? '-- Select Staff --' : 'Choose speciality first'}
-                                </option>
-                                {activeStaff.map(s => {
-                                  const specLower = (s.production_role_speciality || '').toLowerCase();
-                                  const roleLower = (s.role || '').toLowerCase();
-                                  const rSpecLower = (row.speciality || '').toLowerCase();
-                                  const isMatch = rSpecLower && (specLower === rSpecLower || roleLower === rSpecLower);
-                                  const wl = getStaffWorkload(s.name);
-                                  return (
-                                    <option key={s.staff_id} value={`${s.staff_id}|${s.name}`}>
-                                      {isMatch ? '★ ' : ''}{s.name} | {s.production_role_speciality || s.role} | {s.department} | {s.status} ({wl.activeCount} Jobs)
-                                    </option>
-                                  );
-                                })}
-                              </select>
-                            </div>
-
-                            {/* Action Remove */}
-                            <div className="lg:col-span-2 flex justify-start lg:justify-end pb-0.5">
+                                onFocus={() => setIsDropdownOpen(true)}
+                                className="w-full bg-zinc-950 border border-zinc-850 hover:border-zinc-800 text-xs text-zinc-100 rounded-xl px-4 py-2.5 font-sans focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                              />
                               <button
                                 type="button"
-                                disabled={assignmentRows.length <= 1}
-                                onClick={() => {
-                                  const updated = assignmentRows.filter((_, idx) => idx !== index);
-                                  setAssignmentRows(updated);
-                                }}
-                                className="w-full lg:w-9 h-9 flex items-center justify-center gap-1.5 text-[10px] uppercase font-mono font-bold text-zinc-400 hover:text-rose-455 hover:bg-rose-500/10 border border-zinc-850 hover:border-rose-500/20 rounded-xl transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                                title="Remove team assignments row"
+                                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white text-[10px] font-mono"
                               >
-                                <span className="lg:hidden">Remove Entry</span>
-                                <span className="text-sm font-mono leading-none">✕</span>
+                                {isDropdownOpen ? '▲' : '▼'}
                               </button>
                             </div>
 
+                            {/* Dropdown list */}
+                            {isDropdownOpen && (() => {
+                              const filteredStaff = activeProductionStaff.filter(s => 
+                                s.name.toLowerCase().includes(editorSearchQuery.toLowerCase())
+                              );
+
+                              return (
+                                <div className="absolute left-4 right-4 z-[110] mt-1 max-h-52 overflow-y-auto bg-zinc-950 border border-zinc-850 rounded-xl shadow-2xl divide-y divide-zinc-900/50">
+                                  {filteredStaff.length === 0 ? (
+                                    <div className="p-3 text-zinc-500 text-xs italic text-center">
+                                      No matching active production editors.
+                                    </div>
+                                  ) : (
+                                    filteredStaff.map(s => {
+                                      const isSelected = selectedEditors.some(editor => editor.staff_id === s.staff_id);
+                                      const wl = getStaffWorkload(s.name);
+                                      return (
+                                        <button
+                                          key={s.staff_id}
+                                          type="button"
+                                          onClick={() => {
+                                            if (isSelected) {
+                                              setSelectedEditors(selectedEditors.filter(editor => editor.staff_id !== s.staff_id));
+                                            } else {
+                                              setSelectedEditors([...selectedEditors, s]);
+                                            }
+                                            setEditorSearchQuery('');
+                                          }}
+                                          className={`w-full text-left px-4 py-3 flex justify-between items-center text-xs transition-colors hover:bg-zinc-900/50 ${
+                                            isSelected ? 'bg-purple-900/10 text-purple-300' : 'text-zinc-300'
+                                          }`}
+                                        >
+                                          <div>
+                                            <div className="font-bold text-zinc-200">{s.name}</div>
+                                            <div className="text-[10px] text-zinc-500 mt-0.5 font-mono">
+                                              {s.production_role_speciality || s.role || 'Editor'}
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-[10px] font-mono text-zinc-500">
+                                              ({wl.activeCount} active tasks)
+                                            </span>
+                                            <span className={`w-2.5 h-2.5 rounded-full border ${
+                                              isSelected ? 'bg-purple-500 border-purple-400' : 'bg-transparent border-zinc-700'
+                                            }`} />
+                                          </div>
+                                        </button>
+                                      );
+                                    })
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
-                      })}
+                      })()}
                     </div>
 
-                    {/* Row 2: Delivery Target Date & Priority */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {/* Target Delivery Date */}
-                      <div className="space-y-1">
-                        <label className="text-[10px] text-zinc-500 uppercase font-black tracking-wider block font-mono">
-                          Delivery Target Date *
-                        </label>
-                        <input
-                          type="date"
-                          value={wfTargetDeliveryDate}
-                          onChange={(e) => setWfTargetDeliveryDate(e.target.value)}
-                          className="w-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 rounded-xl px-3 h-9.5 font-mono focus:outline-[#7c3aed]"
-                        />
+                    {/* 3. EDITOR DETAILS */}
+                    {selectedEditors.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="border-b border-zinc-900 pb-2">
+                          <h4 className="text-[10px] text-[#a78bfa] uppercase font-black tracking-widest font-mono">
+                            3. Editor Details
+                          </h4>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {(() => {
+                            const getTaskEventName = (productionId: string) => {
+                              const correlatedProj = production.find(p => p.production_id === productionId);
+                              if (!correlatedProj) return 'Project';
+                              const trackingId = correlatedProj.tracking_id;
+                              
+                              const linkedOrder = orders.find(o => o.order_id === trackingId || o.lead_id === trackingId);
+                              if (linkedOrder) {
+                                return linkedOrder.event_type || linkedOrder.custom_event_name || 'Project';
+                              }
+                              
+                              const linkedLead = leadsData?.find(l => l.lead_id === trackingId);
+                              if (linkedLead) {
+                                return linkedLead.event_type || linkedLead.custom_event_name || 'Project';
+                              }
+
+                              return 'Project';
+                            };
+
+                            const getTaskCustomerName = (productionId: string) => {
+                              const correlatedProj = production.find(p => p.production_id === productionId);
+                              if (!correlatedProj) return '';
+                              const trackingId = correlatedProj.tracking_id;
+                              
+                              const linkedOrder = orders.find(o => o.order_id === trackingId || o.lead_id === trackingId);
+                              if (linkedOrder) return linkedOrder.customer_name;
+                              
+                              const linkedLead = leadsData?.find(l => l.lead_id === trackingId);
+                              if (linkedLead) return linkedLead.customer_name;
+                              
+                              return '';
+                            };
+
+                            return selectedEditors.map((editor) => {
+                              const activeTasks = editorAssignments.filter(a => 
+                                a.staff_id === editor.staff_id && 
+                                a.status !== 'Completed'
+                              );
+                              
+                              const skills = editor.production_role_speciality
+                                ? editor.production_role_speciality.split(',').map(s => s.trim()).filter(Boolean)
+                                : [editor.role || 'Editor'];
+                              
+                              const isBusy = activeTasks.length >= 2;
+
+                              return (
+                                <div 
+                                  key={editor.staff_id}
+                                  className="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-4 space-y-3.5 shadow-sm flex flex-col justify-between text-left"
+                                >
+                                  <div className="space-y-3">
+                                    {/* Editor Header */}
+                                    <div className="flex items-center gap-2 border-b border-zinc-900 pb-2">
+                                      <span className="text-base">👤</span>
+                                      <span className="font-extrabold text-sm text-white tracking-tight">{editor.name}</span>
+                                    </div>
+
+                                    {/* Contact info */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-sans">
+                                      <div>
+                                        <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Mobile Number:</span>
+                                        <span className="text-zinc-200 font-medium">{editor.mobile || '—'}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">WhatsApp Number:</span>
+                                        <span className="text-zinc-200 font-medium">{editor.whatsapp_number || editor.mobile || '—'}</span>
+                                      </div>
+                                    </div>
+
+                                    {/* Skills */}
+                                    <div>
+                                      <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono mb-1">Skills:</span>
+                                      <div className="space-y-0.5">
+                                        {skills.map((skill, sIdx) => (
+                                          <span key={sIdx} className="block text-xs text-zinc-300 font-medium">
+                                            • {skill}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    {/* Current Assigned Tasks */}
+                                    <div>
+                                      <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono mb-1">Current Assigned Tasks:</span>
+                                      {activeTasks.length === 0 ? (
+                                        <span className="text-xs text-zinc-500 italic block">No Active Tasks</span>
+                                      ) : (
+                                        <div className="space-y-1 max-h-24 overflow-y-auto pr-1 font-sans">
+                                          {activeTasks.map((task) => {
+                                            const evName = getTaskEventName(task.production_id);
+                                            const custName = getTaskCustomerName(task.production_id);
+                                            return (
+                                              <span key={task.assignment_id} className="block text-xs text-zinc-300 leading-normal">
+                                                • {evName} {custName ? `- ${custName}` : ''}
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Workload & Availability Status */}
+                                  <div className="pt-3 border-t border-zinc-900/60 flex justify-between items-center text-xs font-mono">
+                                    <div>
+                                      <span className="text-[8px] text-zinc-500 uppercase tracking-wider block font-bold">Current Workload:</span>
+                                      <span className="text-zinc-200 font-extrabold">{activeTasks.length} Active {activeTasks.length === 1 ? 'Task' : 'Tasks'}</span>
+                                    </div>
+                                    <div className="text-right">
+                                      <span className="text-[8px] text-zinc-500 uppercase tracking-wider block font-bold">Status:</span>
+                                      <span className={`inline-flex items-center gap-1 font-bold ${isBusy ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                        <span>{isBusy ? '🔴' : '🟢'}</span>
+                                        <span>{isBusy ? 'Busy' : 'Available'}</span>
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 4. DELIVERY TARGET DATE */}
+                    <div className="space-y-2">
+                      <div className="border-b border-zinc-900 pb-2">
+                        <h4 className="text-[10px] text-[#a78bfa] uppercase font-black tracking-widest font-mono">
+                          4. Delivery Target Date
+                        </h4>
                       </div>
 
-                      {/* Priority */}
-                      <div className="space-y-1">
-                        <label className="text-[10px] text-zinc-500 uppercase font-black tracking-wider block font-mono">
-                          Priority *
-                        </label>
-                        <select
-                          value={wfPriority}
-                          onChange={(e) => setWfPriority(e.target.value as any)}
-                          className="w-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 rounded-xl px-3 h-9.5 cursor-pointer font-mono focus:outline-[#7c3aed]"
-                        >
-                          <option value="Low">Low</option>
-                          <option value="Medium">Medium</option>
-                          <option value="High">High</option>
-                          <option value="Critical">Critical</option>
-                        </select>
+                      <div className="bg-zinc-900/20 border border-zinc-900 p-4 rounded-2xl">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-zinc-400 uppercase font-black tracking-wider block font-mono">
+                            Delivery Target Date <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="date"
+                            value={wfTargetDeliveryDate}
+                            onChange={(e) => setWfTargetDeliveryDate(e.target.value)}
+                            className="w-full bg-zinc-950 border border-zinc-850 hover:border-zinc-800 text-xs text-zinc-100 rounded-xl px-3.5 py-2.5 font-mono focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                            required
+                          />
+                        </div>
                       </div>
-                    </div>
-
-                    {/* Row 3: Notes */}
-                    <div className="space-y-1">
-                      <label className="text-[10px] text-zinc-500 uppercase font-black tracking-wider block font-mono">
-                        Project Notes
-                      </label>
-                      <textarea
-                        rows={1.5}
-                        value={wfProjectNotes}
-                        onChange={(e) => setWfProjectNotes(e.target.value)}
-                        placeholder="Log revision specifics, requested aspect ratios, color grade preferences, reference directories..."
-                        className="w-full bg-zinc-900 border border-zinc-805 text-xs text-zinc-100 rounded-xl p-2 flex focus:outline-[#7c3aed] leading-normal"
-                      />
-                    </div>
-
-                    {/* Row 4: Internal Comments */}
-                    <div className="space-y-1">
-                      <label className="text-[10px] text-zinc-500 uppercase font-black tracking-wider block font-mono">
-                        Internal Comments
-                      </label>
-                      <textarea
-                        rows={1.5}
-                        value={wfInternalComments}
-                        onChange={(e) => setWfInternalComments(e.target.value)}
-                        placeholder="Log dynamic workflow benchmarks, internal tags, production backlog statuses..."
-                        className="w-full bg-zinc-900 border border-zinc-805 text-xs text-zinc-100 rounded-xl p-2 flex focus:outline-[#7c3aed] leading-normal"
-                      />
-                    </div>
-
-                    {/* Row 5: + Add Another Editor */}
-                    <div className="pt-0.5 flex">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setWfError('');
-                          setAssignmentRows([...assignmentRows, { speciality: '', staffId: '', staffName: '' }]);
-                        }}
-                        className="px-3 py-1.5 border border-violet-500/30 text-violet-400 hover:text-white bg-violet-600/10 hover:bg-violet-600/20 text-[10px] font-black uppercase font-mono tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
-                      >
-                        <span className="text-xs font-mono font-semibold">+</span> Add Another River / Editor
-                      </button>
                     </div>
 
                     {/* Display Error Warning If Any (Compact) */}
                     {wfError && (
-                      <div className="p-2 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] font-mono rounded-xl leading-normal flex items-start gap-2">
+                      <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-mono rounded-xl leading-relaxed flex items-start gap-2.5">
                         <span className="font-bold">⚠️ Warning:</span>
                         <span>{wfError}</span>
                       </div>
                     )}
 
-                    {/* Row 6: Assign Editor Button & Cancel Button */}
-                    <div className="border-t border-zinc-900 pt-3.5 flex items-center justify-end gap-3">
+                    {/* Actions Row */}
+                    <div className="border-t border-zinc-900 pt-4 flex items-center justify-end gap-3">
                       <button
                         type="button"
                         onClick={() => {
                           setActiveWorkflowProd(null);
                           setWorkflowActionType(null);
-                          setWfSpeciality('');
-                          setWfEditor('Unassigned');
                           setWfError('');
                         }}
-                        className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-zinc-400 hover:text-white text-xs font-mono font-bold rounded-xl transition-colors cursor-pointer"
+                        className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-zinc-400 hover:text-white text-xs font-mono font-bold rounded-xl transition-colors cursor-pointer"
                       >
                         Cancel
                       </button>
                       <button
                         type="button"
+                        disabled={isSaving}
                         onClick={async () => {
                           setWfError('');
 
                           // 1. Validation
-                          let hasError = false;
-                          for (let i = 0; i < assignmentRows.length; i++) {
-                            const r = assignmentRows[i];
-                            if (!r.speciality || !r.staffId) {
-                              hasError = true;
-                              setWfError(`Please fill both Speciality and Editor fields for team assignment row #${i + 1}.`);
-                              break;
-                            }
+                          if (selectedEditors.length === 0) {
+                            setWfError('At least one editor must be assigned.');
+                            return;
                           }
 
-                          if (hasError || isSaving) return;
-
-                          const filledRows = assignmentRows.filter(r => r.speciality && r.staffId);
-                          if (filledRows.length === 0) {
-                            setWfError('At least one production role spec and editor selection is required.');
+                          if (!wfTargetDeliveryDate) {
+                            setWfError('Delivery Target Date is mandatory.');
                             return;
                           }
 
                           try {
                             setIsSaving(true);
-                            // 2. Database Sync
+                            // 2. Clear existing assignments
                             const existing = editorAssignments.filter(a => a.production_id === activeWorkflowProd.production_id);
                             for (const ext of existing) {
                               await deleteEditorAssignment(ext.assignment_id);
                             }
+
+                            // 3. Save new assignments
+                            const filledRows = selectedEditors.map(editor => ({
+                              staffId: editor.staff_id,
+                              staffName: editor.name,
+                              speciality: editor.production_role_speciality?.split(',')[0]?.trim() || editor.role || 'Editor'
+                            }));
 
                             for (const val of filledRows) {
                               await assignEditorToProject({
@@ -5505,23 +5727,20 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 staff_id: val.staffId,
                                 staff_name: val.staffName,
                                 speciality: val.speciality,
-                                target_finish_date: wfTargetDeliveryDate || new Date().toISOString().split('T')[0]
+                                target_finish_date: wfTargetDeliveryDate
                               });
                             }
 
+                            // 4. Update the Production record
                             const finalNames = filledRows.map(r => r.staffName).filter(Boolean);
-                            const primaryEditor = finalNames[finalNames.length - 1] || 'Unassigned';
+                            const primaryEditor = finalNames[0] || 'Unassigned';
                             const assignedStaffJoined = finalNames.join(', ');
                             const rolesJoined = filledRows.map(r => r.speciality).filter(Boolean).join(', ');
 
                             await updateProduction(activeWorkflowProd.production_id, {
                               editor_assigned: primaryEditor,
                               assigned_staff: assignedStaffJoined,
-                              target_delivery_date: wfTargetDeliveryDate || activeWorkflowProd.target_delivery_date,
-                              project_priority: wfPriority,
-                              remarks: wfProjectNotes,
-                              project_notes: wfProjectNotes,
-                              internal_comments: wfInternalComments,
+                              target_delivery_date: wfTargetDeliveryDate,
                               editing_status: 'Editor Assigned',
                               production_role: rolesJoined,
                               assigned_role: rolesJoined
@@ -5529,21 +5748,18 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                             setActiveWorkflowProd(null);
                             setWorkflowActionType(null);
-                            setWfSpeciality('');
-                            setWfEditor('Unassigned');
                             setWfError('');
                             alert("Project Editorial Active");
                           } catch (err: any) {
-                            console.error("Failed to assign editor:", err);
+                            console.error("Failed to assign editors:", err);
                             setWfError("Failed to save editor assignment. " + (err.message || "Please try again."));
                           } finally {
                             setIsSaving(false);
                           }
                         }}
-                        disabled={isSaving}
-                        className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-650 hover:from-purple-500 hover:to-indigo-550 disabled:opacity-50 text-white font-black uppercase text-[10px] tracking-wider rounded-xl transition-all cursor-pointer shadow-lg font-mono font-extrabold"
+                        className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 border border-purple-500 text-white text-xs font-mono font-bold rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {isSaving ? 'Processing...' : 'Assign Editor'}
+                        {isSaving ? 'Saving...' : 'Save Assignments'}
                       </button>
                     </div>
 
