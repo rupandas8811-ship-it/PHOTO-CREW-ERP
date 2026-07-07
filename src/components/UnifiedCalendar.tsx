@@ -438,33 +438,10 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, ownerFil
     return events;
   }, [leads, orders, operations, production, rawFootage, notifications, role]);
 
-  // Filters Event list by role first
+  // Filters Event list by role first (Relaxed to show all events as requested)
   const roleFilteredEvents = useMemo(() => {
-    return allEvents.filter(ev => {
-      if (role === 'sales') {
-        // Sales focuses on Scheduled events
-        if (ev.sourceType === 'order' && ev.currentStage === 'Event Scheduled') return true;
-        return false;
-      }
-      if (role === 'operations') {
-        // Operations calendar strictly shows ONLY events with 'Event Scheduled' status
-        return ev.sourceType === 'order' && ev.currentStage === 'Event Scheduled';
-      }
-      if (role === 'production') {
-        // Production focuses strictly on Target Delivery Date events
-        return ev.sourceType === 'production' && (ev.eventClass === 'Delivery Due' || ev.eventClass === 'Overdue');
-      }
-      if (role === 'worker') {
-        // Worker only sees order and operations
-        return ev.sourceType === 'order' && ev.currentStage === 'Event Scheduled';
-      }
-      if (role === 'owner') {
-        // Owner only sees Scheduled Events
-        return ev.sourceType === 'order' && ev.currentStage === 'Event Scheduled';
-      }
-      return true;
-    });
-  }, [allEvents, role]);
+    return allEvents;
+  }, [allEvents]);
 
   // Inline filter by search, type, and classes
   
@@ -1380,6 +1357,13 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, ownerFil
             <div className="animate-fade-in space-y-4">
               <div className="bg-zinc-950/20 border border-zinc-900 p-4 rounded-2xl flex justify-between items-center">
                 <div>
+                  <button
+                    onClick={() => setCalendarView('month')}
+                    className="mb-2 flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-xs font-mono text-zinc-300 transition-all cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Back
+                  </button>
                   <span className="text-[10px] font-mono uppercase text-zinc-450">Day Perspective</span>
                   <h3 className="text-sm font-bold text-white mt-0.5">
                     Viewing events for: <span className="text-yellow-500 font-mono">{selectedDate || todayStr}</span>
@@ -1726,6 +1710,13 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, ownerFil
             {/* Modal Heading Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-4">
               <div className="space-y-1">
+                <button
+                  onClick={() => setSelectedEvent(null)}
+                  className="mb-3 flex items-center gap-1.5 px-3 py-1.5 bg-zinc-950 hover:bg-zinc-850 border border-zinc-800 rounded-xl text-xs font-mono text-zinc-300 transition-all cursor-pointer"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Back
+                </button>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] font-mono uppercase px-2.5 py-0.5 bg-zinc-950 text-yellow-500 rounded border border-zinc-800">
                     {selectedEvent.eventType}

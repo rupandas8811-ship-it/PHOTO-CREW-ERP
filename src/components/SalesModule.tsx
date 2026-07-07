@@ -1703,9 +1703,27 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     } else if (msg.includes("column \"new_status\"") || msg.includes("column lead_status_history.new_status")) {
       reason = "Missing column \"new_status\" in table \"lead_status_history\".";
       suggestedFix = "Add the missing 'new_status' column to 'lead_status_history' table using: \n\nALTER TABLE lead_status_history ADD COLUMN new_status TEXT;";
+    } else if (msg.includes("operations") && (msg.includes("row-level security") || msg.includes("violates row-level security") || msg.includes("rls"))) {
+      reason = "Insert permission denied by Row-Level Security (RLS) on 'operations' table.";
+      suggestedFix = `Detailed Database Report:
+• Table Name: operations
+• Failed Operation: INSERT
+• Missing Policy: Enable INSERT policy for authenticated users
+• Authenticated Role: authenticated
+• Supabase Error: ${errorMsg}
+
+Suggested Fix:
+Please execute the following SQL statement in your Supabase SQL Editor to enable authenticated users to insert operations:
+
+ALTER TABLE operations ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Enable INSERT for authenticated users on operations" 
+ON operations FOR INSERT 
+TO authenticated 
+WITH CHECK (true);`;
     } else if (msg.includes("rls policy denied") || msg.includes("row-level security") || msg.includes("violates row-level security")) {
-      reason = `RLS policy denied UPDATE on table "leads".`;
-      suggestedFix = "Update the RLS policy to allow authenticated users to update lead records.";
+      reason = `RLS policy denied UPDATE/INSERT on table or database records.`;
+      suggestedFix = "Update the RLS policy to allow authenticated users to perform this action.";
     } else if (msg.includes("permission denied") || msg.includes("insufficient privilege")) {
       reason = `Permission denied by database. Details: ${errorMsg}`;
       suggestedFix = "Ensure the API client role has correct permissions (SELECT/INSERT/UPDATE) granted on the table.";
@@ -1796,9 +1814,23 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   // Step 2 Follow-up and Lost Lead states
   const [showStep2Popup, setShowStep2Popup] = useState(false);
-  const [showStep3StatusPopup, setShowStep3StatusPopup] = useState(false);
+  const [showStep3Popup, setShowStep3Popup] = useState(false);
   const [step2FollowUpDate, setStep2FollowUpDate] = useState('');
+  const [step2FollowUpReason, setStep2FollowUpReason] = useState('Customer Requested Time');
   const [step2FollowUpNotes, setStep2FollowUpNotes] = useState('');
+
+  // Sync follow-up states when selectedLead changes
+  React.useEffect(() => {
+    if (selectedLead) {
+      setStep2FollowUpDate(selectedLead.next_follow_up_date || '');
+      setStep2FollowUpReason(selectedLead.follow_up_reason || 'Customer Requested Time');
+      setStep2FollowUpNotes(selectedLead.follow_up_notes || '');
+    } else if (activeTab !== 'create') {
+      setStep2FollowUpDate('');
+      setStep2FollowUpReason('Customer Requested Time');
+      setStep2FollowUpNotes('');
+    }
+  }, [selectedLead, activeTab]);
 
   const [showLostModal, setShowLostModal] = useState(false);
   const [lostReason, setLostReason] = useState('Price too high');
@@ -1810,19 +1842,35 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     source?: string;
     failedFunction?: string;
     database?: string;
+    tableName?: string;
+    columnName?: string;
+    failedField?: string;
     leadId?: string;
     suggestedFix?: string;
     stack?: string;
   } | null>(null);
 
-  const showErrorHelper = (title: string, reason: string, failedFunction: string, leadId: string, suggestedFix: string, err?: any) => {
+  const showErrorHelper = (
+    title: string, 
+    reason: string, 
+    failedFunction: string, 
+    leadId: string, 
+    suggestedFix: string, 
+    err?: any,
+    tableName?: string,
+    columnName?: string,
+    failedField?: string
+  ) => {
     console.error(`❌ ${title}\nReason: ${reason}\nFunction: ${failedFunction}\n`, err);
     setErrorDetails({
       title,
       reason: err?.message || reason,
       source: 'SalesModule.tsx',
       failedFunction,
-      database: 'quotations / leads',
+      database: 'Supabase',
+      tableName,
+      columnName,
+      failedField,
       leadId,
       suggestedFix,
       stack: err?.stack || ''
@@ -2275,6 +2323,21 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     transaction_id: '',
   });
 
+  // Synchronize confirmForm quotation_amount automatically from current Lead Final_Quotation_Amount
+  React.useEffect(() => {
+    if (showConfirmModal && selectedLead) {
+      const finalQuotationAmount = Number(selectedLead.Final_Quotation_Amount || selectedLead.package_price || selectedLead.budget || 0);
+      setConfirmForm(prev => ({
+        ...prev,
+        quotation_amount: finalQuotationAmount,
+        package_name: prev.package_name || selectedLead.Select_Package_Option || (selectedLead.event_type === 'Other' ? (selectedLead.custom_event_name || 'Premium Package') : `${selectedLead.event_type} Premium Package`),
+        event_date: selectedLead.event_date || prev.event_date || '',
+        event_time: selectedLead.event_time || prev.event_time || '12:00',
+        notes: selectedLead.remarks || prev.notes || '',
+      }));
+    }
+  }, [showConfirmModal, selectedLead]);
+
   // Quotation System State
   const [quotationTerms, setQuotationTerms] = useState(
     "1. Payments are non-refundable.\n" +
@@ -2287,8 +2350,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   );
   const [generatedPDFBlobUrl, setGeneratedPDFBlobUrl] = useState<string>('');
   const [activeQuoteNum, setActiveQuoteNum] = useState<string>('');
-  const [showStep3Popup, setShowStep3Popup] = useState<boolean>(false);
-  const [step3Option, setStep3Option] = useState<'negotiation' | 'quotation_send'>('negotiation');
 
   // Customizable inclusions, deliverables, discount, and additional charges states
   const [editableInclusions, setEditableInclusions] = useState<Record<string, string[]>>({});
@@ -2624,47 +2685,56 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   // Auto-load package details into Step 3 if a package is selected but inclusions/deliverables are empty
   React.useEffect(() => {
-    const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
-    if (pkgId && packages && packages.length > 0) {
-      const pkg = packages.find((p) => p.package_id === pkgId);
-      if (pkg) {
-        setEditableInclusions(prev => {
-          let updated = { ...prev };
-          let changed = false;
-          const incList = parseTeamMembers(pkg.team_members);
-          const defaultInc = incList.length > 0 ? incList : ['1 Professional Photographer'];
-          
-          if (!prev[pkgId] || prev[pkgId].length === 0) {
-            updated[pkgId] = defaultInc;
-            changed = true;
-          }
-          if (crmEvents && crmEvents.length > 0) {
-            crmEvents.forEach(ev => {
-              const key = `${pkgId}_${ev.id}`;
-              if (!prev[key] || prev[key].length === 0) {
-                updated[key] = [...defaultInc];
-                changed = true;
-              }
-            });
-          }
-          return changed ? updated : prev;
-        });
+    const pkgIds = [
+      wizardLeadData.selected_package_id,
+      wizardLeadData.Select_Package_Option,
+      ...selectedPkgIds
+    ].filter(Boolean) as string[];
 
-        setEditableDeliverables(prev => {
-          if (!prev[pkgId] || prev[pkgId].length === 0) {
+    if (pkgIds.length > 0 && packages && packages.length > 0) {
+      setEditableInclusions(prev => {
+        let updated = { ...prev };
+        let changed = false;
+        pkgIds.forEach(pkgId => {
+          const pkg = packages.find((p) => p.package_id === pkgId);
+          if (pkg) {
+            const incList = parseTeamMembers(pkg.team_members);
+            const defaultInc = incList.length > 0 ? incList : ['1 Professional Photographer'];
+            if (!updated[pkgId] || updated[pkgId].length === 0) {
+              updated[pkgId] = defaultInc;
+              changed = true;
+            }
+            if (crmEvents && crmEvents.length > 0) {
+              crmEvents.forEach(ev => {
+                const key = `${pkgId}_${ev.id}`;
+                if (!updated[key] || updated[key].length === 0) {
+                  updated[key] = [...defaultInc];
+                  changed = true;
+                }
+              });
+            }
+          }
+        });
+        return changed ? updated : prev;
+      });
+
+      setEditableDeliverables(prev => {
+        let updated = { ...prev };
+        let changed = false;
+        pkgIds.forEach(pkgId => {
+          const pkg = packages.find((p) => p.package_id === pkgId);
+          if (pkg && (!updated[pkgId] || updated[pkgId].length === 0)) {
             const delList = pkg.deliverables
               ? pkg.deliverables.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
               : [];
-            return {
-              ...prev,
-              [pkgId]: delList.length > 0 ? delList : ['High Resolution Edited Photos']
-            };
+            updated[pkgId] = delList.length > 0 ? delList : ['High Resolution Edited Photos'];
+            changed = true;
           }
-          return prev;
         });
-      }
+        return changed ? updated : prev;
+      });
     }
-  }, [wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, packages]);
+  }, [wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, selectedPkgIds, packages, crmEvents]);
 
   // Auto-scroll and focus transitions for Sales Popups & Forms
   React.useEffect(() => {
@@ -2691,11 +2761,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
   }, [showConfirmModal]);
 
-  React.useEffect(() => {
-    if (showStep3Popup) {
-      triggerAutoScrollAndFocus('#modal_step3_proceed_status', 150);
-    }
-  }, [showStep3Popup]);
 
   React.useEffect(() => {
     // Completely removed automated quotation number generation as per instructions
@@ -2738,11 +2803,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
   };
 
-  const dynamicBaseSum = getSelectedPkgsInfo(crmWizardStep > 0).reduce((sum, p) => sum + Number(p.package_cost || 0), 0);
+  const dynamicBaseSum = getSelectedPkgsInfo(!!selectedLead).reduce((sum, p) => sum + Number(p.package_cost || 0), 0);
   const dynamicAdditionalSum = quoteServices
     .filter(s => s.isAdditional)
     .reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
-    const discountVal = Number(quoteDiscount || 0);
+    const discountVal = selectedLead ? Number(quoteDiscount || 0) : Number(leadDiscount || 0);
   const dynamicFinalAmt = Math.max(0, dynamicBaseSum + Number(quoteAdditional || 0) - discountVal);
 
   React.useEffect(() => {
@@ -3355,9 +3420,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
           </div>
 
-          {/* Final Calculated Amount Badge */}
+          {/* Section 3: Financial Summary */}
           <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 flex items-center justify-between shadow-inner mt-2">
             <div className="space-y-0.5">
+              <h4 className="text-[10px] text-amber-500 font-bold uppercase tracking-wide font-mono flex items-center gap-1.5 mb-1">
+                <span></span> Section 3: Financial Summary
+              </h4>
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide font-mono">Final Quotation Amount</p>
               <p className="text-[9px] text-slate-500 font-mono">Formula: Base Price (₹{basePkgSum}) + Addl (₹{quoteAdditional || 0}) - Disc (₹{quoteDiscount || 0})</p>
             </div>
@@ -3375,25 +3443,31 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             <span>⚙️</span> Section 4: Quotation Actions
           </h4>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {/* Download PDF */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            {/* Generate Quotation */}
             <button
               type="button"
-              onClick={() => handleDownloadQuotePDF(isEdit)}
+              onClick={() => {
+                setSalesStatus('Quotation Sent');
+                handleDownloadQuotePDF(isEdit);
+              }}
               disabled={isSaving}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-red-950/40 hover:bg-red-900/50 text-red-300 rounded-lg transition-all border border-red-900/40 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-indigo-950/40 hover:bg-indigo-900/50 text-indigo-300 rounded-lg transition-all border border-indigo-900/40 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span>��</span> {isSaving ? 'Processing...' : 'Download PDF Document'}
+              <span>✨</span> {isSaving ? 'Processing...' : 'Generate Quotation'}
             </button>
 
             {/* Send WhatsApp */}
             <button
               type="button"
-              onClick={() => handleSendWhatsAppQuote(isEdit)}
+              onClick={() => {
+                setSalesStatus('Quotation Sent');
+                handleSendWhatsAppQuote(isEdit);
+              }}
               disabled={isSaving}
               className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 rounded-lg transition-all border border-emerald-900/40 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span>��</span> {isSaving ? 'Processing...' : 'Send Quotation via WhatsApp'}
+              <span>💬</span> {isSaving ? 'Processing...' : 'Send Quotation via WhatsApp'}
             </button>
           </div>
         </div>
@@ -3647,6 +3721,106 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
   };
 
+  const STATUS_RANKS: Record<string, number> = {
+    'New Lead': 1,
+    'Contacted': 1,
+    'Follow Up': 2,
+    'Follow-up': 2,
+    'Negotiation': 3,
+    'Quotation Sent': 4,
+    'Order Confirmed': 5
+  };
+
+  const isValidTransition = (oldStatus: string | undefined | null, newStatus: string): boolean => {
+    if (!oldStatus) return true;
+    if (newStatus === 'Lost Lead') return true;
+    const o = oldStatus === 'Follow-up' || oldStatus === 'Follow-Up' ? 'Follow Up' : oldStatus;
+    const n = newStatus === 'Follow-up' || newStatus === 'Follow-Up' ? 'Follow Up' : newStatus;
+    const rankOld = STATUS_RANKS[o] || 0;
+    const rankNew = STATUS_RANKS[n] || 0;
+    if (rankOld === 0 || rankNew === 0) return true;
+    return rankNew >= rankOld;
+  };
+
+  const handleStep3StatusSelect = async (status: 'Negotiation' | 'Quotation Sent') => {
+    if (!selectedLead) return;
+    setIsSaving(true);
+    try {
+      const currentStatusOfLead = selectedLead.current_status || selectedLead.status || 'New Lead';
+      
+      let finalStatusToSet = currentStatusOfLead;
+      if (isValidTransition(currentStatusOfLead, status)) {
+        finalStatusToSet = status;
+      } else {
+        showToastMsg(`Cannot transition from ${currentStatusOfLead} to ${status}. Status preserved.`, "error");
+      }
+
+      const timestamp = new Date().toISOString();
+      const updatedRemarks = `${selectedLead.remarks || ''}\n[Update ${timestamp.split('T')[0]}]: Status updated automatically to ${finalStatusToSet} after Step 3 save.`;
+
+      // Save the lead with status
+      await updateLead(selectedLead.lead_id, {
+        status: finalStatusToSet as any,
+        current_status: finalStatusToSet,
+        remarks: updatedRemarks
+      });
+
+      // Update lead follow up and preserve/update status
+      await updateLeadFollowUp(
+        selectedLead.lead_id,
+        finalStatusToSet as any,
+        `Step 3 Complete. Automatically set to ${finalStatusToSet}`,
+        selectedLead.next_follow_up_date || '',
+        Number(wizardLeadData.package_cost || selectedLead.package_price || selectedLead.budget || 0),
+        `Finalized Step 3 with status: ${finalStatusToSet}`
+      );
+
+      // Locally update selectedLead
+      setSelectedLead(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          status: finalStatusToSet as any,
+          current_status: finalStatusToSet,
+          remarks: updatedRemarks
+        };
+      });
+
+      showToastMsg(`Lead successfully updated to ${finalStatusToSet} and saved.`, "success");
+      setShowStep3Popup(false);
+      setSelectedLead(null); // Close the CRM modal
+    } catch (err: any) {
+      console.error("Step 3 Status transition failed:", err);
+      const errMsg = err?.message || String(err);
+      const parsed = parseStatusUpdateError(errMsg);
+      
+      logStatusUpdateError({
+        leadId: selectedLead?.lead_id || null,
+        orderId: null,
+        oldStatus: selectedLead ? (selectedLead.current_status || selectedLead.status || 'New Lead') : null,
+        newStatus: status,
+        updatePayload: {
+          status,
+          current_status: status
+        },
+        insertPayload: null,
+        dbResponse: null,
+        fullError: err
+      });
+
+      setStatusError({
+        title: "Step 3 Status Update Failed",
+        reason: parsed.reason,
+        suggestedFix: parsed.suggestedFix,
+        failedFunction: "handleStep3StatusSelect",
+        failedTable: "leads"
+      });
+      showToastMsg(parsed.reason, "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSaveStep = async (step: number) => {
     if (!selectedLead) return;
     setIsSaving(true);
@@ -3669,6 +3843,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           return;
         }
         const updatedRemarks = appendCompletedStep(selectedLead.remarks || wizardLeadData.remarks, 1);
+        const currentStatusOfLead = selectedLead.current_status || selectedLead.status || 'New Lead';
+        const finalStatusToSet = isValidTransition(currentStatusOfLead, 'New Lead') ? 'New Lead' : currentStatusOfLead;
+
         await updateLead(selectedLead.lead_id, {
           customer_name: wizardLeadData.customer_name || 'Inbound Prospect',
           mobile: wizardLeadData.mobile,
@@ -3685,7 +3862,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           reference_source: wizardLeadData.reference_source,
           Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || '',
           remarks: updatedRemarks,
-          status: selectedLead.status || 'New Lead'
+          status: finalStatusToSet as any,
+          current_status: finalStatusToSet
         });
 
         const newCompleted = Math.max(crmHighestStep, 1);
@@ -3696,7 +3874,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           if (!prev) return null;
           return {
             ...prev,
-            remarks: updatedRemarks
+            remarks: updatedRemarks,
+            status: finalStatusToSet as any,
+            current_status: finalStatusToSet
           };
         });
 
@@ -3908,11 +4088,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           };
         });
 
-        showToastMsg(`CRM Changes Saved.`, "success");
-        setShowStep3Popup(true);
-        setStep3Option('negotiation');
+        showToastMsg("Quotation details saved. Please set the lead stage.", "success");
         setIsSaving(false);
-        return; // Halt here to wait for popup selection!
+        setShowStep3Popup(true);
+        return;
       }
 
       if (step < 3) {
@@ -3959,32 +4138,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
   };
 
-  const handleConfirmStep3Proceed = async () => {
-    if (!selectedLead) return;
-    setIsSaving(true);
-    try {
-      if (step3Option === 'negotiation') {
-        await updateLead(selectedLead.lead_id, {
-          status: 'Negotiation' as CurrentStage
-        });
-        showToastMsg("Lead status updated to Negotiation.", "success");
-        setShowStep3Popup(false);
-        setSelectedLead(null);
-      } else if (step3Option === 'quotation_send') {
-        await updateLead(selectedLead.lead_id, {
-          status: 'Quotation Sent' as CurrentStage
-        });
-        showToastMsg("Lead status updated to Quotation Sent.", "success");
-        setShowStep3Popup(false);
-        setSelectedLead(null);
-      }
-    } catch (err: any) {
-      console.error("Failed to proceed with Step 3 option:", err);
-      showToastMsg(err.message || String(err), "error");
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   const handleSaveStep2FollowUp = async () => {
     const isCreateFlow = activeTab === 'create';
@@ -3994,7 +4147,31 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return;
     }
     if (!step2FollowUpDate) {
-      showToastMsg("Next Follow-up Date is mandatory.", "error");
+      showErrorHelper(
+        "Mandatory Field Missing",
+        "Next Follow-up Date is required.",
+        "handleSaveStep2FollowUp",
+        currentLeadId,
+        "Select a date for the next follow-up.",
+        null,
+        "leads",
+        "next_follow_up_date",
+        "Next Follow-up Date"
+      );
+      return;
+    }
+    if (!step2FollowUpNotes) {
+      showErrorHelper(
+        "Mandatory Field Missing",
+        "Follow-up Notes are required.",
+        "handleSaveStep2FollowUp",
+        currentLeadId,
+        "Enter notes describing the follow-up conversation or plan.",
+        null,
+        "leads",
+        "follow_up_notes",
+        "Follow-up Notes"
+      );
       return;
     }
     setIsSaving(true);
@@ -4041,22 +4218,24 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       const notesWithTag = appendCompletedStep(step2FollowUpNotes || 'Saved event details', 2);
 
-      // Determine target status: If the current status is New Lead or empty, update to Follow Up. Otherwise preserve advanced status.
-      const previousStatus = isCreateFlow ? 'New Lead' : (selectedLead ? getLeadCurrentStatus(selectedLead) : 'New Lead');
-      const targetStatus = (previousStatus === 'New Lead' || !previousStatus) ? 'Follow Up' : previousStatus;
+      // Automatically update Lead Status to: Follow-up as requested
+      const targetStatus = 'Follow Up';
+      const currentStatusOfLead = selectedLead?.current_status || selectedLead?.status || 'New Lead';
+      const finalStatusToSet = isValidTransition(currentStatusOfLead, targetStatus) ? targetStatus : currentStatusOfLead;
 
       // Update lead follow up and preserve/update status
       await updateLeadFollowUp(
         currentLeadId,
-        targetStatus as CurrentStage,
+        finalStatusToSet as CurrentStage,
         notesWithTag,
         step2FollowUpDate,
         Number(isCreateFlow ? (createForm.budget || 0) : (wizardLeadData.package_cost || selectedLead?.budget || 0)),
-        step2FollowUpNotes || 'Saved event details'
+        step2FollowUpNotes || 'Saved event details',
+        step2FollowUpReason
       );
 
       if (isCreateFlow) {
-        setSalesStatus(targetStatus as CurrentStage);
+        setSalesStatus(finalStatusToSet as CurrentStage);
         setWizardStep(3);
       } else {
         const newCompleted = Math.max(crmHighestStep, 2);
@@ -4074,16 +4253,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           if (!prev) return null;
           return {
             ...prev,
-            status: targetStatus as CurrentStage,
-            current_status: targetStatus,
-            remarks: updatedRemarks
+            status: finalStatusToSet as CurrentStage,
+            current_status: finalStatusToSet,
+            remarks: updatedRemarks,
+            follow_up_notes: step2FollowUpNotes || 'Saved event details',
+            next_follow_up_date: step2FollowUpDate,
+            follow_up_reason: step2FollowUpReason
           };
         });
 
         setCrmWizardStep(3);
       }
 
-      showToastMsg("Event details and follow-up saved successfully. Status set to Follow-up.", "success");
+      showToastMsg(`Event details and follow-up saved successfully. Status set to ${finalStatusToSet}.`, "success");
       setShowStep2Popup(false);
     } catch (err: any) {
       console.error("Step 2 Follow-up save failed:", err);
@@ -4093,7 +4275,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         "handleSaveStep2FollowUp",
         currentLeadId,
         "Check event details and try again.",
-        err
+        err,
+        "leads"
       );
       setTimeout(() => {
         document.getElementById('error_details_modal')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -5575,7 +5758,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setStatusError({
         title: "Follow-up Pipeline Status Update Failed",
         reason: parsed.reason,
-        suggestedFix: parsed.suggestedFix
+        suggestedFix: parsed.suggestedFix,
+        failedFunction: "handleFollowUpSubmit / confirmOrder",
+        failedTable: "leads / orders / operations",
+        supabaseError: errMsg,
+        missingField: errMsg.includes("order_id") ? "order_id" : undefined
       });
       alert(parsed.reason);
     } finally {
@@ -5658,7 +5845,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setStatusError({
         title: "Action Button Order Confirmation Failed",
         reason: parsed.reason,
-        suggestedFix: parsed.suggestedFix
+        suggestedFix: parsed.suggestedFix,
+        failedFunction: "handleConfirmOrderSubmit / confirmOrder",
+        failedTable: "leads / orders / operations",
+        supabaseError: errMsg,
+        missingField: errMsg.includes("order_id") ? "order_id" : undefined
       });
       alert(parsed.reason);
     } finally {
@@ -6023,10 +6214,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         onChange={(e) => setFollowUpForm({ ...followUpForm, status: e.target.value as CurrentStage })}
                         className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                       >
-                        <option value="Follow Up">Follow Up</option>
-                        <option value="Quotation Sent">Quotation Sent</option>
-                        <option value="Negotiation">Negotiation</option>
-                        <option value="Order Confirmed">Order Confirmed</option>
+                        {isValidTransition(selectedLead.status, 'Follow Up') && <option value="Follow Up">Follow Up</option>}
+                        {isValidTransition(selectedLead.status, 'Negotiation') && <option value="Negotiation">Negotiation</option>}
+                        {isValidTransition(selectedLead.status, 'Quotation Sent') && <option value="Quotation Sent">Quotation Sent</option>}
+                        {isValidTransition(selectedLead.status, 'Order Confirmed') && <option value="Order Confirmed">Order Confirmed</option>}
                       </select>
                     </div>
                   </div>
@@ -7345,7 +7536,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 <div className="bg-slate-950/30 border border-slate-800/60 rounded-xl p-4.5 space-y-4 shadow-sm animate-fade-in text-left">
                   <div className="flex items-center gap-2 border-b border-slate-800/50 pb-2 mb-1">
                     <CheckSquare className="w-4 h-4 text-cyan-405" />
-                    <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">3. Package Selection</span>
+                    <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">Section 1: Package Selection</span>
                   </div>
 
                   <div className="relative">
@@ -7601,56 +7792,142 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                   {/* Display Package Pricing & Live Auto Calculation Output */}
                   {selectedPkgIds.length > 0 && (
-                    <div id="pkg_pricing_calc_panel" className="bg-slate-950/70 p-4 rounded-xl border border-slate-800/80 space-y-3 animate-fade-in">
-                      <span className="text-[10px] font-bold text-slate-400 font-mono block border-b border-slate-800/65 pb-1.5 uppercase tracking-wider">
-                        Selected Packages & Price Estimate
-                      </span>
-                      <ul className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                        {selectedPkgIds.map((id) => {
-                          const pkg = PACKAGES_LIST.flatMap(cat => cat.items).find(item => item.id === id);
-                          if (!pkg) return null;
-                          return (
-                            <li key={id} className="flex justify-between items-center text-xs text-slate-300">
-                              <span className="flex items-center gap-2">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                {pkg.name}
-                              </span>
-                              <span className="font-mono text-emerald-400">₹{pkg.cost.toLocaleString('en-IN')}</span>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                      
-                      <div className="border-t border-slate-800/80 pt-3 space-y-2.5 text-xs">
-                        <div className="flex justify-between text-slate-400">
-                          <span>Subtotal</span>
-                          <span className="font-mono text-slate-200">₹{subtotal.toLocaleString('en-IN')}</span>
-                        </div>
+                    <div className="space-y-6">
+                      {selectedPkgIds.map((pkgId) => {
+                        const pkgObj = packages.find(p => p.package_id === pkgId);
+                        if (!pkgObj) return null;
                         
-                        <div className="flex justify-between items-center text-slate-400">
-                          <span>Discount (Optional)</span>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-slate-500">₹</span>
-                            <input
-                              type="number"
-                              min="0"
-                              max={subtotal}
-                              placeholder="0"
-                              value={leadDiscount || ''}
-                              onChange={(e) => {
-                                const val = Math.min(subtotal, Math.max(0, Number(e.target.value)));
-                                setLeadDiscount(val);
-                              }}
-                              className="w-24 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-right font-mono text-xs text-slate-100 focus:outline-none focus:border-emerald-600 transition-all"
-                            />
+                        const inclusionsList = editableInclusions[pkgId] || [];
+                        const deliverablesList = editableDeliverables[pkgId] || [];
+                        
+                        return (
+                          <div key={pkgId} className="bg-[#0F172A] border border-slate-800 rounded-xl p-4.5 space-y-4 animate-fade-in text-xs text-left">
+                            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                              <h4 className="font-bold text-white text-[12px] uppercase tracking-wider font-mono">
+                                 Package Details: {pkgObj.package_name}
+                              </h4>
+                            </div>
+
+                            {/* Team Members */}
+                            <div>
+                              <div className="flex items-center justify-between mb-1.5">
+                                <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Team Members Included (Editable)</label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const currentList = [...(editableInclusions[pkgId] || [])];
+                                    currentList.push('');
+                                    setEditableInclusions({
+                                      ...editableInclusions,
+                                      [pkgId]: currentList
+                                    });
+                                  }}
+                                  className="text-xs text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded cursor-pointer"
+                                >
+                                  + Add Member
+                                </button>
+                              </div>
+                              {inclusionsList.length === 0 ? (
+                                <p className="text-[10px] text-zinc-500 italic">No team members added yet.</p>
+                              ) : (
+                                <div className="space-y-2">
+                                  {inclusionsList.map((item, idx) => (
+                                    <div key={idx} className="flex items-center gap-2">
+                                      <input
+                                        type="text"
+                                        value={item}
+                                        onChange={(e) => {
+                                          const currentList = [...(editableInclusions[pkgId] || [])];
+                                          currentList[idx] = e.target.value;
+                                          setEditableInclusions({
+                                            ...editableInclusions,
+                                            [pkgId]: currentList
+                                          });
+                                        }}
+                                        className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const currentList = [...(editableInclusions[pkgId] || [])];
+                                          currentList.splice(idx, 1);
+                                          setEditableInclusions({
+                                            ...editableInclusions,
+                                            [pkgId]: currentList
+                                          });
+                                        }}
+                                        className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono cursor-pointer"
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Deliverables */}
+                            <div>
+                              <div className="flex items-center justify-between mb-1.5">
+                                <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Deliverables Description (Editable)</label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const currentList = [...(editableDeliverables[pkgId] || [])];
+                                    currentList.unshift('');
+                                    setEditableDeliverables({
+                                      ...editableDeliverables,
+                                      [pkgId]: currentList
+                                    });
+                                  }}
+                                  className="text-xs text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded cursor-pointer"
+                                >
+                                  + Add Deliverable
+                                </button>
+                              </div>
+                              {deliverablesList.length === 0 ? (
+                                <p className="text-[10px] text-zinc-500 italic">No deliverables added yet.</p>
+                              ) : (
+                                <div className="space-y-2">
+                                  {deliverablesList.map((item, idx) => (
+                                    <div key={idx} className="flex items-center gap-2">
+                                      <input
+                                        type="text"
+                                        value={item}
+                                        onChange={(e) => {
+                                          const currentList = [...(editableDeliverables[pkgId] || [])];
+                                          currentList[idx] = e.target.value;
+                                          setEditableDeliverables({
+                                            ...editableDeliverables,
+                                            [pkgId]: currentList
+                                          });
+                                        }}
+                                        className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const currentList = [...(editableDeliverables[pkgId] || [])];
+                                          currentList.splice(idx, 1);
+                                          setEditableDeliverables({
+                                            ...editableDeliverables,
+                                            [pkgId]: currentList
+                                          });
+                                        }}
+                                        className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono cursor-pointer"
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                        
-                        <div className="flex justify-between items-center text-white font-extrabold border-t border-slate-800/80 pt-2.5">
-                          <span className="tracking-wide">Final Total Project Value</span>
-                          <span className="font-mono text-amber-400 text-sm">₹{finalTotal.toLocaleString('en-IN')}</span>
-                        </div>
-                      </div>
+                        );
+                      })}
+
+                      {renderQuotationAndStep4Section(false)}
                     </div>
                   )}
                 </div>
@@ -7699,7 +7976,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     if (salesStatus === 'Order Confirmed') {
                       handleOrderConfirmedSubmit(e);
                     } else {
-                      setShowStep3StatusPopup(true);
+                      handleStatusSave();
                     }
                   }}
                   disabled={isSaving}
@@ -8243,10 +8520,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   </label>
                   <input
                     type="number"
+                    readOnly
                     required
                     value={confirmForm.quotation_amount}
-                    onChange={(e) => setConfirmForm({ ...confirmForm, quotation_amount: Number(e.target.value) })}
-                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg py-1.5 px-3 text-slate-400 focus:outline-none font-mono cursor-not-allowed"
                   />
                 </div>
 
@@ -8329,108 +8606,141 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       {/* Step 2 Mandatory Follow-up Popup Modal */}
       {showStep2Popup && (selectedLead || activeTab === 'create') && (
-        <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-4 backdrop-blur-md">
-          <div id="step2_followup_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
-                <span>��</span> Log Mandatory Follow-up Details
+        <div className="fixed inset-0 bg-black/85 z-[100] flex items-center justify-center p-4 backdrop-blur-md">
+          <div id="step2_followup_modal" className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden max-w-md w-full shadow-2xl p-6 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <h4 className="font-bold text-slate-100 text-base flex items-center gap-2 font-sans">
+                <span className="text-amber-500">📅</span> Log Mandatory Follow-up Details
               </h4>
               <button 
                 onClick={() => setShowStep2Popup(false)}
-                className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0"
+                className="text-slate-500 hover:text-slate-300 transition-colors p-1"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg text-xs text-amber-200">
-              Please schedule the next follow-up and add notes to progress the lead to <strong>Follow-up</strong> status.
-            </div>
-
-            <div className="space-y-3.5 text-xs text-slate-300">
+            <div className="space-y-4">
               <div>
-                <label className="block font-medium text-slate-400 mb-1">
-                  Next Follow-up Date * (Required)
-                </label>
+                <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">Next Follow-up Date *</label>
                 <input
                   type="date"
-                  required
                   value={step2FollowUpDate}
-                  min={new Date().toISOString().split('T')[0]}
                   onChange={(e) => setStep2FollowUpDate(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl py-2.5 px-4 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 transition-all"
+                  required
                 />
               </div>
 
               <div>
-                <label className="block font-medium text-slate-400 mb-1">
-                  Follow-up Notes * (Required)
-                </label>
-                <textarea
+                <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">Follow-up Reason *</label>
+                <select
+                  value={step2FollowUpReason}
+                  onChange={(e) => setStep2FollowUpReason(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl py-2.5 px-4 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 transition-all appearance-none"
                   required
-                  rows={3}
-                  placeholder="Summarize the event discussion, client's vibe, key preferences..."
-                  value={step2FollowUpNotes}
-                  onChange={(e) => setStep2FollowUpNotes(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs"
-                />
+                >
+                  <option value="Customer Requested Time">Customer Requested Time</option>
+                  <option value="Budget Discussion">Budget Discussion</option>
+                  <option value="Package Clarification">Package Clarification</option>
+                  <option value="Waiting for Family Approval">Waiting for Family Approval</option>
+                  <option value="Follow-up Call">Follow-up Call</option>
+                  <option value="Meeting Scheduled">Meeting Scheduled</option>
+                  <option value="Other">Other</option>
+                </select>
               </div>
 
-              <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setShowStep2Popup(false)}
-                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs animate-none border-0"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveStep2FollowUp}
-                  disabled={isSaving || !step2FollowUpDate || !step2FollowUpNotes}
-                  className="px-4 py-2 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center gap-1.5 cursor-pointer shadow-lg text-xs border-0"
-                >
-                  {isSaving ? 'Saving...' : 'Save & Continue'}
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">Follow-up Notes *</label>
+                <textarea
+                  value={step2FollowUpNotes}
+                  onChange={(e) => setStep2FollowUpNotes(e.target.value)}
+                  rows={3}
+                  placeholder="Enter detailed follow-up notes here..."
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl py-2.5 px-4 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 transition-all resize-none"
+                  required
+                />
               </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
+              <button 
+                type="button"
+                onClick={() => setShowStep2Popup(false)}
+                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold rounded-xl transition-all text-xs border border-slate-700"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveStep2FollowUp}
+                disabled={isSaving || !step2FollowUpDate || !step2FollowUpNotes}
+                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2 text-xs border border-indigo-400/20"
+              >
+                {isSaving ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>💾 Save & Continue to Step 3</>
+                )}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {showStep3StatusPopup && (
-        <div className="fixed inset-0 bg-black/85 z-60 flex items-center justify-center p-4 backdrop-blur-md">
-          <div className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-sm w-full shadow-2xl p-6 text-center animate-in fade-in zoom-in-95 duration-200">
-            <h3 className="text-lg font-bold text-slate-100 mb-2">Select Next Action</h3>
-            <p className="text-slate-400 text-sm mb-6">Choose the current status for this lead to finish the creation process.</p>
-            
-            <div className="grid grid-cols-1 gap-3">
-              <button
-                onClick={() => {
-                  setSalesStatus('Quotation Sent');
-                  setShowStep3StatusPopup(false);
-                  handleStatusSave('Quotation Sent');
-                }}
-                className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl cursor-pointer transition-colors flex items-center justify-center gap-2"
+      {/* Step 3 Final Status Popup Modal */}
+      {showStep3Popup && selectedLead && (
+        <div className="fixed inset-0 bg-black/85 z-[100] flex items-center justify-center p-4 backdrop-blur-md">
+          <div id="step3_status_modal" className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden max-w-md w-full shadow-2xl p-6 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <h4 className="font-bold text-slate-100 text-base flex items-center gap-2 font-sans">
+                <span className="text-indigo-500">📈</span> Set Final CRM Lead Status
+              </h4>
+              <button 
+                onClick={() => setShowStep3Popup(false)}
+                className="text-slate-500 hover:text-slate-300 transition-colors p-1 cursor-pointer"
               >
-                <span>📄</span> Quotation Sent
+                <X className="w-5 h-5" />
               </button>
-              
+            </div>
+
+            <p className="text-slate-300 text-xs leading-relaxed font-sans">
+              Quotation and event setup saved successfully. Please select the next step for <strong>{selectedLead.customer_name}</strong> to finalize the Sales CRM stage:
+            </p>
+
+            <div className="grid grid-cols-1 gap-3.5">
               <button
-                onClick={() => {
-                  setSalesStatus('Negotiation');
-                  setShowStep3StatusPopup(false);
-                  handleStatusSave('Negotiation');
-                }}
-                className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl cursor-pointer transition-colors flex items-center justify-center gap-2"
+                type="button"
+                onClick={() => handleStep3StatusSelect('Negotiation')}
+                disabled={isSaving}
+                className="w-full flex items-center justify-between p-4 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-indigo-500/50 rounded-xl transition-all group text-left cursor-pointer"
               >
-                <span>🤝</span> Negotiation
+                <div>
+                  <div className="font-bold text-slate-100 text-sm group-hover:text-indigo-400 transition-colors font-sans">🤝 Negotiation</div>
+                  <div className="text-[11px] text-slate-400 mt-1 font-sans">Lead is interested. Discussing pricing and custom package terms.</div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-indigo-400 transition-colors shrink-0 ml-3" />
               </button>
-              
+
               <button
-                onClick={() => setShowStep3StatusPopup(false)}
-                className="mt-2 text-slate-500 hover:text-slate-300 text-xs py-2 cursor-pointer"
+                type="button"
+                onClick={() => handleStep3StatusSelect('Quotation Sent')}
+                disabled={isSaving}
+                className="w-full flex items-center justify-between p-4 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/50 rounded-xl transition-all group text-left cursor-pointer"
+              >
+                <div>
+                  <div className="font-bold text-slate-100 text-sm group-hover:text-emerald-400 transition-colors font-sans">✉️ Quotation Sent</div>
+                  <div className="text-[11px] text-slate-400 mt-1 font-sans">Quotation has been shared with the client. Awaiting booking decision.</div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-emerald-400 transition-colors shrink-0 ml-3" />
+              </button>
+            </div>
+
+            <div className="pt-4 border-t border-slate-800 flex items-center justify-end">
+              <button 
+                type="button"
+                onClick={() => setShowStep3Popup(false)}
+                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold rounded-xl transition-all text-xs border border-slate-700 cursor-pointer font-sans"
               >
                 Cancel
               </button>
@@ -8444,39 +8754,54 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         <div className="fixed inset-0 bg-black/85 z-[100] flex items-center justify-center p-4 backdrop-blur-md">
           <div className="bg-slate-900 border border-red-900/50 rounded-xl overflow-hidden max-w-lg w-full shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <h4 className="font-bold text-red-400 text-lg flex items-center gap-2">
-                <span>❌</span> {errorDetails.title}
-              </h4>
-              <button 
-                onClick={() => setErrorDetails(null)}
-                className="text-slate-400 hover:text-white transition-colors"
-              >
-                ✕
+              <h3 className="text-lg font-bold text-white">Error Details</h3>
+              <button onClick={() => setErrorDetails(null)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="space-y-3 text-sm text-slate-300">
-              <p><strong>Reason:</strong> {errorDetails.reason}</p>
-              {errorDetails.source && <p><strong>Source:</strong> {errorDetails.source}</p>}
-              {errorDetails.failedFunction && <p><strong>Failed Function:</strong> {errorDetails.failedFunction}</p>}
-              {errorDetails.database && <p><strong>Database:</strong> {errorDetails.database}</p>}
-              {errorDetails.leadId && <p><strong>Lead ID:</strong> {errorDetails.leadId}</p>}
-              {errorDetails.suggestedFix && (
-                <div className="mt-4 p-3 bg-blue-950/30 border border-blue-900/50 rounded-lg text-blue-300">
-                  <strong>Suggested Fix:</strong> {errorDetails.suggestedFix}
+            <div className="space-y-3">
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2 overflow-auto max-h-60 custom-scrollbar">
+                <div className="grid grid-cols-3 gap-2 text-[10px] uppercase font-bold text-slate-500 mb-1">
+                  <div>Field</div>
+                  <div className="col-span-2">Value</div>
                 </div>
-              )}
-              {process.env.NODE_ENV !== 'production' && errorDetails.stack && (
-                <div className="mt-4 p-3 bg-slate-950 rounded-lg overflow-auto max-h-40 border border-slate-800 text-[10px] font-mono text-slate-500">
-                  {errorDetails.stack}
+                
+                {errorDetails.failedField && (
+                  <div className="grid grid-cols-3 gap-2 text-xs border-b border-slate-800/50 pb-2">
+                    <div className="text-slate-400">Failed Field</div>
+                    <div className="col-span-2 text-rose-400 font-mono">{errorDetails.failedField}</div>
+                  </div>
+                )}
+                
+                {errorDetails.tableName && (
+                  <div className="grid grid-cols-3 gap-2 text-xs border-b border-slate-800/50 pb-2">
+                    <div className="text-slate-400">Table Name</div>
+                    <div className="col-span-2 text-amber-400 font-mono">{errorDetails.tableName}</div>
+                  </div>
+                )}
+
+                {errorDetails.columnName && (
+                  <div className="grid grid-cols-3 gap-2 text-xs border-b border-slate-800/50 pb-2">
+                    <div className="text-slate-400">Column Name</div>
+                    <div className="col-span-2 text-amber-400 font-mono">{errorDetails.columnName}</div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-3 gap-2 text-xs border-b border-slate-800/50 pb-2">
+                  <div className="text-slate-400">Supabase Error</div>
+                  <div className="col-span-2 text-slate-200">{errorDetails.reason}</div>
                 </div>
-              )}
+
+                {errorDetails.suggestedFix && (
+                  <div className="grid grid-cols-3 gap-2 text-xs pt-1">
+                    <div className="text-slate-400">Suggested Fix</div>
+                    <div className="col-span-2 text-emerald-400 italic">{errorDetails.suggestedFix}</div>
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="pt-4 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setErrorDetails(null)}
-                className="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
-              >
+            <div className="flex justify-end">
+              <button onClick={() => setErrorDetails(null)} className="px-4 py-2 bg-slate-800 text-white rounded-lg">
                 Close
               </button>
             </div>
@@ -8774,7 +9099,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       <div className="border-b border-slate-800 pb-1.5">
                         <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
                           <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">3</span>
-                          <span>Quotation Workspace</span>
+                          <span>Section 1: Package Selection</span>
                         </h3>
                         <p className="text-[10px] text-zinc-400 mt-0.5">Select from standard configured packages, customize team members and deliverables, adjust pricing, and generate the quotation.</p>
                       </div>
@@ -9083,447 +9408,48 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                             Remove
                                           </button>
                                         )}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                {renderQuotationAndStep4Section(true)}
                               </div>
-
-                              {renderQuotationAndStep4Section(true)}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* STEP 5 INTEGRATED (CRM): Status Update */}
-                  <div className="space-y-4 animate-fade-in text-left mt-6">
-                      <div className="border-b border-slate-800 pb-1.5">
-                        <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                          <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">4</span>
-                          <span>Status Update</span>
-                        </h3>
-                        <p className="text-[10px] text-zinc-400 mt-0.5">Determine final CRM pipeline stages or transition the contract to Operations.</p>
-                      </div>
-                      <div className="space-y-4 text-left">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider font-black">Select Sales Pipeline Status *</label>
-                          <select
-                            value={wizardLeadData.status || ''}
-                            disabled={isLeadLocked}
-                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, status: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-white font-bold cursor-pointer"
-                          >
-                            <option value="New Lead">New Lead</option>
-                            <option value="Contacted">Contacted</option>
-                            <option value="Follow Up">Follow Up</option>
-                            <option value="Quotation Sent">Quotation Sent</option>
-                            <option value="Negotiation">Negotiation</option>
-                            <option value="Order Confirmed">Order Confirmed (Moves to Operations & Locks CRM)</option>
-                            <option value="Lost Lead">Lost Lead</option>
-                          </select>
-                        </div>
-
-                        {wizardLeadData.status === 'Order Confirmed' && (
-                          <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
-                            <div className="border-b border-emerald-500/20 pb-1.5">
-                              <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest font-mono">�� Configure Confirmed Order & Booking Contract</h4>
-                              <p className="text-[10px] text-zinc-400 mt-0.5">Confirming this order locks the CRM profile and creates a real-time production entry. Only payment configurations remain editable.</p>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-left">
-                              <div>
-                                <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Confirmed Event Date *</label>
-                                <input
-                                  type="date"
-                                  value={wizardLeadData.confirmed_event_date || ''}
-                                  disabled={isLeadLocked}
-                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, confirmed_event_date: e.target.value })}
-                                  className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
-                                  required
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Confirmed Event Time *</label>
-                                <input
-                                  type="time"
-                                  value={wizardLeadData.confirmed_event_time || ''}
-                                  disabled={isLeadLocked}
-                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, confirmed_event_time: e.target.value })}
-                                  className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
-                                  required
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Contract Final Amount (₹) *</label>
-                                <input
-                                  type="number"
-                                  value={wizardLeadData.final_amount || 0}
-                                  disabled={isLeadLocked}
-                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, final_amount: Math.max(0, parseInt(e.target.value) || 0) })}
-                                  className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-amber-400 font-mono font-bold"
-                                  required
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Advance Payment Received (₹) *</label>
-                                <input
-                                  type="number"
-                                  value={wizardLeadData.advance_received || 0}
-                                  disabled={isLeadLocked}
-                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, advance_received: Math.max(0, parseInt(e.target.value) || 0) })}
-                                  className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-emerald-400 font-mono font-bold"
-                                  required
-                                />
-                              </div>
-                            </div>
-
-                            <div className="bg-slate-950 p-3 rounded-lg border border-slate-850 flex items-center justify-between text-xs">
-                              <div>
-                                <span className="text-[10px] text-zinc-550 uppercase font-bold font-mono">Calculated Pending Amount</span>
-                                <strong className="block text-red-500 text-sm font-mono mt-0.5">₹{((wizardLeadData.final_amount || 0) - (wizardLeadData.advance_received || 0)).toLocaleString('en-IN')}</strong>
-                              </div>
-                              <span className="text-[9px] bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Payment Pending</span>
-                            </div>
+                            );
+                            })()}
                           </div>
-                        )}
-                      </div>
-                    </div>
-                </form>
-              </div>
-            </div>
-
-            {/* Footer Buttons: Sticky */}
-            <div className="py-1 px-4 sm:px-5 border-t border-slate-850 flex items-center justify-between bg-slate-950/40 sticky bottom-0 z-10 shrink-0 backdrop-blur-sm">
-              {crmWizardStep > 1 ? (
-                <button
-                  type="button"
-                  onClick={() => setCrmWizardStep(crmWizardStep - 1)}
-                  className="px-3.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border border-slate-705 border-0"
-                >
-                  Back
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setSelectedLead(null)}
-                  className="px-3.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border border-slate-705 border-0"
-                >
-                  Back
-                </button>
-              )}
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleSaveStep(crmWizardStep)}
-                  disabled={isSaving || (crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === ''))}
-                  className={`px-4 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 border-0 ${
-                    crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')
-                      ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
-                      : 'bg-indigo-650 hover:bg-indigo-600 text-white cursor-pointer'
-                  }`}
-                >
-                  {isSaving ? (
-                    <span className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
-                  ) : null}
-                  <span>{isSaving ? 'Saving...' : crmWizardStep === 3 ? 'Save & Proceed' : 'Save & Next'}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-      {/* MODAL: Proceed Status Pop-up */}
-      {showStep3Popup && (
-        <div id="modal_step3_proceed_status" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-4 animate-fade-in text-left">
-          <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-indigo-500/30 rounded-2xl w-full max-w-md shadow-2xl relative p-6 space-y-5">
-            <div className="absolute top-0 left-12 w-48 h-48 bg-indigo-500/[0.03] rounded-full blur-[60px] pointer-events-none" />
-
-            <div className="flex items-start justify-between border-b border-slate-800 pb-3 relative z-10">
-              <div>
-                <h3 className="text-sm font-bold text-white tracking-widest font-mono flex items-center gap-1.5 animate-pulse">
-                  <span>STATUS</span>
-                </h3>
-                <p className="text-[11px] text-indigo-300 mt-0.5 font-sans">
-                  How would you like to proceed?
-                </p>
-              </div>
-              <button 
-                onClick={() => setShowStep3Popup(false)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-4 relative z-10 text-slate-300">
-              <div className="space-y-3">
-                <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-800/80 bg-slate-950/20 hover:bg-slate-950/40 cursor-pointer transition-colors">
-                  <input
-                    type="radio"
-                    name="step3Option"
-                    value="negotiation"
-                    checked={step3Option === 'negotiation'}
-                    onChange={() => setStep3Option('negotiation')}
-                    className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-slate-750 bg-slate-900 cursor-pointer"
-                  />
-                  <div>
-                    <span className="text-sm font-bold text-white">Mark as Negotiation</span>
-                    <p className="text-[11px] text-zinc-400 mt-0.5 font-sans">Update lead status to Negotiation and return to Leads Directory.</p>
-                  </div>
-                </label>
-
-                <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-800/80 bg-slate-950/20 hover:bg-slate-950/40 cursor-pointer transition-colors">
-                  <input
-                    type="radio"
-                    name="step3Option"
-                    value="quotation_send"
-                    checked={step3Option === 'quotation_send'}
-                    onChange={() => setStep3Option('quotation_send')}
-                    className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-slate-750 bg-slate-900 cursor-pointer"
-                  />
-                  <div>
-                    <span className="text-sm font-bold text-white">Quotation Sent</span>
-                    <p className="text-[11px] text-zinc-400 mt-0.5 font-sans">Update lead status to Quotation Sent and return to Leads Directory.</p>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800/80 relative z-10">
-              <button
-                onClick={() => setShowStep3Popup(false)}
-                className="px-4 py-1.5 rounded bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmStep3Proceed}
-                disabled={isSaving}
-                className="px-4 py-1.5 rounded bg-indigo-650 hover:bg-indigo-600 text-white text-xs font-mono font-bold uppercase transition-all shadow-md flex items-center gap-1.5"
-              >
-                {isSaving && <span className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>}
-                <span>Continue</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-{/* MODAL: Existing Customer Detection Pop-up */}
-      {showDetectionPopup && detectedCustomer && (
-        <div id="modal_existing_customer_detection" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-4 animate-fade-in text-left">
-          <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-indigo-500/30 rounded-2xl w-full max-w-lg shadow-2xl relative p-6 space-y-5">
-            {/* Ambient light ring */}
-            <div className="absolute top-0 left-12 w-48 h-48 bg-indigo-500/[0.03] rounded-full blur-[60px] pointer-events-none" />
-
-            <div className="flex items-start justify-between border-b border-slate-800 pb-3 relative z-10">
-              <div>
-                <h3 className="text-sm font-bold text-white tracking-widest font-mono flex items-center gap-1.5">
-                  <span className="p-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[9px] rounded font-black font-mono">DUPLICATION WARNING</span>
-                  <span>EXISTING CUSTOMER DETECTED</span>
-                </h3>
-                <p className="text-[11px] text-indigo-300 mt-0.5 font-sans">
-                  The phone index or email graph entered already maps to an active account.
-                </p>
-              </div>
-              <button 
-                onClick={() => { setShowDetectionPopup(false); setDetectedCustomer(null); }}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-4 relative z-10 text-slate-300">
-              {/* Profile Card Summary */}
-              <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800/80 space-y-3.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono text-amber-500 bg-slate-850 px-2 py-0.5 border border-slate-750 rounded font-black">
-                    {detectedCustomer.customer_id}
-                  </span>
-                  <span className="text-[9px] bg-slate-850 text-slate-400 px-2 py-0.5 rounded border border-slate-750 font-mono">
-                    Last Event: {detectedCustomer.lastEventDate || 'N/A'}
-                  </span>
-                </div>
-
-                <div className="space-y-1">
-                  <h4 className="text-sm font-black text-white">{detectedCustomer.customer_name}</h4>
-                  <div className="text-[10px] text-slate-400 font-mono flex items-center gap-x-3 gap-y-1 flex-wrap">
-                    <span>{detectedCustomer.email}</span>
-                    <span>•</span>
-                    <span>{formatIndianPhoneNumber(detectedCustomer.mobile)}</span>
-                  </div>
-                </div>
-
-                {/* Key Retention KPIs */}
-                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-800/50 text-xs text-left">
-                  <div>
-                    <span className="text-[10px] text-slate-500 block font-mono">PREVIOUS ORDERS</span>
-                    <strong className="text-slate-200 font-black font-mono">{detectedCustomer.totalOrders} Contracts</strong>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 block font-mono">TOTAL REVENUE (CLV)</span>
-                    <strong className="text-emerald-455 font-black font-mono">{formatINR(detectedCustomer.totalRevenue)}</strong>
-                  </div>
-                </div>
-              </div>
-
-              {/* Packages badge roster */}
-              {detectedCustomer.previousPackages.length > 0 && (
-                <div className="space-y-1.5 text-left">
-                  <span className="text-[9px] text-slate-550 uppercase font-bold tracking-wider font-mono">PREVIOUS PACKAGES UNDERTAKINGS:</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {detectedCustomer.previousPackages.map((pkg: string, i: number) => (
-                      <span key={pkg + i} className="bg-slate-900 border border-slate-800 px-2 py-0.5 text-[9px] font-mono rounded text-slate-400">
-                        {pkg}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* REORDER MODE TOGGLE SEGMENT */}
-              {isQuickReorderView ? (
-                <div className="bg-slate-900 border border-indigo-500/25 p-3 rounded-xl space-y-3 animate-fade-in-up text-left">
-                  <span className="text-[9px] font-black text-indigo-400 tracking-widest font-mono block">CONFIGURE QUICK REORDER PACKAGE</span>
-                  
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div className={reorderForm.event_type === 'Other' ? "col-span-2 space-y-1.5" : ""}>
-                      <label className="text-[10px] text-slate-400 block mb-1">Shoot Category</label>
-                      <select
-                        value={reorderForm.event_type}
-                        onChange={(e) => setReorderForm({ ...reorderForm, event_type: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200"
-                      >
-                        {EVENT_TYPES.map(type => (
-                          <option key={type} value={type}>{type}</option>
-                        ))}
-                      </select>
-
-                      {reorderForm.event_type === 'Other' && (
-                        <div className="animate-fade-in-down mt-1.5">
-                          <label className="text-[9px] font-mono font-bold text-amber-500 block mb-1">
-                            Custom Event Type *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Specify custom event type"
-                            value={reorderForm.custom_event_name}
-                            onChange={(e) => setReorderForm({ ...reorderForm, custom_event_name: e.target.value })}
-                            className="w-full bg-slate-950 border border-amber-500/50 rounded px-2 py-1 text-slate-100 text-xs focus:outline-none text-white"
-                          />
                         </div>
                       )}
-                    </div>
 
-                    <div>
-                      <label className="text-[10px] text-slate-400 block mb-1">Event Plan Date *</label>
-                      <input
-                        type="date"
-                        required
-                        value={reorderForm.event_date}
-                        onChange={(e) => setReorderForm({ ...reorderForm, event_date: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 font-mono"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] text-slate-400 block mb-1">Contract Amount (₹)</label>
-                      <input
-                        type="number"
-                        value={reorderForm.quotation_amount}
-                        onChange={(e) => setReorderForm({ ...reorderForm, quotation_amount: Number(e.target.value), advance_received: Math.round(Number(e.target.value)/3) })}
-                        className="w-full bg-slate-950 border border-slate-805 rounded px-2 py-1 text-slate-200 font-mono"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] text-slate-400 block mb-1">Advance Received (₹)</label>
-                      <input
-                        type="number"
-                        value={reorderForm.advance_received}
-                        onChange={(e) => setReorderForm({ ...reorderForm, advance_received: Number(e.target.value) })}
-                        className="w-full bg-slate-950 border border-slate-805 rounded px-2 py-1 text-slate-205 font-mono"
-                      />
+                        <div className="mt-8 pt-6 border-t border-slate-800/60 flex items-center justify-between">
+                          <button
+                            type="button"
+                            onClick={() => setCrmWizardStep(crmWizardStep - 1)}
+                            disabled={crmWizardStep === 1}
+                            className="px-5 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold rounded-xl border border-slate-700 transition-all disabled:opacity-30 disabled:cursor-not-allowed text-xs flex items-center gap-2"
+                          >
+                            <span>←</span> Back
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveStep(crmWizardStep)}
+                            disabled={isSaving}
+                            className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2 text-xs border border-indigo-400/20"
+                          >
+                            {isSaving ? (
+                              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : (
+                              <span>{crmWizardStep === 3 ? '💾 Save & Finalize Lead' : 'Next Step →'}</span>
+                            )}
+                          </button>
+                        </div>
+                      </form>
                     </div>
                   </div>
-
-                  <div className="flex justify-end gap-2 border-t border-slate-800 pt-2 text-[11px]">
-                    <button 
-                      type="button" 
-                      onClick={() => setIsQuickReorderView(false)} 
-                      className="px-3 py-1 bg-slate-800 text-slate-400 rounded hover:text-slate-200 cursor-pointer"
-                    >
-                      Refuse
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => handleExecuteQuickReorder(detectedCustomer)} 
-                      className="px-3 py-1 bg-indigo-650 text-white rounded font-bold cursor-pointer"
-                    >
-                      Finalize Reorder Project
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-[11px] text-slate-500 italic text-left">
-                  Tip: Bypassing manual typing and booking a new event will keep the legacy events intact in client timeline record history.
                 </div>
               )}
-            </div>
 
-            {/* Action buttons */}
-            <div className="flex flex-col sm:flex-row justify-end gap-2 p-1 border-t border-slate-800">
-              {!isQuickReorderView && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // Autofill name and other details back to the createForm
-                      setCreateForm(prev => ({
-                        ...prev,
-                        customer_name: detectedCustomer.customer_name,
-                        email: detectedCustomer.email,
-                        alternate_mobile: detectedCustomer.alternate_mobile || '',
-                      }));
-                      setShowDetectionPopup(false);
-                      setDetectedCustomer(null);
-                    }}
-                    className="px-4 py-2 text-xs bg-slate-800 hover:bg-slate-755 text-slate-200 border border-slate-700 rounded-lg cursor-pointer transition-all font-bold"
-                  >
-                    Auto-Fill Contact Info
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsQuickReorderView(true);
-                      // Set default reorder date
-                      const tomorrowStr = new Date();
-                      tomorrowStr.setDate(tomorrowStr.getDate() + 30);
-                      setReorderForm(prev => ({
-                        ...prev,
-                        event_date: tomorrowStr.toISOString().split('T')[0]
-                      }));
-                    }}
-                    className="px-4 py-2 text-xs bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-505 hover:to-indigo-605 text-white rounded-lg shadow-md cursor-pointer transition-all font-bold flex items-center justify-center gap-1.5"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Quick Repeat Reorder</span>
-                  </button>
-                </>
-              )}
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: Business Owner Unlock Reason Prompt */}
+      {/* MODAL: Sales Record Unlock */}
       {unlockingRecordId && (
         <div id="modal_sales_record_unlock" className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[200] flex items-center justify-center p-4 animate-fade-in text-left">
           <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-amber-500/30 rounded-2xl w-full max-w-md shadow-2xl relative p-6 space-y-4">
@@ -10122,22 +10048,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   </div>
                 </div>
               ))}
-
-              <div className="p-4 bg-slate-900/50 border border-slate-800 rounded-xl space-y-3">
-                <h5 className="font-bold text-emerald-400 text-xs uppercase tracking-wider mb-2 border-b border-slate-800/50 pb-2">
-                  Transaction Information
-                </h5>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Transaction ID (Optional)</label>
-                  <input
-                    type="text"
-                    placeholder="Enter Payment Transaction Reference"
-                    value={bookingTransactionId}
-                    onChange={(e) => setBookingTransactionId(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono text-sm"
-                  />
-                </div>
-              </div>
             </div>
 
             <div className="flex justify-end gap-2 border-t border-slate-800 p-5 shrink-0 bg-slate-900">

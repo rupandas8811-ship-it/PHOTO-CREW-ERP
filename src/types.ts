@@ -201,6 +201,7 @@ export interface Lead {
   lead_value?: number;
   follow_up_notes?: string;
   next_follow_up_date?: string;
+  follow_up_reason?: string;
   Lost_Reason?: string;
   Lost_Notes?: string;
   lead_score?: number;
@@ -218,6 +219,7 @@ export interface Lead {
   payment_mode?: string;
   transaction_id?: string;
   contract_notes?: string;
+  order_id?: string;
 }
 
 export interface LeadPackage {
@@ -282,6 +284,7 @@ export interface Order {
   lead_value?: number;
   follow_up_notes?: string;
   next_follow_up_date?: string;
+  follow_up_reason?: string;
   Lost_Reason?: string;
   Lost_Notes?: string;
   lead_score?: number;
