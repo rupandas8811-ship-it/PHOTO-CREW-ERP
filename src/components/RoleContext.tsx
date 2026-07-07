@@ -713,11 +713,42 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [leads, setLeads] = useState<Lead[]>([]);
+  const generateNextLeadId = (): string => {
+    let maxNum = 99;
+    leads.forEach(l => {
+      if (l.lead_id) {
+        const match = l.lead_id.match(/^LD(\d+)$/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum && num < 1000000) {
+            maxNum = num;
+          }
+        }
+      }
+    });
+    return `LD${maxNum + 1}`;
+  };
+
   const [statusHistory, setStatusHistory] = useState<any[]>([]);
   const [quotations, setQuotations] = useState<any[]>([]);
   const [leadPackages, setLeadPackages] = useState<LeadPackage[]>([]);
   const [packages, setPackages] = useState<Package[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const generateNextOrderId = (): string => {
+    let maxNum = 99;
+    orders.forEach(o => {
+      if (o.order_id) {
+        const match = o.order_id.match(/^RD(\d+)$/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum && num < 1000000) {
+            maxNum = num;
+          }
+        }
+      }
+    });
+    return `RD${maxNum + 1}`;
+  };
   const [operations, setOperations] = useState<Operation[]>([]);
   const [rawFootage, setRawFootage] = useState<RawFootage[]>([]);
   const [production, setProduction] = useState<Production[]>([]);
@@ -2677,7 +2708,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    const leadId = `LD-${Math.floor(9012 + Math.random() * 988)}`;
+    const leadId = generateNextLeadId();
     // We still keep notes_special_customizations plain without serialized events, 
     // or we can keep it as is for backward compatibility but save events to table anyway
     const serializedNotes = leadDetails.notes_special_customizations || '';
@@ -2856,7 +2887,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (normalizedStatus !== previousStage) {
       const linkedOrder = orders.find(o => o.lead_id === leadId);
-      const orderId = (updatesPayload as any).order_id || linkedOrder?.order_id || (status === 'Order Confirmed' ? `ORD-${Math.floor(1012 + Math.random() * 800)}` : null);
+      const orderId = (updatesPayload as any).order_id || linkedOrder?.order_id || (status === 'Order Confirmed' ? generateNextOrderId() : null);
 
       if (normalizedStatus === 'Order Confirmed' && !orderId) {
         throw new Error(`"order_id" is required for "Order Confirmed" status, but it was not found or is missing.`);
@@ -2977,7 +3008,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     if (!masterOrderId) {
-      masterOrderId = existingOrder ? existingOrder.order_id : `ORD-${Math.floor(1012 + Math.random() * 800)}`;
+      masterOrderId = existingOrder ? existingOrder.order_id : generateNextOrderId();
     }
 
     if (!masterOrderId) {
@@ -5501,7 +5532,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (newStatus === 'Order Confirmed' && !orderId) {
         console.warn(`[WARN] order_id is missing for "Order Confirmed" status. Attempting to generate one.`);
-        const tempOrderId = `ORD-FIX-${Math.floor(1000 + Math.random() * 9000)}`;
+        const tempOrderId = generateNextOrderId();
         // We will use this temp one for history, but ideally it should be passed.
         // If confirmOrder is calling this, it should have passed it.
       }
@@ -5514,7 +5545,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       const newHist = {
         lead_id: leadId,
-        order_id: orderId || `ORD-AUTO-${Math.floor(1000 + Math.random() * 9000)}`,
+        order_id: orderId || generateNextOrderId(),
         old_status: oldStatus,
         new_status: newStatus,
         changed_by: changedBy,

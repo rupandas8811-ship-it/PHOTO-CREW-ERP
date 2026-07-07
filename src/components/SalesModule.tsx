@@ -7808,60 +7808,183 @@ WITH CHECK (true);`;
                               </h4>
                             </div>
 
-                            {/* Team Members */}
+                            {/* Team Members per Event */}
                             <div>
-                              <div className="flex items-center justify-between mb-1.5">
-                                <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Team Members Included (Editable)</label>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const currentList = [...(editableInclusions[pkgId] || [])];
-                                    currentList.push('');
-                                    setEditableInclusions({
-                                      ...editableInclusions,
-                                      [pkgId]: currentList
-                                    });
-                                  }}
-                                  className="text-xs text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded cursor-pointer"
-                                >
-                                  + Add Member
-                                </button>
-                              </div>
-                              {inclusionsList.length === 0 ? (
-                                <p className="text-[10px] text-zinc-500 italic">No team members added yet.</p>
-                              ) : (
-                                <div className="space-y-2">
-                                  {inclusionsList.map((item, idx) => (
-                                    <div key={idx} className="flex items-center gap-2">
-                                      <input
-                                        type="text"
-                                        value={item}
-                                        onChange={(e) => {
-                                          const currentList = [...(editableInclusions[pkgId] || [])];
-                                          currentList[idx] = e.target.value;
-                                          setEditableInclusions({
-                                            ...editableInclusions,
-                                            [pkgId]: currentList
-                                          });
-                                        }}
-                                        className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const currentList = [...(editableInclusions[pkgId] || [])];
-                                          currentList.splice(idx, 1);
-                                          setEditableInclusions({
-                                            ...editableInclusions,
-                                            [pkgId]: currentList
-                                          });
-                                        }}
-                                        className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono cursor-pointer"
-                                      >
-                                        Remove
-                                      </button>
+                              {createEvents && createEvents.length > 0 ? (
+                                createEvents.map((event) => {
+                                  const eventKey = `${pkgId}_${event.id}`;
+                                  const eventInclusions = editableInclusions[eventKey] !== undefined
+                                    ? editableInclusions[eventKey]
+                                    : inclusionsList;
+
+                                  return (
+                                    <div key={event.id} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-3 mt-3 mb-4 text-left font-sans animate-fade-in">
+                                      <h4 className="text-xs sm:text-sm font-bold text-slate-100 uppercase tracking-wider font-mono border-b border-slate-800/40 pb-1.5 flex items-center justify-between">
+                                        <span>🎈 {event.event_name || event.event_type || 'Unnamed Event'}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
+                                            currentList.push('');
+                                            setEditableInclusions({
+                                              ...editableInclusions,
+                                              [eventKey]: currentList
+                                            });
+                                          }}
+                                          className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded transition-all cursor-pointer"
+                                        >
+                                          + Add Member
+                                        </button>
+                                      </h4>
+
+                                      {eventInclusions.length === 0 ? (
+                                        <p className="text-[10px] text-zinc-500 italic">No team members added yet.</p>
+                                      ) : (
+                                        <div className="space-y-3">
+                                          {eventInclusions.map((item, idx) => {
+                                            const [staffName, staffMobile] = item.includes('|') ? item.split('|') : [item, ''];
+                                            return (
+                                              <div key={idx} className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-slate-950/40 p-3 rounded-lg border border-slate-850">
+                                                <div>
+                                                  <label className="block text-[10px] font-semibold text-slate-400 mb-1">Staff Name</label>
+                                                  <input
+                                                    type="text"
+                                                    placeholder="Staff Name"
+                                                    value={staffName}
+                                                    onChange={(e) => {
+                                                      const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
+                                                      currentList[idx] = `${e.target.value}|${staffMobile}`;
+                                                      setEditableInclusions({
+                                                        ...editableInclusions,
+                                                        [eventKey]: currentList
+                                                      });
+                                                    }}
+                                                    className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
+                                                  />
+                                                </div>
+                                                <div>
+                                                  <label className="block text-[10px] font-semibold text-slate-400 mb-1">Mobile Number</label>
+                                                  <div className="flex items-center gap-2">
+                                                    <input
+                                                      type="text"
+                                                      placeholder="Mobile Number"
+                                                      value={staffMobile}
+                                                      onChange={(e) => {
+                                                        const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
+                                                        currentList[idx] = `${staffName}|${e.target.value}`;
+                                                        setEditableInclusions({
+                                                          ...editableInclusions,
+                                                          [eventKey]: currentList
+                                                        });
+                                                      }}
+                                                      className="flex-1 bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100 font-mono"
+                                                    />
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
+                                                        currentList.splice(idx, 1);
+                                                        setEditableInclusions({
+                                                          ...editableInclusions,
+                                                          [eventKey]: currentList
+                                                        });
+                                                      }}
+                                                      className="text-red-400 hover:text-red-350 p-1.5 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer shrink-0"
+                                                    >
+                                                      Remove
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
                                     </div>
-                                  ))}
+                                  );
+                                })
+                              ) : (
+                                <div>
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Team Members Included (Editable)</label>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const currentList = [...(editableInclusions[pkgId] || [])];
+                                        currentList.push('');
+                                        setEditableInclusions({
+                                          ...editableInclusions,
+                                          [pkgId]: currentList
+                                        });
+                                      }}
+                                      className="text-xs text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded cursor-pointer"
+                                    >
+                                      + Add Member
+                                    </button>
+                                  </div>
+                                  {inclusionsList.length === 0 ? (
+                                    <p className="text-[10px] text-zinc-500 italic">No team members added yet.</p>
+                                  ) : (
+                                    <div className="space-y-3">
+                                      {inclusionsList.map((item, idx) => {
+                                        const [staffName, staffMobile] = item.includes('|') ? item.split('|') : [item, ''];
+                                        return (
+                                          <div key={idx} className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-slate-950/40 p-3 rounded-lg border border-slate-850">
+                                            <div>
+                                              <label className="block text-[10px] font-semibold text-slate-400 mb-1">Staff Name</label>
+                                              <input
+                                                type="text"
+                                                placeholder="Staff Name"
+                                                value={staffName}
+                                                onChange={(e) => {
+                                                  const currentList = [...(editableInclusions[pkgId] || [])];
+                                                  currentList[idx] = `${e.target.value}|${staffMobile}`;
+                                                  setEditableInclusions({
+                                                    ...editableInclusions,
+                                                    [pkgId]: currentList
+                                                  });
+                                                }}
+                                                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
+                                              />
+                                            </div>
+                                            <div>
+                                              <label className="block text-[10px] font-semibold text-slate-400 mb-1">Mobile Number</label>
+                                              <div className="flex items-center gap-2">
+                                                <input
+                                                  type="text"
+                                                  placeholder="Mobile Number"
+                                                  value={staffMobile}
+                                                  onChange={(e) => {
+                                                    const currentList = [...(editableInclusions[pkgId] || [])];
+                                                    currentList[idx] = `${staffName}|${e.target.value}`;
+                                                    setEditableInclusions({
+                                                      ...editableInclusions,
+                                                      [pkgId]: currentList
+                                                    });
+                                                  }}
+                                                  className="flex-1 bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100 font-mono"
+                                                />
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const currentList = [...(editableInclusions[pkgId] || [])];
+                                                    currentList.splice(idx, 1);
+                                                    setEditableInclusions({
+                                                      ...editableInclusions,
+                                                      [pkgId]: currentList
+                                                    });
+                                                  }}
+                                                  className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono cursor-pointer"
+                                                >
+                                                  Remove
+                                                </button>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -9220,69 +9343,91 @@ WITH CHECK (true);`;
                                       : inclusionsList;
 
                                     return (
-                                      <div key={event.id} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-3 mt-3 mb-4">
+                                      <div key={event.id} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-3 mt-3 mb-4 text-left font-sans animate-fade-in">
                                         <h4 className="text-xs sm:text-sm font-bold text-slate-100 uppercase tracking-wider font-mono border-b border-slate-800/40 pb-1.5 flex items-center justify-between">
-                                          <span>�� {event.event_name || event.event_type || 'Unnamed Event'}</span>
+                                          <span>🎈 {event.event_name || event.event_type || 'Unnamed Event'}</span>
+                                          <button
+                                            type="button"
+                                            disabled={isLeadLocked}
+                                            onClick={() => {
+                                              const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
+                                              currentList.push('');
+                                              setEditableInclusions({
+                                                ...editableInclusions,
+                                                [eventKey]: currentList
+                                              });
+                                            }}
+                                            className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded transition-all cursor-pointer"
+                                          >
+                                            + Add Member
+                                          </button>
                                         </h4>
                                         <div>
-                                          <div className="flex items-center justify-between mb-2">
-                                            <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">
-                                              Team Members Included (Editable)
-                                            </label>
-                                            <button
-                                              type="button"
-                                              disabled={isLeadLocked}
-                                              onClick={() => {
-                                                const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
-                                                currentList.push('');
-                                                setEditableInclusions({
-                                                  ...editableInclusions,
-                                                  [eventKey]: currentList
-                                                });
-                                              }}
-                                              className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded transition-all cursor-pointer"
-                                            >
-                                              + Add Member
-                                            </button>
-                                          </div>
                                           {eventInclusions.length === 0 ? (
                                             <p className="text-[10px] text-zinc-500 italic">No team members added yet.</p>
                                           ) : (
-                                            <div className="space-y-2">
-                                              {eventInclusions.map((item, idx) => (
-                                                <div key={idx} className="flex items-center gap-2">
-                                                  <input
-                                                    type="text"
-                                                    value={item}
-                                                    disabled={isLeadLocked}
-                                                    onChange={(e) => {
-                                                      const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
-                                                      currentList[idx] = e.target.value;
-                                                      setEditableInclusions({
-                                                        ...editableInclusions,
-                                                        [eventKey]: currentList
-                                                      });
-                                                    }}
-                                                    className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
-                                                  />
-                                                  {!isLeadLocked && (
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => {
-                                                        const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
-                                                        currentList.splice(idx, 1);
-                                                        setEditableInclusions({
-                                                          ...editableInclusions,
-                                                          [eventKey]: currentList
-                                                        });
-                                                      }}
-                                                      className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer"
-                                                    >
-                                                      Remove
-                                                    </button>
-                                                  )}
-                                                </div>
-                                              ))}
+                                            <div className="space-y-3">
+                                              {eventInclusions.map((item, idx) => {
+                                                const [staffName, staffMobile] = item.includes('|') ? item.split('|') : [item, ''];
+                                                return (
+                                                  <div key={idx} className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-slate-950/40 p-3 rounded-lg border border-slate-850">
+                                                    <div>
+                                                      <label className="block text-[10px] font-semibold text-slate-400 mb-1">Staff Name</label>
+                                                      <input
+                                                        type="text"
+                                                        placeholder="Staff Name"
+                                                        value={staffName}
+                                                        disabled={isLeadLocked}
+                                                        onChange={(e) => {
+                                                          const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
+                                                          currentList[idx] = `${e.target.value}|${staffMobile}`;
+                                                          setEditableInclusions({
+                                                            ...editableInclusions,
+                                                            [eventKey]: currentList
+                                                          });
+                                                        }}
+                                                        className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
+                                                      />
+                                                    </div>
+                                                    <div>
+                                                      <label className="block text-[10px] font-semibold text-slate-400 mb-1">Mobile Number</label>
+                                                      <div className="flex items-center gap-2">
+                                                        <input
+                                                          type="text"
+                                                          placeholder="Mobile Number"
+                                                          value={staffMobile}
+                                                          disabled={isLeadLocked}
+                                                          onChange={(e) => {
+                                                            const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
+                                                            currentList[idx] = `${staffName}|${e.target.value}`;
+                                                            setEditableInclusions({
+                                                              ...editableInclusions,
+                                                              [eventKey]: currentList
+                                                            });
+                                                          }}
+                                                          className="flex-1 bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100 font-mono"
+                                                        />
+                                                        {!isLeadLocked && (
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                              const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
+                                                              currentList.splice(idx, 1);
+                                                              setEditableInclusions({
+                                                                ...editableInclusions,
+                                                                [eventKey]: currentList
+                                                              });
+                                                            }}
+                                                            className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer"
+                                                          >
+                                                            Remove
+                                                          </button>
+                                                        )}
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                );
+                                              })}
                                             </div>
                                           )}
                                         </div>
@@ -9304,7 +9449,7 @@ WITH CHECK (true);`;
                                             [selectedPkgId]: currentList
                                           });
                                         }}
-                                        className="text-xs text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded"
+                                        className="text-xs text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded cursor-pointer"
                                       >
                                         + Add Member
                                       </button>
@@ -9312,41 +9457,68 @@ WITH CHECK (true);`;
                                     {inclusionsList.length === 0 ? (
                                       <p className="text-[10px] text-zinc-500 italic">No team members added yet.</p>
                                     ) : (
-                                      <div className="space-y-2">
-                                        {inclusionsList.map((item, idx) => (
-                                          <div key={idx} className="flex items-center gap-2">
-                                            <input
-                                              type="text"
-                                              value={item}
-                                              disabled={isLeadLocked}
-                                              onChange={(e) => {
-                                                const currentList = [...(editableInclusions[selectedPkgId] || [])];
-                                                currentList[idx] = e.target.value;
-                                                setEditableInclusions({
-                                                  ...editableInclusions,
-                                                  [selectedPkgId]: currentList
-                                                });
-                                              }}
-                                              className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
-                                            />
-                                            {!isLeadLocked && (
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  const currentList = [...(editableInclusions[selectedPkgId] || [])];
-                                                  currentList.splice(idx, 1);
-                                                  setEditableInclusions({
-                                                    ...editableInclusions,
-                                                    [selectedPkgId]: currentList
-                                                  });
-                                                }}
-                                                className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono"
-                                              >
-                                                Remove
-                                              </button>
-                                            )}
-                                          </div>
-                                        ))}
+                                      <div className="space-y-3">
+                                        {inclusionsList.map((item, idx) => {
+                                          const [staffName, staffMobile] = item.includes('|') ? item.split('|') : [item, ''];
+                                          return (
+                                            <div key={idx} className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-slate-950/40 p-3 rounded-lg border border-slate-850">
+                                              <div>
+                                                <label className="block text-[10px] font-semibold text-slate-400 mb-1">Staff Name</label>
+                                                <input
+                                                  type="text"
+                                                  placeholder="Staff Name"
+                                                  value={staffName}
+                                                  disabled={isLeadLocked}
+                                                  onChange={(e) => {
+                                                    const currentList = [...(editableInclusions[selectedPkgId] || [])];
+                                                    currentList[idx] = `${e.target.value}|${staffMobile}`;
+                                                    setEditableInclusions({
+                                                      ...editableInclusions,
+                                                      [selectedPkgId]: currentList
+                                                    });
+                                                  }}
+                                                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
+                                                />
+                                              </div>
+                                              <div>
+                                                <label className="block text-[10px] font-semibold text-slate-400 mb-1">Mobile Number</label>
+                                                <div className="flex items-center gap-2">
+                                                  <input
+                                                    type="text"
+                                                    placeholder="Mobile Number"
+                                                    value={staffMobile}
+                                                    disabled={isLeadLocked}
+                                                    onChange={(e) => {
+                                                      const currentList = [...(editableInclusions[selectedPkgId] || [])];
+                                                      currentList[idx] = `${staffName}|${e.target.value}`;
+                                                      setEditableInclusions({
+                                                        ...editableInclusions,
+                                                        [selectedPkgId]: currentList
+                                                      });
+                                                    }}
+                                                    className="flex-1 bg-[#0F172A] border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100 font-mono"
+                                                  />
+                                                  {!isLeadLocked && (
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        const currentList = [...(editableInclusions[selectedPkgId] || [])];
+                                                        currentList.splice(idx, 1);
+                                                        setEditableInclusions({
+                                                          ...editableInclusions,
+                                                          [selectedPkgId]: currentList
+                                                        });
+                                                      }}
+                                                      className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer"
+                                                    >
+                                                      Remove
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
                                       </div>
                                     )}
                                   </div>
