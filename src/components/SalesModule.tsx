@@ -262,7 +262,7 @@ const generateQuotationPDF = (
       incKeys.forEach((key) => {
         const eventId = key.substring(pkgId.length + 1);
         const eventObj = (lead.events || []).find((e: any) => e.id === eventId);
-        const eventName = eventObj ? eventObj.event_name : 'Event';
+        const eventName = eventObj ? (eventObj.event_name || eventObj.event_type || 'Event') : 'Event';
         if (!eventInclusionsMap[eventName]) eventInclusionsMap[eventName] = [];
         eventInclusionsMap[eventName].push(...(editableInclusions![key] || []).filter(Boolean));
       });
@@ -275,7 +275,7 @@ const generateQuotationPDF = (
       delKeys.forEach((key) => {
         const eventId = key.substring(pkgId.length + 1);
         const eventObj = (lead.events || []).find((e: any) => e.id === eventId);
-        const eventName = eventObj ? eventObj.event_name : 'Event';
+        const eventName = eventObj ? (eventObj.event_name || eventObj.event_type || 'Event') : 'Event';
         if (!eventDeliverablesMap[eventName]) eventDeliverablesMap[eventName] = { pkgName, items: [] };
         eventDeliverablesMap[eventName].items.push(...(editableDeliverables![key] || []).filter(Boolean));
       });
@@ -756,7 +756,7 @@ const generateQuotationPDF = (
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
     doc.setTextColor(255, 255, 255);
-    doc.text('SERVICE / DELIVERABLES', 19, currentY + 4.8);
+    doc.text('TEAM MEMBER', 19, currentY + 4.8);
 
     currentY += 7.5;
 
@@ -767,7 +767,7 @@ const generateQuotationPDF = (
       doc.setFont('helvetica', 'italic');
       doc.setFontSize(7.5);
       doc.setTextColor(148, 163, 184);
-      doc.text('No specified deliverables or customized service items.', 19, currentY + 5);
+      doc.text('No team members assigned.', 19, currentY + 5);
       doc.line(15, currentY, 15, currentY + 8);
       doc.line(195, currentY, 195, currentY + 8);
       doc.line(15, currentY + 8, 195, currentY + 8);
@@ -789,7 +789,7 @@ const generateQuotationPDF = (
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(7.5);
         doc.setTextColor(255, 255, 255);
-        doc.text('SERVICE / DELIVERABLES (CONTINUED)', 19, currentY + 4.8);
+        doc.text('TEAM MEMBER (CONTINUED)', 19, currentY + 4.8);
         currentY += 7.5;
       }
 
@@ -916,9 +916,10 @@ const generateQuotationPDF = (
     // 2. Team Members Included section
   const drawTeamMembers = (eventName: string | null, members: string[]) => {
     if (members.length === 0) return;
-    const title = eventName ? `Event Name: ${eventName}\nTEAM MEMBERS INCLUDED` : 'TEAM MEMBERS INCLUDED';
+    const title = eventName ? `${eventName}\nTEAM MEMBERS INCLUDED` : 'TEAM MEMBERS INCLUDED';
     const mapped = members.map((m, i) => {
-      const staffName = m.includes('|') ? m.split('|')[0] : m;
+      let staffName = m.includes('|') ? m.split('|')[0] : m;
+      staffName = staffName.replace(/[\-\s]+[\d\+\s]+$/, '').trim();
       return { id: String(i), name: staffName, qty: 1, price: 0 };
     });
     drawTable(title, mapped);
@@ -2850,9 +2851,11 @@ USING (true);`;
   }, [dynamicFinalAmt]);
 
   const getLeadInfoForQuote = (isEdit: boolean) => {
+    const currentEvents = isEdit ? crmEvents : createEvents;
     if (isEdit) {
       return {
         ...selectedLead,
+        events: currentEvents,
         customer_name: wizardLeadData.customer_name,
         mobile: wizardLeadData.mobile,
         email: wizardLeadData.email,
@@ -2877,6 +2880,7 @@ USING (true);`;
     } else {
       return {
         ...createForm,
+        events: currentEvents,
         lead_id: createdLeadId || 'DRAFT-LEAD',
         deliverables_description: selectedPkgs.map(p => pkgDeliverables[p.id] || p.deliverables || 'N/A').join('\n'),
         notes_special_customizations: selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
