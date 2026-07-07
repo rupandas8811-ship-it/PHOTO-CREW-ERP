@@ -1128,7 +1128,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ],
       payments: [
         'payment_id', 'order_id', 'quotation_amount', 'advance_received', 'balance_due', 
-        'final_payment_received', 'payment_date', 'payment_proof_url', 'payment_status'
+        'final_payment_received', 'payment_date', 'payment_proof_url', 'payment_status', 'transaction_id'
       ],
       activity_logs: [
         'log_id', 'user_name', 'role', 'action', 'module', 'record_id', 'timestamp', 
@@ -1191,8 +1191,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!record || typeof record !== 'object') return record;
     const clone = { ...record };
     
-    // Fallbacks for leads table not-null constraints
-    if (table === 'leads') {
+    // Fallbacks for leads and orders table not-null constraints
+    if (table === 'leads' || table === 'orders') {
       if (clone.event_date === null || clone.event_date === '' || clone.event_date === undefined) {
          clone.event_date = new Date().toISOString().split('T')[0];
       }
@@ -3135,9 +3135,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         advance_received: advanceReceived,
         balance_due: quotationAmount - advanceReceived,
         final_payment_received: 0,
-        payment_proof_url: undefined,
+        payment_proof_url: null as any,
         payment_status: advanceReceived >= quotationAmount ? 'Fully Paid' : (advanceReceived > 0 ? 'Partially Paid' : 'Pending'),
-        transaction_id: transactionId || undefined,
+        transaction_id: transactionId || null as any,
+        payment_date: new Date().toISOString().split('T')[0] as any,
       };
       const rPay = await pushInsert('payments', newPayment);
       if (!rPay?.success) throw new Error("Failed to insert Payment: " + rPay?.error);
@@ -3147,7 +3148,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         advance_received: advanceReceived,
         balance_due: quotationAmount - advanceReceived,
         payment_status: advanceReceived >= quotationAmount ? 'Fully Paid' : (advanceReceived > 0 ? 'Partially Paid' : 'Pending'),
-        transaction_id: transactionId || undefined,
+        transaction_id: transactionId || null as any,
+        payment_date: new Date().toISOString().split('T')[0] as any,
       });
       if (!rPay?.success) throw new Error("Failed to update Payment: " + rPay?.error);
     }
