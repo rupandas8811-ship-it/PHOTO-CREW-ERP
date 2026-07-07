@@ -86,7 +86,7 @@ export const OwnerSalesDetailed: React.FC = () => {
     const pendingFollowups = leads.filter(l => l.status === 'Follow-up').length;
     const convertedLeads = orders.length;
     const conversionRate = totalLeads > 0 ? ((convertedLeads / totalLeads) * 100).toFixed(1) : '0';
-    const averageDealValue = confirmedOrders > 0 ? (orders.reduce((sum, o) => sum + (o.quotation_amount || 0), 0) / confirmedOrders) : 0;
+    const averageDealValue = confirmedOrders > 0 ? (orders.reduce((sum, o) => sum + ((o.Final_Package_Amount !== undefined ? o.Final_Package_Amount : o.quotation_amount) || 0), 0) / confirmedOrders) : 0;
 
     return {
       totalLeads,
@@ -144,7 +144,7 @@ export const OwnerSalesDetailed: React.FC = () => {
     const persons: Record<string, number> = {};
     orders.forEach(o => {
       const person = o.assigned_to_name || 'Unassigned';
-      persons[person] = (persons[person] || 0) + (o.quotation_amount || 0);
+      persons[person] = (persons[person] || 0) + ((o.Final_Package_Amount !== undefined ? o.Final_Package_Amount : o.quotation_amount) || 0);
     });
     return Object.entries(persons).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   }, [orders]);

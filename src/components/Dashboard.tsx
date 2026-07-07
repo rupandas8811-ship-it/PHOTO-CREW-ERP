@@ -885,7 +885,7 @@ export const Dashboard: React.FC = () => {
 
                     {/* Revenue */}
                     <td className="p-3 font-mono text-zinc-100 font-extrabold text-[12px]">
-                      {formatINR(order.quotation_amount)}
+                      {formatINR(order.Final_Package_Amount !== undefined ? order.Final_Package_Amount : order.quotation_amount)}
                     </td>
 
                     {/* Action button */}

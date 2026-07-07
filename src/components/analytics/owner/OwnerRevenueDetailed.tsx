@@ -118,7 +118,7 @@ export const OwnerRevenueDetailed: React.FC = () => {
       if (!isNaN(year) && year === new Date().getFullYear()) {
         const monthIndex = date.getMonth();
         if (!isNaN(monthIndex) && data[monthIndex]) {
-          data[monthIndex].revenue += (o.quotation_amount || 0);
+          data[monthIndex].revenue += ((o.Final_Package_Amount !== undefined ? o.Final_Package_Amount : o.quotation_amount) || 0);
         }
       }
     });
@@ -142,7 +142,7 @@ export const OwnerRevenueDetailed: React.FC = () => {
     const types: Record<string, number> = {};
     orders.forEach(o => {
       const type = o.event_type || 'Other';
-      types[type] = (types[type] || 0) + (o.quotation_amount || 0);
+      types[type] = (types[type] || 0) + ((o.Final_Package_Amount !== undefined ? o.Final_Package_Amount : o.quotation_amount) || 0);
     });
     return Object.entries(types).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   }, [orders]);
@@ -174,7 +174,7 @@ export const OwnerRevenueDetailed: React.FC = () => {
     const packages: Record<string, number> = {};
     orders.forEach(o => {
       const pkg = o.package_name || 'Custom Package';
-      packages[pkg] = (packages[pkg] || 0) + (o.quotation_amount || 0);
+      packages[pkg] = (packages[pkg] || 0) + ((o.Final_Package_Amount !== undefined ? o.Final_Package_Amount : o.quotation_amount) || 0);
     });
     return Object.entries(packages).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 8);
   }, [orders]);

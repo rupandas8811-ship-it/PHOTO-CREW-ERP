@@ -300,13 +300,25 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
                   {currentRole !== 'Production Team' && (
                     <div className="grid grid-cols-2 gap-3 pt-1">
                       <div>
-                        <span className="text-[10px] text-zinc-500 uppercase tracking-widest block">Master Audited Quote</span>
-                        <p className="text-xs text-zinc-100 font-extrabold mt-1">{formatINR(order.quotation_amount)}</p>
+                        <span className="text-[10px] text-zinc-500 uppercase tracking-widest block">Final Package Amount</span>
+                        <p className="text-xs text-zinc-100 font-extrabold mt-1">{formatINR(order.Final_Package_Amount !== undefined ? order.Final_Package_Amount : order.quotation_amount)}</p>
                       </div>
                       <div>
-                        <span className="text-[10px] text-zinc-500 uppercase tracking-widest block">Retainer Advance Deposited</span>
-                        <p className="text-xs text-emerald-450 font-extrabold mt-1">{formatINR(order.advance_received)}</p>
+                        <span className="text-[10px] text-zinc-500 uppercase tracking-widest block">Advance Collected</span>
+                        <p className="text-xs text-emerald-450 font-extrabold mt-1">{formatINR(order.Advance_Collected !== undefined ? order.Advance_Collected : order.advance_received)}</p>
                       </div>
+                      {order.Transaction_ID && (
+                        <div>
+                          <span className="text-[10px] text-zinc-500 uppercase tracking-widest block">Transaction ID</span>
+                          <p className="text-xs text-zinc-300 font-bold mt-1 break-all">{order.Transaction_ID}</p>
+                        </div>
+                      )}
+                      {order.Payment_Mode && (
+                        <div>
+                          <span className="text-[10px] text-zinc-500 uppercase tracking-widest block">Payment Mode</span>
+                          <p className="text-xs text-zinc-300 font-bold mt-1">{order.Payment_Mode}</p>
+                        </div>
+                      )}
                     </div>
                   )}
                   <div className="border-t border-zinc-900/80 pt-3 font-sans">

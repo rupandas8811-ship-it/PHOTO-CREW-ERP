@@ -289,6 +289,10 @@ export interface Order {
   Lost_Notes?: string;
   lead_score?: number;
   booking_status?: string;
+  Final_Package_Amount?: number;
+  Advance_Collected?: number;
+  Transaction_ID?: string;
+  Payment_Mode?: string;
 }
 
 export interface Customer {

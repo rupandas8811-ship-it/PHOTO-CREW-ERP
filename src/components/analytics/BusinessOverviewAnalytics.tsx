@@ -41,7 +41,7 @@ export const BusinessOverviewAnalytics: React.FC = () => {
 
   // 1. Revenue Analytics calculations
   const totalRevenue = useMemo(() => {
-    return filteredOrders.reduce((sum, o) => sum + (o.quotation_amount || 0), 0);
+    return filteredOrders.reduce((sum, o) => sum + (o.Final_Package_Amount !== undefined ? o.Final_Package_Amount : o.quotation_amount || 0), 0);
   }, [filteredOrders]);
 
   const totalReceived = useMemo(() => {
@@ -70,7 +70,7 @@ export const BusinessOverviewAnalytics: React.FC = () => {
 
   const upcomingEvents = filteredOrders.filter(o => o.event_date >= TODAY_REF).length;
   const ongoingEvents = filteredOrders.filter(o => o.event_date === TODAY_REF).length;
-  const cancelledEvents = filteredOrders.filter(o => o.current_stage === 'Closed' && o.quotation_amount === 0).length;
+  const cancelledEvents = filteredOrders.filter(o => o.current_stage === 'Closed' && o.Final_Package_Amount !== undefined ? o.Final_Package_Amount : o.quotation_amount === 0).length;
 
   // 3. Payment Analytics calculations
   const fullyPaidEvents = filteredPayments.filter(p => p.payment_status === 'Fully Paid').length;
@@ -118,7 +118,7 @@ export const BusinessOverviewAnalytics: React.FC = () => {
     filteredOrders.forEach(o => {
       const d = o.created_at ? o.created_at.split('T')[0] : o.event_date;
       if (datesMap[d]) {
-        datesMap[d].revenue += o.quotation_amount || 0;
+        datesMap[d].revenue += o.Final_Package_Amount !== undefined ? o.Final_Package_Amount : o.quotation_amount || 0;
       }
     });
 

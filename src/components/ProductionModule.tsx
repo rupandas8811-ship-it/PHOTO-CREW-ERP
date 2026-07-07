@@ -1959,7 +1959,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                       // Payments calculations
                       const payment = payments.find(p => p.order_id === order.order_id);
-                      const totalAmount = order.quotation_amount || 0;
+                      const totalAmount = (order.Final_Package_Amount !== undefined ? order.Final_Package_Amount : (order?.Final_Package_Amount !== undefined ? order.Final_Package_Amount : order?.quotation_amount)) || 0;
                       const advanceReceived = payment?.advance_received !== undefined ? payment.advance_received : (payment?.advance_paid || 0);
                       const balanceDue = payment?.balance_due !== undefined ? payment.balance_due : (totalAmount - advanceReceived);
                       const payStatus = payment?.payment_status || 'Pending';
@@ -5052,7 +5052,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
         // Load payments info
         const payment = payments.find(p => p.order_id === order.order_id);
-        const totalAmount = order.quotation_amount || 0;
+        const totalAmount = (order.Final_Package_Amount !== undefined ? order.Final_Package_Amount : (order?.Final_Package_Amount !== undefined ? order.Final_Package_Amount : order?.quotation_amount)) || 0;
         const advanceReceived = payment?.advance_received !== undefined ? payment.advance_received : (payment?.advance_paid || 0);
         const balanceDue = payment?.balance_due !== undefined ? payment.balance_due : (totalAmount - advanceReceived);
 

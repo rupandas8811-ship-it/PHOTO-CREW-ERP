@@ -3161,6 +3161,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         notes_special_customizations: targetLead.notes_special_customizations || '',
         quotation_discount: targetLead.quotation_discount || 0,
         additional_services_cost: targetLead.additional_services_cost || 0,
+        Final_Package_Amount: quotationAmount,
+        Advance_Collected: advanceReceived,
+        Transaction_ID: transactionId || '',
+        Payment_Mode: paymentMode || '',
       });
       if (!rOrd?.success) throw new Error("Failed to update existing order: " + rOrd?.error);
     } else {
@@ -3200,6 +3204,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         notes_special_customizations: targetLead.notes_special_customizations || '',
         quotation_discount: targetLead.quotation_discount || 0,
         additional_services_cost: targetLead.additional_services_cost || 0,
+        Final_Package_Amount: quotationAmount,
+        Advance_Collected: advanceReceived,
+        Transaction_ID: transactionId || '',
+        Payment_Mode: paymentMode || '',
       };
       const rOrd = await pushInsert('orders', newOrder);
       if (!rOrd?.success) throw new Error("Failed to insert Order: " + rOrd?.error);

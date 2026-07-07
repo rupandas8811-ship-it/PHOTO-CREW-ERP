@@ -2260,7 +2260,7 @@ USING (true);`;
   
   // Package Selection Price is editable, so subtotal sums the edited prices
   const subtotal = selectedPkgs.reduce((sum, item) => sum + (pkgPrices[item.id] !== undefined ? pkgPrices[item.id] : item.cost), 0);
-  const finalTotal = Math.max(0, subtotal - leadDiscount);
+  const finalTotal = Math.max(0, subtotal + Number(quoteAdditional || 0) - Number(quoteDiscount || 0));
 
   // Sync package configurations on changes
   React.useEffect(() => {
@@ -2837,8 +2837,8 @@ USING (true);`;
   const dynamicAdditionalSum = quoteServices
     .filter(s => s.isAdditional)
     .reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
-  const discountVal = selectedLead ? Number(quoteDiscount || 0) : Number(leadDiscount || 0);
-  const finalPackagePrice = selectedLead && wizardLeadData.package_price !== undefined ? wizardLeadData.package_price : dynamicBaseSum;
+  const discountVal = Number(quoteDiscount || 0);
+  const finalPackagePrice = wizardLeadData.package_price !== undefined ? wizardLeadData.package_price : dynamicBaseSum;
   const dynamicFinalAmt = Math.max(0, finalPackagePrice + Number(quoteAdditional || 0) - discountVal);
 
   React.useEffect(() => {
@@ -3465,18 +3465,33 @@ USING (true);`;
           </div>
 
           {/* Section 3: Financial Summary */}
-          <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 flex items-center justify-between shadow-inner mt-2">
-            <div className="space-y-0.5">
-              <h4 className="text-[10px] text-amber-500 font-bold uppercase tracking-wide font-mono flex items-center gap-1.5 mb-1">
-                <span></span> Section 3: Financial Summary
-              </h4>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide font-mono">Final Quotation Amount</p>
-              <p className="text-[9px] text-slate-500 font-mono">Formula: Base Price (₹{basePkgSum}) + Addl (₹{quoteAdditional || 0}) - Disc (₹{quoteDiscount || 0})</p>
+          <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 shadow-inner mt-2">
+            <h4 className="text-[10px] text-amber-500 font-bold uppercase tracking-wide font-mono flex items-center gap-1.5 mb-2 pb-1 border-b border-slate-800/50">
+              <span>💰</span> Section 3: Financial Summary
+            </h4>
+            
+            <div className="space-y-1.5 mb-3">
+              <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                <span>Package Price:</span>
+                <span>₹{(basePkgSum).toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                <span>Additional Services Cost:</span>
+                <span>+ ₹{(Number(quoteAdditional) || 0).toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                <span>Quotation Discount:</span>
+                <span className="text-red-400">- ₹{(Number(quoteDiscount) || 0).toLocaleString('en-IN')}</span>
+              </div>
             </div>
-            <div className="text-right">
-              <span className="text-lg font-extrabold text-amber-500 font-mono">
-                ₹{finalAmt.toLocaleString('en-IN')}
-              </span>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800/50">
+              <p className="text-[11px] text-slate-300 font-bold uppercase tracking-wide font-mono">Final Quotation Amount</p>
+              <div className="text-right">
+                <span className="text-xl font-extrabold text-amber-500 font-mono">
+                  ₹{finalAmt.toLocaleString('en-IN')}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -5500,7 +5515,7 @@ USING (true);`;
           package_cost: pkgPrices[pkg.id] !== undefined ? pkgPrices[pkg.id] : pkg.cost,
           quantity: 1,
           total_amount: pkgPrices[pkg.id] !== undefined ? pkgPrices[pkg.id] : pkg.cost,
-          discount: leadDiscount,
+          discount: 0,
           final_amount: pkgPrices[pkg.id] !== undefined ? pkgPrices[pkg.id] : pkg.cost,
           deliverables_description: pkgDeliverables[pkg.id] || pkg.deliverables || 'N/A',
           notes_special_customizations: pkgNotes[pkg.id] || '',
@@ -5514,7 +5529,7 @@ USING (true);`;
       await updateLead(createdLeadId!, {
         status: finalStatus as CurrentStage,
         budget: finalTotal,
-          package_price: finalTotal,
+          package_price: subtotal,
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
           Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
           Final_Quotation_Amount: finalTotal,
@@ -5551,7 +5566,7 @@ USING (true);`;
         updatePayload: {
           status: finalStatus,
           budget: finalTotal,
-          package_price: finalTotal,
+          package_price: subtotal,
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
           Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
           Final_Quotation_Amount: finalTotal,
@@ -7896,20 +7911,34 @@ USING (true);`;
                                             const [staffName, staffMobile] = item.includes('|') ? item.split('|') : [item, ''];
                                             return (
                                               <div key={idx} className="flex items-center gap-2 bg-slate-950/40 p-2.5 rounded-lg border border-slate-850">
-                                                <div className="flex-1">
+                                                <div className="flex-1 grid grid-cols-2 gap-2">
                                                   <input
                                                     type="text"
                                                     placeholder="Staff Name"
                                                     value={staffName}
                                                     onChange={(e) => {
                                                       const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
-                                                      currentList[idx] = e.target.value;
+                                                      currentList[idx] = `${e.target.value}|${staffMobile}`;
                                                       setEditableInclusions({
                                                         ...editableInclusions,
                                                         [eventKey]: currentList
                                                       });
                                                     }}
                                                     className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
+                                                  />
+                                                  <input
+                                                    type="text"
+                                                    placeholder="Mobile Number"
+                                                    value={staffMobile}
+                                                    onChange={(e) => {
+                                                      const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
+                                                      currentList[idx] = `${staffName}|${e.target.value}`;
+                                                      setEditableInclusions({
+                                                        ...editableInclusions,
+                                                        [eventKey]: currentList
+                                                      });
+                                                    }}
+                                                    className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100 font-mono"
                                                   />
                                                 </div>
                                                 <button
@@ -7961,20 +7990,34 @@ USING (true);`;
                                         const [staffName, staffMobile] = item.includes('|') ? item.split('|') : [item, ''];
                                         return (
                                           <div key={idx} className="flex items-center gap-2 bg-slate-950/40 p-2.5 rounded-lg border border-slate-850">
-                                            <div className="flex-1">
+                                            <div className="flex-1 grid grid-cols-2 gap-2">
                                               <input
                                                 type="text"
                                                 placeholder="Staff Name"
                                                 value={staffName}
                                                 onChange={(e) => {
                                                   const currentList = [...(editableInclusions[pkgId] || [])];
-                                                  currentList[idx] = e.target.value;
+                                                  currentList[idx] = `${e.target.value}|${staffMobile}`;
                                                   setEditableInclusions({
                                                     ...editableInclusions,
                                                     [pkgId]: currentList
                                                   });
                                                 }}
                                                 className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
+                                              />
+                                              <input
+                                                type="text"
+                                                placeholder="Mobile Number"
+                                                value={staffMobile}
+                                                onChange={(e) => {
+                                                  const currentList = [...(editableInclusions[pkgId] || [])];
+                                                  currentList[idx] = `${staffName}|${e.target.value}`;
+                                                  setEditableInclusions({
+                                                    ...editableInclusions,
+                                                    [pkgId]: currentList
+                                                  });
+                                                }}
+                                                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100 font-mono"
                                               />
                                             </div>
                                             <button
@@ -9389,7 +9432,7 @@ USING (true);`;
                                                 const [staffName, staffMobile] = item.includes('|') ? item.split('|') : [item, ''];
                                                 return (
                                                   <div key={idx} className="flex items-center gap-2 bg-slate-950/40 p-2.5 rounded-lg border border-slate-850">
-                                                    <div className="flex-1">
+                                                    <div className="flex-1 grid grid-cols-2 gap-2">
                                                       <input
                                                         type="text"
                                                         placeholder="Staff Name"
@@ -9397,13 +9440,28 @@ USING (true);`;
                                                         disabled={isLeadLocked}
                                                         onChange={(e) => {
                                                           const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
-                                                          currentList[idx] = e.target.value;
+                                                          currentList[idx] = `${e.target.value}|${staffMobile}`;
                                                           setEditableInclusions({
                                                             ...editableInclusions,
                                                             [eventKey]: currentList
                                                           });
                                                         }}
                                                         className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
+                                                      />
+                                                      <input
+                                                        type="text"
+                                                        placeholder="Mobile Number"
+                                                        value={staffMobile}
+                                                        disabled={isLeadLocked}
+                                                        onChange={(e) => {
+                                                          const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
+                                                          currentList[idx] = `${staffName}|${e.target.value}`;
+                                                          setEditableInclusions({
+                                                            ...editableInclusions,
+                                                            [eventKey]: currentList
+                                                          });
+                                                        }}
+                                                        className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100 font-mono"
                                                       />
                                                     </div>
                                                     {!isLeadLocked && (
@@ -9459,7 +9517,7 @@ USING (true);`;
                                           const [staffName, staffMobile] = item.includes('|') ? item.split('|') : [item, ''];
                                           return (
                                             <div key={idx} className="flex items-center gap-2 bg-slate-950/40 p-2.5 rounded-lg border border-slate-850">
-                                              <div className="flex-1">
+                                              <div className="flex-1 grid grid-cols-2 gap-2">
                                                 <input
                                                   type="text"
                                                   placeholder="Staff Name"
@@ -9467,13 +9525,28 @@ USING (true);`;
                                                   disabled={isLeadLocked}
                                                   onChange={(e) => {
                                                     const currentList = [...(editableInclusions[selectedPkgId] || [])];
-                                                    currentList[idx] = e.target.value;
+                                                    currentList[idx] = `${e.target.value}|${staffMobile}`;
                                                     setEditableInclusions({
                                                       ...editableInclusions,
                                                       [selectedPkgId]: currentList
                                                     });
                                                   }}
                                                   className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
+                                                />
+                                                <input
+                                                  type="text"
+                                                  placeholder="Mobile Number"
+                                                  value={staffMobile}
+                                                  disabled={isLeadLocked}
+                                                  onChange={(e) => {
+                                                    const currentList = [...(editableInclusions[selectedPkgId] || [])];
+                                                    currentList[idx] = `${staffName}|${e.target.value}`;
+                                                    setEditableInclusions({
+                                                      ...editableInclusions,
+                                                      [selectedPkgId]: currentList
+                                                    });
+                                                  }}
+                                                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100 font-mono"
                                                 />
                                               </div>
                                               {!isLeadLocked && (
