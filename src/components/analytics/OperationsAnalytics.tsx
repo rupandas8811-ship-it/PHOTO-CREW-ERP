@@ -348,8 +348,8 @@ export const OperationsAnalytics: React.FC = () => {
             let revenueGenerated = 0;
             uniqueAssignments.forEach(a => {
               const order = orders.find(o => o.order_id === a.order_id);
-              if (order && (order.Final_Package_Amount !== undefined ? order.Final_Package_Amount : order.quotation_amount)) {
-                revenueGenerated += (order.Final_Package_Amount !== undefined ? order.Final_Package_Amount : order.quotation_amount);
+              if (order && order.quotation_amount) {
+                revenueGenerated += order.quotation_amount;
               }
             });
 

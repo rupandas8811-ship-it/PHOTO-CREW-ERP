@@ -89,7 +89,7 @@ async function startServer() {
   // Helper to dynamically strip stale/missing columns that cause schema cache mismatch errors
   const healPayload = (table: string, payload: any, errorMsg: string): any | null => {
     if (!payload || typeof payload !== 'object') return null;
-    if (table !== 'leads' && table !== 'orders' && table !== 'quotations' && table !== 'lead_packages' && table !== 'lead_events') return null;
+    if (table !== 'leads' && table !== 'orders' && table !== 'quotations' && table !== 'lead_packages') return null;
     
     const lowerMsg = errorMsg.toLowerCase();
     let healed = false;
@@ -107,8 +107,6 @@ async function startServer() {
       'lead_score',
       'booking_status',
       'reporting_time',
-      'reporting_date',
-      'Reporting_date',
       'quotation_discount',
       'additional_services_cost',
       'whatsapp_number',
@@ -262,27 +260,6 @@ async function startServer() {
       if (!['activity_logs', 'notifications', 'analytics_snapshots', 'login_logs'].includes(table)) {
         console.error(`[Server DB Upsert Exception] ${table}`, err);
       }
-      res.status(500).json({ success: false, error: err.message || String(err) });
-    }
-  });
-
-  app.post('/api/db/select', async (req, res) => {
-    const { table, matchColumn, matchValue } = req.body;
-    try {
-      const db = getServerSupabase();
-      console.log(`[Server DB Select] Selecting from ${table} where ${matchColumn}=${matchValue}`);
-      let query = db.from(table).select('*');
-      if (matchColumn && matchValue !== undefined) {
-        query = query.eq(matchColumn, matchValue);
-      }
-      const { data, error } = await query;
-      if (error) {
-        console.error(`[Server DB Select Error] ${table}`, error);
-        return res.status(400).json({ success: false, error: error.message });
-      }
-      res.json({ success: true, data });
-    } catch (err: any) {
-      console.error(`[Server DB Select Exception] ${table}`, err);
       res.status(500).json({ success: false, error: err.message || String(err) });
     }
   });

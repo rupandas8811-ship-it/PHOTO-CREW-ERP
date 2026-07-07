@@ -77,9 +77,7 @@ interface RoleContextType {
     paymentMode?: string,
     notes?: string,
     reportingTime?: string,
-    transactionId?: string,
-    reportingDate?: string,
-    events?: any[]
+    transactionId?: string
   ) => string;
   assignOperations: (
     orderId: string, 
@@ -713,42 +711,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [leads, setLeads] = useState<Lead[]>([]);
-  const generateNextLeadId = (): string => {
-    let maxNum = 99;
-    leads.forEach(l => {
-      if (l.lead_id) {
-        const match = l.lead_id.match(/^LD(\d+)$/i);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (num > maxNum && num < 1000000) {
-            maxNum = num;
-          }
-        }
-      }
-    });
-    return `LD${maxNum + 1}`;
-  };
-
   const [statusHistory, setStatusHistory] = useState<any[]>([]);
   const [quotations, setQuotations] = useState<any[]>([]);
   const [leadPackages, setLeadPackages] = useState<LeadPackage[]>([]);
   const [packages, setPackages] = useState<Package[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const generateNextOrderId = (): string => {
-    let maxNum = 99;
-    orders.forEach(o => {
-      if (o.order_id) {
-        const match = o.order_id.match(/^RD(\d+)$/i);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (num > maxNum && num < 1000000) {
-            maxNum = num;
-          }
-        }
-      }
-    });
-    return `RD${maxNum + 1}`;
-  };
   const [operations, setOperations] = useState<Operation[]>([]);
   const [rawFootage, setRawFootage] = useState<RawFootage[]>([]);
   const [production, setProduction] = useState<Production[]>([]);
@@ -1108,12 +1075,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'total_amount', 'discount', 'final_amount', 'deliverables_description', 
         'notes_special_customizations', 'additional_services_cost', 'created_at'
       ],
-      lead_events: [
-        'id', 'lead_id', 'event_type', 'event_name', 'event_shoot_type', 'event_date', 
-        'event_start_time', 'event_end_time', 'event_location', 'google_maps_link', 
-        'reporting_time', 'guest_pax', 'staff_pax', 'assigned_staff_names', 'assigned_staff_mobiles',
-        'created_at', 'updated_at'
-      ],
       raw_footage: [
         'tracking_id', 'order_id', 'event_completed_date', 'raw_received', 'server_path', 
         'uploaded_by', 'uploaded_date', 'status'
@@ -1128,7 +1089,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ],
       payments: [
         'payment_id', 'order_id', 'quotation_amount', 'advance_received', 'balance_due', 
-        'final_payment_received', 'payment_date', 'payment_proof_url', 'payment_status', 'transaction_id'
+        'final_payment_received', 'payment_date', 'payment_proof_url', 'payment_status'
       ],
       activity_logs: [
         'log_id', 'user_name', 'role', 'action', 'module', 'record_id', 'timestamp', 
@@ -1191,8 +1152,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!record || typeof record !== 'object') return record;
     const clone = { ...record };
     
-    // Fallbacks for leads and orders table not-null constraints
-    if (table === 'leads' || table === 'orders') {
+    // Fallbacks for leads table not-null constraints
+    if (table === 'leads') {
       if (clone.event_date === null || clone.event_date === '' || clone.event_date === undefined) {
          clone.event_date = new Date().toISOString().split('T')[0];
       }
@@ -1201,8 +1162,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    const timeFields = ['event_time', 'reporting_time', 'confirmed_event_time', 'event_start_time', 'event_end_time'];
-    const dateFields = ['event_date', 'booking_date', 'event_start_date', 'event_end_date', 'delivery_target_date', 'Reporting_date', 'reporting_date'];
+    const timeFields = ['event_time', 'reporting_time', 'confirmed_event_time'];
+    const dateFields = ['event_date', 'booking_date', 'event_start_date', 'event_end_date', 'delivery_target_date'];
     
     for (const field of dateFields) {
       if (field in clone) {
@@ -1261,27 +1222,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Synchronous CRUD wrappers for updating Supabase in backgrounds
   const pushInsert = async (table: string, record: any): Promise<{ success: boolean; error?: string; localFallback?: boolean }> => {
     if (!supabaseClient) return { success: true };
-
-    // Authentication Validation as requested by user
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    
-    console.log(`[DEBUG AUTH] Table: ${table} | Action: INSERT`);
-    console.log(`[DEBUG AUTH] Session Valid: ${!!session}`);
-    console.log(`[DEBUG AUTH] User ID: ${user?.id || 'NULL'}`);
-    console.log(`[DEBUG AUTH] auth.uid() equivalent: ${user?.id || 'NULL'}`);
-
-    if (!session || !user) {
-      if (['activity_logs', 'notifications', 'analytics_snapshots'].includes(table)) {
-        console.warn(`[AUTH WARN] Attempted insert on ${table} without valid session. Skipping log.`);
-        return { success: true };
-      }
-      console.error(`[AUTH ERROR] Attempted insert on ${table} without valid session. Redirecting to login.`);
-      setCurrentUser(null);
-      localStorage.removeItem('erp_current_user');
-      return { success: false, error: 'Authentication session expired. Please log in again.' };
-    }
-
     try {
       if (table === 'leads') {
         if (!('total_pax' in record)) {
@@ -1306,30 +1246,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           sanitized.created_by = `${currentUserName}|${currentRole || 'System'}`;
         }
       }
-      
-      if (table === 'payments' && record.payment_id) {
-        sanitized.payment_id = record.payment_id;
-      }
-      if (table === 'orders' && record.order_id) sanitized.order_id = record.order_id;
-      if (table === 'leads' && record.lead_id) sanitized.lead_id = record.lead_id;
-      if (table === 'operations' && record.operation_id) sanitized.operation_id = record.operation_id;
-
       // Try sending to server-side proxy first to bypass client RLS issues
-      let proxyErrorDetails = '';
-      let proxyStatus: number | null = null;
-      let proxySucceeded = false;
-
       try {
-        const { data: { session: currentSession } } = await supabaseClient.auth.getSession();
         const response = await fetch('/api/db/insert', {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${currentSession?.access_token}`
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ table, record: sanitized })
         });
-        proxyStatus = response.status;
         if (response.ok) {
           const resJson = await response.json();
           if (resJson.success) {
@@ -1355,75 +1278,51 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             broadcastSyncPing();
-            proxySucceeded = true;
             return { success: true };
           } else {
             console.warn(`[pushInsert Proxy WARN] server returned success=false for ${table}, falling back...`, resJson.error);
-            proxyErrorDetails = `Server returned success=false. Error: ${resJson.error || 'Unknown error'}`;
           }
         } else {
           console.warn(`[pushInsert Proxy WARN] server returned status ${response.status} for ${table}, falling back...`);
-          proxyErrorDetails = `Server returned HTTP status ${response.status}`;
         }
-      } catch (proxyErr: any) {
+      } catch (proxyErr) {
         console.warn(`[pushInsert Proxy ERROR] failed to reach server for ${table}, falling back...`, proxyErr);
-        proxyErrorDetails = `Exception calling server-side API: ${proxyErr?.message || String(proxyErr)}`;
       }
 
-      if (!proxySucceeded) {
-        const { data: fallbackInsData, error } = await supabaseClient.from(table).insert(sanitized).select();
-        if (error) {
-          if (['activity_logs', 'notifications', 'analytics_snapshots'].includes(table)) {
-            return { success: true };
-          }
-          console.warn(`Supabase Insert error in ${table}:`, error?.message || String(error));
-          updateDiagnosticMetric('insert', 'fail', error?.message || String(error));
-          
-          if (table === 'payments') {
-            const detailedErrorMessage = `
-========================================
-🚨 PAYMENT INSERTION FAILURE REPORT 🚨
-========================================
-- HTTP Status Code: ${proxyStatus || 'N/A (Network/Fetch Exception)'}
-- Table Name: ${table}
-- SQL Operation: INSERT
-- Endpoint Used: /api/db/insert (Proxy) & supabaseClient.from('${table}').insert() (Fallback)
-- Failed Function: pushInsert() inside RoleContext.tsx
-- Exact Supabase Error: [${error.code || 'NO_CODE'}] ${error.message}
-- Root Cause: Server proxy returned: "${proxyErrorDetails}". Fallback direct client-side insert failed due to: "${error.message}".
-- Suggested Fix: Check if database is online, check RLS policy for the table, or ensure the payload has all required NOT NULL columns.
-========================================
-            `.trim();
-            return { success: false, error: detailedErrorMessage };
-          }
-          
-          return { success: false, error: `[Table: ${table}] ${error?.message || String(error)}` };
-        } else {
-          updateDiagnosticMetric('insert', 'ok');
-  
-          // Clean up matching local record if any from erp_local_<tableKey>
-          const localKey = `erp_local_${table}`;
-          const existingLocalStr = localStorage.getItem(localKey);
-          if (existingLocalStr) {
-            try {
-              const localRecords = JSON.parse(existingLocalStr);
-              if (Array.isArray(localRecords)) {
-                const idCol = table === 'leads' ? 'lead_id' : (table === 'orders' ? 'order_id' : null);
-                if (idCol && record[idCol]) {
-                  const filtered = localRecords.filter((r: any) => r && r[idCol] !== record[idCol]);
-                  localStorage.setItem(localKey, JSON.stringify(filtered));
-                }
-              }
-            } catch (e) {
-              console.error(`Error cleaning up local records on insert for ${table}:`, e);
-            }
-          }
-  
-          broadcastSyncPing();
+      const { data: fallbackInsData, error } = await supabaseClient.from(table).insert(sanitized).select();
+      if (error) {
+        if (['activity_logs', 'notifications', 'analytics_snapshots'].includes(table)) {
           return { success: true };
         }
+        console.warn(`Supabase Insert error in ${table}:`, error?.message || String(error));
+        updateDiagnosticMetric('insert', 'fail', error?.message || String(error));
+        return { success: false, error: `[Table: ${table}] ${error?.message || String(error)}` };
+      } else {
+        updateDiagnosticMetric('insert', 'ok');
+
+        // Clean up matching local record if any from erp_local_<tableKey>
+        const localKey = `erp_local_${table}`;
+        const existingLocalStr = localStorage.getItem(localKey);
+        if (existingLocalStr) {
+          try {
+            const localRecords = JSON.parse(existingLocalStr);
+            if (Array.isArray(localRecords)) {
+              const idCol = table === 'leads' ? 'lead_id' : (table === 'orders' ? 'order_id' : null);
+              if (idCol && record[idCol]) {
+                const filtered = localRecords.filter((r: any) => r && r[idCol] !== record[idCol]);
+                localStorage.setItem(localKey, JSON.stringify(filtered));
+              }
+            }
+          } catch (e) {
+            console.error(`Error cleaning up local records on insert for ${table}:`, e);
+          }
+        }
+
+        // Realtime subscription will handle syncing new records
+        broadcastSyncPing();
+
+        return { success: true };
       }
-      return { success: true };
     } catch (err: any) {
       console.warn(`Supabase Insert exception in ${table}:`, err?.message || String(err));
       updateDiagnosticMetric('insert', 'fail', err?.message || String(err));
@@ -1433,28 +1332,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const pushUpdate = async (table: string, matchColumn: string, matchValue: any, updates: any): Promise<{ success: boolean; error?: string; localFallback?: boolean }> => {
     if (!supabaseClient) return { success: true };
-    
-    // Authentication Validation as requested by user
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    
-    console.log(`[DEBUG AUTH] Table: ${table} | Action: UPDATE`);
-    console.log(`[DEBUG AUTH] Session Valid: ${!!session}`);
-    console.log(`[DEBUG AUTH] User ID: ${user?.id || 'NULL'}`);
-    console.log(`[DEBUG AUTH] auth.uid() equivalent: ${user?.id || 'NULL'}`);
-
-    if (!session || !user) {
-      if (['activity_logs', 'notifications', 'analytics_snapshots'].includes(table)) {
-        console.warn(`[AUTH WARN] Attempted update on ${table} without valid session. Skipping log.`);
-        return { success: true };
-      }
-      console.error(`[AUTH ERROR] Attempted update on ${table} without valid session. Redirecting to login.`);
-      // We don't have a direct "redirect" function here, but we can set currentUser to null to trigger LoginScreen
-      setCurrentUser(null);
-      localStorage.removeItem('erp_current_user');
-      return { success: false, error: 'Authentication session expired. Please log in again.' };
-    }
-
     try {
       const sanitized = sanitizeTimeFieldsForDb(stripClientOnlyFields(table, updates), table);
       let finalMatchValue = matchValue;
@@ -1528,26 +1405,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       console.log(`[pushUpdate EXECUTING] on ${table}:`, sanitized);
       
-      if (table === 'payments' && (updates as any).payment_id) {
-        sanitized.payment_id = (updates as any).payment_id;
-      }
-
       // Try sending to server-side proxy first to bypass client RLS issues
-      let proxyErrorDetails = '';
-      let proxyStatus: number | null = null;
-      let proxySucceeded = false;
-
       try {
-        const { data: { session: currentSession } } = await supabaseClient.auth.getSession();
         const response = await fetch('/api/db/update', {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${currentSession?.access_token}`
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ table, matchColumn, matchValue: finalMatchValue, updates: sanitized })
         });
-        proxyStatus = response.status;
         if (response.ok) {
           const resJson = await response.json();
           if (resJson.success) {
@@ -1580,142 +1444,117 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             broadcastSyncPing();
-            proxySucceeded = true;
             return { success: true };
           } else {
             console.warn(`[pushUpdate Proxy WARN] server returned success=false for ${table}, falling back...`, resJson.error);
-            proxyErrorDetails = `Server returned success=false. Error: ${resJson.error || 'Unknown error'}`;
           }
         } else {
           console.warn(`[pushUpdate Proxy WARN] server returned status ${response.status} for ${table}, falling back...`);
-          proxyErrorDetails = `Server returned HTTP status ${response.status}`;
         }
-      } catch (proxyErr: any) {
+      } catch (proxyErr) {
         console.warn(`[pushUpdate Proxy ERROR] failed to reach server for ${table}, falling back...`, proxyErr);
-        proxyErrorDetails = `Exception calling server-side API: ${proxyErr?.message || String(proxyErr)}`;
       }
 
-      if (!proxySucceeded) {
-        let { error, data } = await supabaseClient.from(table).update(sanitized).eq(matchColumn, finalMatchValue).select();
-        
-        // Automatic unified fallback for database check constraints or value exceptions
-        if (error && (
-          error.message.toLowerCase().includes('constraint') || 
-          error.message.toLowerCase().includes('check') || 
-          error.message.toLowerCase().includes('violate') || 
-          error.message.toLowerCase().includes('status_check') ||
-          error.message.toLowerCase().includes('invalid')
-        )) {
-           let fallbackNeeded = false;
-           if (table === 'leads' && sanitized.status) {
-              console.warn(`[pushUpdate FALLBACK] Constraint error on leads for status (${sanitized.status}). Stripping status and retrying with current_status only...`);
-              delete sanitized.status;
-              fallbackNeeded = true;
-           }
-           if (table === 'orders' && sanitized.order_status) {
-              console.warn(`[pushUpdate FALLBACK] Constraint error on orders for stage (${sanitized.current_stage}). Stripping order_status and retrying...`);
-              delete sanitized.order_status;
-              fallbackNeeded = true;
-           }
-           if (table === 'production' && sanitized.editing_status) {
-              console.warn(`[pushUpdate FALLBACK] Constraint error on production for status (${sanitized.editing_status}). Stripping editing_status and retrying...`);
-              delete sanitized.editing_status;
-              fallbackNeeded = true;
-           }
-           if (fallbackNeeded) {
-              const fallback = await supabaseClient.from(table).update(sanitized).eq(matchColumn, matchValue).select();
-              error = fallback.error;
-              data = fallback.data;
-           }
+      let { error, data } = await supabaseClient.from(table).update(sanitized).eq(matchColumn, finalMatchValue).select();
+      
+      // Automatic unified fallback for database check constraints or value exceptions
+      if (error && (
+        error.message.toLowerCase().includes('constraint') || 
+        error.message.toLowerCase().includes('check') || 
+        error.message.toLowerCase().includes('violate') || 
+        error.message.toLowerCase().includes('status_check') ||
+        error.message.toLowerCase().includes('invalid')
+      )) {
+         let fallbackNeeded = false;
+         if (table === 'leads' && sanitized.status) {
+            console.warn(`[pushUpdate FALLBACK] Constraint error on leads for status (${sanitized.status}). Stripping status and retrying with current_status only...`);
+            delete sanitized.status;
+            fallbackNeeded = true;
+         }
+         if (table === 'orders' && sanitized.order_status) {
+            console.warn(`[pushUpdate FALLBACK] Constraint error on orders for stage (${sanitized.current_stage}). Stripping order_status and retrying...`);
+            delete sanitized.order_status;
+            fallbackNeeded = true;
+         }
+         if (table === 'production' && sanitized.editing_status) {
+            console.warn(`[pushUpdate FALLBACK] Constraint error on production for status (${sanitized.editing_status}). Stripping editing_status and retrying...`);
+            delete sanitized.editing_status;
+            fallbackNeeded = true;
+         }
+         if (fallbackNeeded) {
+            const fallback = await supabaseClient.from(table).update(sanitized).eq(matchColumn, matchValue).select();
+            error = fallback.error;
+            data = fallback.data;
+         }
+      }
+      if (error) {
+        if (['activity_logs', 'notifications', 'analytics_snapshots'].includes(table)) {
+          return { success: true };
         }
-        if (error) {
-          if (['activity_logs', 'notifications', 'analytics_snapshots'].includes(table)) {
-            return { success: true };
-          }
-          console.warn(`[pushUpdate ERROR] in ${table}:`, error?.message || String(error));
-          updateDiagnosticMetric('update', 'fail', error?.message || String(error));
+        console.warn(`[pushUpdate ERROR] in ${table}:`, error?.message || String(error));
+        updateDiagnosticMetric('update', 'fail', error?.message || String(error));
+        return { success: false, error: `[Table: ${table}] ${error?.message || String(error)}` };
+      } else {
+        console.log(`[pushUpdate SUCCESS] returned data:`, data);
+        updateDiagnosticMetric('update', 'ok');
+        if (table === 'leads') {
+          const leadId = matchValue;
+          const prevLead = leads.find(l => l.lead_id === leadId);
+          const oldStatus = prevLead ? (prevLead.current_status || prevLead.status || 'New Lead') : 'New Lead';
+          const anyStatus = sanitized.status || sanitized.current_status || updates.status || updates.current_status;
           
-          if (table === 'payments') {
-            const detailedErrorMessage = `
-========================================
-🚨 PAYMENT UPDATE FAILURE REPORT 🚨
-========================================
-- HTTP Status Code: ${proxyStatus || 'N/A (Network/Fetch Exception)'}
-- Table Name: ${table}
-- SQL Operation: UPDATE
-- Endpoint Used: /api/db/update (Proxy) & supabaseClient.from('${table}').update() (Fallback)
-- Failed Function: pushUpdate() inside RoleContext.tsx
-- Exact Supabase Error: [${error.code || 'NO_CODE'}] ${error.message}
-- Root Cause: Server proxy returned: "${proxyErrorDetails}". Fallback direct client-side update failed due to: "${error.message}".
-- Suggested Fix: Check if database is online, check RLS policy for the table, or ensure the payload has all required columns.
-========================================
-            `.trim();
-            return { success: false, error: detailedErrorMessage };
-          }
-          
-          return { success: false, error: `[Table: ${table}] ${error?.message || String(error)}` };
-        } else {
-          console.log(`[pushUpdate SUCCESS] returned data:`, data);
-          updateDiagnosticMetric('update', 'ok');
-          if (table === 'leads') {
-            const leadId = matchValue;
-            const prevLead = leads.find(l => l.lead_id === leadId);
-            const oldStatus = prevLead ? (prevLead.current_status || prevLead.status || 'New Lead') : 'New Lead';
-            const anyStatus = sanitized.status || sanitized.current_status || updates.status || updates.current_status;
+          if (anyStatus && anyStatus !== oldStatus) {
+            const timestamp = new Date().toISOString();
+            const linkedOrder = orders.find(o => o.lead_id === leadId);
+            const orderId = linkedOrder?.order_id || null;
             
-            if (anyStatus && anyStatus !== oldStatus) {
-              const timestamp = new Date().toISOString();
-              const linkedOrder = orders.find(o => o.lead_id === leadId);
-              const orderId = linkedOrder?.order_id || null;
-              
-              const roleParts = (currentUserName && currentUserName.includes('|')) 
-                ? currentUserName.split('|') 
-                : [currentUserName || 'System', currentRole || 'System'];
-              const changedBy = roleParts[0];
-              const changedByRole = roleParts[1] || currentRole || 'System';
-              
-              const newHist = {
-                lead_id: leadId,
-                order_id: orderId,
-                old_status: oldStatus,
-                new_status: anyStatus,
-                changed_by: changedBy,
-                changed_by_role: changedByRole,
-                remarks: updates.remarks || sanitized.remarks || 'Status updated from dashboard',
-                created_at: timestamp
-              };
-              
-              try {
-                const insertRes = await supabaseClient.from('lead_status_history').insert(newHist);
-                if (insertRes.error) {
-                  console.warn("Failed to insert lead status history in pushUpdate:", insertRes.error?.message || insertRes.error);
-                } else {
-                  setStatusHistory(prev => {
-                    const updatedHist = [...prev, newHist];
-                    localStorage.setItem('erp_status_history', JSON.stringify(updatedHist));
-                    return updatedHist;
-                  });
-                }
-              } catch (e: any) {
-                console.warn("Failed to insert lead status history in pushUpdate (exception):", e?.message || e);
+            const roleParts = (currentUserName && currentUserName.includes('|')) 
+              ? currentUserName.split('|') 
+              : [currentUserName || 'System', currentRole || 'System'];
+            const changedBy = roleParts[0];
+            const changedByRole = roleParts[1] || currentRole || 'System';
+            
+            const newHist = {
+              lead_id: leadId,
+              order_id: orderId,
+              old_status: oldStatus,
+              new_status: anyStatus,
+              changed_by: changedBy,
+              changed_by_role: changedByRole,
+              remarks: updates.remarks || sanitized.remarks || 'Status updated from dashboard',
+              created_at: timestamp
+            };
+            
+            try {
+              const insertRes = await supabaseClient.from('lead_status_history').insert(newHist);
+              if (insertRes.error) {
+                console.warn("Failed to insert lead status history in pushUpdate:", insertRes.error?.message || insertRes.error);
+              } else {
+                setStatusHistory(prev => {
+                  const updatedHist = [...prev, newHist];
+                  localStorage.setItem('erp_status_history', JSON.stringify(updatedHist));
+                  return updatedHist;
+                });
               }
-              
-              setLeads((prev) => 
-                prev.map((ld) => {
-                  if (ld.lead_id === leadId) {
-                    return {
-                      ...ld,
-                      status: anyStatus,
-                      current_status: anyStatus,
-                      updated_at: timestamp
-                    };
-                  }
-                  return ld;
-                })
-              );
-              
-              
+            } catch (e: any) {
+              console.warn("Failed to insert lead status history in pushUpdate (exception):", e?.message || e);
             }
+            
+            setLeads((prev) => 
+              prev.map((ld) => {
+                if (ld.lead_id === leadId) {
+                  return {
+                    ...ld,
+                    status: anyStatus,
+                    current_status: anyStatus,
+                    updated_at: timestamp
+                  };
+                }
+                return ld;
+              })
+            );
+            
+            
           }
         }
 
@@ -1748,23 +1587,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const pushDelete = async (table: string, matchColumn: string, matchValue: any): Promise<{ success: boolean; error?: string }> => {
     if (!supabaseClient) return { success: true };
-
-    // Authentication Validation as requested by user
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    
-    console.log(`[DEBUG AUTH] Table: ${table} | Action: DELETE`);
-    console.log(`[DEBUG AUTH] Session Valid: ${!!session}`);
-    console.log(`[DEBUG AUTH] User ID: ${user?.id || 'NULL'}`);
-    console.log(`[DEBUG AUTH] auth.uid() equivalent: ${user?.id || 'NULL'}`);
-
-    if (!session || !user) {
-      console.error(`[AUTH ERROR] Attempted delete on ${table} without valid session. Redirecting to login.`);
-      setCurrentUser(null);
-      localStorage.removeItem('erp_current_user');
-      return { success: false, error: 'Authentication session expired. Please log in again.' };
-    }
-
     try {
       let finalMatchValue = matchValue;
       if (table === 'operations_staff' && matchColumn === 'staff_id' && matchValue) {
@@ -1786,13 +1608,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Try sending to server-side proxy first to bypass client RLS issues
       try {
-        const { data: { session: currentSession } } = await supabaseClient.auth.getSession();
         const response = await fetch('/api/db/delete', {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${currentSession?.access_token}`
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ table, matchColumn, matchValue: finalMatchValue })
         });
         if (response.ok) {
@@ -1828,26 +1646,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err: any) {
       updateDiagnosticMetric('delete', 'fail', err?.message || String(err));
-      return { success: false, error: err?.message || String(err) };
-    }
-  };
-
-  const pushSelect = async (table: string, matchColumn?: string, matchValue?: any): Promise<{ success: boolean; data?: any[]; error?: string }> => {
-    try {
-      const response = await fetch('/api/db/select', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ table, matchColumn, matchValue })
-      });
-      if (response.ok) {
-        const resJson = await response.json();
-        if (resJson.success) {
-          return { success: true, data: resJson.data };
-        }
-        return { success: false, error: resJson.error };
-      }
-      return { success: false, error: `HTTP status ${response.status}` };
-    } catch (err: any) {
       return { success: false, error: err?.message || String(err) };
     }
   };
@@ -2213,19 +2011,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Check initial session
     supabaseClient.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        console.log(`[AUTH] Session found on mount for: ${session.user.email}`);
         syncProfileAndSession(session);
-      } else {
-        console.log("[AUTH] No session found on mount. Clearing stale local state.");
-        setCurrentUser(null);
-        localStorage.removeItem('erp_current_user');
-        localStorage.removeItem('erp_role');
-        localStorage.removeItem('erp_user_name');
       }
     }).catch(e => {
       console.warn("Supabase getSession failed:", e?.message || String(e));
-      // Even if it fails, we should consider the user logged out if we can't verify the session
-      setCurrentUser(null);
     });
 
     // Subscribe to auth state changes
@@ -2799,7 +2588,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    const leadId = generateNextLeadId();
+    const leadId = `LD-${Math.floor(9012 + Math.random() * 988)}`;
     // We still keep notes_special_customizations plain without serialized events, 
     // or we can keep it as is for backward compatibility but save events to table anyway
     const serializedNotes = leadDetails.notes_special_customizations || '';
@@ -2842,7 +2631,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           event_end_time: ev.event_end_time || '',
           event_location: ev.event_location || '',
           google_maps_link: ev.google_maps_link || '',
-          reporting_time: ev.reporting_time || '',
           guest_pax: String(ev.guest_pax) !== '' && ev.guest_pax != null ? Number(ev.guest_pax) : null,
           staff_pax: String(ev.staff_pax) !== '' && ev.staff_pax != null ? Number(ev.staff_pax) : null,
           assigned_staff_names: ev.assigned_staff_names || '',
@@ -2926,8 +2714,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     callNotes: string, 
     nextFollowUpDate: string, 
     quotationAmount?: number, 
-    negotiationNotes?: string,
-    followUpReason?: string
+    negotiationNotes?: string
   ) => {
     if (!leadId || typeof leadId !== 'string' || leadId.trim() === '') {
       throw new Error('lead_id is missing or invalid.');
@@ -2963,7 +2750,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     updatesPayload.follow_up_notes = callNotes || null;
     updatesPayload.next_follow_up_date = nextFollowUpDate || null;
-    updatesPayload.follow_up_reason = followUpReason || null;
     
     if (normalizedStatus === 'Lost Lead') {
       updatesPayload["Lost_Reason"] = callNotes; // Lost Reason is usually passed via callNotes or negotiationNotes
@@ -2978,7 +2764,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (normalizedStatus !== previousStage) {
       const linkedOrder = orders.find(o => o.lead_id === leadId);
-      const orderId = (updatesPayload as any).order_id || linkedOrder?.order_id || (status === 'Order Confirmed' ? generateNextOrderId() : null);
+      const orderId = linkedOrder?.order_id || null;
 
       if (normalizedStatus === 'Order Confirmed' && !orderId) {
         throw new Error(`"order_id" is required for "Order Confirmed" status, but it was not found or is missing.`);
@@ -3017,9 +2803,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             current_status: normalizedStatus,
             budget: quotationAmount !== undefined ? quotationAmount : ld.budget,
             remarks: `${ld.remarks || ''}\n[Update ${timestamp.split('T')[0]}]: ${callNotes}. ${negotiationNotes ? 'Neg Notes: ' + negotiationNotes : ''}. Next follow-up: ${nextFollowUpDate}`,
-            follow_up_notes: callNotes || null,
-            next_follow_up_date: nextFollowUpDate || null,
-            follow_up_reason: followUpReason || null,
             updated_by: currentUserName,
             updated_at: timestamp
           };
@@ -3043,30 +2826,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     paymentMode?: string,
     notes?: string,
     reportingTime?: string,
-    transactionId?: string,
-    reportingDate?: string,
-    events?: any[]
+    transactionId?: string
   ) => {
     if (!leadId || typeof leadId !== 'string' || leadId.trim() === '') {
       throw new Error('lead_id is missing or invalid.');
-    }
-
-    // Authentication Validation as requested by user
-    if (!supabaseClient) throw new Error('Database client not initialized');
-    
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    
-    console.log(`[DEBUG AUTH] Confirm Order Workflow`);
-    console.log(`[DEBUG AUTH] Session Valid: ${!!session}`);
-    console.log(`[DEBUG AUTH] User ID: ${user?.id || 'NULL'}`);
-    console.log(`[DEBUG AUTH] auth.uid() equivalent: ${user?.id || 'NULL'}`);
-
-    if (!session || !user) {
-      console.error(`[AUTH ERROR] Attempted Confirm Order without valid session.`);
-      setCurrentUser(null);
-      localStorage.removeItem('erp_current_user');
-      throw new Error('Authentication session expired. Please log in again.');
     }
 
     const targetLead = leads.find((ld) => ld.lead_id === leadId);
@@ -3085,7 +2848,31 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const resolvedRemarks = `${targetLead.remarks || ''}\n[Booking Confirmed Update ${new Date().toISOString().split('T')[0]}]: ${notes || 'No extra notes'}. Payment Mode: ${paymentMode || 'N/A'}`;
     const timestamp = new Date().toISOString();
 
-    // Step 2: Generate or Find order_id BEFORE updating lead status to satisfy history validation
+    const resLead = await pushUpdate('leads', 'lead_id', leadId, { 
+      status: 'Order Confirmed', 
+      current_status: 'Order Confirmed', 
+      booking_status: 'Confirmed',
+      booking_date: new Date().toISOString().split('T')[0],
+      booking_time: new Date().toLocaleTimeString(),
+      package_name: packageName,
+      final_package_amount: quotationAmount,
+      advance_collected: advanceReceived,
+      payment_mode: paymentMode || 'N/A',
+      transaction_id: transactionId || 'N/A',
+      contract_notes: notes || 'No extra notes',
+      event_date: eventDate || targetLead.event_date,
+      event_time: eventTime || targetLead.event_time,
+      reporting_time: reportingTime || targetLead.reporting_time,
+      remarks: resolvedRemarks,
+      updated_by: currentUserName, 
+      updated_at: timestamp
+    });
+
+    if (!resLead?.success) {
+      throw new Error(resLead?.error || "Failed to update lead during order confirmation.");
+    }
+
+    // Step 3: Check Supabase directly for existing order
     let masterOrderId = '';
     let existingOrder = augmentedOrders.find(o => o.lead_id === leadId);
     let orderExistsInDb = false;
@@ -3099,37 +2886,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     if (!masterOrderId) {
-      masterOrderId = existingOrder ? existingOrder.order_id : generateNextOrderId();
+      masterOrderId = existingOrder ? existingOrder.order_id : `ORD-${Math.floor(1012 + Math.random() * 800)}`;
     }
 
     if (!masterOrderId) {
       throw new Error(`"order_id" could not be generated or found for Order Confirmation.`);
     }
-
-    await updateLead(leadId, { 
-      status: 'Order Confirmed', 
-      current_status: 'Order Confirmed', 
-      order_id: masterOrderId,
-      booking_status: 'Confirmed',
-      booking_date: new Date().toISOString().split('T')[0],
-      booking_time: new Date().toLocaleTimeString(),
-      package_name: packageName,
-      final_package_amount: quotationAmount,
-      advance_collected: advanceReceived,
-      payment_mode: paymentMode || 'N/A',
-      transaction_id: transactionId || 'N/A',
-      contract_notes: notes || 'No extra notes',
-      event_date: eventDate || targetLead.event_date,
-      event_time: eventTime || targetLead.event_time,
-      reporting_time: reportingTime || targetLead.reporting_time,
-      Reporting_date: reportingDate || targetLead.Reporting_date,
-      events: events || targetLead.events,
-      remarks: resolvedRemarks,
-      updated_by: currentUserName, 
-      updated_at: timestamp
-    } as any);
-
-    // Step 3: Handle Orders table
+    
     if (orderExistsInDb) {
       const rOrd = await pushUpdate('orders', 'order_id', masterOrderId, {
         customer_name: targetLead.customer_name,
@@ -3140,7 +2903,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         event_date: eventDate || targetLead.event_date,
         event_time: eventTime || targetLead.event_time,
         reporting_time: reportingTime || targetLead.reporting_time || '',
-        Reporting_date: reportingDate || targetLead.Reporting_date || '',
         event_location: targetLead.event_location,
         package_name: packageName,
         quotation_amount: quotationAmount,
@@ -3161,10 +2923,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         notes_special_customizations: targetLead.notes_special_customizations || '',
         quotation_discount: targetLead.quotation_discount || 0,
         additional_services_cost: targetLead.additional_services_cost || 0,
-        Final_Package_Amount: quotationAmount,
-        Advance_Collected: advanceReceived,
-        Transaction_ID: transactionId || '',
-        Payment_Mode: paymentMode || '',
       });
       if (!rOrd?.success) throw new Error("Failed to update existing order: " + rOrd?.error);
     } else {
@@ -3180,7 +2938,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         event_date: eventDate || targetLead.event_date,
         event_time: eventTime || targetLead.event_time,
         reporting_time: reportingTime || '',
-        Reporting_date: reportingDate || '',
         event_location: targetLead.event_location,
         package_name: packageName,
         quotation_amount: quotationAmount,
@@ -3204,10 +2961,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         notes_special_customizations: targetLead.notes_special_customizations || '',
         quotation_discount: targetLead.quotation_discount || 0,
         additional_services_cost: targetLead.additional_services_cost || 0,
-        Final_Package_Amount: quotationAmount,
-        Advance_Collected: advanceReceived,
-        Transaction_ID: transactionId || '',
-        Payment_Mode: paymentMode || '',
       };
       const rOrd = await pushInsert('orders', newOrder);
       if (!rOrd?.success) throw new Error("Failed to insert Order: " + rOrd?.error);
@@ -3218,9 +2971,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let existingPaymentId = payments.find(p => p.order_id === masterOrderId)?.payment_id;
 
     if (supabaseClient) {
-      const dbSelectRes = await pushSelect('payments', 'order_id', masterOrderId);
-      if (dbSelectRes.success && dbSelectRes.data && dbSelectRes.data.length > 0) {
-        const dbPayment = dbSelectRes.data[0];
+      const { data: dbPayment } = await supabaseClient.from('payments').select('payment_id').eq('order_id', masterOrderId).maybeSingle();
+      if (dbPayment) {
         existingPaymentId = dbPayment.payment_id;
         paymentExistsInDb = true;
       }
@@ -3235,10 +2987,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         advance_received: advanceReceived,
         balance_due: quotationAmount - advanceReceived,
         final_payment_received: 0,
-        payment_proof_url: null as any,
+        payment_proof_url: undefined,
         payment_status: advanceReceived >= quotationAmount ? 'Fully Paid' : (advanceReceived > 0 ? 'Partially Paid' : 'Pending'),
-        transaction_id: transactionId || null as any,
-        payment_date: new Date().toISOString().split('T')[0] as any,
+        transaction_id: transactionId || undefined,
       };
       const rPay = await pushInsert('payments', newPayment);
       if (!rPay?.success) throw new Error("Failed to insert Payment: " + rPay?.error);
@@ -3248,8 +2999,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         advance_received: advanceReceived,
         balance_due: quotationAmount - advanceReceived,
         payment_status: advanceReceived >= quotationAmount ? 'Fully Paid' : (advanceReceived > 0 ? 'Partially Paid' : 'Pending'),
-        transaction_id: transactionId || null as any,
-        payment_date: new Date().toISOString().split('T')[0] as any,
+        transaction_id: transactionId || undefined,
       });
       if (!rPay?.success) throw new Error("Failed to update Payment: " + rPay?.error);
     }
@@ -3259,9 +3009,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let existingOpId = operations.find(o => o.order_id === masterOrderId)?.operation_id;
 
     if (supabaseClient) {
-      const dbSelectRes = await pushSelect('operations', 'order_id', masterOrderId);
-      if (dbSelectRes.success && dbSelectRes.data && dbSelectRes.data.length > 0) {
-        const dbOp = dbSelectRes.data[0];
+      const { data: dbOp } = await supabaseClient.from('operations').select('operation_id').eq('order_id', masterOrderId).maybeSingle();
+      if (dbOp) {
         existingOpId = dbOp.operation_id;
         opExistsInDb = true;
       }
@@ -5595,7 +5344,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           event_end_time: ev.event_end_time || '',
           event_location: ev.event_location || '',
           google_maps_link: ev.google_maps_link || '',
-          reporting_time: ev.reporting_time || '',
           guest_pax: String(ev.guest_pax) !== '' && ev.guest_pax != null ? Number(ev.guest_pax) : null,
           staff_pax: String(ev.staff_pax) !== '' && ev.staff_pax != null ? Number(ev.staff_pax) : null,
           assigned_staff_names: ev.assigned_staff_names || '',
@@ -5628,16 +5376,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
 
-    const newStatus = finalUpdates.current_status || finalUpdates.status;
-    const linkedOrder = (orders || []).find(o => o.lead_id === leadId);
-    if (newStatus && (newStatus !== oldStatus || (newStatus === 'Order Confirmed' && !linkedOrder))) {
-      const orderId = (updates as any).order_id || (finalUpdates as any).order_id || (updates as any).orderId || (finalUpdates as any).orderId || linkedOrder?.order_id || null;
+    const newStatus = finalUpdates.current_status;
+    if (newStatus && newStatus !== oldStatus) {
+      const linkedOrder = orders.find(o => o.lead_id === leadId);
+      const orderId = linkedOrder?.order_id || null;
 
       if (newStatus === 'Order Confirmed' && !orderId) {
-        console.warn(`[WARN] order_id is missing for "Order Confirmed" status. Attempting to generate one.`);
-        const tempOrderId = generateNextOrderId();
-        // We will use this temp one for history, but ideally it should be passed.
-        // If confirmOrder is calling this, it should have passed it.
+        throw new Error(`"order_id" is required for "Order Confirmed" status, but it was not found or is missing.`);
       }
       
       const roleParts = (currentUserName && currentUserName.includes('|')) 
@@ -5648,7 +5393,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       const newHist = {
         lead_id: leadId,
-        order_id: orderId || generateNextOrderId(),
+        order_id: orderId,
         old_status: oldStatus,
         new_status: newStatus,
         changed_by: changedBy,

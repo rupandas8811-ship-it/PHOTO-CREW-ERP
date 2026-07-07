@@ -26,14 +26,6 @@ import { formatINR, formatTime12Hour } from '../utils';
 import { EVENT_TYPES } from '../types';
 
 interface UnifiedCalendarProps {
-  ownerFilters?: {
-    search: string;
-    status: string;
-    startDate: string;
-    endDate: string;
-    dateRange: string;
-  };
-
   role: 'sales' | 'operations' | 'production' | 'owner' | 'worker';
 }
 
@@ -91,7 +83,7 @@ const parseLocalDate = (dateStr: string | Date | null | undefined): Date => {
   return new Date(dateStr);
 };
 
-export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, ownerFilters }) => {
+export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   const { 
     leads, 
     orders, 
@@ -438,62 +430,60 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, ownerFil
     return events;
   }, [leads, orders, operations, production, rawFootage, notifications, role]);
 
-  // Filters Event list by role first (Relaxed to show all events as requested)
+  // Filters Event list by role first
   const roleFilteredEvents = useMemo(() => {
-    return allEvents;
-  }, [allEvents]);
-
-  // Inline filter by search, type, and classes
-  
-  const filteredEvents = useMemo(() => {
-    let result = roleFilteredEvents.filter(ev => {
-      // Internal filters
-      if (searchQuery && !ev.customerName.toLowerCase().includes(searchQuery.toLowerCase()) 
-          && !ev.eventType.toLowerCase().includes(searchQuery.toLowerCase())) {
+    return allEvents.filter(ev => {
+      if (role === 'sales') {
+        // Sales focuses on Scheduled events
+        if (ev.sourceType === 'order' && ev.currentStage === 'Event Scheduled') return true;
         return false;
       }
-      if (statusFilter !== 'All' && ev.eventClass !== statusFilter) {
-        return false;
+      if (role === 'operations') {
+        // Operations calendar strictly shows ONLY events with 'Event Scheduled' status
+        return ev.sourceType === 'order' && ev.currentStage === 'Event Scheduled';
       }
-      if (eventTypeFilter !== 'All' && ev.eventType !== eventTypeFilter) {
-        return false;
+      if (role === 'production') {
+        // Production focuses strictly on Target Delivery Date events
+        return ev.sourceType === 'production' && (ev.eventClass === 'Delivery Due' || ev.eventClass === 'Overdue');
+      }
+      if (role === 'worker') {
+        // Worker only sees order and operations
+        return ev.sourceType === 'order' && ev.currentStage === 'Event Scheduled';
+      }
+      if (role === 'owner') {
+        // Owner only sees Scheduled Events
+        return ev.sourceType === 'order' && ev.currentStage === 'Event Scheduled';
       }
       return true;
     });
+  }, [allEvents, role]);
 
-    if (role === 'owner' && ownerFilters) {
-      result = result.filter(ev => {
-        // 1. Date
-        if (ownerFilters.dateRange !== 'All Time') {
-          if (ev.date < ownerFilters.startDate || ev.date > ownerFilters.endDate) return false;
-        }
-        // 2. Search
-        if (ownerFilters.search) {
-          const s = ownerFilters.search.toLowerCase();
-          const matchCust = ev.customerName.toLowerCase().includes(s);
-          const matchEvent = ev.eventType.toLowerCase().includes(s);
-          const matchId = ev.orderId?.toLowerCase().includes(s) || ev.id.toLowerCase().includes(s);
-          if (!matchCust && !matchEvent && !matchId) return false;
-        }
-        // 3. Status filter
-        if (ownerFilters.status !== 'All') {
-          const isCompleted = ['Event Completed', 'Raw Footage Received', 'Delivered', 'Paid', 'Closed'].includes(ev.currentStage);
-          const isCancelled = ev.currentStage === 'Cancelled' || ev.currentStage === 'Lost';
-          const isUpcoming = ev.date > todayStr;
-          const isOngoing = ev.date === todayStr;
-          
-          if (ownerFilters.status === 'Upcoming' && !isUpcoming) return false;
-          if (ownerFilters.status === 'Ongoing' && !isOngoing) return false;
-          if (ownerFilters.status === 'Completed' && !isCompleted) return false;
-          if (ownerFilters.status === 'Cancelled' && !isCancelled) return false;
-        }
-        return true;
-      });
-    }
+  // Inline filter by search, type, and classes
+  const filteredEvents = useMemo(() => {
+    return roleFilteredEvents.filter(ev => {
+      // Search text query
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const matchesName = ev.customerName.toLowerCase().includes(query);
+        const matchesLoc = ev.eventLocation.toLowerCase().includes(query);
+        const matchesType = ev.eventType.toLowerCase().includes(query);
+        const matchesNotes = ev.notes?.toLowerCase().includes(query) || false;
+        if (!matchesName && !matchesLoc && !matchesType && !matchesNotes) return false;
+      }
 
-    return result;
-  }, [roleFilteredEvents, searchQuery, statusFilter, eventTypeFilter, ownerFilters, todayStr]);
+      // Event Status (Class) filter
+      if (statusFilter !== 'All') {
+        if (ev.eventClass !== statusFilter) return false;
+      }
 
+      // Event Type filter
+      if (eventTypeFilter !== 'All') {
+        if (ev.eventType !== eventTypeFilter) return false;
+      }
+
+      return true;
+    });
+  }, [roleFilteredEvents, searchQuery, statusFilter, eventTypeFilter]);
 
   // Unique Event Type tags for filtering dropdown
   const uniqueEventTypes = useMemo(() => {
@@ -1357,13 +1347,6 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, ownerFil
             <div className="animate-fade-in space-y-4">
               <div className="bg-zinc-950/20 border border-zinc-900 p-4 rounded-2xl flex justify-between items-center">
                 <div>
-                  <button
-                    onClick={() => setCalendarView('month')}
-                    className="mb-2 flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-xs font-mono text-zinc-300 transition-all cursor-pointer"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                    Back
-                  </button>
                   <span className="text-[10px] font-mono uppercase text-zinc-450">Day Perspective</span>
                   <h3 className="text-sm font-bold text-white mt-0.5">
                     Viewing events for: <span className="text-yellow-500 font-mono">{selectedDate || todayStr}</span>
@@ -1710,13 +1693,6 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, ownerFil
             {/* Modal Heading Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-4">
               <div className="space-y-1">
-                <button
-                  onClick={() => setSelectedEvent(null)}
-                  className="mb-3 flex items-center gap-1.5 px-3 py-1.5 bg-zinc-950 hover:bg-zinc-850 border border-zinc-800 rounded-xl text-xs font-mono text-zinc-300 transition-all cursor-pointer"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  Back
-                </button>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] font-mono uppercase px-2.5 py-0.5 bg-zinc-950 text-yellow-500 rounded border border-zinc-800">
                     {selectedEvent.eventType}

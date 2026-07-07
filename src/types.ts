@@ -201,7 +201,6 @@ export interface Lead {
   lead_value?: number;
   follow_up_notes?: string;
   next_follow_up_date?: string;
-  follow_up_reason?: string;
   Lost_Reason?: string;
   Lost_Notes?: string;
   lead_score?: number;
@@ -211,15 +210,6 @@ export interface Lead {
   sales_staff_mobile?: string;
   guest_pax?: number;
   staff_pax?: number;
-  booking_date?: string;
-  booking_time?: string;
-  package_name?: string;
-  final_package_amount?: number;
-  advance_collected?: number;
-  payment_mode?: string;
-  transaction_id?: string;
-  contract_notes?: string;
-  order_id?: string;
 }
 
 export interface LeadPackage {
@@ -284,15 +274,10 @@ export interface Order {
   lead_value?: number;
   follow_up_notes?: string;
   next_follow_up_date?: string;
-  follow_up_reason?: string;
   Lost_Reason?: string;
   Lost_Notes?: string;
   lead_score?: number;
   booking_status?: string;
-  Final_Package_Amount?: number;
-  Advance_Collected?: number;
-  Transaction_ID?: string;
-  Payment_Mode?: string;
 }
 
 export interface Customer {

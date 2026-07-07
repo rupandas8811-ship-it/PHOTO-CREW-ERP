@@ -73,8 +73,8 @@ export const PendingPaymentsReport: React.FC = () => {
       const order = orders.find(o => o.lead_id === lead.lead_id);
       const payment = order ? payments.find(p => p.order_id === order.order_id) : null;
       
-      const finalPackageAmount = order ? (order.Final_Package_Amount !== undefined ? order.Final_Package_Amount : order.quotation_amount) : lead.budget;
-      const advanceReceived = order ? (order.Advance_Collected !== undefined ? order.Advance_Collected : order.advance_received) : 0;
+      const finalPackageAmount = order ? order.quotation_amount : lead.budget;
+      const advanceReceived = order ? order.advance_received : 0;
       
       // Use payments table for balance if available, otherwise fallback to order balance
       const remainingAmount = payment ? payment.balance_due : (order ? order.balance_amount : finalPackageAmount - advanceReceived);

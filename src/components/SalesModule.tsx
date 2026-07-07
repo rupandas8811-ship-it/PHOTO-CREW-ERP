@@ -262,7 +262,7 @@ const generateQuotationPDF = (
       incKeys.forEach((key) => {
         const eventId = key.substring(pkgId.length + 1);
         const eventObj = (lead.events || []).find((e: any) => e.id === eventId);
-        const eventName = eventObj ? (eventObj.event_name || eventObj.event_type || 'Event') : 'Event';
+        const eventName = eventObj ? eventObj.event_name : 'Event';
         if (!eventInclusionsMap[eventName]) eventInclusionsMap[eventName] = [];
         eventInclusionsMap[eventName].push(...(editableInclusions![key] || []).filter(Boolean));
       });
@@ -275,7 +275,7 @@ const generateQuotationPDF = (
       delKeys.forEach((key) => {
         const eventId = key.substring(pkgId.length + 1);
         const eventObj = (lead.events || []).find((e: any) => e.id === eventId);
-        const eventName = eventObj ? (eventObj.event_name || eventObj.event_type || 'Event') : 'Event';
+        const eventName = eventObj ? eventObj.event_name : 'Event';
         if (!eventDeliverablesMap[eventName]) eventDeliverablesMap[eventName] = { pkgName, items: [] };
         eventDeliverablesMap[eventName].items.push(...(editableDeliverables![key] || []).filter(Boolean));
       });
@@ -738,14 +738,11 @@ const generateQuotationPDF = (
     if (currentY + 4 > 250) {
       currentY = createNewPage();
     }
-    const titleLines = title.split('\n');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9.5);
     doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-    titleLines.forEach((line, lineIdx) => {
-      doc.text(line, 15, currentY + (lineIdx * 4.5));
-    });
-    currentY += 4.5 * titleLines.length;
+    doc.text(title, 15, currentY);
+    currentY += 4;
 
     if (currentY + 7.5 > 250) {
       currentY = createNewPage();
@@ -756,7 +753,7 @@ const generateQuotationPDF = (
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
     doc.setTextColor(255, 255, 255);
-    doc.text('TEAM MEMBER', 19, currentY + 4.8);
+    doc.text('SERVICE / DELIVERABLES', 19, currentY + 4.8);
 
     currentY += 7.5;
 
@@ -767,7 +764,7 @@ const generateQuotationPDF = (
       doc.setFont('helvetica', 'italic');
       doc.setFontSize(7.5);
       doc.setTextColor(148, 163, 184);
-      doc.text('No team members assigned.', 19, currentY + 5);
+      doc.text('No specified deliverables or customized service items.', 19, currentY + 5);
       doc.line(15, currentY, 15, currentY + 8);
       doc.line(195, currentY, 195, currentY + 8);
       doc.line(15, currentY + 8, 195, currentY + 8);
@@ -789,7 +786,7 @@ const generateQuotationPDF = (
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(7.5);
         doc.setTextColor(255, 255, 255);
-        doc.text('TEAM MEMBER (CONTINUED)', 19, currentY + 4.8);
+        doc.text('SERVICE / DELIVERABLES (CONTINUED)', 19, currentY + 4.8);
         currentY += 7.5;
       }
 
@@ -916,12 +913,8 @@ const generateQuotationPDF = (
     // 2. Team Members Included section
   const drawTeamMembers = (eventName: string | null, members: string[]) => {
     if (members.length === 0) return;
-    const title = eventName ? `${eventName}\nTEAM MEMBERS INCLUDED` : 'TEAM MEMBERS INCLUDED';
-    const mapped = members.map((m, i) => {
-      let staffName = m.includes('|') ? m.split('|')[0] : m;
-      staffName = staffName.replace(/[\-\s]+[\d\+\s]+$/, '').trim();
-      return { id: String(i), name: staffName, qty: 1, price: 0 };
-    });
+    const title = eventName ? `${eventName} - TEAM MEMBERS INCLUDED` : 'TEAM MEMBERS INCLUDED';
+    const mapped = members.map((m, i) => ({ id: String(i), name: m, qty: 1, price: 0 }));
     drawTable(title, mapped);
   };
 
@@ -932,6 +925,11 @@ const generateQuotationPDF = (
     });
   } else if (generalInclusions.length > 0) {
     drawTeamMembers(null, generalInclusions);
+  }
+
+  // 3. Additional services table
+  if (additionalServices.length > 0) {
+    drawTable('ADDITIONAL SPECIFICATIONS & SERVICE ADD-ONS', additionalServices);
   }
 
   // 4. Deliverables table
@@ -1062,61 +1060,45 @@ const generateQuotationPDF = (
   doc.text('PRICING SUMMARY & ESTIMATES', 15, currentY);
   currentY += 4.5;
 
-  const pricingRowH = cfg.pricingCardHeight / 4;
-  const baseSumVal = baseServices.reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
-  // Instead of additionalServices calculation, we use additionalCharges which corresponds to quoteAdditional
-  const addlSumVal = additionalCharges || 0;
-  
-  const hasAddl = addlSumVal > 0;
-  const hasDiscount = discountValue > 0;
-  let rows = 2; // base cost + final amount
-  if (hasAddl) rows++;
-  if (hasDiscount) rows++;
-  
-  const dynamicCardHeight = pricingRowH * rows;
-
   doc.setFillColor(248, 250, 252);
-  doc.rect(15, currentY, 180, dynamicCardHeight, 'F');
+  doc.rect(15, currentY, 180, cfg.pricingCardHeight, 'F');
   doc.setDrawColor(226, 232, 240);
   doc.setLineWidth(0.2);
-  doc.rect(15, currentY, 180, dynamicCardHeight, 'D');
+  doc.rect(15, currentY, 180, cfg.pricingCardHeight, 'D');
 
-  for (let i = 1; i < rows; i++) {
-    doc.line(15, currentY + (pricingRowH * i), 195, currentY + (pricingRowH * i));
-  }
-  doc.line(115, currentY, 115, currentY + dynamicCardHeight);
+  const pricingRowH = cfg.pricingCardHeight / 4;
+  doc.line(15, currentY + pricingRowH, 195, currentY + pricingRowH);
+  doc.line(15, currentY + (pricingRowH * 2), 195, currentY + (pricingRowH * 2));
+  doc.line(15, currentY + (pricingRowH * 3), 195, currentY + (pricingRowH * 3));
+  doc.line(115, currentY, 115, currentY + cfg.pricingCardHeight);
 
+  const baseSumVal = baseServices.reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
+  const addlSumVal = additionalServices.reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
   const finalAmountSum = Math.max(0, baseSumVal + addlSumVal - discountValue);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(71, 85, 105);
   
-  let rowIdx = 1;
-  doc.text('Package Base Cost', 19, currentY + (pricingRowH * rowIdx) - 2);
-  doc.text(baseSumVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * rowIdx) - 2, { align: 'right' });
-  rowIdx++;
-  
-  if (hasAddl) {
-    doc.text('Additional Services & Add-ons', 19, currentY + (pricingRowH * rowIdx) - 2);
-    doc.text(addlSumVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * rowIdx) - 2, { align: 'right' });
-    rowIdx++;
-  }
-  
-  if (hasDiscount) {
-    doc.text('Quotation Discount (Applied)', 19, currentY + (pricingRowH * rowIdx) - 2);
-    doc.text('- ' + discountValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * rowIdx) - 2, { align: 'right' });
-    rowIdx++;
-  }
+  doc.text('Package Base Cost', 19, currentY + pricingRowH - 2);
+  doc.text('Additional Services & Add-ons', 19, currentY + (pricingRowH * 2) - 2);
+  doc.text('Quotation Discount (Applied)', 19, currentY + (pricingRowH * 3) - 2);
   
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(15, 23, 42);
-  doc.text('FINAL ESTIMATED COMMERCIAL AMOUNT', 19, currentY + (pricingRowH * rowIdx) - 2);
-  
-  doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
-  doc.text(finalAmountSum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * rowIdx) - 2, { align: 'right' });
+  doc.text('FINAL ESTIMATED COMMERCIAL AMOUNT', 19, currentY + (pricingRowH * 4) - 2);
 
-  currentY += dynamicCardHeight + cfg.secSpacing;
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(51, 65, 85);
+  doc.text(baseSumVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + pricingRowH - 2, { align: 'right' });
+  doc.text(addlSumVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 2) - 2, { align: 'right' });
+  doc.text('- ' + discountValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 3) - 2, { align: 'right' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
+  doc.text(finalAmountSum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 4) - 2, { align: 'right' });
+
+  currentY += cfg.pricingCardHeight + cfg.secSpacing;
 
   // 6. PAYMENT DETAILS CARD
   const paymentCardTotalH = 4.5 + cfg.paymentCardHeight;
@@ -1705,55 +1687,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     } else if (msg.includes("column \"new_status\"") || msg.includes("column lead_status_history.new_status")) {
       reason = "Missing column \"new_status\" in table \"lead_status_history\".";
       suggestedFix = "Add the missing 'new_status' column to 'lead_status_history' table using: \n\nALTER TABLE lead_status_history ADD COLUMN new_status TEXT;";
-    } else if (msg.includes("operations") && (msg.includes("row-level security") || msg.includes("violates row-level security") || msg.includes("rls"))) {
-      reason = "Insert permission denied by Row-Level Security (RLS) on 'operations' table.";
-      suggestedFix = `Detailed Database Report:
-• Table Name: operations
-• Failed Operation: INSERT
-• Missing Policy: Enable INSERT policy for authenticated users
-• Authenticated Role: authenticated
-• Supabase Error: ${errorMsg}
-
-Suggested Fix:
-Please execute the following SQL statement in your Supabase SQL Editor to enable authenticated users to insert operations:
-
-ALTER TABLE operations ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Enable INSERT for authenticated users on operations" 
-ON operations FOR INSERT 
-TO authenticated 
-WITH CHECK (true);
-
-CREATE POLICY "Enable UPDATE for authenticated users on operations" 
-ON operations FOR UPDATE 
-TO authenticated 
-USING (true);`;
-    } else if (msg.includes("payments") && (msg.includes("row-level security") || msg.includes("violates row-level security") || msg.includes("rls"))) {
-      reason = "Insert/Update permission denied by Row-Level Security (RLS) on 'payments' table.";
-      suggestedFix = `Detailed Database Report:
-• Table Name: payments
-• Failed Operation: INSERT/UPDATE
-• Missing Policy: Enable INSERT/UPDATE policies for authenticated users
-• Authenticated Role: authenticated
-• Supabase Error: ${errorMsg}
-
-Suggested Fix:
-Please execute the following SQL statements in your Supabase SQL Editor to enable authenticated users to manage payments:
-
-ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Enable INSERT for authenticated users on payments" 
-ON payments FOR INSERT 
-TO authenticated 
-WITH CHECK (true);
-
-CREATE POLICY "Enable UPDATE for authenticated users on payments" 
-ON payments FOR UPDATE 
-TO authenticated 
-USING (true);`;
     } else if (msg.includes("rls policy denied") || msg.includes("row-level security") || msg.includes("violates row-level security")) {
-      reason = `RLS policy denied UPDATE/INSERT on table or database records.`;
-      suggestedFix = "Update the RLS policy to allow authenticated users to perform this action.";
+      reason = `RLS policy denied UPDATE on table "leads".`;
+      suggestedFix = "Update the RLS policy to allow authenticated users to update lead records.";
     } else if (msg.includes("permission denied") || msg.includes("insufficient privilege")) {
       reason = `Permission denied by database. Details: ${errorMsg}`;
       suggestedFix = "Ensure the API client role has correct permissions (SELECT/INSERT/UPDATE) granted on the table.";
@@ -1772,9 +1708,6 @@ USING (true);`;
     } else if (msg.includes("network error") || msg.includes("failed to fetch") || msg.includes("database connection failed")) {
       reason = `Network error or failed to reach the database connection.`;
       suggestedFix = "Please check your internet connection or verify if your server/Supabase instances are active.";
-    } else if (msg.includes("order_id") && (msg.includes("required") || msg.includes("missing"))) {
-      reason = `"order_id" is required for "Order Confirmed" status, but it was not found.`;
-      suggestedFix = "The system failed to generate or retrieve an order ID. Please ensure the lead transition logic correctly handles order creation.";
     } else if (msg.includes("required field") || msg.includes("null value in column")) {
       reason = `Required database field is missing. Details: ${errorMsg}`;
       suggestedFix = "Ensure all required fields are filled and not null before submitting.";
@@ -1793,24 +1726,15 @@ USING (true);`;
   };
 
 
-  const [statusError, setStatusError] = useState<{ 
-    title: string; 
-    reason: string; 
-    suggestedFix: string;
-    failedFunction?: string;
-    failedTable?: string;
-    missingField?: string;
-    supabaseError?: string;
-  } | null>(null);
+  const [statusError, setStatusError] = useState<{ title: string; reason: string; suggestedFix: string } | null>(null);
   
   // Interception Popup for Reporting Date & Time
   const [showReportingPopup, setShowReportingPopup] = useState(false);
   const [reportingPopupData, setReportingPopupData] = useState<{ eventId: string; eventName: string; date: string; time: string; }[]>([]);
-  const [bookingTransactionId, setBookingTransactionId] = useState('');
-  const [pendingConfirmAction, setPendingConfirmAction] = useState<((reportingData?: any) => Promise<void>) | null>(null);
+  const [pendingConfirmAction, setPendingConfirmAction] = useState<(() => Promise<void>) | null>(null);
   const [isReportingSaving, setIsReportingSaving] = useState(false);
 
-  const executeWithReportingPopup = (action: (reportingData?: any) => Promise<void>) => {
+  const executeWithReportingPopup = (action: () => Promise<void>) => {
     const targetLeadId = selectedLead?.lead_id || createdLeadId;
     const targetLead = leads.find(l => l.lead_id === targetLeadId);
     
@@ -1832,7 +1756,6 @@ USING (true);`;
     }
     
     setPendingConfirmAction(() => action);
-    setBookingTransactionId('');
     setShowReportingPopup(true);
   };
 
@@ -1844,23 +1767,8 @@ USING (true);`;
 
   // Step 2 Follow-up and Lost Lead states
   const [showStep2Popup, setShowStep2Popup] = useState(false);
-  const [showStep3Popup, setShowStep3Popup] = useState(false);
   const [step2FollowUpDate, setStep2FollowUpDate] = useState('');
-  const [step2FollowUpReason, setStep2FollowUpReason] = useState('Customer Requested Time');
   const [step2FollowUpNotes, setStep2FollowUpNotes] = useState('');
-
-  // Sync follow-up states when selectedLead changes
-  React.useEffect(() => {
-    if (selectedLead) {
-      setStep2FollowUpDate(selectedLead.next_follow_up_date || '');
-      setStep2FollowUpReason(selectedLead.follow_up_reason || 'Customer Requested Time');
-      setStep2FollowUpNotes(selectedLead.follow_up_notes || '');
-    } else if (activeTab !== 'create') {
-      setStep2FollowUpDate('');
-      setStep2FollowUpReason('Customer Requested Time');
-      setStep2FollowUpNotes('');
-    }
-  }, [selectedLead, activeTab]);
 
   const [showLostModal, setShowLostModal] = useState(false);
   const [lostReason, setLostReason] = useState('Price too high');
@@ -1872,35 +1780,19 @@ USING (true);`;
     source?: string;
     failedFunction?: string;
     database?: string;
-    tableName?: string;
-    columnName?: string;
-    failedField?: string;
     leadId?: string;
     suggestedFix?: string;
     stack?: string;
   } | null>(null);
 
-  const showErrorHelper = (
-    title: string, 
-    reason: string, 
-    failedFunction: string, 
-    leadId: string, 
-    suggestedFix: string, 
-    err?: any,
-    tableName?: string,
-    columnName?: string,
-    failedField?: string
-  ) => {
+  const showErrorHelper = (title: string, reason: string, failedFunction: string, leadId: string, suggestedFix: string, err?: any) => {
     console.error(`❌ ${title}\nReason: ${reason}\nFunction: ${failedFunction}\n`, err);
     setErrorDetails({
       title,
       reason: err?.message || reason,
       source: 'SalesModule.tsx',
       failedFunction,
-      database: 'Supabase',
-      tableName,
-      columnName,
-      failedField,
+      database: 'quotations / leads',
       leadId,
       suggestedFix,
       stack: err?.stack || ''
@@ -2254,15 +2146,13 @@ USING (true);`;
   const [leadDiscount, setLeadDiscount] = useState<number>(0);
   const [isPkgDropdownOpen, setIsPkgDropdownOpen] = useState(false);
   const [pkgSearchQuery, setPkgSearchQuery] = useState('');
-  const [quoteDiscount, setQuoteDiscount] = useState<number | ''>('');
-  const [quoteAdditional, setQuoteAdditional] = useState<number | ''>('');
 
   // Auto calculate and sync with createForm.budget
   const selectedPkgs = PACKAGES_LIST.flatMap(cat => cat.items).filter(item => selectedPkgIds.includes(item.id));
   
   // Package Selection Price is editable, so subtotal sums the edited prices
   const subtotal = selectedPkgs.reduce((sum, item) => sum + (pkgPrices[item.id] !== undefined ? pkgPrices[item.id] : item.cost), 0);
-  const finalTotal = Math.max(0, subtotal + Number(quoteAdditional || 0) - Number(quoteDiscount || 0));
+  const finalTotal = Math.max(0, subtotal - leadDiscount);
 
   // Sync package configurations on changes
   React.useEffect(() => {
@@ -2355,21 +2245,6 @@ USING (true);`;
     transaction_id: '',
   });
 
-  // Synchronize confirmForm quotation_amount automatically from current Lead Final_Quotation_Amount
-  React.useEffect(() => {
-    if (showConfirmModal && selectedLead) {
-      const finalQuotationAmount = Number(selectedLead.Final_Quotation_Amount || selectedLead.package_price || selectedLead.budget || 0);
-      setConfirmForm(prev => ({
-        ...prev,
-        quotation_amount: finalQuotationAmount,
-        package_name: prev.package_name || selectedLead.Select_Package_Option || (selectedLead.event_type === 'Other' ? (selectedLead.custom_event_name || 'Premium Package') : `${selectedLead.event_type} Premium Package`),
-        event_date: selectedLead.event_date || prev.event_date || '',
-        event_time: selectedLead.event_time || prev.event_time || '12:00',
-        notes: selectedLead.remarks || prev.notes || '',
-      }));
-    }
-  }, [showConfirmModal, selectedLead]);
-
   // Quotation System State
   const [quotationTerms, setQuotationTerms] = useState(
     "1. Payments are non-refundable.\n" +
@@ -2382,12 +2257,16 @@ USING (true);`;
   );
   const [generatedPDFBlobUrl, setGeneratedPDFBlobUrl] = useState<string>('');
   const [activeQuoteNum, setActiveQuoteNum] = useState<string>('');
+  const [showStep3Popup, setShowStep3Popup] = useState<boolean>(false);
+  const [step3Option, setStep3Option] = useState<'negotiation' | 'quotation_send'>('negotiation');
 
   // Customizable inclusions, deliverables, discount, and additional charges states
   const [editableInclusions, setEditableInclusions] = useState<Record<string, string[]>>({});
   const [editableDeliverables, setEditableDeliverables] = useState<Record<string, string[]>>({});
   const [salesStaffName, setSalesStaffName] = useState<string>('');
   const [salesStaffMobile, setSalesStaffMobile] = useState<string>('');
+  const [quoteDiscount, setQuoteDiscount] = useState<number | ''>('');
+  const [quoteAdditional, setQuoteAdditional] = useState<number | ''>('');
   
   const [quoteServices, setQuoteServices] = useState<{ id: string; name: string; qty: number; price: number; isAdditional?: boolean }[]>([]);
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
@@ -2715,57 +2594,47 @@ USING (true);`;
 
   // Auto-load package details into Step 3 if a package is selected but inclusions/deliverables are empty
   React.useEffect(() => {
-    const pkgIds = [
-      wizardLeadData.selected_package_id,
-      wizardLeadData.Select_Package_Option,
-      ...selectedPkgIds
-    ].filter(Boolean) as string[];
-
-    if (pkgIds.length > 0 && packages && packages.length > 0) {
-      setEditableInclusions(prev => {
-        let updated = { ...prev };
-        let changed = false;
-        pkgIds.forEach(pkgId => {
-          const pkg = packages.find((p) => p.package_id === pkgId);
-          if (pkg) {
-            const incList = parseTeamMembers(pkg.team_members);
-            const defaultInc = incList.length > 0 ? incList : ['1 Professional Photographer'];
-            if (!updated[pkgId] || updated[pkgId].length === 0) {
-              updated[pkgId] = defaultInc;
-              changed = true;
-            }
-            const currentEvents = (crmEvents && crmEvents.length > 0) ? crmEvents : createEvents;
-            if (currentEvents && currentEvents.length > 0) {
-              currentEvents.forEach(ev => {
-                const key = `${pkgId}_${ev.id}`;
-                if (!updated[key] || updated[key].length === 0) {
-                  updated[key] = [...defaultInc];
-                  changed = true;
-                }
-              });
-            }
+    const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
+    if (pkgId && packages && packages.length > 0) {
+      const pkg = packages.find((p) => p.package_id === pkgId);
+      if (pkg) {
+        setEditableInclusions(prev => {
+          let updated = { ...prev };
+          let changed = false;
+          const incList = parseTeamMembers(pkg.team_members);
+          const defaultInc = incList.length > 0 ? incList : ['1 Professional Photographer'];
+          
+          if (!prev[pkgId] || prev[pkgId].length === 0) {
+            updated[pkgId] = defaultInc;
+            changed = true;
           }
+          if (crmEvents && crmEvents.length > 0) {
+            crmEvents.forEach(ev => {
+              const key = `${pkgId}_${ev.id}`;
+              if (!prev[key] || prev[key].length === 0) {
+                updated[key] = [...defaultInc];
+                changed = true;
+              }
+            });
+          }
+          return changed ? updated : prev;
         });
-        return changed ? updated : prev;
-      });
 
-      setEditableDeliverables(prev => {
-        let updated = { ...prev };
-        let changed = false;
-        pkgIds.forEach(pkgId => {
-          const pkg = packages.find((p) => p.package_id === pkgId);
-          if (pkg && (!updated[pkgId] || updated[pkgId].length === 0)) {
+        setEditableDeliverables(prev => {
+          if (!prev[pkgId] || prev[pkgId].length === 0) {
             const delList = pkg.deliverables
               ? pkg.deliverables.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
               : [];
-            updated[pkgId] = delList.length > 0 ? delList : ['High Resolution Edited Photos'];
-            changed = true;
+            return {
+              ...prev,
+              [pkgId]: delList.length > 0 ? delList : ['High Resolution Edited Photos']
+            };
           }
+          return prev;
         });
-        return changed ? updated : prev;
-      });
+      }
     }
-  }, [wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, selectedPkgIds, packages, crmEvents, createEvents]);
+  }, [wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, packages]);
 
   // Auto-scroll and focus transitions for Sales Popups & Forms
   React.useEffect(() => {
@@ -2792,6 +2661,11 @@ USING (true);`;
     }
   }, [showConfirmModal]);
 
+  React.useEffect(() => {
+    if (showStep3Popup) {
+      triggerAutoScrollAndFocus('#modal_step3_proceed_status', 150);
+    }
+  }, [showStep3Popup]);
 
   React.useEffect(() => {
     // Completely removed automated quotation number generation as per instructions
@@ -2834,13 +2708,12 @@ USING (true);`;
     }
   };
 
-  const dynamicBaseSum = getSelectedPkgsInfo(!!selectedLead).reduce((sum, p) => sum + Number(p.package_cost || 0), 0);
+  const dynamicBaseSum = getSelectedPkgsInfo(crmWizardStep > 0).reduce((sum, p) => sum + Number(p.package_cost || 0), 0);
   const dynamicAdditionalSum = quoteServices
     .filter(s => s.isAdditional)
     .reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
-  const discountVal = Number(quoteDiscount || 0);
-  const finalPackagePrice = wizardLeadData.package_price !== undefined ? wizardLeadData.package_price : dynamicBaseSum;
-  const dynamicFinalAmt = Math.max(0, finalPackagePrice + Number(quoteAdditional || 0) - discountVal);
+    const discountVal = Number(quoteDiscount || 0);
+  const dynamicFinalAmt = Math.max(0, dynamicBaseSum + Number(quoteAdditional || 0) - discountVal);
 
   React.useEffect(() => {
     setWizardLeadData(prev => {
@@ -2852,11 +2725,9 @@ USING (true);`;
   }, [dynamicFinalAmt]);
 
   const getLeadInfoForQuote = (isEdit: boolean) => {
-    const currentEvents = isEdit ? crmEvents : createEvents;
     if (isEdit) {
       return {
         ...selectedLead,
-        events: currentEvents,
         customer_name: wizardLeadData.customer_name,
         mobile: wizardLeadData.mobile,
         email: wizardLeadData.email,
@@ -2881,7 +2752,6 @@ USING (true);`;
     } else {
       return {
         ...createForm,
-        events: currentEvents,
         lead_id: createdLeadId || 'DRAFT-LEAD',
         deliverables_description: selectedPkgs.map(p => pkgDeliverables[p.id] || p.deliverables || 'N/A').join('\n'),
         notes_special_customizations: selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
@@ -2938,7 +2808,7 @@ USING (true);`;
         return null;
       }
 
-      const basePkgSum = finalPackagePrice;
+      const basePkgSum = dynamicBaseSum;
       const finalAmt = dynamicFinalAmt;
 
       const leadId = leadObj.lead_id || 'DRAFT-LEAD';
@@ -3033,12 +2903,8 @@ USING (true);`;
           
           const payloadToSave = activePackagesList.map(lp => {
             const isPrimary = lp.package_id === wizardLeadData.selected_package_id;
-            const incKeys = Object.keys(editableInclusions).filter(k => k === lp.package_id || k.startsWith(lp.package_id + '_'));
-            let allInc: string[] = [];
-            incKeys.forEach(k => { allInc = allInc.concat(editableInclusions[k]); });
-            const incStr = Array.from(new Set(allInc.filter(Boolean))).join(', ');
-            
-            const delStr = (editableDeliverables[lp.package_id!] || []).filter(Boolean).join(', ');
+            const incStr = (editableInclusions[lp.package_id!] || []).join(', ');
+            const delStr = (editableDeliverables[lp.package_id!] || []).join(', ');
             return {
               package_id: lp.package_id!,
               package_name: lp.package_name || 'Selected Package',
@@ -3049,7 +2915,7 @@ USING (true);`;
               final_amount: isPrimary ? Number(wizardLeadData.package_cost) : lp.final_amount,
               deliverables_description: isPrimary ? wizardLeadData.deliverables : lp.deliverables_description,
               notes_special_customizations: isPrimary ? wizardLeadData.notes : lp.notes_special_customizations,
-              additional_services_cost: isPrimary ? Number(quoteAdditional || 0) : (lp.additional_services_cost || 0),
+              additional_services_cost: lp.additional_services_cost || 0,
               team_members: incStr || lp.team_members || '',
               deliverables: delStr || lp.deliverables || ''
             };
@@ -3180,7 +3046,7 @@ USING (true);`;
         editableInclusions,
         editableDeliverables,
         Number(quoteDiscount || 0),
-        Number(quoteAdditional || 0), // Extra charges included
+        0, // Extra charges removed
         quoteServices
       );
       
@@ -3209,7 +3075,7 @@ USING (true);`;
         editableInclusions,
         editableDeliverables,
         Number(quoteDiscount || 0),
-        Number(quoteAdditional || 0), // Extra charges included
+        0, // Extra charges removed
         quoteServices
       );
       
@@ -3246,7 +3112,7 @@ USING (true);`;
         editableInclusions,
         editableDeliverables,
         Number(quoteDiscount || 0),
-        Number(quoteAdditional || 0), // Extra charges included
+        0, // Extra charges removed
         quoteServices
       );
       
@@ -3270,10 +3136,10 @@ USING (true);`;
       const message = `Hello *${safeCustomerName}*,\n\n` +
         `Thank you for choosing *PhotoCrew Pictures*.\n\n` +
         `Please find your quotation details below:\n\n` +
-        `�� Event: ${safeEventType}\n` +
-        `�� Event Date: ${safeEventDate}\n` +
-        `�� Event Address: ${safeEventLocation}\n` +
-        `�� Final Amount: ₹${finalAmt.toLocaleString('en-IN')}\n\n` +
+        `🎉 Event: ${safeEventType}\n` +
+        `📅 Event Date: ${safeEventDate}\n` +
+        `📍 Event Address: ${safeEventLocation}\n` +
+        `💰 Final Amount: ₹${finalAmt.toLocaleString('en-IN')}\n\n` +
         `Thank you.\nPhotoCrew Pictures`;
 
       const cleanPhone = phoneStr.replace(/[^0-9]/g, '');
@@ -3309,7 +3175,7 @@ USING (true);`;
     try {
       const leadObj = getLeadInfoForQuote(isEdit);
       const activePkgs = getSelectedPkgsInfo(isEdit);
-      const basePkgSum = finalPackagePrice;
+      const basePkgSum = dynamicBaseSum;
       const finalAmt = dynamicFinalAmt;
       
       const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
@@ -3319,19 +3185,13 @@ USING (true);`;
       const safeEventType = String(leadObj.event_type || 'Event');
 
       const subject = `Photocrew Pictures - Custom Quotation Details`;
-      let body = `Dear ${safeCustomerName},\n\n` +
+      const body = `Dear ${safeCustomerName},\n\n` +
         `Thank you for reach out to us! We are pleased to provide the custom quotation details for your upcoming ${safeEventType} shoot.\n\n` +
         `Selected Package: ${pkgNames}\n` +
-        `Package Base Cost: Rs. ${basePkgSum.toLocaleString('en-IN')}\n`;
-      
-      if (quoteAdditional && quoteAdditional > 0) {
-        body += `Additional Services: Rs. ${(quoteAdditional).toLocaleString('en-IN')}\n`;
-      }
-      if (quoteDiscount && quoteDiscount > 0) {
-        body += `Discount Applied: Rs. ${(quoteDiscount).toLocaleString('en-IN')}\n`;
-      }
-      
-      body += `Final Quotation Amount: Rs. ${finalAmt.toLocaleString('en-IN')}\n\n` +
+        `Package Amount: Rs. ${basePkgSum.toLocaleString('en-IN')}\n` +
+        `Discount Applied: Rs. ${(quoteDiscount || 0).toLocaleString('en-IN')}\n` +
+        `Additional Services: Rs. ${(quoteAdditional || 0).toLocaleString('en-IN')}\n` +
+        `Final Quotation Amount: Rs. ${finalAmt.toLocaleString('en-IN')}\n\n` +
         `We will follow up shortly to discuss any specific adjustments you might need.\n\n` +
         `Warm regards,\n` +
         `The Photocrew Pictures Team\n` +
@@ -3345,7 +3205,7 @@ USING (true);`;
 
   const renderQuotationAndStep4Section = (isEdit: boolean) => {
     const activePkgs = getSelectedPkgsInfo(isEdit);
-    const basePkgSum = finalPackagePrice;
+    const basePkgSum = dynamicBaseSum;
     const finalAmt = dynamicFinalAmt;
     const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
 
@@ -3408,29 +3268,19 @@ USING (true);`;
         {/* Section 2: Quotation Details */}
         <div className="bg-slate-900/50 border border-slate-805/40 rounded-xl p-4.5 space-y-3.5 shadow-sm">
           <h4 className="text-xs font-bold text-amber-500 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-2">
-            <span>��</span> Section 2: Quotation Details
+            <span>📋</span> Section 2: Quotation Details
           </h4>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Package Amount (Editable Input representing Base Price) */}
+            {/* Package Amount (Read-only Display representing Base Price) */}
             <div>
               <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Package Price (₹)
+                Package Base Price (₹)
               </label>
-              <input
-                type="number"
-                value={wizardLeadData.package_price !== undefined ? wizardLeadData.package_price : basePkgSum}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setWizardLeadData(prev => ({
-                    ...prev,
-                    package_price: val,
-                    package_cost: val
-                  }));
-                }}
-                placeholder="0"
-                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 font-mono transition-all"
-              />
+              <div className="w-full bg-slate-950/60 border border-slate-850/50 rounded-lg py-2 px-3 text-xs text-slate-400 font-mono flex items-center justify-between">
+                <span className="break-words max-w-[200px]">{pkgNames}</span>
+                <span className="font-bold text-slate-200">₹{basePkgSum.toLocaleString('en-IN')}</span>
+              </div>
             </div>
 
             {/* Discount */}
@@ -3461,14 +3311,20 @@ USING (true);`;
               />
             </div>
 
-            {/* Final Quotation Amount */}
-            <div>
-              <label className="block text-xs font-bold text-amber-500 mb-1.5 font-mono">
-                Final Quotation Amount (₹)
-              </label>
-              <div className="w-full bg-slate-950/80 border border-amber-500/30 rounded-lg py-2 px-3 text-sm text-amber-500 font-extrabold font-mono flex items-center h-[34px]">
-                ₹{dynamicFinalAmt.toLocaleString('en-IN')}
-              </div>
+            {/* Extra Charges */}
+
+          </div>
+
+          {/* Final Calculated Amount Badge */}
+          <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 flex items-center justify-between shadow-inner mt-2">
+            <div className="space-y-0.5">
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide font-mono">Final Quotation Amount</p>
+              <p className="text-[9px] text-slate-500 font-mono">Formula: Base Price (₹{basePkgSum}) + Addl (₹{quoteAdditional || 0}) - Disc (₹{quoteDiscount || 0})</p>
+            </div>
+            <div className="text-right">
+              <span className="text-lg font-extrabold text-amber-500 font-mono">
+                ₹{finalAmt.toLocaleString('en-IN')}
+              </span>
             </div>
           </div>
         </div>
@@ -3479,27 +3335,21 @@ USING (true);`;
             <span>⚙️</span> Section 4: Quotation Actions
           </h4>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            {/* Generate Quotation */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {/* Download PDF */}
             <button
               type="button"
-              onClick={() => {
-                setSalesStatus('Quotation Sent');
-                handleDownloadQuotePDF(isEdit);
-              }}
+              onClick={() => handleDownloadQuotePDF(isEdit)}
               disabled={isSaving}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-indigo-950/40 hover:bg-indigo-900/50 text-indigo-300 rounded-lg transition-all border border-indigo-900/40 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-red-950/40 hover:bg-red-900/50 text-red-300 rounded-lg transition-all border border-red-900/40 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span>✨</span> {isSaving ? 'Processing...' : 'Generate Quotation'}
+              <span>📄</span> {isSaving ? 'Processing...' : 'Download PDF Document'}
             </button>
 
             {/* Send WhatsApp */}
             <button
               type="button"
-              onClick={() => {
-                setSalesStatus('Quotation Sent');
-                handleSendWhatsAppQuote(isEdit);
-              }}
+              onClick={() => handleSendWhatsAppQuote(isEdit)}
               disabled={isSaving}
               className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 rounded-lg transition-all border border-emerald-900/40 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -3519,36 +3369,9 @@ USING (true);`;
     setActiveQuoteNum('');
     setQuoteDiscount(0);
     setQuoteAdditional(0);
-    // Immediately populate inclusions/deliverables from lead_packages to prevent flicker
-    const actPkgs = (leadPackages || []).filter(lp => lp.lead_id === lead.lead_id);
-    const initialInclusions: Record<string, string[]> = {};
-    const initialDeliverables: Record<string, string[]> = {};
-    
-    actPkgs.forEach(lp => {
-      const pkgKey = lp.package_id;
-      const pObj = (packages || []).find(p => p.package_id === lp.package_id);
-      
-      const incStr = lp.team_members || pObj?.team_members || '';
-      const delStr = lp.deliverables || lp.deliverables_description || pObj?.deliverables || '';
-      
-      const parsedInc = parseTeamMembers(incStr);
-      const incList = parsedInc.length > 0 ? parsedInc : ['1 Professional Photographer'];
-      
-      const delList = delStr ? delStr.split(/[,\n]/).map((s: any) => s.trim()).filter(Boolean) : ['Standard Deliverables'];
-      
-      initialInclusions[pkgKey] = incList;
-      initialDeliverables[pkgKey] = delList;
-      
-      // Also populate event specific keys if needed
-      if (lead.events && lead.events.length > 0) {
-        lead.events.forEach(ev => {
-          initialInclusions[`${pkgKey}_${ev.id}`] = [...incList];
-        });
-      }
-    });
-    
-    setEditableInclusions(initialInclusions);
-    setEditableDeliverables(initialDeliverables);
+    // Explicitly reset on new lead selection
+    setEditableInclusions({});
+    setEditableDeliverables({});
     // Extract staff info from events if not directly on lead
     let evtStaffName = '';
     let evtStaffMobile = '';
@@ -3608,7 +3431,7 @@ USING (true);`;
     setCrmWizardStep(startStep);
 
     setQuoteDiscount(lead.Quotation_Discount ?? latestQuote?.discount_amount ?? 0);
-    setQuoteAdditional((actPkgs.reduce((acc, curr) => acc + (Number(curr.additional_services_cost) || 0), 0) || lead.Additional_Services_Cost) ?? (latestQuote?.additional_services_cost ?? 0));
+    setQuoteAdditional(lead.Additional_Services_Cost ?? latestQuote?.additional_services_cost ?? 0);
     if (latestQuote) {
       setActiveQuoteNum(latestQuote.quotation_number || '');
       setSalesStaffName(latestQuote.sales_staff_name || lead.sales_staff_name || evtStaffName || '');
@@ -3737,9 +3560,8 @@ USING (true);`;
         ...editableInclusions,
         [packageId]: defaultInc,
       };
-      const currentEvents = (crmEvents && crmEvents.length > 0) ? crmEvents : createEvents;
-      if (currentEvents && currentEvents.length > 0) {
-        currentEvents.forEach((ev) => {
+      if (crmEvents && crmEvents.length > 0) {
+        crmEvents.forEach((ev) => {
           newInclusions[`${packageId}_${ev.id}`] = [...defaultInc];
         });
       }
@@ -3755,106 +3577,6 @@ USING (true);`;
         selected_package_id: '',
         Select_Package_Option: '',
       }));
-    }
-  };
-
-  const STATUS_RANKS: Record<string, number> = {
-    'New Lead': 1,
-    'Contacted': 1,
-    'Follow Up': 2,
-    'Follow-up': 2,
-    'Negotiation': 3,
-    'Quotation Sent': 4,
-    'Order Confirmed': 5
-  };
-
-  const isValidTransition = (oldStatus: string | undefined | null, newStatus: string): boolean => {
-    if (!oldStatus) return true;
-    if (newStatus === 'Lost Lead') return true;
-    const o = oldStatus === 'Follow-up' || oldStatus === 'Follow-Up' ? 'Follow Up' : oldStatus;
-    const n = newStatus === 'Follow-up' || newStatus === 'Follow-Up' ? 'Follow Up' : newStatus;
-    const rankOld = STATUS_RANKS[o] || 0;
-    const rankNew = STATUS_RANKS[n] || 0;
-    if (rankOld === 0 || rankNew === 0) return true;
-    return rankNew >= rankOld;
-  };
-
-  const handleStep3StatusSelect = async (status: 'Negotiation' | 'Quotation Sent') => {
-    if (!selectedLead) return;
-    setIsSaving(true);
-    try {
-      const currentStatusOfLead = selectedLead.current_status || selectedLead.status || 'New Lead';
-      
-      let finalStatusToSet = currentStatusOfLead;
-      if (isValidTransition(currentStatusOfLead, status)) {
-        finalStatusToSet = status;
-      } else {
-        showToastMsg(`Cannot transition from ${currentStatusOfLead} to ${status}. Status preserved.`, "error");
-      }
-
-      const timestamp = new Date().toISOString();
-      const updatedRemarks = `${selectedLead.remarks || ''}\n[Update ${timestamp.split('T')[0]}]: Status updated automatically to ${finalStatusToSet} after Step 3 save.`;
-
-      // Save the lead with status
-      await updateLead(selectedLead.lead_id, {
-        status: finalStatusToSet as any,
-        current_status: finalStatusToSet,
-        remarks: updatedRemarks
-      });
-
-      // Update lead follow up and preserve/update status
-      await updateLeadFollowUp(
-        selectedLead.lead_id,
-        finalStatusToSet as any,
-        `Step 3 Complete. Automatically set to ${finalStatusToSet}`,
-        selectedLead.next_follow_up_date || '',
-        Number(wizardLeadData.package_cost || selectedLead.package_price || selectedLead.budget || 0),
-        `Finalized Step 3 with status: ${finalStatusToSet}`
-      );
-
-      // Locally update selectedLead
-      setSelectedLead(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          status: finalStatusToSet as any,
-          current_status: finalStatusToSet,
-          remarks: updatedRemarks
-        };
-      });
-
-      showToastMsg(`Lead successfully updated to ${finalStatusToSet} and saved.`, "success");
-      setShowStep3Popup(false);
-      setSelectedLead(null); // Close the CRM modal
-    } catch (err: any) {
-      console.error("Step 3 Status transition failed:", err);
-      const errMsg = err?.message || String(err);
-      const parsed = parseStatusUpdateError(errMsg);
-      
-      logStatusUpdateError({
-        leadId: selectedLead?.lead_id || null,
-        orderId: null,
-        oldStatus: selectedLead ? (selectedLead.current_status || selectedLead.status || 'New Lead') : null,
-        newStatus: status,
-        updatePayload: {
-          status,
-          current_status: status
-        },
-        insertPayload: null,
-        dbResponse: null,
-        fullError: err
-      });
-
-      setStatusError({
-        title: "Step 3 Status Update Failed",
-        reason: parsed.reason,
-        suggestedFix: parsed.suggestedFix,
-        failedFunction: "handleStep3StatusSelect",
-        failedTable: "leads"
-      });
-      showToastMsg(parsed.reason, "error");
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -3880,9 +3602,6 @@ USING (true);`;
           return;
         }
         const updatedRemarks = appendCompletedStep(selectedLead.remarks || wizardLeadData.remarks, 1);
-        const currentStatusOfLead = selectedLead.current_status || selectedLead.status || 'New Lead';
-        const finalStatusToSet = isValidTransition(currentStatusOfLead, 'New Lead') ? 'New Lead' : currentStatusOfLead;
-
         await updateLead(selectedLead.lead_id, {
           customer_name: wizardLeadData.customer_name || 'Inbound Prospect',
           mobile: wizardLeadData.mobile,
@@ -3899,8 +3618,7 @@ USING (true);`;
           reference_source: wizardLeadData.reference_source,
           Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || '',
           remarks: updatedRemarks,
-          status: finalStatusToSet as any,
-          current_status: finalStatusToSet
+          status: selectedLead.status || 'New Lead'
         });
 
         const newCompleted = Math.max(crmHighestStep, 1);
@@ -3911,9 +3629,7 @@ USING (true);`;
           if (!prev) return null;
           return {
             ...prev,
-            remarks: updatedRemarks,
-            status: finalStatusToSet as any,
-            current_status: finalStatusToSet
+            remarks: updatedRemarks
           };
         });
 
@@ -4053,12 +3769,8 @@ USING (true);`;
           
           const payloadToSave = activePackagesList.map(lp => {
             const isPrimary = lp.package_id === wizardLeadData.selected_package_id;
-            const incKeys = Object.keys(editableInclusions).filter(k => k === lp.package_id || k.startsWith(lp.package_id + '_'));
-            let allInc = [];
-            incKeys.forEach(k => { allInc = allInc.concat(editableInclusions[k]); });
-            const incStr = Array.from(new Set(allInc.filter(Boolean))).join(', ');
-            
-            const delStr = (editableDeliverables[lp.package_id!] || []).filter(Boolean).join(', ');
+            const incStr = (editableInclusions[lp.package_id!] || []).join(', ');
+            const delStr = (editableDeliverables[lp.package_id!] || []).join(', ');
             return {
               package_id: lp.package_id!,
               package_name: lp.package_name || 'Selected Package',
@@ -4069,7 +3781,7 @@ USING (true);`;
               final_amount: isPrimary ? Number(wizardLeadData.package_cost) : lp.final_amount,
               deliverables_description: isPrimary ? wizardLeadData.deliverables : lp.deliverables_description,
               notes_special_customizations: isPrimary ? wizardLeadData.notes : lp.notes_special_customizations,
-              additional_services_cost: isPrimary ? Number(quoteAdditional || 0) : (lp.additional_services_cost || 0),
+              additional_services_cost: lp.additional_services_cost || 0,
               team_members: incStr || lp.team_members || '',
               deliverables: delStr || lp.deliverables || ''
             };
@@ -4125,10 +3837,11 @@ USING (true);`;
           };
         });
 
-        showToastMsg("Quotation details saved. Please set the lead stage.", "success");
-        setIsSaving(false);
+        showToastMsg(`CRM Changes Saved.`, "success");
         setShowStep3Popup(true);
-        return;
+        setStep3Option('negotiation');
+        setIsSaving(false);
+        return; // Halt here to wait for popup selection!
       }
 
       if (step < 3) {
@@ -4175,6 +3888,32 @@ USING (true);`;
     }
   };
 
+  const handleConfirmStep3Proceed = async () => {
+    if (!selectedLead) return;
+    setIsSaving(true);
+    try {
+      if (step3Option === 'negotiation') {
+        await updateLead(selectedLead.lead_id, {
+          status: 'Negotiation' as CurrentStage
+        });
+        showToastMsg("Lead status updated to Negotiation.", "success");
+        setShowStep3Popup(false);
+        setSelectedLead(null);
+      } else if (step3Option === 'quotation_send') {
+        await updateLead(selectedLead.lead_id, {
+          status: 'Quotation Sent' as CurrentStage
+        });
+        showToastMsg("Lead status updated to Quotation Sent.", "success");
+        setShowStep3Popup(false);
+        setSelectedLead(null);
+      }
+    } catch (err: any) {
+      console.error("Failed to proceed with Step 3 option:", err);
+      showToastMsg(err.message || String(err), "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleSaveStep2FollowUp = async () => {
     const isCreateFlow = activeTab === 'create';
@@ -4184,31 +3923,7 @@ USING (true);`;
       return;
     }
     if (!step2FollowUpDate) {
-      showErrorHelper(
-        "Mandatory Field Missing",
-        "Next Follow-up Date is required.",
-        "handleSaveStep2FollowUp",
-        currentLeadId,
-        "Select a date for the next follow-up.",
-        null,
-        "leads",
-        "next_follow_up_date",
-        "Next Follow-up Date"
-      );
-      return;
-    }
-    if (!step2FollowUpNotes) {
-      showErrorHelper(
-        "Mandatory Field Missing",
-        "Follow-up Notes are required.",
-        "handleSaveStep2FollowUp",
-        currentLeadId,
-        "Enter notes describing the follow-up conversation or plan.",
-        null,
-        "leads",
-        "follow_up_notes",
-        "Follow-up Notes"
-      );
+      showToastMsg("Next Follow-up Date is mandatory.", "error");
       return;
     }
     setIsSaving(true);
@@ -4255,24 +3970,22 @@ USING (true);`;
 
       const notesWithTag = appendCompletedStep(step2FollowUpNotes || 'Saved event details', 2);
 
-      // Automatically update Lead Status to: Follow-up as requested
-      const targetStatus = 'Follow Up';
-      const currentStatusOfLead = selectedLead?.current_status || selectedLead?.status || 'New Lead';
-      const finalStatusToSet = isValidTransition(currentStatusOfLead, targetStatus) ? targetStatus : currentStatusOfLead;
+      // Determine target status: If the current status is New Lead or empty, update to Follow Up. Otherwise preserve advanced status.
+      const previousStatus = isCreateFlow ? 'New Lead' : (selectedLead ? getLeadCurrentStatus(selectedLead) : 'New Lead');
+      const targetStatus = (previousStatus === 'New Lead' || !previousStatus) ? 'Follow Up' : previousStatus;
 
       // Update lead follow up and preserve/update status
       await updateLeadFollowUp(
         currentLeadId,
-        finalStatusToSet as CurrentStage,
+        targetStatus as CurrentStage,
         notesWithTag,
         step2FollowUpDate,
         Number(isCreateFlow ? (createForm.budget || 0) : (wizardLeadData.package_cost || selectedLead?.budget || 0)),
-        step2FollowUpNotes || 'Saved event details',
-        step2FollowUpReason
+        step2FollowUpNotes || 'Saved event details'
       );
 
       if (isCreateFlow) {
-        setSalesStatus(finalStatusToSet as CurrentStage);
+        setSalesStatus(targetStatus as CurrentStage);
         setWizardStep(3);
       } else {
         const newCompleted = Math.max(crmHighestStep, 2);
@@ -4290,19 +4003,16 @@ USING (true);`;
           if (!prev) return null;
           return {
             ...prev,
-            status: finalStatusToSet as CurrentStage,
-            current_status: finalStatusToSet,
-            remarks: updatedRemarks,
-            follow_up_notes: step2FollowUpNotes || 'Saved event details',
-            next_follow_up_date: step2FollowUpDate,
-            follow_up_reason: step2FollowUpReason
+            status: targetStatus as CurrentStage,
+            current_status: targetStatus,
+            remarks: updatedRemarks
           };
         });
 
         setCrmWizardStep(3);
       }
 
-      showToastMsg(`Event details and follow-up saved successfully. Status set to ${finalStatusToSet}.`, "success");
+      showToastMsg("Event details and follow-up saved successfully. Status set to Follow-up.", "success");
       setShowStep2Popup(false);
     } catch (err: any) {
       console.error("Step 2 Follow-up save failed:", err);
@@ -4312,8 +4022,7 @@ USING (true);`;
         "handleSaveStep2FollowUp",
         currentLeadId,
         "Check event details and try again.",
-        err,
-        "leads"
+        err
       );
       setTimeout(() => {
         document.getElementById('error_details_modal')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -5242,8 +4951,7 @@ USING (true);`;
             remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
             next_follow_up_date: followUpDate || null,
             follow_up_notes: internalNotes || null,
-            Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || '',
-            status: 'New Lead'
+            Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
           });
           setCreatedLeadId(newId);
           finalId = newId;
@@ -5272,8 +4980,7 @@ USING (true);`;
             remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
             next_follow_up_date: followUpDate || null,
             follow_up_notes: internalNotes || null,
-            Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || '',
-            status: 'New Lead'
+            Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
           });
         }
         const isEdit = !!createdLeadId;
@@ -5478,9 +5185,9 @@ USING (true);`;
 
   };
 
-  const handleStatusSave = async (overrideStatus?: CurrentStage) => {
+  const handleStatusSave = async () => {
     if (isSaving) return;
-    const finalStatus = overrideStatus || salesStatus || 'New Lead';
+    const finalStatus = salesStatus || 'New Lead';
     try {
       setIsSaving(true);
 
@@ -5493,7 +5200,7 @@ USING (true);`;
           package_cost: pkgPrices[pkg.id] !== undefined ? pkgPrices[pkg.id] : pkg.cost,
           quantity: 1,
           total_amount: pkgPrices[pkg.id] !== undefined ? pkgPrices[pkg.id] : pkg.cost,
-          discount: 0,
+          discount: leadDiscount,
           final_amount: pkgPrices[pkg.id] !== undefined ? pkgPrices[pkg.id] : pkg.cost,
           deliverables_description: pkgDeliverables[pkg.id] || pkg.deliverables || 'N/A',
           notes_special_customizations: pkgNotes[pkg.id] || '',
@@ -5507,7 +5214,7 @@ USING (true);`;
       await updateLead(createdLeadId!, {
         status: finalStatus as CurrentStage,
         budget: finalTotal,
-          package_price: subtotal,
+          package_price: finalTotal,
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
           Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
           Final_Quotation_Amount: finalTotal,
@@ -5544,7 +5251,7 @@ USING (true);`;
         updatePayload: {
           status: finalStatus,
           budget: finalTotal,
-          package_price: subtotal,
+          package_price: finalTotal,
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
           Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
           Final_Quotation_Amount: finalTotal,
@@ -5586,7 +5293,7 @@ USING (true);`;
       return;
     }
 
-    executeWithReportingPopup(async (reportingData: any = {}) => {
+    executeWithReportingPopup(async () => {
       try {
       setIsSaving(true);
       const selectedPkgsNames = selectedPkgs.map(p => p.name).join(' + ') || 'Custom Configured Coverage';
@@ -5599,10 +5306,7 @@ USING (true);`;
         confirmedEventTime,
         'UPI / Cash / Bank Transfer',
         getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
-        reportingData.reporting_time || reportingTime,
-        reportingData.transaction_id || undefined,
-        reportingData.Reporting_date,
-        reportingData.events
+        reportingTime
       );
       
       showToastMsg("Lead created successfully.", "success");
@@ -5641,11 +5345,7 @@ USING (true);`;
       setStatusError({
         title: "Order Confirmation Pipeline Transition Failed",
         reason: parsed.reason,
-        suggestedFix: parsed.suggestedFix,
-        failedFunction: "handleOrderConfirmedSubmit / confirmOrder",
-        failedTable: "leads / orders / operations",
-        supabaseError: errMsg,
-        missingField: errMsg.includes("order_id") ? "order_id" : undefined
+        suggestedFix: parsed.suggestedFix
       });
       alert(parsed.reason);
     } finally {
@@ -5677,7 +5377,7 @@ USING (true);`;
         return;
       }
 
-      executeWithReportingPopup(async (reportingData: any = {}) => {
+      executeWithReportingPopup(async () => {
         try {
         setIsSaving(true);
         await confirmOrder(
@@ -5689,10 +5389,7 @@ USING (true);`;
           followUpForm.event_time,
           followUpForm.payment_mode || 'UPI',
           followUpForm.call_notes || 'Confirmed from CRM activity logger',
-          reportingData.reporting_time || followUpForm.reporting_time || '08:00',
-          reportingData.transaction_id || undefined,
-          reportingData.Reporting_date,
-          reportingData.events
+          followUpForm.reporting_time || '08:00'
         );
 
         setSelectedLead(null);
@@ -5727,11 +5424,7 @@ USING (true);`;
         setStatusError({
           title: "Follow-up Transition to Order Confirmed Failed",
           reason: parsed.reason,
-          suggestedFix: parsed.suggestedFix,
-          failedFunction: "handleFollowUpSubmit / confirmOrder",
-          failedTable: "leads / orders / operations",
-          supabaseError: errMsg,
-          missingField: errMsg.includes("order_id") ? "order_id" : undefined
+          suggestedFix: parsed.suggestedFix
         });
         alert(parsed.reason);
       } finally {
@@ -5795,11 +5488,7 @@ USING (true);`;
       setStatusError({
         title: "Follow-up Pipeline Status Update Failed",
         reason: parsed.reason,
-        suggestedFix: parsed.suggestedFix,
-        failedFunction: "handleFollowUpSubmit / confirmOrder",
-        failedTable: "leads / orders / operations",
-        supabaseError: errMsg,
-        missingField: errMsg.includes("order_id") ? "order_id" : undefined
+        suggestedFix: parsed.suggestedFix
       });
       alert(parsed.reason);
     } finally {
@@ -5829,7 +5518,7 @@ USING (true);`;
       return;
     }
 
-    executeWithReportingPopup(async (reportingData: any = {}) => {
+    executeWithReportingPopup(async () => {
       try {
       setIsSaving(true);
       await confirmOrder(
@@ -5841,10 +5530,8 @@ USING (true);`;
         confirmForm.event_time,
         confirmForm.payment_mode,
         confirmForm.notes,
-        reportingData.reporting_time,
-        confirmForm.transaction_id,
-        reportingData.Reporting_date,
-        reportingData.events
+        undefined,
+        confirmForm.transaction_id
       );
 
       setShowConfirmModal(false);
@@ -5882,11 +5569,7 @@ USING (true);`;
       setStatusError({
         title: "Action Button Order Confirmation Failed",
         reason: parsed.reason,
-        suggestedFix: parsed.suggestedFix,
-        failedFunction: "handleConfirmOrderSubmit / confirmOrder",
-        failedTable: "leads / orders / operations",
-        supabaseError: errMsg,
-        missingField: errMsg.includes("order_id") ? "order_id" : undefined
+        suggestedFix: parsed.suggestedFix
       });
       alert(parsed.reason);
     } finally {
@@ -5987,36 +5670,15 @@ USING (true);`;
             </div>
             
             <div className="p-6 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {statusError.failedFunction && (
-                  <div className="space-y-1">
-                    <span className="text-[10px] text-slate-500 font-mono uppercase tracking-wider block font-bold">Failed Function:</span>
-                    <span className="text-[11px] text-slate-300 font-mono">{statusError.failedFunction}</span>
-                  </div>
-                )}
-                {statusError.failedTable && (
-                  <div className="space-y-1">
-                    <span className="text-[10px] text-slate-500 font-mono uppercase tracking-wider block font-bold">Database Table:</span>
-                    <span className="text-[11px] text-slate-300 font-mono">{statusError.failedTable}</span>
-                  </div>
-                )}
-                {statusError.missingField && (
-                  <div className="space-y-1">
-                    <span className="text-[10px] text-slate-500 font-mono uppercase tracking-wider block font-bold">Missing Field:</span>
-                    <span className="text-[11px] text-amber-400 font-mono font-bold">{statusError.missingField}</span>
-                  </div>
-                )}
-              </div>
-
               <div className="space-y-1.5">
-                <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider block">Exact Error Message / Supabase Error:</span>
+                <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider block">Reason:</span>
                 <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3 text-xs text-red-300 font-mono leading-relaxed whitespace-pre-wrap max-h-36 overflow-y-auto">
-                  {statusError.supabaseError || statusError.reason}
+                  {statusError.reason}
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider block">Suggested Fix:</span>
+                <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider block">Suggested Fix / Schema Migration:</span>
                 <div className="bg-emerald-950/20 border border-emerald-500/25 rounded-xl p-3 text-xs text-emerald-300 font-sans leading-relaxed whitespace-pre-wrap max-h-36 overflow-y-auto">
                   {statusError.suggestedFix}
                 </div>
@@ -6058,7 +5720,7 @@ USING (true);`;
                 : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            �� Customer Profiles
+            👥 Customer Profiles
           </button>
 
           <button
@@ -6209,14 +5871,14 @@ USING (true);`;
           {/* Column B: Follow-up Activity Logger */}
           <div className="lg:col-span-8 bg-slate-850 rounded-xl border border-slate-800 p-5">
             <h3 className="text-sm font-semibold text-slate-100 flex items-center gap-1.5 pb-2.5 border-b border-slate-800 mb-4">
-              <span>��</span> Log Lead Follow-up activity & CRM notes
+              <span>📝</span> Log Lead Follow-up activity & CRM notes
             </h3>
 
             {selectedLead && isLeadLocked && (
               <div className="p-4 mb-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-left animate-fade-in relative z-10">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-wider font-mono">
-                    <span className="animate-pulse">��</span> Stage-Locked: Order Confirmed
+                    <span className="animate-pulse">🔒</span> Stage-Locked: Order Confirmed
                   </div>
                   <p className="text-[11px] text-slate-350 leading-relaxed font-sans">
                     This lead is lock-protected due to having officially transitioned to operations. Only payment schedules are editable.
@@ -6231,7 +5893,7 @@ USING (true);`;
                     }}
                     className="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-lg transition-all cursor-pointer font-mono font-extrabold uppercase tracking-wide border border-amber-500/20 shadow-lg"
                   >
-                    �� Owner Override
+                    🔓 Owner Override
                   </button>
                 )}
               </div>
@@ -6251,10 +5913,10 @@ USING (true);`;
                         onChange={(e) => setFollowUpForm({ ...followUpForm, status: e.target.value as CurrentStage })}
                         className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                       >
-                        {isValidTransition(selectedLead.status, 'Follow Up') && <option value="Follow Up">Follow Up</option>}
-                        {isValidTransition(selectedLead.status, 'Negotiation') && <option value="Negotiation">Negotiation</option>}
-                        {isValidTransition(selectedLead.status, 'Quotation Sent') && <option value="Quotation Sent">Quotation Sent</option>}
-                        {isValidTransition(selectedLead.status, 'Order Confirmed') && <option value="Order Confirmed">Order Confirmed</option>}
+                        <option value="Follow Up">Follow Up</option>
+                        <option value="Quotation Sent">Quotation Sent</option>
+                        <option value="Negotiation">Negotiation</option>
+                        <option value="Order Confirmed">Order Confirmed</option>
                       </select>
                     </div>
                   </div>
@@ -6425,7 +6087,7 @@ USING (true);`;
                       : 'bg-indigo-650 hover:bg-indigo-550 text-white border-indigo-500/10 cursor-pointer text-shadow'
                     }`}
                   >
-                    {isSaving ? 'Saving...' : (isLeadLocked ? '�� Locked' : followUpForm.status === 'Order Confirmed' ? '�� Confirm Order booking' : 'Save Follow-up Notes')}
+                    {isSaving ? 'Saving...' : (isLeadLocked ? '🔒 Locked' : followUpForm.status === 'Order Confirmed' ? '💍 Confirm Order booking' : 'Save Follow-up Notes')}
                   </button>
                 </div>
               </form>
@@ -6453,7 +6115,7 @@ USING (true);`;
             <div className="lg:col-span-4 bg-slate-850 rounded-xl border border-slate-800 p-4 space-y-4 text-left">
               <div className="border-b border-slate-800 pb-3">
                 <h3 className="text-sm font-bold text-slate-100 flex items-center gap-1.5 font-mono">
-                  <span>��</span> CLIENT ACCOUNTS ({getCustomers(leads, orders, payments).length})
+                  <span>👥</span> CLIENT ACCOUNTS ({getCustomers(leads, orders, payments).length})
                 </h3>
                 <p className="text-[11px] text-slate-400 mt-0.5">
                   Unified customer profiles compiled via CRM phone & email graphs.
@@ -6520,7 +6182,7 @@ USING (true);`;
                           </span>
                           {cust.totalOrders >= 2 && (
                             <span className="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-black uppercase">
-                              �� REPEAT ({cust.totalOrders})
+                              🔥 REPEAT ({cust.totalOrders})
                             </span>
                           )}
                         </div>
@@ -7573,7 +7235,7 @@ USING (true);`;
                 <div className="bg-slate-950/30 border border-slate-800/60 rounded-xl p-4.5 space-y-4 shadow-sm animate-fade-in text-left">
                   <div className="flex items-center gap-2 border-b border-slate-800/50 pb-2 mb-1">
                     <CheckSquare className="w-4 h-4 text-cyan-405" />
-                    <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">Section 1: Package Selection</span>
+                    <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">3. Package Selection</span>
                   </div>
 
                   <div className="relative">
@@ -7801,7 +7463,7 @@ USING (true);`;
                                   onClick={() => setViewingPkgDetails(pkgObj)}
                                   className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg border border-slate-800 hover:border-slate-700 font-semibold cursor-pointer transition-all flex items-center gap-1 text-[11px]"
                                 >
-                                  �� View Specification
+                                  📋 View Specification
                                 </button>
                                 <button
                                   type="button"
@@ -7809,7 +7471,7 @@ USING (true);`;
                                   className="px-2.5 py-1.5 bg-rose-950/20 hover:bg-rose-950/40 text-rose-400 border border-rose-900/30 hover:border-rose-900/50 rounded-lg font-semibold cursor-pointer transition-all flex items-center gap-1 text-[11px]"
                                   title="Remove Package"
                                 >
-                                  ��️ Remove
+                                  🗑️ Remove
                                 </button>
                               </div>
                             </div>
@@ -7829,232 +7491,56 @@ USING (true);`;
 
                   {/* Display Package Pricing & Live Auto Calculation Output */}
                   {selectedPkgIds.length > 0 && (
-                    <div className="space-y-6">
-                      {selectedPkgIds.map((pkgId) => {
-                        const pkgObj = packages.find(p => p.package_id === pkgId);
-                        if (!pkgObj) return null;
+                    <div id="pkg_pricing_calc_panel" className="bg-slate-950/70 p-4 rounded-xl border border-slate-800/80 space-y-3 animate-fade-in">
+                      <span className="text-[10px] font-bold text-slate-400 font-mono block border-b border-slate-800/65 pb-1.5 uppercase tracking-wider">
+                        Selected Packages & Price Estimate
+                      </span>
+                      <ul className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                        {selectedPkgIds.map((id) => {
+                          const pkg = PACKAGES_LIST.flatMap(cat => cat.items).find(item => item.id === id);
+                          if (!pkg) return null;
+                          return (
+                            <li key={id} className="flex justify-between items-center text-xs text-slate-300">
+                              <span className="flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                {pkg.name}
+                              </span>
+                              <span className="font-mono text-emerald-400">₹{pkg.cost.toLocaleString('en-IN')}</span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      
+                      <div className="border-t border-slate-800/80 pt-3 space-y-2.5 text-xs">
+                        <div className="flex justify-between text-slate-400">
+                          <span>Subtotal</span>
+                          <span className="font-mono text-slate-200">₹{subtotal.toLocaleString('en-IN')}</span>
+                        </div>
                         
-                        const inclusionsList = editableInclusions[pkgId] || [];
-                        const deliverablesList = editableDeliverables[pkgId] || [];
-                        
-                        return (
-                          <div key={pkgId} className="bg-[#0F172A] border border-slate-800 rounded-xl p-4.5 space-y-4 animate-fade-in text-xs text-left">
-                            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                              <h4 className="font-bold text-white text-[12px] uppercase tracking-wider font-mono">
-                                 Package Details: {pkgObj.package_name}
-                              </h4>
-                            </div>
-
-                            {/* Team Members per Event */}
-                            <div>
-                              {createEvents && createEvents.length > 0 ? (
-                                createEvents.map((event) => {
-                                  const eventKey = `${pkgId}_${event.id}`;
-                                  const eventInclusions = editableInclusions[eventKey] !== undefined
-                                    ? editableInclusions[eventKey]
-                                    : inclusionsList;
-
-                                  return (
-                                    <div key={event.id} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-3 mt-3 mb-4 text-left font-sans animate-fade-in">
-                                      <div className="border-b border-slate-800/40 pb-1.5 flex items-center justify-between">
-                                        <div>
-                                          <h3 className="text-sm font-bold text-slate-100 uppercase font-mono tracking-wider">
-                                            {event.event_name || event.event_type || 'Event'}
-                                          </h3>
-                                          <span className="text-[10px] font-semibold text-indigo-400 tracking-wider uppercase font-mono">
-                                            TEAM MEMBERS INCLUDED
-                                          </span>
-                                        </div>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
-                                            currentList.push('');
-                                            setEditableInclusions({
-                                              ...editableInclusions,
-                                              [eventKey]: currentList
-                                            });
-                                          }}
-                                          className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded transition-all cursor-pointer"
-                                        >
-                                          + Add Member
-                                        </button>
-                                      </div>
-
-                                      {eventInclusions.length === 0 ? (
-                                        <p className="text-[10px] text-zinc-500 italic">No team members added yet.</p>
-                                      ) : (
-                                        <div className="space-y-3">
-                                          {eventInclusions.map((item, idx) => {
-                                            const staffName = item.includes('|') ? item.split('|')[0] : item;
-                                            return (
-                                              <div key={idx} className="flex items-center gap-2 bg-slate-950/40 p-2.5 rounded-lg border border-slate-850">
-                                                <div className="flex-1">
-                                                  <input
-                                                    type="text"
-                                                    placeholder="Staff Name"
-                                                    value={staffName}
-                                                    onChange={(e) => {
-                                                      const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
-                                                      currentList[idx] = `${e.target.value}`;
-                                                      setEditableInclusions({
-                                                        ...editableInclusions,
-                                                        [eventKey]: currentList
-                                                      });
-                                                    }}
-                                                    className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
-                                                  />
-                                                </div>
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
-                                                    currentList.splice(idx, 1);
-                                                    setEditableInclusions({
-                                                      ...editableInclusions,
-                                                      [eventKey]: currentList
-                                                    });
-                                                  }}
-                                                  className="text-red-400 hover:text-red-350 p-1.5 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer shrink-0"
-                                                >
-                                                  Remove
-                                                </button>
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })
-                              ) : (
-                                <div>
-                                  <div className="flex items-center justify-between mb-1.5">
-                                    <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">TEAM MEMBERS INCLUDED</label>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const currentList = [...(editableInclusions[pkgId] || [])];
-                                        currentList.push('');
-                                        setEditableInclusions({
-                                          ...editableInclusions,
-                                          [pkgId]: currentList
-                                        });
-                                      }}
-                                      className="text-xs text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded cursor-pointer"
-                                    >
-                                      + Add Member
-                                    </button>
-                                  </div>
-                                  {inclusionsList.length === 0 ? (
-                                    <p className="text-[10px] text-zinc-500 italic">No team members added yet.</p>
-                                  ) : (
-                                    <div className="space-y-3">
-                                      {inclusionsList.map((item, idx) => {
-                                        const staffName = item.includes('|') ? item.split('|')[0] : item;
-                                        return (
-                                          <div key={idx} className="flex items-center gap-2 bg-slate-950/40 p-2.5 rounded-lg border border-slate-850">
-                                            <div className="flex-1">
-                                              <input
-                                                type="text"
-                                                placeholder="Staff Name"
-                                                value={staffName}
-                                                onChange={(e) => {
-                                                  const currentList = [...(editableInclusions[pkgId] || [])];
-                                                  currentList[idx] = `${e.target.value}`;
-                                                  setEditableInclusions({
-                                                    ...editableInclusions,
-                                                    [pkgId]: currentList
-                                                  });
-                                                }}
-                                                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
-                                              />
-                                            </div>
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                const currentList = [...(editableInclusions[pkgId] || [])];
-                                                currentList.splice(idx, 1);
-                                                setEditableInclusions({
-                                                  ...editableInclusions,
-                                                  [pkgId]: currentList
-                                                });
-                                              }}
-                                              className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono cursor-pointer shrink-0"
-                                            >
-                                              Remove
-                                            </button>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Deliverables */}
-                            <div>
-                              <div className="flex items-center justify-between mb-1.5">
-                                <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Deliverables Description (Editable)</label>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const currentList = [...(editableDeliverables[pkgId] || [])];
-                                    currentList.unshift('');
-                                    setEditableDeliverables({
-                                      ...editableDeliverables,
-                                      [pkgId]: currentList
-                                    });
-                                  }}
-                                  className="text-xs text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded cursor-pointer"
-                                >
-                                  + Add Deliverable
-                                </button>
-                              </div>
-                              {deliverablesList.length === 0 ? (
-                                <p className="text-[10px] text-zinc-500 italic">No deliverables added yet.</p>
-                              ) : (
-                                <div className="space-y-2">
-                                  {deliverablesList.map((item, idx) => (
-                                    <div key={idx} className="flex items-center gap-2">
-                                      <input
-                                        type="text"
-                                        value={item}
-                                        onChange={(e) => {
-                                          const currentList = [...(editableDeliverables[pkgId] || [])];
-                                          currentList[idx] = e.target.value;
-                                          setEditableDeliverables({
-                                            ...editableDeliverables,
-                                            [pkgId]: currentList
-                                          });
-                                        }}
-                                        className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const currentList = [...(editableDeliverables[pkgId] || [])];
-                                          currentList.splice(idx, 1);
-                                          setEditableDeliverables({
-                                            ...editableDeliverables,
-                                            [pkgId]: currentList
-                                          });
-                                        }}
-                                        className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono cursor-pointer"
-                                      >
-                                        Remove
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
+                        <div className="flex justify-between items-center text-slate-400">
+                          <span>Discount (Optional)</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-slate-500">₹</span>
+                            <input
+                              type="number"
+                              min="0"
+                              max={subtotal}
+                              placeholder="0"
+                              value={leadDiscount || ''}
+                              onChange={(e) => {
+                                const val = Math.min(subtotal, Math.max(0, Number(e.target.value)));
+                                setLeadDiscount(val);
+                              }}
+                              className="w-24 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-right font-mono text-xs text-slate-100 focus:outline-none focus:border-emerald-600 transition-all"
+                            />
                           </div>
-                        );
-                      })}
-
-                      {renderQuotationAndStep4Section(false)}
+                        </div>
+                        
+                        <div className="flex justify-between items-center text-white font-extrabold border-t border-slate-800/80 pt-2.5">
+                          <span className="tracking-wide">Final Total Project Value</span>
+                          <span className="font-mono text-amber-400 text-sm">₹{finalTotal.toLocaleString('en-IN')}</span>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -8109,7 +7595,7 @@ USING (true);`;
                   disabled={isSaving}
                   className="px-5.5 py-2 text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl shadow-lg shadow-emerald-500/10 cursor-pointer border border-transparent transition-colors flex items-center gap-1.5"
                 >
-                  {isSaving ? 'Saving...' : salesStatus === 'Order Confirmed' ? '�� Confirm Order & Transition' : 'Save & Finish →'}
+                  {isSaving ? 'Saving...' : salesStatus === 'Order Confirmed' ? '🎉 Confirm Order & Transition' : '✍️ Create Lead'}
                 </button>
               )}
             </div>
@@ -8147,7 +7633,7 @@ USING (true);`;
           {/* Leads Directory Title & Export Utility Panel */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-900/60 p-4 rounded-2xl border border-zinc-850 shadow-xl">
             <div className="flex items-center gap-2">
-              <span className="text-xl">��</span>
+              <span className="text-xl">📁</span>
               <div>
                 <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">Leads Directory</h3>
                 <p className="text-[10px] text-zinc-400">Export active pipeline registers using start and end filters</p>
@@ -8160,7 +7646,7 @@ USING (true);`;
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
                 title="Print lead report to paper"
               >
-                <span>��️</span> Print Report
+                <span>🖨️</span> Print Report
               </button>
               
               <button
@@ -8168,7 +7654,7 @@ USING (true);`;
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-rose-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
                 title="Download report as PDF format"
               >
-                <span>��</span> Download PDF
+                <span>📄</span> Download PDF
               </button>
               
               <button
@@ -8176,7 +7662,7 @@ USING (true);`;
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-emerald-450 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
                 title="Download report as Excel spreadsheet"
               >
-                <span>��</span> Excel (.xlsx)
+                <span>📊</span> Excel (.xlsx)
               </button>
 
               <button
@@ -8184,7 +7670,7 @@ USING (true);`;
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-indigo-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
                 title="Download report as CSV file"
               >
-                <span>��</span> CSV
+                <span>📝</span> CSV
               </button>
             </div>
           </div>
@@ -8579,7 +8065,7 @@ USING (true);`;
             
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
-                <span>��</span> Booking Confirmation & Contract Form
+                <span>💍</span> Booking Confirmation & Contract Form
               </h4>
               <button 
                 onClick={() => setShowConfirmModal(false)}
@@ -8647,10 +8133,10 @@ USING (true);`;
                   </label>
                   <input
                     type="number"
-                    readOnly
                     required
                     value={confirmForm.quotation_amount}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg py-1.5 px-3 text-slate-400 focus:outline-none font-mono cursor-not-allowed"
+                    onChange={(e) => setConfirmForm({ ...confirmForm, quotation_amount: Number(e.target.value) })}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
                   />
                 </div>
 
@@ -8733,144 +8219,71 @@ USING (true);`;
 
       {/* Step 2 Mandatory Follow-up Popup Modal */}
       {showStep2Popup && (selectedLead || activeTab === 'create') && (
-        <div className="fixed inset-0 bg-black/85 z-[100] flex items-center justify-center p-4 backdrop-blur-md">
-          <div id="step2_followup_modal" className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden max-w-md w-full shadow-2xl p-6 space-y-6 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <h4 className="font-bold text-slate-100 text-base flex items-center gap-2 font-sans">
-                <span className="text-amber-500">📅</span> Log Mandatory Follow-up Details
+        <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-4 backdrop-blur-md">
+          <div id="step2_followup_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
+                <span>📅</span> Log Mandatory Follow-up Details
               </h4>
               <button 
                 onClick={() => setShowStep2Popup(false)}
-                className="text-slate-500 hover:text-slate-300 transition-colors p-1"
+                className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg text-xs text-amber-200">
+              Please schedule the next follow-up and add notes to progress the lead to <strong>Follow-up</strong> status.
+            </div>
+
+            <div className="space-y-3.5 text-xs text-slate-300">
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">Next Follow-up Date *</label>
+                <label className="block font-medium text-slate-400 mb-1">
+                  Next Follow-up Date * (Required)
+                </label>
                 <input
                   type="date"
-                  value={step2FollowUpDate}
-                  onChange={(e) => setStep2FollowUpDate(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl py-2.5 px-4 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 transition-all"
                   required
+                  value={step2FollowUpDate}
+                  min={new Date().toISOString().split('T')[0]}
+                  onChange={(e) => setStep2FollowUpDate(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">Follow-up Reason *</label>
-                <select
-                  value={step2FollowUpReason}
-                  onChange={(e) => setStep2FollowUpReason(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl py-2.5 px-4 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 transition-all appearance-none"
-                  required
-                >
-                  <option value="Customer Requested Time">Customer Requested Time</option>
-                  <option value="Budget Discussion">Budget Discussion</option>
-                  <option value="Package Clarification">Package Clarification</option>
-                  <option value="Waiting for Family Approval">Waiting for Family Approval</option>
-                  <option value="Follow-up Call">Follow-up Call</option>
-                  <option value="Meeting Scheduled">Meeting Scheduled</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">Follow-up Notes *</label>
+                <label className="block font-medium text-slate-400 mb-1">
+                  Follow-up Notes * (Required)
+                </label>
                 <textarea
+                  required
+                  rows={3}
+                  placeholder="Summarize the event discussion, client's vibe, key preferences..."
                   value={step2FollowUpNotes}
                   onChange={(e) => setStep2FollowUpNotes(e.target.value)}
-                  rows={3}
-                  placeholder="Enter detailed follow-up notes here..."
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl py-2.5 px-4 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 transition-all resize-none"
-                  required
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs"
                 />
               </div>
-            </div>
 
-            <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
-              <button 
-                type="button"
-                onClick={() => setShowStep2Popup(false)}
-                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold rounded-xl transition-all text-xs border border-slate-700"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveStep2FollowUp}
-                disabled={isSaving || !step2FollowUpDate || !step2FollowUpNotes}
-                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2 text-xs border border-indigo-400/20"
-              >
-                {isSaving ? (
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <>💾 Save & Continue to Step 3</>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Step 3 Final Status Popup Modal */}
-      {showStep3Popup && selectedLead && (
-        <div className="fixed inset-0 bg-black/85 z-[100] flex items-center justify-center p-4 backdrop-blur-md">
-          <div id="step3_status_modal" className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden max-w-md w-full shadow-2xl p-6 space-y-6 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <h4 className="font-bold text-slate-100 text-base flex items-center gap-2 font-sans">
-                <span className="text-indigo-500">📈</span> Set Final CRM Lead Status
-              </h4>
-              <button 
-                onClick={() => setShowStep3Popup(false)}
-                className="text-slate-500 hover:text-slate-300 transition-colors p-1 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-slate-300 text-xs leading-relaxed font-sans">
-              Quotation and event setup saved successfully. Please select the next step for <strong>{selectedLead.customer_name}</strong> to finalize the Sales CRM stage:
-            </p>
-
-            <div className="grid grid-cols-1 gap-3.5">
-              <button
-                type="button"
-                onClick={() => handleStep3StatusSelect('Negotiation')}
-                disabled={isSaving}
-                className="w-full flex items-center justify-between p-4 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-indigo-500/50 rounded-xl transition-all group text-left cursor-pointer"
-              >
-                <div>
-                  <div className="font-bold text-slate-100 text-sm group-hover:text-indigo-400 transition-colors font-sans">🤝 Negotiation</div>
-                  <div className="text-[11px] text-slate-400 mt-1 font-sans">Lead is interested. Discussing pricing and custom package terms.</div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-indigo-400 transition-colors shrink-0 ml-3" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleStep3StatusSelect('Quotation Sent')}
-                disabled={isSaving}
-                className="w-full flex items-center justify-between p-4 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/50 rounded-xl transition-all group text-left cursor-pointer"
-              >
-                <div>
-                  <div className="font-bold text-slate-100 text-sm group-hover:text-emerald-400 transition-colors font-sans">✉️ Quotation Sent</div>
-                  <div className="text-[11px] text-slate-400 mt-1 font-sans">Quotation has been shared with the client. Awaiting booking decision.</div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-emerald-400 transition-colors shrink-0 ml-3" />
-              </button>
-            </div>
-
-            <div className="pt-4 border-t border-slate-800 flex items-center justify-end">
-              <button 
-                type="button"
-                onClick={() => setShowStep3Popup(false)}
-                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold rounded-xl transition-all text-xs border border-slate-700 cursor-pointer font-sans"
-              >
-                Cancel
-              </button>
+              <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowStep2Popup(false)}
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs animate-none border-0"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveStep2FollowUp}
+                  disabled={isSaving || !step2FollowUpDate || !step2FollowUpNotes}
+                  className="px-4 py-2 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center gap-1.5 cursor-pointer shadow-lg text-xs border-0"
+                >
+                  {isSaving ? 'Saving...' : 'Save & Continue'}
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -8881,54 +8294,39 @@ USING (true);`;
         <div className="fixed inset-0 bg-black/85 z-[100] flex items-center justify-center p-4 backdrop-blur-md">
           <div className="bg-slate-900 border border-red-900/50 rounded-xl overflow-hidden max-w-lg w-full shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <h3 className="text-lg font-bold text-white">Error Details</h3>
-              <button onClick={() => setErrorDetails(null)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
+              <h4 className="font-bold text-red-400 text-lg flex items-center gap-2">
+                <span>❌</span> {errorDetails.title}
+              </h4>
+              <button 
+                onClick={() => setErrorDetails(null)}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                ✕
               </button>
             </div>
-            <div className="space-y-3">
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2 overflow-auto max-h-60 custom-scrollbar">
-                <div className="grid grid-cols-3 gap-2 text-[10px] uppercase font-bold text-slate-500 mb-1">
-                  <div>Field</div>
-                  <div className="col-span-2">Value</div>
+            <div className="space-y-3 text-sm text-slate-300">
+              <p><strong>Reason:</strong> {errorDetails.reason}</p>
+              {errorDetails.source && <p><strong>Source:</strong> {errorDetails.source}</p>}
+              {errorDetails.failedFunction && <p><strong>Failed Function:</strong> {errorDetails.failedFunction}</p>}
+              {errorDetails.database && <p><strong>Database:</strong> {errorDetails.database}</p>}
+              {errorDetails.leadId && <p><strong>Lead ID:</strong> {errorDetails.leadId}</p>}
+              {errorDetails.suggestedFix && (
+                <div className="mt-4 p-3 bg-blue-950/30 border border-blue-900/50 rounded-lg text-blue-300">
+                  <strong>Suggested Fix:</strong> {errorDetails.suggestedFix}
                 </div>
-                
-                {errorDetails.failedField && (
-                  <div className="grid grid-cols-3 gap-2 text-xs border-b border-slate-800/50 pb-2">
-                    <div className="text-slate-400">Failed Field</div>
-                    <div className="col-span-2 text-rose-400 font-mono">{errorDetails.failedField}</div>
-                  </div>
-                )}
-                
-                {errorDetails.tableName && (
-                  <div className="grid grid-cols-3 gap-2 text-xs border-b border-slate-800/50 pb-2">
-                    <div className="text-slate-400">Table Name</div>
-                    <div className="col-span-2 text-amber-400 font-mono">{errorDetails.tableName}</div>
-                  </div>
-                )}
-
-                {errorDetails.columnName && (
-                  <div className="grid grid-cols-3 gap-2 text-xs border-b border-slate-800/50 pb-2">
-                    <div className="text-slate-400">Column Name</div>
-                    <div className="col-span-2 text-amber-400 font-mono">{errorDetails.columnName}</div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-3 gap-2 text-xs border-b border-slate-800/50 pb-2">
-                  <div className="text-slate-400">Supabase Error</div>
-                  <div className="col-span-2 text-slate-200">{errorDetails.reason}</div>
+              )}
+              {process.env.NODE_ENV !== 'production' && errorDetails.stack && (
+                <div className="mt-4 p-3 bg-slate-950 rounded-lg overflow-auto max-h-40 border border-slate-800 text-[10px] font-mono text-slate-500">
+                  {errorDetails.stack}
                 </div>
-
-                {errorDetails.suggestedFix && (
-                  <div className="grid grid-cols-3 gap-2 text-xs pt-1">
-                    <div className="text-slate-400">Suggested Fix</div>
-                    <div className="col-span-2 text-emerald-400 italic">{errorDetails.suggestedFix}</div>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
-            <div className="flex justify-end">
-              <button onClick={() => setErrorDetails(null)} className="px-4 py-2 bg-slate-800 text-white rounded-lg">
+            <div className="pt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setErrorDetails(null)}
+                className="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              >
                 Close
               </button>
             </div>
@@ -8942,7 +8340,7 @@ USING (true);`;
           <div id="lost_lead_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
-                <span>��</span> Mark Lead as Lost
+                <span>💔</span> Mark Lead as Lost
               </h4>
               <button 
                 onClick={() => setShowLostModal(false)}
@@ -9039,7 +8437,7 @@ USING (true);`;
             <div className="py-2.5 px-4 sm:px-5 border-b border-slate-850 flex items-center justify-between bg-slate-950/40 sticky top-0 z-10 backdrop-blur-sm shrink-0">
               <div className="flex items-center gap-2 text-left">
                 <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5 font-mono uppercase tracking-wider">
-                  <span>��</span> Digital Lead CRM Workspace — Client Board
+                  <span>💍</span> Digital Lead CRM Workspace — Client Board
                 </h3>
                 <span className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded font-mono font-bold">Code: {selectedLead.lead_id}</span>
               </div>
@@ -9102,7 +8500,7 @@ USING (true);`;
             {/* If locked, display banner */}
             {isLeadLocked && (
               <div className="mx-4 sm:mx-5 mt-2 bg-amber-950/25 border border-amber-500/20 p-2.5 rounded-xl flex items-start gap-3 text-left shadow-lg">
-                <span className="text-amber-500 text-base mt-0.5">��</span>
+                <span className="text-amber-500 text-base mt-0.5">🔒</span>
                 <div>
                   <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wide">Record Lock Active (CRM Closed)</h4>
                   <p className="text-[10px] text-zinc-400 leading-relaxed mt-0.5">
@@ -9226,7 +8624,7 @@ USING (true);`;
                       <div className="border-b border-slate-800 pb-1.5">
                         <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
                           <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">3</span>
-                          <span>Section 1: Package Selection</span>
+                          <span>Quotation Workspace</span>
                         </h3>
                         <p className="text-[10px] text-zinc-400 mt-0.5">Select from standard configured packages, customize team members and deliverables, adjust pricing, and generate the quotation.</p>
                       </div>
@@ -9269,7 +8667,7 @@ USING (true);`;
                               {/* Sales Executive Details */}
                               <div className="bg-slate-900/50 border border-slate-805/40 rounded-lg p-3 space-y-2.5 shadow-sm mt-3">
                                 <h4 className="text-[11px] font-bold text-indigo-400 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-1">
-                                  <span>��</span> Sales Executive Details
+                                  <span>👤</span> Sales Executive Details
                                 </h4>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                                   <div>
@@ -9347,77 +8745,69 @@ USING (true);`;
                                       : inclusionsList;
 
                                     return (
-                                      <div key={event.id} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-3 mt-3 mb-4 text-left font-sans animate-fade-in">
-                                        <div className="border-b border-slate-800/40 pb-1.5 flex items-center justify-between">
-                                          <div>
-                                            <h3 className="text-sm font-bold text-slate-100 uppercase font-mono tracking-wider">
-                                              {event.event_name || event.event_type || 'Event'}
-                                            </h3>
-                                            <span className="text-[10px] font-semibold text-indigo-400 tracking-wider uppercase font-mono">
-                                              TEAM MEMBERS INCLUDED
-                                            </span>
-                                          </div>
-                                          <button
-                                            type="button"
-                                            disabled={isLeadLocked}
-                                            onClick={() => {
-                                              const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
-                                              currentList.push('');
-                                              setEditableInclusions({
-                                                ...editableInclusions,
-                                                [eventKey]: currentList
-                                              });
-                                            }}
-                                            className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded transition-all cursor-pointer"
-                                          >
-                                            + Add Member
-                                          </button>
-                                        </div>
+                                      <div key={event.id} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-3 mt-3 mb-4">
+                                        <h4 className="text-xs sm:text-sm font-bold text-slate-100 uppercase tracking-wider font-mono border-b border-slate-800/40 pb-1.5 flex items-center justify-between">
+                                          <span>🎬 {event.event_name || event.event_type || 'Unnamed Event'}</span>
+                                        </h4>
                                         <div>
+                                          <div className="flex items-center justify-between mb-2">
+                                            <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">
+                                              Team Members Included (Editable)
+                                            </label>
+                                            <button
+                                              type="button"
+                                              disabled={isLeadLocked}
+                                              onClick={() => {
+                                                const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
+                                                currentList.push('');
+                                                setEditableInclusions({
+                                                  ...editableInclusions,
+                                                  [eventKey]: currentList
+                                                });
+                                              }}
+                                              className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded transition-all cursor-pointer"
+                                            >
+                                              + Add Member
+                                            </button>
+                                          </div>
                                           {eventInclusions.length === 0 ? (
                                             <p className="text-[10px] text-zinc-500 italic">No team members added yet.</p>
                                           ) : (
-                                            <div className="space-y-3">
-                                              {eventInclusions.map((item, idx) => {
-                                                const staffName = item.includes('|') ? item.split('|')[0] : item;
-                                                return (
-                                                  <div key={idx} className="flex items-center gap-2 bg-slate-950/40 p-2.5 rounded-lg border border-slate-850">
-                                                    <div className="flex-1">
-                                                      <input
-                                                        type="text"
-                                                        placeholder="Staff Name"
-                                                        value={staffName}
-                                                        disabled={isLeadLocked}
-                                                        onChange={(e) => {
-                                                          const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
-                                                          currentList[idx] = `${e.target.value}`;
-                                                          setEditableInclusions({
-                                                            ...editableInclusions,
-                                                            [eventKey]: currentList
-                                                          });
-                                                        }}
-                                                        className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
-                                                      />
-                                                    </div>
-                                                    {!isLeadLocked && (
-                                                      <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                          const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
-                                                          currentList.splice(idx, 1);
-                                                          setEditableInclusions({
-                                                            ...editableInclusions,
-                                                            [eventKey]: currentList
-                                                          });
-                                                        }}
-                                                        className="text-red-400 hover:text-red-350 p-1.5 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer shrink-0"
-                                                      >
-                                                        Remove
-                                                      </button>
-                                                    )}
-                                                  </div>
-                                                );
-                                              })}
+                                            <div className="space-y-2">
+                                              {eventInclusions.map((item, idx) => (
+                                                <div key={idx} className="flex items-center gap-2">
+                                                  <input
+                                                    type="text"
+                                                    value={item}
+                                                    disabled={isLeadLocked}
+                                                    onChange={(e) => {
+                                                      const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
+                                                      currentList[idx] = e.target.value;
+                                                      setEditableInclusions({
+                                                        ...editableInclusions,
+                                                        [eventKey]: currentList
+                                                      });
+                                                    }}
+                                                    className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
+                                                  />
+                                                  {!isLeadLocked && (
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
+                                                        currentList.splice(idx, 1);
+                                                        setEditableInclusions({
+                                                          ...editableInclusions,
+                                                          [eventKey]: currentList
+                                                        });
+                                                      }}
+                                                      className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer"
+                                                    >
+                                                      Remove
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              ))}
                                             </div>
                                           )}
                                         </div>
@@ -9427,7 +8817,7 @@ USING (true);`;
                                 ) : (
                                   <div>
                                     <div className="flex items-center justify-between mb-1.5">
-                                      <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">TEAM MEMBERS INCLUDED</label>
+                                      <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Team Members Included (Editable)</label>
                                       <button
                                         type="button"
                                         disabled={isLeadLocked}
@@ -9439,7 +8829,7 @@ USING (true);`;
                                             [selectedPkgId]: currentList
                                           });
                                         }}
-                                        className="text-xs text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded cursor-pointer"
+                                        className="text-xs text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded"
                                       >
                                         + Add Member
                                       </button>
@@ -9447,47 +8837,41 @@ USING (true);`;
                                     {inclusionsList.length === 0 ? (
                                       <p className="text-[10px] text-zinc-500 italic">No team members added yet.</p>
                                     ) : (
-                                      <div className="space-y-3">
-                                        {inclusionsList.map((item, idx) => {
-                                          const staffName = item.includes('|') ? item.split('|')[0] : item;
-                                          return (
-                                            <div key={idx} className="flex items-center gap-2 bg-slate-950/40 p-2.5 rounded-lg border border-slate-850">
-                                              <div className="flex-1">
-                                                <input
-                                                  type="text"
-                                                  placeholder="Staff Name"
-                                                  value={staffName}
-                                                  disabled={isLeadLocked}
-                                                  onChange={(e) => {
-                                                    const currentList = [...(editableInclusions[selectedPkgId] || [])];
-                                                    currentList[idx] = `${e.target.value}`;
-                                                    setEditableInclusions({
-                                                      ...editableInclusions,
-                                                      [selectedPkgId]: currentList
-                                                    });
-                                                  }}
-                                                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
-                                                />
-                                              </div>
-                                              {!isLeadLocked && (
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    const currentList = [...(editableInclusions[selectedPkgId] || [])];
-                                                    currentList.splice(idx, 1);
-                                                    setEditableInclusions({
-                                                      ...editableInclusions,
-                                                      [selectedPkgId]: currentList
-                                                    });
-                                                  }}
-                                                  className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono cursor-pointer shrink-0"
-                                                >
-                                                  Remove
-                                                </button>
-                                              )}
-                                            </div>
-                                          );
-                                        })}
+                                      <div className="space-y-2">
+                                        {inclusionsList.map((item, idx) => (
+                                          <div key={idx} className="flex items-center gap-2">
+                                            <input
+                                              type="text"
+                                              value={item}
+                                              disabled={isLeadLocked}
+                                              onChange={(e) => {
+                                                const currentList = [...(editableInclusions[selectedPkgId] || [])];
+                                                currentList[idx] = e.target.value;
+                                                setEditableInclusions({
+                                                  ...editableInclusions,
+                                                  [selectedPkgId]: currentList
+                                                });
+                                              }}
+                                              className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
+                                            />
+                                            {!isLeadLocked && (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  const currentList = [...(editableInclusions[selectedPkgId] || [])];
+                                                  currentList.splice(idx, 1);
+                                                  setEditableInclusions({
+                                                    ...editableInclusions,
+                                                    [selectedPkgId]: currentList
+                                                  });
+                                                }}
+                                                className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono"
+                                              >
+                                                Remove
+                                              </button>
+                                            )}
+                                          </div>
+                                        ))}
                                       </div>
                                     )}
                                   </div>
@@ -9549,48 +8933,447 @@ USING (true);`;
                                             Remove
                                           </button>
                                         )}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                                {renderQuotationAndStep4Section(true)}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
-                            );
-                            })()}
-                          </div>
-                        </div>
-                      )}
 
-                        <div className="mt-8 pt-6 border-t border-slate-800/60 flex items-center justify-between">
-                          <button
-                            type="button"
-                            onClick={() => setCrmWizardStep(crmWizardStep - 1)}
-                            disabled={crmWizardStep === 1}
-                            className="px-5 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold rounded-xl border border-slate-700 transition-all disabled:opacity-30 disabled:cursor-not-allowed text-xs flex items-center gap-2"
-                          >
-                            <span>←</span> Back
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSaveStep(crmWizardStep)}
-                            disabled={isSaving}
-                            className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2 text-xs border border-indigo-400/20"
-                          >
-                            {isSaving ? (
-                              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            ) : (
-                              <span>{crmWizardStep === 3 ? '💾 Save & Finalize Lead' : 'Next Step →'}</span>
-                            )}
-                          </button>
-                        </div>
-                      </form>
+                              {renderQuotationAndStep4Section(true)}
+                            </div>
+                          );
+                        })()}
+                      </div>
                     </div>
+                  )}
+
+                  {/* STEP 5 INTEGRATED (CRM): Status Update */}
+                  <div className="space-y-4 animate-fade-in text-left mt-6">
+                      <div className="border-b border-slate-800 pb-1.5">
+                        <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                          <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">4</span>
+                          <span>Status Update</span>
+                        </h3>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">Determine final CRM pipeline stages or transition the contract to Operations.</p>
+                      </div>
+                      <div className="space-y-4 text-left">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider font-black">Select Sales Pipeline Status *</label>
+                          <select
+                            value={wizardLeadData.status || ''}
+                            disabled={isLeadLocked}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, status: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-white font-bold cursor-pointer"
+                          >
+                            <option value="New Lead">New Lead</option>
+                            <option value="Contacted">Contacted</option>
+                            <option value="Follow Up">Follow Up</option>
+                            <option value="Quotation Sent">Quotation Sent</option>
+                            <option value="Negotiation">Negotiation</option>
+                            <option value="Order Confirmed">Order Confirmed (Moves to Operations & Locks CRM)</option>
+                            <option value="Lost Lead">Lost Lead</option>
+                          </select>
+                        </div>
+
+                        {wizardLeadData.status === 'Order Confirmed' && (
+                          <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
+                            <div className="border-b border-emerald-500/20 pb-1.5">
+                              <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest font-mono">💍 Configure Confirmed Order & Booking Contract</h4>
+                              <p className="text-[10px] text-zinc-400 mt-0.5">Confirming this order locks the CRM profile and creates a real-time production entry. Only payment configurations remain editable.</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-left">
+                              <div>
+                                <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Confirmed Event Date *</label>
+                                <input
+                                  type="date"
+                                  value={wizardLeadData.confirmed_event_date || ''}
+                                  disabled={isLeadLocked}
+                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, confirmed_event_date: e.target.value })}
+                                  className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Confirmed Event Time *</label>
+                                <input
+                                  type="time"
+                                  value={wizardLeadData.confirmed_event_time || ''}
+                                  disabled={isLeadLocked}
+                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, confirmed_event_time: e.target.value })}
+                                  className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Contract Final Amount (₹) *</label>
+                                <input
+                                  type="number"
+                                  value={wizardLeadData.final_amount || 0}
+                                  disabled={isLeadLocked}
+                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, final_amount: Math.max(0, parseInt(e.target.value) || 0) })}
+                                  className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-amber-400 font-mono font-bold"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Advance Payment Received (₹) *</label>
+                                <input
+                                  type="number"
+                                  value={wizardLeadData.advance_received || 0}
+                                  disabled={isLeadLocked}
+                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, advance_received: Math.max(0, parseInt(e.target.value) || 0) })}
+                                  className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-emerald-400 font-mono font-bold"
+                                  required
+                                />
+                              </div>
+                            </div>
+
+                            <div className="bg-slate-950 p-3 rounded-lg border border-slate-850 flex items-center justify-between text-xs">
+                              <div>
+                                <span className="text-[10px] text-zinc-550 uppercase font-bold font-mono">Calculated Pending Amount</span>
+                                <strong className="block text-red-500 text-sm font-mono mt-0.5">₹{((wizardLeadData.final_amount || 0) - (wizardLeadData.advance_received || 0)).toLocaleString('en-IN')}</strong>
+                              </div>
+                              <span className="text-[9px] bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Payment Pending</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                </form>
+              </div>
+            </div>
+
+            {/* Footer Buttons: Sticky */}
+            <div className="py-1 px-4 sm:px-5 border-t border-slate-850 flex items-center justify-between bg-slate-950/40 sticky bottom-0 z-10 shrink-0 backdrop-blur-sm">
+              {crmWizardStep > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => setCrmWizardStep(crmWizardStep - 1)}
+                  className="px-3.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border border-slate-705 border-0"
+                >
+                  Back
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setSelectedLead(null)}
+                  className="px-3.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border border-slate-705 border-0"
+                >
+                  Back
+                </button>
+              )}
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSaveStep(crmWizardStep)}
+                  disabled={isSaving || (crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === ''))}
+                  className={`px-4 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 border-0 ${
+                    crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')
+                      ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
+                      : 'bg-indigo-650 hover:bg-indigo-600 text-white cursor-pointer'
+                  }`}
+                >
+                  {isSaving ? (
+                    <span className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
+                  ) : null}
+                  <span>{isSaving ? 'Saving...' : crmWizardStep === 3 ? 'Save & Proceed' : 'Save & Next'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      {/* MODAL: Proceed Status Pop-up */}
+      {showStep3Popup && (
+        <div id="modal_step3_proceed_status" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-4 animate-fade-in text-left">
+          <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-indigo-500/30 rounded-2xl w-full max-w-md shadow-2xl relative p-6 space-y-5">
+            <div className="absolute top-0 left-12 w-48 h-48 bg-indigo-500/[0.03] rounded-full blur-[60px] pointer-events-none" />
+
+            <div className="flex items-start justify-between border-b border-slate-800 pb-3 relative z-10">
+              <div>
+                <h3 className="text-sm font-bold text-white tracking-widest font-mono flex items-center gap-1.5 animate-pulse">
+                  <span>STATUS</span>
+                </h3>
+                <p className="text-[11px] text-indigo-300 mt-0.5 font-sans">
+                  How would you like to proceed?
+                </p>
+              </div>
+              <button 
+                onClick={() => setShowStep3Popup(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 relative z-10 text-slate-300">
+              <div className="space-y-3">
+                <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-800/80 bg-slate-950/20 hover:bg-slate-950/40 cursor-pointer transition-colors">
+                  <input
+                    type="radio"
+                    name="step3Option"
+                    value="negotiation"
+                    checked={step3Option === 'negotiation'}
+                    onChange={() => setStep3Option('negotiation')}
+                    className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-slate-750 bg-slate-900 cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-sm font-bold text-white">Mark as Negotiation</span>
+                    <p className="text-[11px] text-zinc-400 mt-0.5 font-sans">Update lead status to Negotiation and return to Leads Directory.</p>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-800/80 bg-slate-950/20 hover:bg-slate-950/40 cursor-pointer transition-colors">
+                  <input
+                    type="radio"
+                    name="step3Option"
+                    value="quotation_send"
+                    checked={step3Option === 'quotation_send'}
+                    onChange={() => setStep3Option('quotation_send')}
+                    className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-slate-750 bg-slate-900 cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-sm font-bold text-white">Quotation Sent</span>
+                    <p className="text-[11px] text-zinc-400 mt-0.5 font-sans">Update lead status to Quotation Sent and return to Leads Directory.</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800/80 relative z-10">
+              <button
+                onClick={() => setShowStep3Popup(false)}
+                className="px-4 py-1.5 rounded bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmStep3Proceed}
+                disabled={isSaving}
+                className="px-4 py-1.5 rounded bg-indigo-650 hover:bg-indigo-600 text-white text-xs font-mono font-bold uppercase transition-all shadow-md flex items-center gap-1.5"
+              >
+                {isSaving && <span className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>}
+                <span>Continue</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+{/* MODAL: Existing Customer Detection Pop-up */}
+      {showDetectionPopup && detectedCustomer && (
+        <div id="modal_existing_customer_detection" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-4 animate-fade-in text-left">
+          <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-indigo-500/30 rounded-2xl w-full max-w-lg shadow-2xl relative p-6 space-y-5">
+            {/* Ambient light ring */}
+            <div className="absolute top-0 left-12 w-48 h-48 bg-indigo-500/[0.03] rounded-full blur-[60px] pointer-events-none" />
+
+            <div className="flex items-start justify-between border-b border-slate-800 pb-3 relative z-10">
+              <div>
+                <h3 className="text-sm font-bold text-white tracking-widest font-mono flex items-center gap-1.5">
+                  <span className="p-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[9px] rounded font-black font-mono">DUPLICATION WARNING</span>
+                  <span>EXISTING CUSTOMER DETECTED</span>
+                </h3>
+                <p className="text-[11px] text-indigo-300 mt-0.5 font-sans">
+                  The phone index or email graph entered already maps to an active account.
+                </p>
+              </div>
+              <button 
+                onClick={() => { setShowDetectionPopup(false); setDetectedCustomer(null); }}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 relative z-10 text-slate-300">
+              {/* Profile Card Summary */}
+              <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800/80 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono text-amber-500 bg-slate-850 px-2 py-0.5 border border-slate-750 rounded font-black">
+                    {detectedCustomer.customer_id}
+                  </span>
+                  <span className="text-[9px] bg-slate-850 text-slate-400 px-2 py-0.5 rounded border border-slate-750 font-mono">
+                    Last Event: {detectedCustomer.lastEventDate || 'N/A'}
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  <h4 className="text-sm font-black text-white">{detectedCustomer.customer_name}</h4>
+                  <div className="text-[10px] text-slate-400 font-mono flex items-center gap-x-3 gap-y-1 flex-wrap">
+                    <span>{detectedCustomer.email}</span>
+                    <span>•</span>
+                    <span>{formatIndianPhoneNumber(detectedCustomer.mobile)}</span>
+                  </div>
+                </div>
+
+                {/* Key Retention KPIs */}
+                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-800/50 text-xs text-left">
+                  <div>
+                    <span className="text-[10px] text-slate-500 block font-mono">PREVIOUS ORDERS</span>
+                    <strong className="text-slate-200 font-black font-mono">{detectedCustomer.totalOrders} Contracts</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block font-mono">TOTAL REVENUE (CLV)</span>
+                    <strong className="text-emerald-455 font-black font-mono">{formatINR(detectedCustomer.totalRevenue)}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Packages badge roster */}
+              {detectedCustomer.previousPackages.length > 0 && (
+                <div className="space-y-1.5 text-left">
+                  <span className="text-[9px] text-slate-550 uppercase font-bold tracking-wider font-mono">PREVIOUS PACKAGES UNDERTAKINGS:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {detectedCustomer.previousPackages.map((pkg: string, i: number) => (
+                      <span key={pkg + i} className="bg-slate-900 border border-slate-800 px-2 py-0.5 text-[9px] font-mono rounded text-slate-400">
+                        {pkg}
+                      </span>
+                    ))}
                   </div>
                 </div>
               )}
 
-      {/* MODAL: Sales Record Unlock */}
+              {/* REORDER MODE TOGGLE SEGMENT */}
+              {isQuickReorderView ? (
+                <div className="bg-slate-900 border border-indigo-500/25 p-3 rounded-xl space-y-3 animate-fade-in-up text-left">
+                  <span className="text-[9px] font-black text-indigo-400 tracking-widest font-mono block">CONFIGURE QUICK REORDER PACKAGE</span>
+                  
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className={reorderForm.event_type === 'Other' ? "col-span-2 space-y-1.5" : ""}>
+                      <label className="text-[10px] text-slate-400 block mb-1">Shoot Category</label>
+                      <select
+                        value={reorderForm.event_type}
+                        onChange={(e) => setReorderForm({ ...reorderForm, event_type: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200"
+                      >
+                        {EVENT_TYPES.map(type => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
+                      </select>
+
+                      {reorderForm.event_type === 'Other' && (
+                        <div className="animate-fade-in-down mt-1.5">
+                          <label className="text-[9px] font-mono font-bold text-amber-500 block mb-1">
+                            Custom Event Type *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Specify custom event type"
+                            value={reorderForm.custom_event_name}
+                            onChange={(e) => setReorderForm({ ...reorderForm, custom_event_name: e.target.value })}
+                            className="w-full bg-slate-950 border border-amber-500/50 rounded px-2 py-1 text-slate-100 text-xs focus:outline-none text-white"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">Event Plan Date *</label>
+                      <input
+                        type="date"
+                        required
+                        value={reorderForm.event_date}
+                        onChange={(e) => setReorderForm({ ...reorderForm, event_date: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">Contract Amount (₹)</label>
+                      <input
+                        type="number"
+                        value={reorderForm.quotation_amount}
+                        onChange={(e) => setReorderForm({ ...reorderForm, quotation_amount: Number(e.target.value), advance_received: Math.round(Number(e.target.value)/3) })}
+                        className="w-full bg-slate-950 border border-slate-805 rounded px-2 py-1 text-slate-200 font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">Advance Received (₹)</label>
+                      <input
+                        type="number"
+                        value={reorderForm.advance_received}
+                        onChange={(e) => setReorderForm({ ...reorderForm, advance_received: Number(e.target.value) })}
+                        className="w-full bg-slate-950 border border-slate-805 rounded px-2 py-1 text-slate-205 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 border-t border-slate-800 pt-2 text-[11px]">
+                    <button 
+                      type="button" 
+                      onClick={() => setIsQuickReorderView(false)} 
+                      className="px-3 py-1 bg-slate-800 text-slate-400 rounded hover:text-slate-200 cursor-pointer"
+                    >
+                      Refuse
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => handleExecuteQuickReorder(detectedCustomer)} 
+                      className="px-3 py-1 bg-indigo-650 text-white rounded font-bold cursor-pointer"
+                    >
+                      Finalize Reorder Project
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-[11px] text-slate-500 italic text-left">
+                  Tip: Bypassing manual typing and booking a new event will keep the legacy events intact in client timeline record history.
+                </div>
+              )}
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex flex-col sm:flex-row justify-end gap-2 p-1 border-t border-slate-800">
+              {!isQuickReorderView && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Autofill name and other details back to the createForm
+                      setCreateForm(prev => ({
+                        ...prev,
+                        customer_name: detectedCustomer.customer_name,
+                        email: detectedCustomer.email,
+                        alternate_mobile: detectedCustomer.alternate_mobile || '',
+                      }));
+                      setShowDetectionPopup(false);
+                      setDetectedCustomer(null);
+                    }}
+                    className="px-4 py-2 text-xs bg-slate-800 hover:bg-slate-755 text-slate-200 border border-slate-700 rounded-lg cursor-pointer transition-all font-bold"
+                  >
+                    Auto-Fill Contact Info
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsQuickReorderView(true);
+                      // Set default reorder date
+                      const tomorrowStr = new Date();
+                      tomorrowStr.setDate(tomorrowStr.getDate() + 30);
+                      setReorderForm(prev => ({
+                        ...prev,
+                        event_date: tomorrowStr.toISOString().split('T')[0]
+                      }));
+                    }}
+                    className="px-4 py-2 text-xs bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-505 hover:to-indigo-605 text-white rounded-lg shadow-md cursor-pointer transition-all font-bold flex items-center justify-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Quick Repeat Reorder</span>
+                  </button>
+                </>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Business Owner Unlock Reason Prompt */}
       {unlockingRecordId && (
         <div id="modal_sales_record_unlock" className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[200] flex items-center justify-center p-4 animate-fade-in text-left">
           <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-amber-500/30 rounded-2xl w-full max-w-md shadow-2xl relative p-6 space-y-4">
@@ -9671,7 +9454,7 @@ USING (true);`;
                   type="submit"
                   className="px-4 py-2 text-xs bg-amber-600 hover:bg-amber-500 text-white rounded-lg shadow-sm cursor-pointer font-extrabold uppercase tracking-wide font-mono border border-amber-500/20"
                 >
-                  �� Confirm Unlock
+                  🔓 Confirm Unlock
                 </button>
               </div>
             </form>
@@ -9909,7 +9692,7 @@ USING (true);`;
                         ID: {viewingPkgDetails.package_id || 'Dynamic Link'}
                       </span>
                       <h4 className="text-sm sm:text-base font-extrabold text-slate-100 font-sans tracking-tight">
-                        �� {viewingPkgDetails.package_name || 'Package Specifications'}
+                        📋 {viewingPkgDetails.package_name || 'Package Specifications'}
                       </h4>
                     </div>
                     <div className="flex items-center gap-2">
@@ -9973,7 +9756,7 @@ USING (true);`;
                     {/* Deliverables Panel */}
                     <div className="bg-slate-950/20 border border-slate-850 p-3.5 rounded-xl space-y-2.5">
                       <span className="text-[10px] font-bold text-slate-400 font-mono tracking-wider uppercase block border-b border-slate-850 pb-1.5 flex items-center gap-1.5">
-                        �� Key Deliverables Included
+                        📦 Key Deliverables Included
                       </span>
                       <div className="space-y-2 text-xs">
                         <div className="flex flex-col bg-slate-900/40 p-1.5 rounded border border-transparent hover:border-slate-800/60">
@@ -10004,7 +9787,7 @@ USING (true);`;
                       {/* Crew Members */}
                       <div className="bg-slate-950/20 border border-slate-850 p-3.5 rounded-xl space-y-2.5">
                         <span className="text-[10px] font-bold text-slate-400 font-mono tracking-wider uppercase block border-b border-slate-850 pb-1.5 flex items-center gap-1.5">
-                          �� Team Members Included
+                          👥 Team Members Included
                         </span>
                         <div className="grid grid-cols-2 gap-2 text-xs">
                           <div className="bg-slate-900/40 p-1.5 rounded">
@@ -10029,7 +9812,7 @@ USING (true);`;
                       {/* Coverage details */}
                       <div className="bg-slate-950/20 border border-slate-850 p-3.5 rounded-xl space-y-2.5">
                         <span className="text-[10px] font-bold text-slate-400 font-mono tracking-wider uppercase block border-b border-slate-850 pb-1.5 flex items-center gap-1.5">
-                          �� Coverage Details
+                          📸 Coverage Details
                         </span>
                         <div className="space-y-2 text-xs">
                           <div className="flex justify-between items-center bg-slate-900/40 p-2 rounded">
@@ -10052,7 +9835,7 @@ USING (true);`;
                   {/* Offers & Perks */}
                   <div className="bg-indigo-950/15 border border-indigo-900/40 p-3.5 rounded-xl space-y-2 text-xs">
                     <span className="text-[10px] font-bold text-indigo-400 font-mono tracking-wider uppercase block border-b border-indigo-950 pb-1">
-                      �� Package Offers & complimentary Items
+                      🎁 Package Offers & complimentary Items
                     </span>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
                       <div>
@@ -10069,7 +9852,7 @@ USING (true);`;
                   {/* Terms & Conditions */}
                   <div className="bg-slate-950/30 border border-slate-850 rounded-xl p-3.5 space-y-1.5 text-xs">
                     <span className="text-slate-505 block font-bold text-[9px] uppercase font-mono tracking-wider">
-                      �� Contractual Terms & conditions
+                      📑 Contractual Terms & conditions
                     </span>
                     <div className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-850 max-h-24 overflow-y-auto leading-relaxed text-slate-350">
                       {viewingPkgDetails.terms_conditions || (
@@ -10137,7 +9920,7 @@ USING (true);`;
           <div className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-lg w-full shadow-2xl flex flex-col max-h-[90vh]">
             <div className="flex items-center justify-between border-b border-slate-800 p-5 shrink-0">
               <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
-                <span>��</span> Reporting Details for Events
+                <span>📅</span> Reporting Details for Events
               </h4>
               <button 
                 onClick={() => {
@@ -10239,15 +10022,17 @@ USING (true);`;
                         });
                       }
 
-                      // Pass data to the action to save in a single transaction
-                      if (pendingConfirmAction) {
-                        await pendingConfirmAction({
-                          Reporting_date: firstDate,
-                          reporting_time: firstTime,
-                          transaction_id: bookingTransactionId,
-                          ...(updatedEvents ? { events: updatedEvents } : {})
-                        });
-                      }
+                      // Save both lead-level Reporting_date, reporting_time, and sub-events safely using the updateLead proxy
+                      await updateLead(targetLeadId, { 
+                        Reporting_date: firstDate,
+                        reporting_time: firstTime,
+                        ...(updatedEvents ? { events: updatedEvents } : {})
+                      });
+                    }
+                    
+                    // Proceed with original action
+                    if (pendingConfirmAction) {
+                      await pendingConfirmAction();
                     }
                     
                     setShowReportingPopup(false);
@@ -10317,7 +10102,7 @@ USING (true);`;
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[20001] flex items-center justify-center p-4 overflow-y-auto animate-fade-in text-left text-xs bg-black/60">
             <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-5 shadow-2xl relative text-slate-355">
               <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
-                <span className="text-xl">��️</span>
+                <span className="text-xl">🗑️</span>
                 <h3 className="text-base font-bold text-white">Delete Package</h3>
               </div>
 
@@ -10436,7 +10221,7 @@ USING (true);`;
                 <tbody>
                   {/* Category Row */}
                   <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
-                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">��️ Category</td>
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">🏷️ Category</td>
                     {selectedPkgIds.map((id) => {
                       const pkg = packages.find(p => p.package_id === id);
                       return (
@@ -10449,7 +10234,7 @@ USING (true);`;
 
                   {/* Pricing Row */}
                   <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
-                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">�� Price Rate</td>
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">💰 Price Rate</td>
                     {selectedPkgIds.map((id) => {
                       const pkg = packages.find(p => p.package_id === id);
                       return (
@@ -10462,7 +10247,7 @@ USING (true);`;
 
                   {/* Row: Deliverables */}
                   <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
-                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">�� Core Deliverables</td>
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">📦 Core Deliverables</td>
                     {selectedPkgIds.map((id) => {
                       const pkg = packages.find(p => p.package_id === id);
                       return (
@@ -10477,7 +10262,7 @@ USING (true);`;
 
                   {/* Row: Team Members */}
                   <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
-                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">�� Crew Required</td>
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">👥 Crew Required</td>
                     {selectedPkgIds.map((id) => {
                       const pkg = packages.find(p => p.package_id === id);
                       return (
@@ -10490,7 +10275,7 @@ USING (true);`;
 
                   {/* Row: Seasonal Offers */}
                   <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
-                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">�� Seasonal offers</td>
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">🎁 Seasonal offers</td>
                     {selectedPkgIds.map((id) => {
                       const pkg = packages.find(p => p.package_id === id);
                       return (
@@ -10518,7 +10303,7 @@ USING (true);`;
 
                   {/* Row: Scope Condition */}
                   <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
-                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">�� Shoot Scope</td>
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">📷 Shoot Scope</td>
                     {selectedPkgIds.map((id) => {
                       const pkg = packages.find(p => p.package_id === id);
                       return (
@@ -10533,7 +10318,7 @@ USING (true);`;
 
                   {/* Row: Terms & Conditions */}
                   <tr className="hover:bg-slate-950/20 text-[11px]">
-                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">�� Terms & Conditions</td>
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">📑 Terms & Conditions</td>
                     {selectedPkgIds.map((id) => {
                       const pkg = packages.find(p => p.package_id === id);
                       return (
