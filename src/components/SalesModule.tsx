@@ -2254,6 +2254,8 @@ USING (true);`;
   const [leadDiscount, setLeadDiscount] = useState<number>(0);
   const [isPkgDropdownOpen, setIsPkgDropdownOpen] = useState(false);
   const [pkgSearchQuery, setPkgSearchQuery] = useState('');
+  const [quoteDiscount, setQuoteDiscount] = useState<number | ''>('');
+  const [quoteAdditional, setQuoteAdditional] = useState<number | ''>('');
 
   // Auto calculate and sync with createForm.budget
   const selectedPkgs = PACKAGES_LIST.flatMap(cat => cat.items).filter(item => selectedPkgIds.includes(item.id));
@@ -2386,8 +2388,6 @@ USING (true);`;
   const [editableDeliverables, setEditableDeliverables] = useState<Record<string, string[]>>({});
   const [salesStaffName, setSalesStaffName] = useState<string>('');
   const [salesStaffMobile, setSalesStaffMobile] = useState<string>('');
-  const [quoteDiscount, setQuoteDiscount] = useState<number | ''>('');
-  const [quoteAdditional, setQuoteAdditional] = useState<number | ''>('');
   
   const [quoteServices, setQuoteServices] = useState<{ id: string; name: string; qty: number; price: number; isAdditional?: boolean }[]>([]);
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
