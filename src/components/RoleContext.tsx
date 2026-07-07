@@ -1306,6 +1306,14 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           sanitized.created_by = `${currentUserName}|${currentRole || 'System'}`;
         }
       }
+      
+      if (table === 'payments' && record.payment_id) {
+        sanitized.payment_id = record.payment_id;
+      }
+      if (table === 'orders' && record.order_id) sanitized.order_id = record.order_id;
+      if (table === 'leads' && record.lead_id) sanitized.lead_id = record.lead_id;
+      if (table === 'operations' && record.operation_id) sanitized.operation_id = record.operation_id;
+
       // Try sending to server-side proxy first to bypass client RLS issues
       let proxyErrorDetails = '';
       let proxyStatus: number | null = null;
@@ -1520,6 +1528,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       console.log(`[pushUpdate EXECUTING] on ${table}:`, sanitized);
       
+      if (table === 'payments' && (updates as any).payment_id) {
+        sanitized.payment_id = (updates as any).payment_id;
+      }
+
       // Try sending to server-side proxy first to bypass client RLS issues
       let proxyErrorDetails = '';
       let proxyStatus: number | null = null;
