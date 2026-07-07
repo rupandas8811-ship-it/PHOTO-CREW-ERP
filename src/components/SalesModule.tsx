@@ -1536,19 +1536,21 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     return Array.from(new Set([...normalizedPkgCats, ...customCats]));
   }, [packages]);
 
-  const PACKAGES_LIST = categoriesList.map((cat) => ({
-    categoryName: cat,
-    items: (packages || [])
-      .filter((p) => normalizeCategory(p.category) === cat && p.status === 'Active')
-      .map((p) => ({
-        id: p.package_id,
-        name: p.package_name,
-        cost: p.price,
-        deliverables: p.deliverables || 'N/A',
-        team_members: p.team_members || 'N/A',
-        seasonal_offer: p.seasonal_offer || 'None'
-      }))
-  }));
+  const PACKAGES_LIST = React.useMemo(() => {
+    return categoriesList.map((cat) => ({
+      categoryName: cat,
+      items: (packages || [])
+        .filter((p) => normalizeCategory(p.category) === cat && p.status === 'Active')
+        .map((p) => ({
+          id: p.package_id,
+          name: p.package_name,
+          cost: p.price,
+          deliverables: p.deliverables || 'N/A',
+          team_members: p.team_members || 'N/A',
+          seasonal_offer: p.seasonal_offer || 'None'
+        }))
+    }));
+  }, [categoriesList, packages]);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [crmWizardStep, setCrmWizardStep] = useState<number>(1);
   const [crmHighestStep, setCrmHighestStep] = useState<number>(1);
@@ -2713,7 +2715,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     .filter(s => s.isAdditional)
     .reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
     const discountVal = Number(quoteDiscount || 0);
-  const dynamicFinalAmt = Math.max(0, dynamicBaseSum + Number(quoteAdditional || 0) - discountVal);
+  const rawDynamicFinalAmt = Math.max(0, dynamicBaseSum + Number(quoteAdditional || 0) - discountVal);
+  const dynamicFinalAmt = Number.isNaN(rawDynamicFinalAmt) ? 0 : rawDynamicFinalAmt;
 
   React.useEffect(() => {
     setWizardLeadData(prev => {

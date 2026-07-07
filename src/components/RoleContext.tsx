@@ -1164,7 +1164,17 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const timeFields = ['event_time', 'reporting_time', 'confirmed_event_time'];
     const dateFields = ['event_date', 'booking_date', 'event_start_date', 'event_end_date', 'delivery_target_date'];
-    
+    const numericFields = ['whatsapp_number', 'package_price', 'quotation_amount', 'advance_received', 'balance_amount', 'total_pax', 'advance_collected', 'lead_value', 'lead_score', 'quotation_discount', 'additional_services_cost', 'tax_amount', 'final_amount'];
+
+    for (const field of numericFields) {
+      if (field in clone) {
+        const val = clone[field];
+        if (val === '') {
+          clone[field] = null;
+        }
+      }
+    }
+
     for (const field of dateFields) {
       if (field in clone) {
         const val = clone[field];
@@ -1280,10 +1290,17 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             broadcastSyncPing();
             return { success: true };
           } else {
-            console.warn(`[pushInsert Proxy WARN] server returned success=false for ${table}, falling back...`, resJson.error);
+            console.warn(`[pushInsert Proxy WARN] server returned success=false for ${table}`, resJson.error);
+            return { success: false, error: resJson.error || "Server validation failed" };
           }
         } else {
-          console.warn(`[pushInsert Proxy WARN] server returned status ${response.status} for ${table}, falling back...`);
+          let errText = await response.text();
+          try {
+            const parsed = JSON.parse(errText);
+            if (parsed.error) errText = parsed.error;
+          } catch(e) {}
+          console.warn(`[pushInsert Proxy WARN] server returned status ${response.status} for ${table}:`, errText);
+          return { success: false, error: errText };
         }
       } catch (proxyErr) {
         console.warn(`[pushInsert Proxy ERROR] failed to reach server for ${table}, falling back...`, proxyErr);
@@ -1446,12 +1463,19 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             broadcastSyncPing();
             return { success: true };
           } else {
-            console.warn(`[pushUpdate Proxy WARN] server returned success=false for ${table}, falling back...`, resJson.error);
+            console.warn(`[pushUpdate Proxy WARN] server returned success=false for ${table}`, resJson.error);
+            return { success: false, error: resJson.error || "Server validation failed" };
           }
         } else {
-          console.warn(`[pushUpdate Proxy WARN] server returned status ${response.status} for ${table}, falling back...`);
+          let errText = await response.text();
+          try {
+            const parsed = JSON.parse(errText);
+            if (parsed.error) errText = parsed.error;
+          } catch(e) {}
+          console.warn(`[pushUpdate Proxy WARN] server returned status ${response.status} for ${table}:`, errText);
+          return { success: false, error: errText };
         }
-      } catch (proxyErr) {
+      } catch (proxyErr: any) {
         console.warn(`[pushUpdate Proxy ERROR] failed to reach server for ${table}, falling back...`, proxyErr);
       }
 
@@ -2900,9 +2924,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         event_type: targetLead.event_type,
         custom_event_name: targetLead.custom_event_name || '',
         custom_event_type: targetLead.custom_event_type || '',
-        event_date: eventDate || targetLead.event_date,
-        event_time: eventTime || targetLead.event_time,
-        reporting_time: reportingTime || targetLead.reporting_time || '',
+        event_date: eventDate || targetLead.event_date || undefined,
+        event_time: eventTime || targetLead.event_time || undefined,
+        reporting_time: reportingTime || targetLead.reporting_time || undefined,
         event_location: targetLead.event_location,
         package_name: packageName,
         quotation_amount: quotationAmount,
@@ -2935,9 +2959,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         custom_event_name: targetLead.custom_event_name || '',
         custom_event_type: targetLead.custom_event_type || '',
         shoot_type: targetLead.shoot_type || '',
-        event_date: eventDate || targetLead.event_date,
-        event_time: eventTime || targetLead.event_time,
-        reporting_time: reportingTime || '',
+        event_date: eventDate || targetLead.event_date || undefined,
+        event_time: eventTime || targetLead.event_time || undefined,
+        reporting_time: reportingTime || targetLead.reporting_time || undefined,
         event_location: targetLead.event_location,
         package_name: packageName,
         quotation_amount: quotationAmount,
@@ -2949,7 +2973,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         created_at: timestamp,
         updated_by: currentUserName,
         updated_at: timestamp,
-        whatsapp_number: targetLead.whatsapp_number || '',
+        whatsapp_number: targetLead.whatsapp_number || undefined,
         address: targetLead.address || '',
         city: targetLead.city || '',
         state: targetLead.state || '',
