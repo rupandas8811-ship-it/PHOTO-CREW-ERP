@@ -34,7 +34,15 @@ async function run() {
     lead_id: leadId,
     customer_name: 'Test Customer',
     mobile: '9876543210',
+    email: 'test@example.com',
     event_type: 'Wedding',
+    event_date: '2026-08-15',
+    event_time: '12:00:00',
+    event_location: 'Mumbai',
+    budget: 150000,
+    sales_person: 'Sales Agent',
+    lead_source: 'Instagram',
+    created_by: 'Sales Agent',
     status: 'New Lead',
     current_status: 'New Lead'
   };
@@ -61,6 +69,14 @@ async function run() {
     customer_name: 'Test Customer',
     mobile: '9876543210',
     event_type: 'Wedding',
+    event_date: '2026-08-15',
+    event_time: '12:00:00',
+    event_location: 'Mumbai',
+    package_name: 'Premium Wedding',
+    quotation_amount: 150000,
+    advance_received: 30000,
+    balance_amount: 120000,
+    sales_person: 'Sales Agent',
     order_status: 'Confirmed',
     current_stage: 'Order Confirmed'
   };

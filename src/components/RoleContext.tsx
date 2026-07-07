@@ -1345,12 +1345,21 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return { success: true };
           } else {
             console.warn(`[pushInsert Proxy WARN] server returned success=false for ${table}, falling back...`, resJson.error);
+            if (table === 'payments') {
+              return { success: false, error: resJson.error || 'Server insert failed' };
+            }
           }
         } else {
           console.warn(`[pushInsert Proxy WARN] server returned status ${response.status} for ${table}, falling back...`);
+          if (table === 'payments') {
+            return { success: false, error: `Server error status ${response.status}` };
+          }
         }
-      } catch (proxyErr) {
+      } catch (proxyErr: any) {
         console.warn(`[pushInsert Proxy ERROR] failed to reach server for ${table}, falling back...`, proxyErr);
+        if (table === 'payments') {
+          return { success: false, error: `Server is unreachable: ${proxyErr?.message || String(proxyErr)}` };
+        }
       }
 
       const { data: fallbackInsData, error } = await supabaseClient.from(table).insert(sanitized).select();
@@ -1537,12 +1546,21 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return { success: true };
           } else {
             console.warn(`[pushUpdate Proxy WARN] server returned success=false for ${table}, falling back...`, resJson.error);
+            if (table === 'payments') {
+              return { success: false, error: resJson.error || 'Server update failed' };
+            }
           }
         } else {
           console.warn(`[pushUpdate Proxy WARN] server returned status ${response.status} for ${table}, falling back...`);
+          if (table === 'payments') {
+            return { success: false, error: `Server error status ${response.status}` };
+          }
         }
-      } catch (proxyErr) {
+      } catch (proxyErr: any) {
         console.warn(`[pushUpdate Proxy ERROR] failed to reach server for ${table}, falling back...`, proxyErr);
+        if (table === 'payments') {
+          return { success: false, error: `Server is unreachable: ${proxyErr?.message || String(proxyErr)}` };
+        }
       }
 
       let { error, data } = await supabaseClient.from(table).update(sanitized).eq(matchColumn, finalMatchValue).select();
@@ -1757,6 +1775,26 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err: any) {
       updateDiagnosticMetric('delete', 'fail', err?.message || String(err));
+      return { success: false, error: err?.message || String(err) };
+    }
+  };
+
+  const pushSelect = async (table: string, matchColumn?: string, matchValue?: any): Promise<{ success: boolean; data?: any[]; error?: string }> => {
+    try {
+      const response = await fetch('/api/db/select', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table, matchColumn, matchValue })
+      });
+      if (response.ok) {
+        const resJson = await response.json();
+        if (resJson.success) {
+          return { success: true, data: resJson.data };
+        }
+        return { success: false, error: resJson.error };
+      }
+      return { success: false, error: `HTTP status ${response.status}` };
+    } catch (err: any) {
       return { success: false, error: err?.message || String(err) };
     }
   };
@@ -3119,8 +3157,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let existingPaymentId = payments.find(p => p.order_id === masterOrderId)?.payment_id;
 
     if (supabaseClient) {
-      const { data: dbPayment } = await supabaseClient.from('payments').select('payment_id').eq('order_id', masterOrderId).maybeSingle();
-      if (dbPayment) {
+      const dbSelectRes = await pushSelect('payments', 'order_id', masterOrderId);
+      if (dbSelectRes.success && dbSelectRes.data && dbSelectRes.data.length > 0) {
+        const dbPayment = dbSelectRes.data[0];
         existingPaymentId = dbPayment.payment_id;
         paymentExistsInDb = true;
       }
@@ -3159,8 +3198,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let existingOpId = operations.find(o => o.order_id === masterOrderId)?.operation_id;
 
     if (supabaseClient) {
-      const { data: dbOp } = await supabaseClient.from('operations').select('operation_id').eq('order_id', masterOrderId).maybeSingle();
-      if (dbOp) {
+      const dbSelectRes = await pushSelect('operations', 'order_id', masterOrderId);
+      if (dbSelectRes.success && dbSelectRes.data && dbSelectRes.data.length > 0) {
+        const dbOp = dbSelectRes.data[0];
         existingOpId = dbOp.operation_id;
         opExistsInDb = true;
       }

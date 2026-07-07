@@ -2836,8 +2836,9 @@ USING (true);`;
   const dynamicAdditionalSum = quoteServices
     .filter(s => s.isAdditional)
     .reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
-    const discountVal = selectedLead ? Number(quoteDiscount || 0) : Number(leadDiscount || 0);
-  const dynamicFinalAmt = Math.max(0, dynamicBaseSum + Number(quoteAdditional || 0) - discountVal);
+  const discountVal = selectedLead ? Number(quoteDiscount || 0) : Number(leadDiscount || 0);
+  const finalPackagePrice = selectedLead && wizardLeadData.package_price !== undefined ? wizardLeadData.package_price : dynamicBaseSum;
+  const dynamicFinalAmt = Math.max(0, finalPackagePrice + Number(quoteAdditional || 0) - discountVal);
 
   React.useEffect(() => {
     setWizardLeadData(prev => {
@@ -2932,7 +2933,7 @@ USING (true);`;
         return null;
       }
 
-      const basePkgSum = dynamicBaseSum;
+      const basePkgSum = finalPackagePrice;
       const finalAmt = dynamicFinalAmt;
 
       const leadId = leadObj.lead_id || 'DRAFT-LEAD';
@@ -3303,7 +3304,7 @@ USING (true);`;
     try {
       const leadObj = getLeadInfoForQuote(isEdit);
       const activePkgs = getSelectedPkgsInfo(isEdit);
-      const basePkgSum = dynamicBaseSum;
+      const basePkgSum = finalPackagePrice;
       const finalAmt = dynamicFinalAmt;
       
       const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
@@ -3339,7 +3340,7 @@ USING (true);`;
 
   const renderQuotationAndStep4Section = (isEdit: boolean) => {
     const activePkgs = getSelectedPkgsInfo(isEdit);
-    const basePkgSum = dynamicBaseSum;
+    const basePkgSum = finalPackagePrice;
     const finalAmt = dynamicFinalAmt;
     const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
 
@@ -3406,15 +3407,25 @@ USING (true);`;
           </h4>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Package Amount (Read-only Display representing Base Price) */}
+            {/* Package Amount (Editable Input representing Base Price) */}
             <div>
               <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Package Base Price (₹)
+                Package Price (₹)
               </label>
-              <div className="w-full bg-slate-950/60 border border-slate-850/50 rounded-lg py-2 px-3 text-xs text-slate-400 font-mono flex items-center justify-between">
-                <span className="break-words max-w-[200px]">{pkgNames}</span>
-                <span className="font-bold text-slate-200">₹{basePkgSum.toLocaleString('en-IN')}</span>
-              </div>
+              <input
+                type="number"
+                value={wizardLeadData.package_price !== undefined ? wizardLeadData.package_price : basePkgSum}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setWizardLeadData(prev => ({
+                    ...prev,
+                    package_price: val,
+                    package_cost: val
+                  }));
+                }}
+                placeholder="0"
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 font-mono transition-all"
+              />
             </div>
 
             {/* Discount */}
