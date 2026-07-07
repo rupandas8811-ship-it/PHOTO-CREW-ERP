@@ -1307,6 +1307,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
       // Try sending to server-side proxy first to bypass client RLS issues
+      let proxyErrorDetails = '';
+      let proxyStatus: number | null = null;
+      let proxySucceeded = false;
+
       try {
         const { data: { session: currentSession } } = await supabaseClient.auth.getSession();
         const response = await fetch('/api/db/insert', {
@@ -1317,6 +1321,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           },
           body: JSON.stringify({ table, record: sanitized })
         });
+        proxyStatus = response.status;
         if (response.ok) {
           const resJson = await response.json();
           if (resJson.success) {
@@ -1342,60 +1347,75 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             broadcastSyncPing();
+            proxySucceeded = true;
             return { success: true };
           } else {
             console.warn(`[pushInsert Proxy WARN] server returned success=false for ${table}, falling back...`, resJson.error);
-            if (table === 'payments') {
-              return { success: false, error: resJson.error || 'Server insert failed' };
-            }
+            proxyErrorDetails = `Server returned success=false. Error: ${resJson.error || 'Unknown error'}`;
           }
         } else {
           console.warn(`[pushInsert Proxy WARN] server returned status ${response.status} for ${table}, falling back...`);
-          if (table === 'payments') {
-            return { success: false, error: `Server error status ${response.status}` };
-          }
+          proxyErrorDetails = `Server returned HTTP status ${response.status}`;
         }
       } catch (proxyErr: any) {
         console.warn(`[pushInsert Proxy ERROR] failed to reach server for ${table}, falling back...`, proxyErr);
-        if (table === 'payments') {
-          return { success: false, error: `Server is unreachable: ${proxyErr?.message || String(proxyErr)}` };
-        }
+        proxyErrorDetails = `Exception calling server-side API: ${proxyErr?.message || String(proxyErr)}`;
       }
 
-      const { data: fallbackInsData, error } = await supabaseClient.from(table).insert(sanitized).select();
-      if (error) {
-        if (['activity_logs', 'notifications', 'analytics_snapshots'].includes(table)) {
+      if (!proxySucceeded) {
+        const { data: fallbackInsData, error } = await supabaseClient.from(table).insert(sanitized).select();
+        if (error) {
+          if (['activity_logs', 'notifications', 'analytics_snapshots'].includes(table)) {
+            return { success: true };
+          }
+          console.warn(`Supabase Insert error in ${table}:`, error?.message || String(error));
+          updateDiagnosticMetric('insert', 'fail', error?.message || String(error));
+          
+          if (table === 'payments') {
+            const detailedErrorMessage = `
+========================================
+🚨 PAYMENT INSERTION FAILURE REPORT 🚨
+========================================
+- HTTP Status Code: ${proxyStatus || 'N/A (Network/Fetch Exception)'}
+- Table Name: ${table}
+- SQL Operation: INSERT
+- Endpoint Used: /api/db/insert (Proxy) & supabaseClient.from('${table}').insert() (Fallback)
+- Failed Function: pushInsert() inside RoleContext.tsx
+- Exact Supabase Error: [${error.code || 'NO_CODE'}] ${error.message}
+- Root Cause: Server proxy returned: "${proxyErrorDetails}". Fallback direct client-side insert failed due to: "${error.message}".
+- Suggested Fix: Check if database is online, check RLS policy for the table, or ensure the payload has all required NOT NULL columns.
+========================================
+            `.trim();
+            return { success: false, error: detailedErrorMessage };
+          }
+          
+          return { success: false, error: `[Table: ${table}] ${error?.message || String(error)}` };
+        } else {
+          updateDiagnosticMetric('insert', 'ok');
+  
+          // Clean up matching local record if any from erp_local_<tableKey>
+          const localKey = `erp_local_${table}`;
+          const existingLocalStr = localStorage.getItem(localKey);
+          if (existingLocalStr) {
+            try {
+              const localRecords = JSON.parse(existingLocalStr);
+              if (Array.isArray(localRecords)) {
+                const idCol = table === 'leads' ? 'lead_id' : (table === 'orders' ? 'order_id' : null);
+                if (idCol && record[idCol]) {
+                  const filtered = localRecords.filter((r: any) => r && r[idCol] !== record[idCol]);
+                  localStorage.setItem(localKey, JSON.stringify(filtered));
+                }
+              }
+            } catch (e) {
+              console.error(`Error cleaning up local records on insert for ${table}:`, e);
+            }
+          }
+  
+          broadcastSyncPing();
           return { success: true };
         }
-        console.warn(`Supabase Insert error in ${table}:`, error?.message || String(error));
-        updateDiagnosticMetric('insert', 'fail', error?.message || String(error));
-        return { success: false, error: `[Table: ${table}] ${error?.message || String(error)}` };
-      } else {
-        updateDiagnosticMetric('insert', 'ok');
-
-        // Clean up matching local record if any from erp_local_<tableKey>
-        const localKey = `erp_local_${table}`;
-        const existingLocalStr = localStorage.getItem(localKey);
-        if (existingLocalStr) {
-          try {
-            const localRecords = JSON.parse(existingLocalStr);
-            if (Array.isArray(localRecords)) {
-              const idCol = table === 'leads' ? 'lead_id' : (table === 'orders' ? 'order_id' : null);
-              if (idCol && record[idCol]) {
-                const filtered = localRecords.filter((r: any) => r && r[idCol] !== record[idCol]);
-                localStorage.setItem(localKey, JSON.stringify(filtered));
-              }
-            }
-          } catch (e) {
-            console.error(`Error cleaning up local records on insert for ${table}:`, e);
-          }
-        }
-
-        // Realtime subscription will handle syncing new records
-        broadcastSyncPing();
-
-        return { success: true };
       }
+      return { success: true };
     } catch (err: any) {
       console.warn(`Supabase Insert exception in ${table}:`, err?.message || String(err));
       updateDiagnosticMetric('insert', 'fail', err?.message || String(err));
@@ -1501,6 +1521,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log(`[pushUpdate EXECUTING] on ${table}:`, sanitized);
       
       // Try sending to server-side proxy first to bypass client RLS issues
+      let proxyErrorDetails = '';
+      let proxyStatus: number | null = null;
+      let proxySucceeded = false;
+
       try {
         const { data: { session: currentSession } } = await supabaseClient.auth.getSession();
         const response = await fetch('/api/db/update', {
@@ -1511,6 +1535,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           },
           body: JSON.stringify({ table, matchColumn, matchValue: finalMatchValue, updates: sanitized })
         });
+        proxyStatus = response.status;
         if (response.ok) {
           const resJson = await response.json();
           if (resJson.success) {
@@ -1543,126 +1568,142 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             broadcastSyncPing();
+            proxySucceeded = true;
             return { success: true };
           } else {
             console.warn(`[pushUpdate Proxy WARN] server returned success=false for ${table}, falling back...`, resJson.error);
-            if (table === 'payments') {
-              return { success: false, error: resJson.error || 'Server update failed' };
-            }
+            proxyErrorDetails = `Server returned success=false. Error: ${resJson.error || 'Unknown error'}`;
           }
         } else {
           console.warn(`[pushUpdate Proxy WARN] server returned status ${response.status} for ${table}, falling back...`);
-          if (table === 'payments') {
-            return { success: false, error: `Server error status ${response.status}` };
-          }
+          proxyErrorDetails = `Server returned HTTP status ${response.status}`;
         }
       } catch (proxyErr: any) {
         console.warn(`[pushUpdate Proxy ERROR] failed to reach server for ${table}, falling back...`, proxyErr);
-        if (table === 'payments') {
-          return { success: false, error: `Server is unreachable: ${proxyErr?.message || String(proxyErr)}` };
-        }
+        proxyErrorDetails = `Exception calling server-side API: ${proxyErr?.message || String(proxyErr)}`;
       }
 
-      let { error, data } = await supabaseClient.from(table).update(sanitized).eq(matchColumn, finalMatchValue).select();
-      
-      // Automatic unified fallback for database check constraints or value exceptions
-      if (error && (
-        error.message.toLowerCase().includes('constraint') || 
-        error.message.toLowerCase().includes('check') || 
-        error.message.toLowerCase().includes('violate') || 
-        error.message.toLowerCase().includes('status_check') ||
-        error.message.toLowerCase().includes('invalid')
-      )) {
-         let fallbackNeeded = false;
-         if (table === 'leads' && sanitized.status) {
-            console.warn(`[pushUpdate FALLBACK] Constraint error on leads for status (${sanitized.status}). Stripping status and retrying with current_status only...`);
-            delete sanitized.status;
-            fallbackNeeded = true;
-         }
-         if (table === 'orders' && sanitized.order_status) {
-            console.warn(`[pushUpdate FALLBACK] Constraint error on orders for stage (${sanitized.current_stage}). Stripping order_status and retrying...`);
-            delete sanitized.order_status;
-            fallbackNeeded = true;
-         }
-         if (table === 'production' && sanitized.editing_status) {
-            console.warn(`[pushUpdate FALLBACK] Constraint error on production for status (${sanitized.editing_status}). Stripping editing_status and retrying...`);
-            delete sanitized.editing_status;
-            fallbackNeeded = true;
-         }
-         if (fallbackNeeded) {
-            const fallback = await supabaseClient.from(table).update(sanitized).eq(matchColumn, matchValue).select();
-            error = fallback.error;
-            data = fallback.data;
-         }
-      }
-      if (error) {
-        if (['activity_logs', 'notifications', 'analytics_snapshots'].includes(table)) {
-          return { success: true };
+      if (!proxySucceeded) {
+        let { error, data } = await supabaseClient.from(table).update(sanitized).eq(matchColumn, finalMatchValue).select();
+        
+        // Automatic unified fallback for database check constraints or value exceptions
+        if (error && (
+          error.message.toLowerCase().includes('constraint') || 
+          error.message.toLowerCase().includes('check') || 
+          error.message.toLowerCase().includes('violate') || 
+          error.message.toLowerCase().includes('status_check') ||
+          error.message.toLowerCase().includes('invalid')
+        )) {
+           let fallbackNeeded = false;
+           if (table === 'leads' && sanitized.status) {
+              console.warn(`[pushUpdate FALLBACK] Constraint error on leads for status (${sanitized.status}). Stripping status and retrying with current_status only...`);
+              delete sanitized.status;
+              fallbackNeeded = true;
+           }
+           if (table === 'orders' && sanitized.order_status) {
+              console.warn(`[pushUpdate FALLBACK] Constraint error on orders for stage (${sanitized.current_stage}). Stripping order_status and retrying...`);
+              delete sanitized.order_status;
+              fallbackNeeded = true;
+           }
+           if (table === 'production' && sanitized.editing_status) {
+              console.warn(`[pushUpdate FALLBACK] Constraint error on production for status (${sanitized.editing_status}). Stripping editing_status and retrying...`);
+              delete sanitized.editing_status;
+              fallbackNeeded = true;
+           }
+           if (fallbackNeeded) {
+              const fallback = await supabaseClient.from(table).update(sanitized).eq(matchColumn, matchValue).select();
+              error = fallback.error;
+              data = fallback.data;
+           }
         }
-        console.warn(`[pushUpdate ERROR] in ${table}:`, error?.message || String(error));
-        updateDiagnosticMetric('update', 'fail', error?.message || String(error));
-        return { success: false, error: `[Table: ${table}] ${error?.message || String(error)}` };
-      } else {
-        console.log(`[pushUpdate SUCCESS] returned data:`, data);
-        updateDiagnosticMetric('update', 'ok');
-        if (table === 'leads') {
-          const leadId = matchValue;
-          const prevLead = leads.find(l => l.lead_id === leadId);
-          const oldStatus = prevLead ? (prevLead.current_status || prevLead.status || 'New Lead') : 'New Lead';
-          const anyStatus = sanitized.status || sanitized.current_status || updates.status || updates.current_status;
+        if (error) {
+          if (['activity_logs', 'notifications', 'analytics_snapshots'].includes(table)) {
+            return { success: true };
+          }
+          console.warn(`[pushUpdate ERROR] in ${table}:`, error?.message || String(error));
+          updateDiagnosticMetric('update', 'fail', error?.message || String(error));
           
-          if (anyStatus && anyStatus !== oldStatus) {
-            const timestamp = new Date().toISOString();
-            const linkedOrder = orders.find(o => o.lead_id === leadId);
-            const orderId = linkedOrder?.order_id || null;
+          if (table === 'payments') {
+            const detailedErrorMessage = `
+========================================
+🚨 PAYMENT UPDATE FAILURE REPORT 🚨
+========================================
+- HTTP Status Code: ${proxyStatus || 'N/A (Network/Fetch Exception)'}
+- Table Name: ${table}
+- SQL Operation: UPDATE
+- Endpoint Used: /api/db/update (Proxy) & supabaseClient.from('${table}').update() (Fallback)
+- Failed Function: pushUpdate() inside RoleContext.tsx
+- Exact Supabase Error: [${error.code || 'NO_CODE'}] ${error.message}
+- Root Cause: Server proxy returned: "${proxyErrorDetails}". Fallback direct client-side update failed due to: "${error.message}".
+- Suggested Fix: Check if database is online, check RLS policy for the table, or ensure the payload has all required columns.
+========================================
+            `.trim();
+            return { success: false, error: detailedErrorMessage };
+          }
+          
+          return { success: false, error: `[Table: ${table}] ${error?.message || String(error)}` };
+        } else {
+          console.log(`[pushUpdate SUCCESS] returned data:`, data);
+          updateDiagnosticMetric('update', 'ok');
+          if (table === 'leads') {
+            const leadId = matchValue;
+            const prevLead = leads.find(l => l.lead_id === leadId);
+            const oldStatus = prevLead ? (prevLead.current_status || prevLead.status || 'New Lead') : 'New Lead';
+            const anyStatus = sanitized.status || sanitized.current_status || updates.status || updates.current_status;
             
-            const roleParts = (currentUserName && currentUserName.includes('|')) 
-              ? currentUserName.split('|') 
-              : [currentUserName || 'System', currentRole || 'System'];
-            const changedBy = roleParts[0];
-            const changedByRole = roleParts[1] || currentRole || 'System';
-            
-            const newHist = {
-              lead_id: leadId,
-              order_id: orderId,
-              old_status: oldStatus,
-              new_status: anyStatus,
-              changed_by: changedBy,
-              changed_by_role: changedByRole,
-              remarks: updates.remarks || sanitized.remarks || 'Status updated from dashboard',
-              created_at: timestamp
-            };
-            
-            try {
-              const insertRes = await supabaseClient.from('lead_status_history').insert(newHist);
-              if (insertRes.error) {
-                console.warn("Failed to insert lead status history in pushUpdate:", insertRes.error?.message || insertRes.error);
-              } else {
-                setStatusHistory(prev => {
-                  const updatedHist = [...prev, newHist];
-                  localStorage.setItem('erp_status_history', JSON.stringify(updatedHist));
-                  return updatedHist;
-                });
-              }
-            } catch (e: any) {
-              console.warn("Failed to insert lead status history in pushUpdate (exception):", e?.message || e);
-            }
-            
-            setLeads((prev) => 
-              prev.map((ld) => {
-                if (ld.lead_id === leadId) {
-                  return {
-                    ...ld,
-                    status: anyStatus,
-                    current_status: anyStatus,
-                    updated_at: timestamp
-                  };
+            if (anyStatus && anyStatus !== oldStatus) {
+              const timestamp = new Date().toISOString();
+              const linkedOrder = orders.find(o => o.lead_id === leadId);
+              const orderId = linkedOrder?.order_id || null;
+              
+              const roleParts = (currentUserName && currentUserName.includes('|')) 
+                ? currentUserName.split('|') 
+                : [currentUserName || 'System', currentRole || 'System'];
+              const changedBy = roleParts[0];
+              const changedByRole = roleParts[1] || currentRole || 'System';
+              
+              const newHist = {
+                lead_id: leadId,
+                order_id: orderId,
+                old_status: oldStatus,
+                new_status: anyStatus,
+                changed_by: changedBy,
+                changed_by_role: changedByRole,
+                remarks: updates.remarks || sanitized.remarks || 'Status updated from dashboard',
+                created_at: timestamp
+              };
+              
+              try {
+                const insertRes = await supabaseClient.from('lead_status_history').insert(newHist);
+                if (insertRes.error) {
+                  console.warn("Failed to insert lead status history in pushUpdate:", insertRes.error?.message || insertRes.error);
+                } else {
+                  setStatusHistory(prev => {
+                    const updatedHist = [...prev, newHist];
+                    localStorage.setItem('erp_status_history', JSON.stringify(updatedHist));
+                    return updatedHist;
+                  });
                 }
-                return ld;
-              })
-            );
-            
-            
+              } catch (e: any) {
+                console.warn("Failed to insert lead status history in pushUpdate (exception):", e?.message || e);
+              }
+              
+              setLeads((prev) => 
+                prev.map((ld) => {
+                  if (ld.lead_id === leadId) {
+                    return {
+                      ...ld,
+                      status: anyStatus,
+                      current_status: anyStatus,
+                      updated_at: timestamp
+                    };
+                  }
+                  return ld;
+                })
+              );
+              
+              
+            }
           }
         }
 
