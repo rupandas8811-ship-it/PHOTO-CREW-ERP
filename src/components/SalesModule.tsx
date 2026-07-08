@@ -1729,37 +1729,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
 
   const [statusError, setStatusError] = useState<{ title: string; reason: string; suggestedFix: string } | null>(null);
-  
-  // Interception Popup for Reporting Date & Time
-  const [showReportingPopup, setShowReportingPopup] = useState(false);
-  const [reportingPopupData, setReportingPopupData] = useState<{ eventId: string; eventName: string; date: string; time: string; }[]>([]);
-  const [pendingConfirmAction, setPendingConfirmAction] = useState<(() => Promise<void>) | null>(null);
-  const [isReportingSaving, setIsReportingSaving] = useState(false);
-
-  const executeWithReportingPopup = (action: () => Promise<void>) => {
-    const targetLeadId = selectedLead?.lead_id || createdLeadId;
-    const targetLead = leads.find(l => l.lead_id === targetLeadId);
-    
-    if (targetLead?.events && targetLead.events.length > 0) {
-      const initialData = targetLead.events.map(ev => ({
-        eventId: ev.id,
-        eventName: ev.event_name || 'Event',
-        date: targetLead.Reporting_date || ev.event_date || '',
-        time: ev.reporting_time || ''
-      }));
-      setReportingPopupData(initialData);
-    } else {
-      setReportingPopupData([{
-        eventId: 'default',
-        eventName: 'Main Event',
-        date: targetLead?.Reporting_date || '',
-        time: targetLead?.reporting_time || ''
-      }]);
-    }
-    
-    setPendingConfirmAction(() => action);
-    setShowReportingPopup(true);
-  };
 
   const [isSaving, setIsSaving] = useState(false);
 
@@ -3840,6 +3809,37 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           };
         });
 
+        if (wizardLeadData.status === 'Order Confirmed') {
+          if (!wizardLeadData.confirmed_event_date || !wizardLeadData.confirmed_event_time) {
+             showToastMsg("Please provide Confirmed Event Date and Time.", "error");
+             setIsSaving(false); return;
+          }
+          if (!wizardLeadData.final_amount || isNaN(wizardLeadData.final_amount)) {
+             showToastMsg("Please provide Final Amount.", "error");
+             setIsSaving(false); return;
+          }
+          
+          const pkgName = packages.find(p => p.package_id === wizardLeadData.selected_package_id)?.package_name || 'Selected Package';
+          
+          await confirmOrder(
+            selectedLead.lead_id,
+            pkgName,
+            Number(wizardLeadData.final_amount),
+            Number(wizardLeadData.advance_received || 0),
+            wizardLeadData.confirmed_event_date,
+            wizardLeadData.confirmed_event_time,
+            'UPI',
+            wizardLeadData.notes || 'Order confirmed via CRM Wizard',
+            undefined,
+            undefined
+          );
+          
+          showToastMsg("Order Confirmed and sent to Operations.", "success");
+          setSelectedLead(null);
+          setIsSaving(false);
+          return;
+        }
+
         showToastMsg(`CRM Changes Saved.`, "success");
         setShowStep3Popup(true);
         setStep3Option('negotiation');
@@ -5296,8 +5296,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return;
     }
 
-    executeWithReportingPopup(async () => {
-      try {
+    try {
       setIsSaving(true);
       const selectedPkgsNames = selectedPkgs.map(p => p.name).join(' + ') || 'Custom Configured Coverage';
       await confirmOrder(
@@ -5354,7 +5353,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     } finally {
       setIsSaving(false);
     }
-    });
   };
 
   // Handle follow up submit
@@ -5380,8 +5378,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         return;
       }
 
-      executeWithReportingPopup(async () => {
-        try {
+      try {
         setIsSaving(true);
         await confirmOrder(
           selectedLead.lead_id,
@@ -5433,7 +5430,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       } finally {
         setIsSaving(false);
       }
-      });
       return;
     }
 
@@ -5521,8 +5517,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return;
     }
 
-    executeWithReportingPopup(async () => {
-      try {
+    try {
       setIsSaving(true);
       await confirmOrder(
         selectedLead.lead_id,
@@ -5578,7 +5573,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     } finally {
       setIsSaving(false);
     }
-    });
   };
 
   // Companion lead metadata parse
@@ -7983,17 +7977,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             setOpenDropdownLeadId(null);
-                                            setConfirmForm({
-                                              package_name: lead.event_type === 'Other' ? (lead.custom_event_name || 'Premium Package') : `${lead.event_type} Premium Package`,
-                                              quotation_amount: lead.package_price || lead.budget || 0,
-                                              advance_received: 0,
-                                              event_date: lead.event_date || '',
-                                              event_time: lead.event_time || '12:00',
-                                              payment_mode: 'UPI',
-                                              notes: lead.remarks || '',
-                                            });
-                                            setSelectedLead(lead);
-                                            setShowConfirmModal(true);
+                                            handleSelectLead(lead);
+                                            setCrmWizardStep(3);
+                                            setWizardLeadData({ ...wizardLeadData, status: 'Order Confirmed' });
+                                            setTimeout(() => {
+                                              document.getElementById('configure_confirmed_order_section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                            }, 300);
                                           }}
                                           className="w-full h-8 px-3 text-xs font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-white rounded-lg border border-emerald-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
                                         >
@@ -8960,26 +8949,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         <p className="text-[10px] text-zinc-400 mt-0.5">Determine final CRM pipeline stages or transition the contract to Operations.</p>
                       </div>
                       <div className="space-y-4 text-left">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider font-black">Select Sales Pipeline Status *</label>
-                          <select
-                            value={wizardLeadData.status || ''}
-                            disabled={isLeadLocked}
-                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, status: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-white font-bold cursor-pointer"
-                          >
-                            <option value="New Lead">New Lead</option>
-                            <option value="Contacted">Contacted</option>
-                            <option value="Follow Up">Follow Up</option>
-                            <option value="Quotation Sent">Quotation Sent</option>
-                            <option value="Negotiation">Negotiation</option>
-                            <option value="Order Confirmed">Order Confirmed (Moves to Operations & Locks CRM)</option>
-                            <option value="Lost Lead">Lost Lead</option>
-                          </select>
-                        </div>
-
                         {wizardLeadData.status === 'Order Confirmed' && (
-                          <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
+                          <div id="configure_confirmed_order_section" className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
                             <div className="border-b border-emerald-500/20 pb-1.5">
                               <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest font-mono">💍 Configure Confirmed Order & Booking Contract</h4>
                               <p className="text-[10px] text-zinc-400 mt-0.5">Confirming this order locks the CRM profile and creates a real-time production entry. Only payment configurations remain editable.</p>
@@ -9030,6 +9001,43 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   required
                                 />
                               </div>
+                              
+                              {crmEvents && crmEvents.length > 0 && (
+                                <div className="col-span-1 sm:col-span-2 mt-4 space-y-3">
+                                  <h5 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest font-mono border-b border-emerald-500/20 pb-1.5">Event-wise Reporting Details</h5>
+                                  {crmEvents.map(ev => (
+                                    <div key={ev.id} className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
+                                      <div className="col-span-1 sm:col-span-2"><span className="text-xs font-bold text-slate-200">🎬 {ev.event_name || ev.event_type}</span></div>
+                                      <div>
+                                         <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting Date *</label>
+                                         <input 
+                                           type="date" 
+                                           value={ev.reporting_date || ev.event_date || ''} 
+                                           onChange={(e) => {
+                                             const updated = crmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_date: e.target.value } : eItem);
+                                             setCrmEvents(updated);
+                                           }} 
+                                           className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
+                                           required 
+                                         />
+                                      </div>
+                                      <div>
+                                         <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting Time *</label>
+                                         <input 
+                                           type="time" 
+                                           value={ev.reporting_time || ''} 
+                                           onChange={(e) => {
+                                             const updated = crmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_time: e.target.value } : eItem);
+                                             setCrmEvents(updated);
+                                           }} 
+                                           className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
+                                           required 
+                                         />
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
 
                             <div className="bg-slate-950 p-3 rounded-lg border border-slate-850 flex items-center justify-between text-xs">
@@ -9916,153 +9924,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
 
       {/* Delete Package Confirmation / Safety Check Modal */}
-      
-      {/* Reporting Popup Modal */}
-      {showReportingPopup && (
-        <div className="fixed inset-0 bg-black/85 z-[100] flex items-center justify-center p-4 backdrop-blur-md">
-          <div className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-lg w-full shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between border-b border-slate-800 p-5 shrink-0">
-              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
-                <span>📅</span> Reporting Details for Events
-              </h4>
-              <button 
-                onClick={() => {
-                  setShowReportingPopup(false);
-                  setPendingConfirmAction(null);
-                }}
-                className="text-slate-500 hover:text-slate-350 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            
-            <div className="overflow-y-auto p-5 space-y-6">
-              {reportingPopupData.map((ev, index) => (
-                <div key={ev.eventId || index} className="p-4 bg-slate-900/50 border border-slate-800 rounded-xl space-y-3">
-                  <h5 className="font-bold text-emerald-400 text-xs uppercase tracking-wider mb-2 border-b border-slate-800/50 pb-2">
-                    {ev.eventName}
-                  </h5>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-400 mb-1.5">Reporting Date *</label>
-                      <input
-                        type="date"
-                        required
-                        value={ev.date}
-                        onChange={(e) => {
-                          const newData = [...reportingPopupData];
-                          newData[index].date = e.target.value;
-                          setReportingPopupData(newData);
-                        }}
-                        className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono text-sm"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-400 mb-1.5">Reporting Time *</label>
-                      <input
-                        type="time"
-                        required
-                        value={ev.time}
-                        onChange={(e) => {
-                          const newData = [...reportingPopupData];
-                          newData[index].time = e.target.value;
-                          setReportingPopupData(newData);
-                        }}
-                        className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono text-sm"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex justify-end gap-2 border-t border-slate-800 p-5 shrink-0 bg-slate-900">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowReportingPopup(false);
-                  setPendingConfirmAction(null);
-                }}
-                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isReportingSaving || reportingPopupData.some(ev => !ev.date || !ev.time)}
-                onClick={async () => {
-                  // Validate all
-                  for (let i=0; i<reportingPopupData.length; i++) {
-                    const ev = reportingPopupData[i];
-                    if (!ev.date) {
-                      showToastMsg(`Reporting Date is required for ${ev.eventName}`, "error");
-                      return;
-                    }
-                    if (!ev.time) {
-                      showToastMsg(`Reporting Time is required for ${ev.eventName}`, "error");
-                      return;
-                    }
-                  }
-                  
-                  setIsReportingSaving(true);
-                  try {
-                    const targetLeadId = selectedLead?.lead_id || createdLeadId;
-                    if (targetLeadId) {
-                      const targetLead = leads.find(l => l.lead_id === targetLeadId);
-                      const firstDate = reportingPopupData[0]?.date;
-                      const firstTime = reportingPopupData[0]?.time;
-                      
-                      // Build the updated events array safely to pass to updateLead
-                      let updatedEvents: LeadEvent[] | undefined;
-                      if (targetLead?.events && targetLead.events.length > 0) {
-                        updatedEvents = targetLead.events.map(ev => {
-                          const popupEv = reportingPopupData.find(p => p.eventId === ev.id);
-                          return {
-                            ...ev,
-                            reporting_time: popupEv ? popupEv.time : ev.reporting_time
-                          };
-                        });
-                      }
-
-                      // Save both lead-level Reporting_date, reporting_time, and sub-events safely using the updateLead proxy
-                      await updateLead(targetLeadId, { 
-                        Reporting_date: firstDate,
-                        reporting_time: firstTime,
-                        ...(updatedEvents ? { events: updatedEvents } : {})
-                      });
-                    }
-                    
-                    // Proceed with original action
-                    if (pendingConfirmAction) {
-                      await pendingConfirmAction();
-                    }
-                    
-                    setShowReportingPopup(false);
-                    setPendingConfirmAction(null);
-                  } catch (err: any) {
-                    console.error("Reporting details save failed:", err);
-                    const errMsg = err?.message || String(err);
-                    const parsed = parseStatusUpdateError(errMsg);
-                    
-                    setStatusError({
-                      title: "Reporting Details Submission Failed",
-                      reason: `Failed Function: Save Reporting Details\nDatabase Table: leads / lead_events\nSupabase Error: ${errMsg}`,
-                      suggestedFix: parsed.suggestedFix
-                    });
-                    showToastMsg("Failed to save Reporting details: " + errMsg, "error");
-                  } finally {
-                    setIsReportingSaving(false);
-                  }
-                }}
-                className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-950/20 text-xs"
-              >
-                {isReportingSaving ? 'Saving...' : 'Confirm'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {deletingPackageId && (() => {
         const pkg = packages.find(p => p.package_id === deletingPackageId);

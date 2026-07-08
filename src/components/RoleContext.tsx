@@ -1294,13 +1294,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return { success: false, error: resJson.error || "Server validation failed" };
           }
         } else {
-          let errText = await response.text();
-          try {
-            const parsed = JSON.parse(errText);
-            if (parsed.error) errText = parsed.error;
-          } catch(e) {}
-          console.warn(`[pushInsert Proxy WARN] server returned status ${response.status} for ${table}:`, errText);
-          return { success: false, error: errText };
+          console.warn(`[pushInsert Proxy WARN] server returned status ${response.status} for ${table}, falling back...`);
         }
       } catch (proxyErr) {
         console.warn(`[pushInsert Proxy ERROR] failed to reach server for ${table}, falling back...`, proxyErr);
@@ -1467,13 +1461,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return { success: false, error: resJson.error || "Server validation failed" };
           }
         } else {
-          let errText = await response.text();
-          try {
-            const parsed = JSON.parse(errText);
-            if (parsed.error) errText = parsed.error;
-          } catch(e) {}
-          console.warn(`[pushUpdate Proxy WARN] server returned status ${response.status} for ${table}:`, errText);
-          return { success: false, error: errText };
+          console.warn(`[pushUpdate Proxy WARN] server returned status ${response.status} for ${table}, falling back...`);
         }
       } catch (proxyErr: any) {
         console.warn(`[pushUpdate Proxy ERROR] failed to reach server for ${table}, falling back...`, proxyErr);
