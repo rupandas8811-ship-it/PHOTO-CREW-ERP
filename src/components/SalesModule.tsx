@@ -2606,16 +2606,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         });
 
         setEditableDeliverables(prev => {
+          let updated = { ...prev };
+          let changed = false;
+          const delList = pkg.deliverables
+            ? pkg.deliverables.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
+            : [];
+          const defaultDel = delList.length > 0 ? delList : ['High Resolution Edited Photos'];
+
           if (!prev[pkgId] || prev[pkgId].length === 0) {
-            const delList = pkg.deliverables
-              ? pkg.deliverables.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
-              : [];
-            return {
-              ...prev,
-              [pkgId]: delList.length > 0 ? delList : ['High Resolution Edited Photos']
-            };
+            updated[pkgId] = defaultDel;
+            changed = true;
           }
-          return prev;
+          return changed ? updated : prev;
         });
       }
     }
@@ -3594,17 +3596,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }));
       
       const incList = parseTeamMembers(pkg.team_members);
+      const defaultInc = incList.length > 0 ? incList : ['1 Professional Photographer'];
+      
       const delList = pkg.deliverables
         ? pkg.deliverables.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
         : [];
+      const defaultDel = delList.length > 0 ? delList : ['High Resolution Edited Photos'];
 
-      const defaultInc = incList.length > 0 ? incList : ['1 Professional Photographer'];
-      
       setEditableInclusions((prevInclusions) => {
-        const newInclusions = {
-          ...prevInclusions,
-          [packageId]: defaultInc,
-        };
+        const newInclusions = { ...prevInclusions };
+        newInclusions[packageId] = defaultInc;
+        
         if (crmEvents && crmEvents.length > 0) {
           crmEvents.forEach((ev) => {
             newInclusions[`${packageId}_${ev.id}`] = [...defaultInc];
@@ -3613,10 +3615,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         return newInclusions;
       });
 
-      setEditableDeliverables((prev) => ({
-        ...prev,
-        [packageId]: delList.length > 0 ? delList : ['High Resolution Edited Photos'],
-      }));
+      setEditableDeliverables((prev) => {
+        const newDeliverables = { ...prev };
+        newDeliverables[packageId] = defaultDel;
+        return newDeliverables;
+      });
     } else {
       setWizardLeadData((prev) => ({
         ...prev,
