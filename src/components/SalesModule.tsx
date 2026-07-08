@@ -2605,7 +2605,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         });
       }
     }
-  }, [wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, packages]);
+  }, [wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, packages, crmEvents]);
 
   // Auto-scroll and focus transitions for Sales Popups & Forms
   React.useEffect(() => {
@@ -3585,16 +3585,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         : [];
 
       const defaultInc = incList.length > 0 ? incList : ['1 Professional Photographer'];
-      const newInclusions = {
-        ...editableInclusions,
-        [packageId]: defaultInc,
-      };
-      if (crmEvents && crmEvents.length > 0) {
-        crmEvents.forEach((ev) => {
-          newInclusions[`${packageId}_${ev.id}`] = [...defaultInc];
-        });
-      }
-      setEditableInclusions(newInclusions);
+      
+      setEditableInclusions((prevInclusions) => {
+        const newInclusions = {
+          ...prevInclusions,
+          [packageId]: defaultInc,
+        };
+        if (crmEvents && crmEvents.length > 0) {
+          crmEvents.forEach((ev) => {
+            newInclusions[`${packageId}_${ev.id}`] = [...defaultInc];
+          });
+        }
+        return newInclusions;
+      });
 
       setEditableDeliverables((prev) => ({
         ...prev,
@@ -7576,13 +7579,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               </div>
                               
                               <div className="flex items-center gap-2 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => setViewingPkgDetails(pkgObj)}
-                                  className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg border border-slate-800 hover:border-slate-700 font-semibold cursor-pointer transition-all flex items-center gap-1 text-[11px]"
-                                >
-                                  📋 View Specification
-                                </button>
                                 <button
                                   type="button"
                                   onClick={() => setSelectedPkgIds(selectedPkgIds.filter(x => x !== id))}
