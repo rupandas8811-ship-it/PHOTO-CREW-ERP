@@ -2495,72 +2495,86 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const activePackages = (leadPackages || []).filter(lp => lp.lead_id === selectedLead.lead_id);
     const hasActivePkgs = activePackages.length > 0;
 
-    const newInclusions = { ...editableInclusions };
-    const newDeliverables = { ...editableDeliverables };
-    let changed = false;
-
-    if (!hasActivePkgs) {
-      const defaultId = `default_${selectedLead.lead_id}`;
-      if (!newInclusions[defaultId]) {
-        newInclusions[defaultId] = [
-          '1 Candid Photographer',
-          '1 Cinematographer',
-          '2 Traditional Photographers',
-          '2 Traditional Videographers',
-          '1 Drone',
-          '1 LED Wall',
-          '1 Spot Mixing'
-        ];
-        newDeliverables[defaultId] = [
-          '350 Edited Photos',
-          '4K Cinematic Video',
-          '3 Reels',
-          'Traditional Edited Video',
-          'Album Details',
-          'Additional Deliverables'
-        ];
-        changed = true;
-      }
-    } else {
-      activePackages.forEach((lp) => {
-        const pkgKey = lp.package_id || lp.lead_package_id || 'default';
-        if (!newInclusions[pkgKey]) {
-          const pObj = (packages || []).find(p => p.package_id === lp.package_id);
-          const incStr = pObj?.team_members || lp.team_members || '';
-          const delStr = pObj?.deliverables || lp.deliverables || '';
-
-          const parsedInc = parseTeamMembers(incStr);
-          newInclusions[pkgKey] = parsedInc.length > 0
-            ? parsedInc
-            : [
-                '1 Candid Photographer',
-                '1 Cinematographer',
-                '2 Traditional Photographers',
-                '2 Traditional Videographers',
-                '1 Drone',
-                '1 LED Wall',
-                '1 Spot Mixing'
-              ];
-
-          newDeliverables[pkgKey] = delStr
-            ? delStr.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
-            : [
-                '350 Edited Photos',
-                '4K Cinematic Video',
-                '3 Reels',
-                'Traditional Edited Video',
-                'Album Details',
-                'Additional Deliverables'
-              ];
+    setEditableInclusions(prev => {
+      const newInclusions = { ...prev };
+      let changed = false;
+      if (!hasActivePkgs) {
+        const defaultId = `default_${selectedLead.lead_id}`;
+        if (!newInclusions[defaultId]) {
+          newInclusions[defaultId] = [
+            '1 Candid Photographer',
+            '1 Cinematographer',
+            '2 Traditional Photographers',
+            '2 Traditional Videographers',
+            '1 Drone',
+            '1 LED Wall',
+            '1 Spot Mixing'
+          ];
           changed = true;
         }
-      });
-    }
+      } else {
+        activePackages.forEach((lp) => {
+          const pkgKey = lp.package_id || lp.lead_package_id || 'default';
+          if (!newInclusions[pkgKey]) {
+            const pObj = (packages || []).find(p => p.package_id === lp.package_id);
+            const incStr = pObj?.team_members || lp.team_members || '';
+            const parsedInc = parseTeamMembers(incStr);
+            newInclusions[pkgKey] = parsedInc.length > 0
+              ? parsedInc
+              : [
+                  '1 Candid Photographer',
+                  '1 Cinematographer',
+                  '2 Traditional Photographers',
+                  '2 Traditional Videographers',
+                  '1 Drone',
+                  '1 LED Wall',
+                  '1 Spot Mixing'
+                ];
+            changed = true;
+          }
+        });
+      }
+      return changed ? newInclusions : prev;
+    });
 
-    if (changed) {
-      setEditableInclusions(newInclusions);
-      setEditableDeliverables(newDeliverables);
-    }
+    setEditableDeliverables(prev => {
+      const newDeliverables = { ...prev };
+      let changed = false;
+      if (!hasActivePkgs) {
+        const defaultId = `default_${selectedLead.lead_id}`;
+        if (!newDeliverables[defaultId]) {
+          newDeliverables[defaultId] = [
+            '350 Edited Photos',
+            '4K Cinematic Video',
+            '3 Reels',
+            'Traditional Edited Video',
+            'Album Details',
+            'Additional Deliverables'
+          ];
+          changed = true;
+        }
+      } else {
+        activePackages.forEach((lp) => {
+          const pkgKey = lp.package_id || lp.lead_package_id || 'default';
+          if (!newDeliverables[pkgKey]) {
+            const pObj = (packages || []).find(p => p.package_id === lp.package_id);
+            const delStr = pObj?.deliverables || lp.deliverables || '';
+            newDeliverables[pkgKey] = delStr
+              ? delStr.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
+              : [
+                  '350 Edited Photos',
+                  '4K Cinematic Video',
+                  '3 Reels',
+                  'Traditional Edited Video',
+                  'Album Details',
+                  'Additional Deliverables'
+                ];
+            changed = true;
+          }
+        });
+      }
+      return changed ? newDeliverables : prev;
+    });
   }, [selectedLead, leadPackages, packages]);
 
   // Auto-load package details into Step 3 if a package is selected but inclusions/deliverables are empty
