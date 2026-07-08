@@ -2889,7 +2889,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               notes_special_customizations: isPrimary ? wizardLeadData.notes : lp.notes_special_customizations,
               additional_services_cost: lp.additional_services_cost || 0,
               team_members: incStr || lp.team_members || '',
-              deliverables: delStr || lp.deliverables || ''
+              deliverables: delStr || lp.deliverables || '',
+              editable_inclusions: editableInclusions,
+              editable_deliverables: editableDeliverables
             };
           });
 
@@ -3457,12 +3459,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setActiveQuoteNum(latestQuote.quotation_number || '');
       setSalesStaffName(latestQuote.sales_staff_name || lead.sales_staff_name || evtStaffName || '');
       setSalesStaffMobile(latestQuote.sales_staff_mobile || lead.sales_staff_mobile || evtStaffMobile || '');
-      if (latestQuote.editableInclusions) {
-        setEditableInclusions(latestQuote.editableInclusions);
-      }
-      if (latestQuote.editableDeliverables) {
-        setEditableDeliverables(latestQuote.editableDeliverables);
-      }
+    }
+
+    if (latestQuote?.editableInclusions) {
+      setEditableInclusions(latestQuote.editableInclusions);
+    } else if (primaryLP?.editable_inclusions) {
+      setEditableInclusions(primaryLP.editable_inclusions);
+    }
+
+    if (latestQuote?.editableDeliverables) {
+      setEditableDeliverables(latestQuote.editableDeliverables);
+    } else if (primaryLP?.editable_deliverables) {
+      setEditableDeliverables(primaryLP.editable_deliverables);
     }
 
     const matchedPkgId = latestQuote?.package_id || primaryLP?.package_id || lead.Select_Package_Option || '';
@@ -3804,7 +3812,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               notes_special_customizations: isPrimary ? wizardLeadData.notes : lp.notes_special_customizations,
               additional_services_cost: lp.additional_services_cost || 0,
               team_members: incStr || lp.team_members || '',
-              deliverables: delStr || lp.deliverables || ''
+              deliverables: delStr || lp.deliverables || '',
+              editable_inclusions: editableInclusions,
+              editable_deliverables: editableDeliverables
             };
           });
 

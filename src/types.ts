@@ -228,6 +228,8 @@ export interface LeadPackage {
   additional_services_cost?: number;
   team_members?: string;
   deliverables?: string;
+  editable_inclusions?: Record<string, string[]>;
+  editable_deliverables?: Record<string, string[]>;
 }
 
 export interface Order {

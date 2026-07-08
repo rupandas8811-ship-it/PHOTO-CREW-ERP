@@ -1073,7 +1073,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       lead_packages: [
         'lead_package_id', 'lead_id', 'package_id', 'package_name', 'package_cost', 'quantity', 
         'total_amount', 'discount', 'final_amount', 'deliverables_description', 
-        'notes_special_customizations', 'additional_services_cost', 'created_at'
+        'notes_special_customizations', 'additional_services_cost', 'team_members', 'deliverables', 'editable_inclusions', 'editable_deliverables', 'created_at'
       ],
       raw_footage: [
         'tracking_id', 'order_id', 'event_completed_date', 'raw_received', 'server_path', 
