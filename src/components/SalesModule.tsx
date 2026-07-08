@@ -5404,19 +5404,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     if (e) e.preventDefault();
     if (isSaving) return;
     if (!confirmedEventDate) {
-      alert("Please select Confirmed Event Date.");
+      showToastMsg("Please select Confirmed Event Date.", "error");
       return;
     }
     if (!confirmedEventTime) {
-      alert("Please select Confirmed Event Time.");
+      showToastMsg("Please select Confirmed Event Time.", "error");
       return;
     }
     if (finalPackageAmount === undefined || finalPackageAmount === 0 || isNaN(finalPackageAmount)) {
-      alert("Please enter Final Amount.");
+      showToastMsg("Please enter Final Amount.", "error");
       return;
     }
     if (advanceReceived === undefined || isNaN(advanceReceived)) {
-      alert("Please enter Advance Paid Amount.");
+      showToastMsg("Please enter Advance Paid Amount.", "error");
       return;
     }
 
@@ -5486,19 +5486,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     if (followUpForm.status === 'Order Confirmed') {
       if (!followUpForm.event_date) {
-        alert("Please select Confirmed Event Date.");
+        showToastMsg("Please select Confirmed Event Date.", "error");
         return;
       }
       if (!followUpForm.event_time) {
-        alert("Please select Confirmed Event Time.");
+        showToastMsg("Please select Confirmed Event Time.", "error");
         return;
       }
       if (followUpForm.quotation_amount === undefined || followUpForm.quotation_amount === 0 || isNaN(followUpForm.quotation_amount)) {
-        alert("Please enter Final Amount.");
+        showToastMsg("Please enter Final Amount.", "error");
         return;
       }
       if (followUpForm.advance_received === undefined || isNaN(followUpForm.advance_received)) {
-        alert("Please enter Advance Paid Amount.");
+        showToastMsg("Please enter Advance Paid Amount.", "error");
         return;
       }
 
@@ -5517,7 +5517,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         );
 
         setSelectedLead(null);
-        alert("Order Confirmed Successfully.");
+        showToastMsg("Order Confirmed Successfully.", "success");
       } catch (err: any) {
         console.error("Failed to convert lead:", err);
         const errMsg = err?.message || String(err);
@@ -5625,19 +5625,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     if (!selectedLead || isSaving) return;
 
     if (!confirmForm.event_date) {
-      alert("Please select Confirmed Event Date.");
+      showToastMsg("Please select Confirmed Event Date.", "error");
       return;
     }
     if (!confirmForm.event_time) {
-      alert("Please select Confirmed Event Time.");
+      showToastMsg("Please select Confirmed Event Time.", "error");
       return;
     }
     if (confirmForm.quotation_amount === undefined || confirmForm.quotation_amount === 0 || isNaN(confirmForm.quotation_amount)) {
-      alert("Please enter Final Amount.");
+      showToastMsg("Please enter Final Amount.", "error");
       return;
     }
     if (confirmForm.advance_received === undefined || isNaN(confirmForm.advance_received)) {
-      alert("Please enter Advance Paid Amount.");
+      showToastMsg("Please enter Advance Paid Amount.", "error");
       return;
     }
 
@@ -5658,7 +5658,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       setShowConfirmModal(false);
       setSelectedLead(null);
-      alert("Order Confirmed Successfully.");
+      showToastMsg("Order Confirmed Successfully.", "success");
     } catch (err: any) {
       console.error("Failed to convert order:", err);
       const errMsg = err?.message || String(err);
@@ -8093,13 +8093,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                           id={`btn_confirm_order_direct_${lead.lead_id}`}
                                           onClick={(e) => {
                                             e.stopPropagation();
+                                            const today = new Date().toISOString().split('T')[0];
+                                            setConfirmForm({
+                                              ...confirmForm,
+                                              package_name: lead.Select_Package_Option || '',
+                                              quotation_amount: Number(lead.final_amount) || 0,
+                                              advance_received: 0,
+                                              event_date: today,
+                                            });
                                             setOpenDropdownLeadId(null);
                                             handleSelectLead(lead);
-                                            setCrmWizardStep(3);
-                                            setWizardLeadData({ ...wizardLeadData, status: 'Order Confirmed' });
-                                            setTimeout(() => {
-                                              document.getElementById('configure_confirmed_order_section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                            }, 300);
+                                            setShowConfirmModal(true);
                                           }}
                                           className="w-full h-8 px-3 text-xs font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-white rounded-lg border border-emerald-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
                                         >
