@@ -2585,7 +2585,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   React.useEffect(() => {
     const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
     if (pkgId && packages && packages.length > 0) {
-      const pkg = packages.find((p) => p.package_id === pkgId);
+      const pkg = packages.find((p) => String(p.package_id) === String(pkgId));
       if (pkg) {
         setEditableInclusions(prev => {
           let updated = { ...prev };
@@ -3597,7 +3597,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const handlePackageChange = (packageId: string) => {
     setIsPackageSelectedAndSaved(false);
     setIsPackageDetailsSaved(false);
-    const pkg = packages.find((p) => p.package_id === packageId);
+    const pkg = packages.find((p) => String(p.package_id) === String(packageId));
     if (pkg) {
       setWizardLeadData((prev) => ({
         ...prev,
@@ -8824,7 +8824,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         </div>
 
                         {(() => {
-                          const selectedPkg = packages.find(p => p.package_id === (wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option));
+                          const selectedPkg = packages.find(p => String(p.package_id) === String(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option));
                           if (!selectedPkg || !isPackageSelectedAndSaved) return null;
                           const selectedPkgId = selectedPkg.package_id;
                           const inclusionsList = editableInclusions[selectedPkgId] || [];
