@@ -2627,6 +2627,66 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
   }, [wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, packages, crmEvents]);
 
+  // Fetch from Supabase directly for the JSON columns
+  React.useEffect(() => {
+    const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
+    if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD' && pkgId && supabaseClient) {
+      const fetchSupabasePackageData = async () => {
+        try {
+          const { data, error } = await supabaseClient
+            .from('lead_packages')
+            .select('deliverables_descriptionn, Team_Members_Included')
+            .eq('lead_id', selectedLead.lead_id)
+            .eq('package_id', pkgId)
+            .limit(1)
+            .maybeSingle();
+          
+          if (!error && data) {
+            if (data.deliverables_descriptionn && Object.keys(data.deliverables_descriptionn).length > 0) {
+              setEditableDeliverables(data.deliverables_descriptionn as Record<string, string[]>);
+            }
+            if (data.Team_Members_Included && Object.keys(data.Team_Members_Included).length > 0) {
+              setEditableInclusions(data.Team_Members_Included as Record<string, string[]>);
+            }
+          }
+        } catch (e) {
+          console.error('Error fetching lead_package from Supabase', e);
+        }
+      };
+      fetchSupabasePackageData();
+    }
+  }, [selectedLead?.lead_id, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, supabaseClient]);
+
+  // Save to Supabase directly for the JSON columns
+  const isFirstRender = React.useRef(true);
+  React.useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
+    if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD' && pkgId && supabaseClient) {
+      const updateSupabase = async () => {
+        try {
+          await supabaseClient
+            .from('lead_packages')
+            .update({
+              deliverables_descriptionn: editableDeliverables,
+              Team_Members_Included: editableInclusions
+            })
+            .eq('lead_id', selectedLead.lead_id)
+            .eq('package_id', pkgId);
+        } catch (e) {
+          console.error('Error updating lead_package in Supabase', e);
+        }
+      };
+      const timeoutId = setTimeout(() => {
+        updateSupabase();
+      }, 500);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [editableDeliverables, editableInclusions, selectedLead?.lead_id, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, supabaseClient]);
+
   // Auto-scroll and focus transitions for Sales Popups & Forms
   React.useEffect(() => {
     if (activeTab === 'create') {
@@ -2911,7 +2971,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               team_members: incStr || lp.team_members || '',
               deliverables: delStr || lp.deliverables || '',
               editable_inclusions: editableInclusions,
-              editable_deliverables: editableDeliverables
+              editable_deliverables: editableDeliverables,
+              deliverables_descriptionn: editableDeliverables,
+              Team_Members_Included: editableInclusions
             };
           });
 
@@ -3849,7 +3911,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               team_members: incStr || lp.team_members || '',
               deliverables: delStr || lp.deliverables || '',
               editable_inclusions: editableInclusions,
-              editable_deliverables: editableDeliverables
+              editable_deliverables: editableDeliverables,
+              deliverables_descriptionn: editableDeliverables,
+              Team_Members_Included: editableInclusions
             };
           });
 

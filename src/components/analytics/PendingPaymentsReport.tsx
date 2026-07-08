@@ -791,7 +791,7 @@ export const PendingPaymentsReport: React.FC = () => {
                       <button 
                         onClick={() => {
                           setPaymentModalRecord(rec);
-                          setPaymentAmount(rec.remainingAmount);
+                          setPaymentAmount('');
                           setPaymentNotes('');
                           setShowPaymentModal(true);
                         }}
@@ -836,32 +836,46 @@ export const PendingPaymentsReport: React.FC = () => {
             </div>
             
             <div className="p-5 space-y-4">
-              <div className="p-3 bg-zinc-900 rounded-lg flex justify-between items-center border border-zinc-850">
-                <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Remaining Balance</span>
-                <span className="text-sm font-black text-rose-450 font-mono">
-                  {formatPercentageOrINR(paymentModalRecord.remainingAmount)}
-                </span>
+              <div className="space-y-2">
+                <div className="p-3 bg-zinc-900 rounded-lg flex justify-between items-center border border-zinc-850">
+                  <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Final Quotation Amount</span>
+                  <span className="text-sm font-black text-white font-mono">
+                    {formatPercentageOrINR(paymentModalRecord.finalPackageAmount)}
+                  </span>
+                </div>
+                <div className="p-3 bg-zinc-900 rounded-lg flex justify-between items-center border border-zinc-850">
+                  <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Total Payment Received</span>
+                  <span className="text-sm font-black text-emerald-450 font-mono">
+                    {formatPercentageOrINR(paymentModalRecord.finalPackageAmount - paymentModalRecord.remainingAmount)}
+                  </span>
+                </div>
+                <div className="p-3 bg-zinc-900 rounded-lg flex justify-between items-center border border-zinc-850">
+                  <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Total Pending Amount</span>
+                  <span className="text-sm font-black text-rose-450 font-mono">
+                    {formatPercentageOrINR(paymentModalRecord.remainingAmount)}
+                  </span>
+                </div>
               </div>
               
               <div className="space-y-1">
-                <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Amount Received (₹)</label>
+                <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Payment Received</label>
                 <input
                   type="number"
                   value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 font-mono font-bold"
-                  placeholder="0.00"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono font-bold"
+                  placeholder="0"
                 />
-                <p className="text-[10px] text-zinc-500 mt-1">Leave as remaining balance to mark Fully Paid</p>
               </div>
               
               <div className="space-y-1">
-                <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Payment Notes (Optional)</label>
-                <textarea
+                <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Transaction ID</label>
+                <input
+                  type="text"
                   value={paymentNotes}
                   onChange={(e) => setPaymentNotes(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 min-h-[60px]"
-                  placeholder="e.g. Bank transfer reference number..."
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  placeholder="Enter Transaction ID"
                 />
               </div>
             </div>
@@ -879,7 +893,7 @@ export const PendingPaymentsReport: React.FC = () => {
                   if (amt > 0) {
                     try {
                       setIsSaving(true);
-                      await recordPayment(paymentModalRecord.orderId, amt, new Date().toISOString().split('T')[0], paymentNotes);
+                      await recordPayment(paymentModalRecord.orderId, amt, new Date().toISOString().split('T')[0], undefined, paymentNotes);
                       setShowPaymentModal(false);
                     } catch (err: any) {
                       alert(`Failed to save payment: ${err.message || err}`);
