@@ -1554,6 +1554,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [crmWizardStep, setCrmWizardStep] = useState<number>(1);
   const [crmHighestStep, setCrmHighestStep] = useState<number>(1);
+  const [isPackageSelectedAndSaved, setIsPackageSelectedAndSaved] = useState(false);
+  const [isPackageDetailsSaved, setIsPackageDetailsSaved] = useState(false);
 
   const appendCompletedStep = (existingRemarks: string | undefined, step: number) => {
     const cleanRemarks = (existingRemarks || '').replace(/\[CRM_COMPLETED_STEP:\s*\d+\]/g, '').trim();
@@ -2025,6 +2027,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     // Reset wizard fields
     setWizardStep(1);
     setCrmWizardStep(1);
+    setIsPackageSelectedAndSaved(false);
+    setIsPackageDetailsSaved(false);
     setCreatedLeadId(null);
     setPkgPrices({});
     setPkgDeliverables({});
@@ -3468,6 +3472,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     else startStep = 1;
 
     setCrmWizardStep(startStep);
+    
+    const hasPackageAnywhere = !!(lead.Select_Package_Option || primaryLP?.package_id || latestQuote?.package_id);
+    if (completedStep >= 3 || hasPackageAnywhere) {
+      setIsPackageSelectedAndSaved(true);
+      setIsPackageDetailsSaved(true);
+    } else {
+      setIsPackageSelectedAndSaved(false);
+      setIsPackageDetailsSaved(false);
+    }
 
     setQuoteDiscount(lead.Quotation_Discount ?? latestQuote?.discount_amount ?? 0);
     setQuoteAdditional(lead.Additional_Services_Cost ?? latestQuote?.additional_services_cost ?? 0);
@@ -3582,6 +3595,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   };
 
   const handlePackageChange = (packageId: string) => {
+    setIsPackageSelectedAndSaved(false);
+    setIsPackageDetailsSaved(false);
     const pkg = packages.find((p) => p.package_id === packageId);
     if (pkg) {
       setWizardLeadData((prev) => ({
@@ -8763,7 +8778,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Select Package Option *</label>
                           <select
                             value={wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || ''}
-                            disabled={isLeadLocked}
+                            disabled={isLeadLocked || isPackageSelectedAndSaved}
                             onChange={(e) => handlePackageChange(e.target.value)}
                             className={`w-full bg-slate-950 border focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer ${
                               !(wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id) || (wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id).trim() === ''
@@ -8783,11 +8798,34 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               ⚠️ Please select a package before continuing.
                             </p>
                           )}
+                          
+                          {(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option) && !isPackageSelectedAndSaved && !isLeadLocked && (
+                            <div className="mt-3 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => setIsPackageSelectedAndSaved(true)}
+                                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] font-bold uppercase tracking-wider rounded-lg shadow transition-colors flex items-center gap-2"
+                              >
+                                Save Package
+                              </button>
+                            </div>
+                          )}
+                          {(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option) && isPackageSelectedAndSaved && !isPackageDetailsSaved && !isLeadLocked && (
+                            <div className="mt-2 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => setIsPackageSelectedAndSaved(false)}
+                                className="text-xs text-indigo-400 hover:text-indigo-300 underline font-mono cursor-pointer"
+                              >
+                                Edit Package Selection
+                              </button>
+                            </div>
+                          )}
                         </div>
 
                         {(() => {
                           const selectedPkg = packages.find(p => p.package_id === (wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option));
-                          if (!selectedPkg) return null;
+                          if (!selectedPkg || !isPackageSelectedAndSaved) return null;
                           const selectedPkgId = selectedPkg.package_id;
                           const inclusionsList = editableInclusions[selectedPkgId] || [];
                           const deliverablesList = editableDeliverables[selectedPkgId] || [];
@@ -8808,7 +8846,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       id="input_sales_staff_name"
                                       type="text"
                                       required
-                                      disabled={isLeadLocked}
+                                      disabled={isLeadLocked || isPackageDetailsSaved}
                                       value={salesStaffName}
                                       onChange={(e) => setSalesStaffName(e.target.value)}
                                       placeholder="E.g., Jane Doe"
@@ -8823,7 +8861,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       id="input_sales_staff_mobile"
                                       type="text"
                                       required
-                                      disabled={isLeadLocked}
+                                      disabled={isLeadLocked || isPackageDetailsSaved}
                                       value={salesStaffMobile}
                                       onChange={(e) => setSalesStaffMobile(e.target.value)}
                                       placeholder="E.g., 9876543210"
@@ -8859,7 +8897,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 <input
                                   type="number"
                                   value={wizardLeadData.package_cost !== undefined ? wizardLeadData.package_cost : selectedPkg.price}
-                                  disabled={isLeadLocked}
+                                  disabled={isLeadLocked || isPackageDetailsSaved}
                                   onChange={(e) => setWizardLeadData({ ...wizardLeadData, package_cost: Math.max(0, parseInt(e.target.value) || 0) })}
                                   className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-amber-400 font-mono font-bold"
                                   required
@@ -8886,7 +8924,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                             </label>
                                             <button
                                               type="button"
-                                              disabled={isLeadLocked}
+                                              disabled={isLeadLocked || isPackageDetailsSaved}
                                               onClick={() => {
                                                 const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
                                                 currentList.push('');
@@ -8909,7 +8947,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                                   <input
                                                     type="text"
                                                     value={item}
-                                                    disabled={isLeadLocked}
+                                                    disabled={isLeadLocked || isPackageDetailsSaved}
                                                     onChange={(e) => {
                                                       const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
                                                       currentList[idx] = e.target.value;
@@ -8920,7 +8958,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                                     }}
                                                     className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
                                                   />
-                                                  {!isLeadLocked && (
+                                                  {!isLeadLocked && !isPackageDetailsSaved && (
                                                     <button
                                                       type="button"
                                                       onClick={() => {
@@ -8950,7 +8988,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Team Members Included (Editable)</label>
                                       <button
                                         type="button"
-                                        disabled={isLeadLocked}
+                                        disabled={isLeadLocked || isPackageDetailsSaved}
                                         onClick={() => {
                                           const currentList = [...(editableInclusions[selectedPkgId] || [])];
                                           currentList.push('');
@@ -8973,7 +9011,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                             <input
                                               type="text"
                                               value={item}
-                                              disabled={isLeadLocked}
+                                              disabled={isLeadLocked || isPackageDetailsSaved}
                                               onChange={(e) => {
                                                 const currentList = [...(editableInclusions[selectedPkgId] || [])];
                                                 currentList[idx] = e.target.value;
@@ -8984,7 +9022,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                               }}
                                               className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
                                             />
-                                            {!isLeadLocked && (
+                                            {!isLeadLocked && !isPackageDetailsSaved && (
                                               <button
                                                 type="button"
                                                 onClick={() => {
@@ -9013,7 +9051,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Deliverables Description / Base Package Deliverables (Editable)</label>
                                   <button
                                     type="button"
-                                    disabled={isLeadLocked}
+                                    disabled={isLeadLocked || isPackageDetailsSaved}
                                     onClick={() => {
                                       const currentList = [...(editableDeliverables[selectedPkgId] || [])];
                                       currentList.unshift('');
@@ -9036,7 +9074,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                         <input
                                           type="text"
                                           value={item}
-                                          disabled={isLeadLocked}
+                                          disabled={isLeadLocked || isPackageDetailsSaved}
                                           onChange={(e) => {
                                             const currentList = [...(editableDeliverables[selectedPkgId] || [])];
                                             currentList[idx] = e.target.value;
@@ -9047,7 +9085,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                           }}
                                           className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
                                         />
-                                        {!isLeadLocked && (
+                                        {!isLeadLocked && !isPackageDetailsSaved && (
                                           <button
                                             type="button"
                                             onClick={() => {
@@ -9069,7 +9107,31 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 )}
                               </div>
 
-                              {renderQuotationAndStep4Section(true)}
+                              {!isPackageDetailsSaved && !isLeadLocked && (
+                                <div className="mt-4 flex justify-end pb-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsPackageDetailsSaved(true)}
+                                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] font-bold uppercase tracking-wider rounded-lg shadow transition-colors flex items-center gap-2"
+                                  >
+                                    Save Package Details
+                                  </button>
+                                </div>
+                              )}
+                              
+                              {isPackageDetailsSaved && !isLeadLocked && (
+                                <div className="mt-2 flex justify-end pb-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsPackageDetailsSaved(false)}
+                                    className="text-xs text-indigo-400 hover:text-indigo-300 underline font-mono cursor-pointer"
+                                  >
+                                    Edit Package Details
+                                  </button>
+                                </div>
+                              )}
+
+                              {isPackageDetailsSaved && renderQuotationAndStep4Section(true)}
                             </div>
                           );
                         })()}
