@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useRole, mapUserFieldsFromDb } from './RoleContext';
 import { supabaseClient } from '../supabaseClient';
@@ -3333,6 +3333,55 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     );
   };
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchReportingData = async () => {
+       if (!selectedLead?.lead_id) return;
+       try {
+          if (!supabaseClient) return;
+          const { data, error } = await supabaseClient
+             .from('order_event_reporting')
+             .select('*')
+             .eq('lead_id', selectedLead.lead_id);
+          
+          if (error) {
+             console.error("Failed to load order_event_reporting data", error);
+             return;
+          }
+
+          if (isMounted && data && data.length > 0) {
+             const first = data[0];
+             setWizardLeadData(prev => ({
+                ...prev,
+                confirmed_event_date: first.confirmed_event_date || prev.confirmed_event_date,
+                confirmed_event_time: first.confirmed_event_time || prev.confirmed_event_time,
+                final_amount: first.contract_final_amount || prev.final_amount,
+                advance_received: first.advance_payment_received || prev.advance_received,
+             }));
+
+             setCrmEvents(prev => prev.map(ev => {
+                const rep = data.find(r => r.event_id === ev.id);
+                if (rep) {
+                   return {
+                      ...ev,
+                      reporting_date: rep.reporting_date || ev.reporting_date,
+                      reporting_time: rep.reporting_time || ev.reporting_time
+                   };
+                }
+                return ev;
+             }));
+          }
+       } catch (err) {
+          console.error("Error loading reporting data", err);
+       }
+    };
+
+    fetchReportingData();
+    
+    return () => { isMounted = false; };
+  }, [selectedLead?.lead_id, supabaseClient]);
+
   // Handle lead select
   const handleSelectLead = (lead: Lead) => {
     setSelectedLead(lead);
@@ -3821,18 +3870,85 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           
           const pkgName = packages.find(p => p.package_id === wizardLeadData.selected_package_id)?.package_name || 'Selected Package';
           
-          await confirmOrder(
-            selectedLead.lead_id,
-            pkgName,
-            Number(wizardLeadData.final_amount),
-            Number(wizardLeadData.advance_received || 0),
-            wizardLeadData.confirmed_event_date,
-            wizardLeadData.confirmed_event_time,
-            'UPI',
-            wizardLeadData.notes || 'Order confirmed via CRM Wizard',
-            undefined,
-            undefined
-          );
+          let masterOrderId = '';
+          try {
+             masterOrderId = await confirmOrder(
+               selectedLead.lead_id,
+               pkgName,
+               Number(wizardLeadData.final_amount),
+               Number(wizardLeadData.advance_received || 0),
+               wizardLeadData.confirmed_event_date,
+               wizardLeadData.confirmed_event_time,
+               'UPI',
+               wizardLeadData.notes || 'Order confirmed via CRM Wizard',
+               undefined,
+               undefined
+             );
+          } catch (err: any) {
+             console.error('confirmOrder error', err);
+             showToastMsg('Failed to confirm order: ' + err.message, 'error');
+             setIsSaving(false); return;
+          }
+
+          // Save to order_event_reporting
+          try {
+             if (supabaseClient) {
+               const finalAmt = Number(wizardLeadData.final_amount);
+               const advanceAmt = Number(wizardLeadData.advance_received || 0);
+               const pendingAmt = finalAmt - advanceAmt;
+               const paymentStatus = pendingAmt <= 0 ? 'Paid' : 'Pending';
+
+               for (const ev of crmEvents) {
+                 const payload = {
+                   order_id: masterOrderId,
+                   lead_id: selectedLead.lead_id,
+                   event_id: ev.id,
+                   event_name: ev.event_name || ev.event_type || 'Unknown Event',
+                   confirmed_event_date: wizardLeadData.confirmed_event_date,
+                   confirmed_event_time: wizardLeadData.confirmed_event_time,
+                   contract_final_amount: finalAmt,
+                   advance_payment_received: advanceAmt,
+                   reporting_date: ev.reporting_date || ev.event_date || wizardLeadData.confirmed_event_date,
+                   reporting_time: ev.reporting_time || wizardLeadData.confirmed_event_time,
+                   pending_amount: pendingAmt,
+                   payment_status: paymentStatus
+                 };
+
+                 const { data: existing, error: fetchErr } = await supabaseClient
+                   .from('order_event_reporting')
+                   .select('event_id')
+                   .eq('event_id', ev.id)
+                   .maybeSingle();
+
+                 if (fetchErr && fetchErr.code !== 'PGRST116') {
+                    throw fetchErr;
+                 }
+
+                 if (existing) {
+                   const response = await fetch('/api/db/update', {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ table: 'order_event_reporting', matchColumn: 'event_id', matchValue: ev.id, updates: payload })
+                   });
+                   const resJson = await response.json();
+                   if (!response.ok || !resJson.success) throw new Error(resJson.error || 'Server update failed');
+                 } else {
+                   const response = await fetch('/api/db/insert', {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ table: 'order_event_reporting', record: payload })
+                   });
+                   const resJson = await response.json();
+                   if (!response.ok || !resJson.success) throw new Error(resJson.error || 'Server insert failed');
+                 }
+               }
+             }
+          } catch (err: any) {
+             const errMsg = `Failed to save Order Event Reporting.\nTable Name: order_event_reporting\nColumn Name: Multiple (Check schema)\nFailed Function: handleSaveStep -> UPSERT\nSQL Operation: INSERT/UPDATE\nExact Supabase Error: ${err.message || String(err)}\nSuggested Fix: Verify table schema 'order_event_reporting' exists with correct columns.`;
+             alert(errMsg);
+             setIsSaving(false);
+             return;
+          }
           
           showToastMsg("Order Confirmed and sent to Operations.", "success");
           setSelectedLead(null);
