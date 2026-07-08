@@ -3925,21 +3925,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                  }
 
                  if (existing) {
-                   const response = await fetch('/api/db/update', {
-                     method: 'POST',
-                     headers: { 'Content-Type': 'application/json' },
-                     body: JSON.stringify({ table: 'order_event_reporting', matchColumn: 'event_id', matchValue: ev.id, updates: payload })
-                   });
-                   const resJson = await response.json();
-                   if (!response.ok || !resJson.success) throw new Error(resJson.error || 'Server update failed');
+                   const { error: updErr } = await supabaseClient
+                     .from('order_event_reporting')
+                     .update(payload)
+                     .eq('event_id', ev.id);
+                   if (updErr) throw updErr;
                  } else {
-                   const response = await fetch('/api/db/insert', {
-                     method: 'POST',
-                     headers: { 'Content-Type': 'application/json' },
-                     body: JSON.stringify({ table: 'order_event_reporting', record: payload })
-                   });
-                   const resJson = await response.json();
-                   if (!response.ok || !resJson.success) throw new Error(resJson.error || 'Server insert failed');
+                   const { error: insErr } = await supabaseClient
+                     .from('order_event_reporting')
+                     .insert(payload);
+                   if (insErr) throw insErr;
                  }
                }
              }
