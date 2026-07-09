@@ -248,7 +248,7 @@ const generateQuotationPDF = (
   };
 
     // NEW PREP FOR TEAM MEMBERS (INCLUSIONS) AND DELIVERABLES
-  const eventInclusionsMap: Record<string, string[]> = {};
+  const eventInclusionsMap: Record<string, { members: string[], shootType: string }> = {};
   const eventDeliverablesMap: Record<string, { pkgName: string, items: string[] }> = {};
   let generalInclusions: string[] = [];
   let generalDeliverables: { pkgName: string, items: string[] }[] = [];
@@ -262,9 +262,10 @@ const generateQuotationPDF = (
       incKeys.forEach((key) => {
         const eventId = key.substring(pkgId.length + 1);
         const eventObj = (lead.events || []).find((e: any) => e.id === eventId);
-        const eventName = eventObj ? eventObj.event_name : 'Event';
-        if (!eventInclusionsMap[eventName]) eventInclusionsMap[eventName] = [];
-        eventInclusionsMap[eventName].push(...(editableInclusions![key] || []).filter(Boolean));
+        const eventName = eventObj ? (eventObj.event_name || eventObj.event_type || 'Event') : 'Event';
+        const eventShootType = eventObj ? (eventObj.event_shoot_type || lead.desired_event_shoot_type || lead.shoot_type || 'N/A') : (lead.desired_event_shoot_type || lead.shoot_type || 'N/A');
+        if (!eventInclusionsMap[eventName]) eventInclusionsMap[eventName] = { members: [], shootType: eventShootType };
+        eventInclusionsMap[eventName].members.push(...(editableInclusions![key] || []).filter(Boolean));
       });
     } else {
       generalInclusions.push(...(editableInclusions?.[pkgId] || []).filter(Boolean));
@@ -360,7 +361,10 @@ const generateQuotationPDF = (
     };
 
     if (hasEventsInclusions) {
-      Object.entries(eventInclusionsMap).forEach(([_, members]) => simTable(members));
+      Object.entries(eventInclusionsMap).forEach(([_, data]) => {
+         simY += 10.5;
+         simTable(data.members);
+      });
     } else if (generalInclusions.length > 0) {
       simTable(generalInclusions);
     }
@@ -702,7 +706,6 @@ const generateQuotationPDF = (
     { label: 'Event Type',     val: wrapEventType, isWrapped: true },
     { label: 'Event Date',     val: formattedEvDate },
     { label: 'Event Location', val: wrapLocation, isWrapped: true },
-    { label: 'Shoot Type',     val: wrapShootType, isWrapped: true },
     { label: 'Quotation Date', val: quoteDateStr }
   ];
 
@@ -911,20 +914,36 @@ const generateQuotationPDF = (
   };
 
     // 2. Team Members Included section
-  const drawTeamMembers = (eventName: string | null, members: string[]) => {
+  const drawTeamMembers = (eventName: string | null, shootType: string | null, members: string[]) => {
     if (members.length === 0) return;
-    const title = eventName ? `${eventName} - TEAM MEMBERS INCLUDED` : 'TEAM MEMBERS INCLUDED';
     const mapped = members.map((m, i) => ({ id: String(i), name: m, qty: 1, price: 0 }));
-    drawTable(title, mapped);
+    
+    if (eventName) {
+       doc.setFont('helvetica', 'bold');
+       doc.setFontSize(9.5);
+       doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+       doc.text(`Event Name: ${eventName}`, 15, currentY);
+       currentY += 4.5;
+       
+       doc.setFont('helvetica', 'normal');
+       doc.setFontSize(8.5);
+       doc.setTextColor(100, 116, 139);
+       doc.text(`Shoot Type: ${shootType || 'N/A'}`, 15, currentY);
+       currentY += 6;
+       
+       drawTable('TEAM MEMBERS INCLUDED', mapped);
+    } else {
+       drawTable('TEAM MEMBERS INCLUDED', mapped);
+    }
   };
 
 
   if (hasEventsInclusions) {
-    Object.entries(eventInclusionsMap).forEach(([eventName, members]) => {
-      drawTeamMembers(eventName, members);
+    Object.entries(eventInclusionsMap).forEach(([eventName, data]) => {
+      drawTeamMembers(eventName, data.shootType, data.members);
     });
   } else if (generalInclusions.length > 0) {
-    drawTeamMembers(null, generalInclusions);
+    drawTeamMembers(null, null, generalInclusions);
   }
 
   // 3. Additional services table
@@ -9181,9 +9200,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                                     return (
                                       <div key={event.id} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-3 mt-3 mb-4">
-                                        <h4 className="text-xs sm:text-sm font-bold text-slate-100 uppercase tracking-wider font-mono border-b border-slate-800/40 pb-1.5 flex items-center justify-between">
-                                          <span>🎬 {event.event_name || event.event_type || 'Unnamed Event'}</span>
-                                        </h4>
+                                        <div className="border-b border-slate-800/40 pb-2 mb-3">
+                                          <div className="text-xs sm:text-sm font-bold text-slate-100 uppercase tracking-wider font-mono flex items-center justify-between mb-1">
+                                            <span>Event Name: {event.event_name || event.event_type || 'Unnamed Event'}</span>
+                                          </div>
+                                          <div className="text-xs text-slate-400 font-medium">
+                                            Shoot Type: <span className="text-slate-300">{event.event_shoot_type || event.shoot_type || selectedLead.desired_event_shoot_type || selectedLead.shoot_type || 'N/A'}</span>
+                                          </div>
+                                        </div>
                                         <div>
                                           <div className="flex items-center justify-between mb-2">
                                             <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">
