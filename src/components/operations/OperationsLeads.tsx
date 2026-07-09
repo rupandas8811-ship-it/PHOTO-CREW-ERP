@@ -290,6 +290,21 @@ export const OperationsLeads: React.FC = () => {
     staffNames: string[];
   } | null>(null);
 
+  const [viewingStaffOrderId, setViewingStaffOrderId] = useState<string | null>(null);
+  const [editedMessages, setEditedMessages] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (whatsappShareModalData) {
+      const initialMsgs: Record<string, string> = {};
+      whatsappShareModalData.staffNames.forEach(name => {
+        initialMsgs[name] = generateWhatsAppMessageForStaff(whatsappShareModalData.order, name);
+      });
+      setEditedMessages(initialMsgs);
+    } else {
+      setEditedMessages({});
+    }
+  }, [whatsappShareModalData]);
+
   // Helper to get assigned staff names for an order
   const getAssignedStaffNamesForOrder = (ord: Order): string[] => {
     const lead = leads.find(l => l.lead_id === ord.lead_id);
@@ -315,6 +330,136 @@ export const OperationsLeads: React.FC = () => {
     const orderAssigns = staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id) : [];
     const fromAssigns = orderAssigns.map(sa => sa.staff_name).filter(Boolean);
     return Array.from(new Set(fromAssigns));
+  };
+
+  interface AssignedStaffDetails {
+    staff_name: string;
+    staff_role: string;
+    staff_type: 'In-House' | 'Freelancer';
+    mobile: string;
+    event_name: string;
+    event_date: string;
+    reporting_date: string;
+    reporting_time: string;
+    status: 'Available' | 'Busy';
+    google_maps_link?: string;
+    assigned_equipment?: string[];
+    event_time?: string;
+  }
+
+  const isStaffBusyOnDate = (staffName: string, targetDate: string, currentOrderId?: string) => {
+    if (!targetDate) return false;
+    
+    return leads?.some(otherLead => {
+      if (otherLead.status === 'Lost Lead') return false;
+      
+      const otherOrder = orders.find(o => o.lead_id === otherLead.lead_id || o.order_id === otherLead.lead_id);
+      if (otherOrder && isCompletedEvent(otherOrder)) return false;
+      if (currentOrderId && otherOrder?.order_id === currentOrderId) return false;
+      
+      // Check events
+      if (otherLead.events && otherLead.events.length > 0) {
+        return otherLead.events.some(otherEv => {
+          const otherEvDate = otherEv.event_date;
+          if (otherEvDate === targetDate) {
+            const assignedNames = otherEv.assigned_staff_names
+              ? otherEv.assigned_staff_names.split(',').map((s: string) => s.trim())
+              : [];
+            return assignedNames.includes(staffName);
+          }
+          return false;
+        });
+      } else {
+        // Check default event
+        if (otherLead.event_date === targetDate) {
+          // Check if assigned
+          let assignmentsHistory = leadStaffAssignmentHistory ? leadStaffAssignmentHistory.filter(h => h.lead_id === otherLead.lead_id) : [];
+          if (assignmentsHistory.length === 0 && otherOrder) {
+            assignmentsHistory = leadStaffAssignmentHistory ? leadStaffAssignmentHistory.filter(h => h.order_id === otherOrder.order_id) : [];
+          }
+          return assignmentsHistory.some(h => h.assigned_staff?.trim() === staffName);
+        }
+      }
+      return false;
+    });
+  };
+
+  const getAssignedStaffDetailsForOrder = (ord: Order): AssignedStaffDetails[] => {
+    const lead = leads.find(l => l.lead_id === ord.lead_id);
+    const staffDetailsList: AssignedStaffDetails[] = [];
+    
+    // Find order level op details for default equipment / times
+    const op = getOpDetails(ord.order_id);
+    
+    if (lead?.events && lead.events.length > 0) {
+      lead.events.forEach(ev => {
+        if (ev.assigned_staff_names) {
+          const names = ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean);
+          
+          let assignedEquipment: string[] = [];
+          let mobilesRaw = ev.assigned_staff_mobiles || '';
+          if (mobilesRaw.includes(' || EQUIPMENT: ')) {
+            const parts = mobilesRaw.split(' || EQUIPMENT: ');
+            assignedEquipment = parts[1] ? parts[1].split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+          }
+          
+          names.forEach(name => {
+            const st = staff?.find(s => s.name === name);
+            
+            // Determine their assigned role
+            // Look up in staff_assignments
+            const saMatch = staffAssignments?.find(sa => sa.order_id === ord.order_id && sa.staff_name === name);
+            const assignedRole = saMatch?.staff_role || st?.role || 'Staff';
+            
+            staffDetailsList.push({
+              staff_name: name,
+              staff_role: assignedRole,
+              staff_type: st?.staff_type || 'In-House',
+              mobile: st?.mobile || '',
+              event_name: ev.event_name || ord.event_type || 'Event',
+              event_date: ev.event_date || ord.event_date || '',
+              reporting_date: ev.reporting_date || lead.Reporting_date || ev.event_date || '',
+              reporting_time: ev.reporting_time || ord.reporting_time || op?.reporting_time || '',
+              status: isStaffBusyOnDate(name, ev.event_date || ord.event_date || '', ord.order_id) ? 'Busy' : 'Available',
+              google_maps_link: ev.google_maps_link || lead.google_maps_link || '',
+              assigned_equipment: assignedEquipment,
+              event_time: ev.event_start_time || ord.event_time || ''
+            });
+          });
+        }
+      });
+    } else {
+      // Treat order/lead as a single event
+      // Find all assigned staff from staffAssignments
+      const orderAssignments = staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id) : [];
+      
+      if (orderAssignments.length > 0) {
+        orderAssignments.forEach(sa => {
+          const name = sa.staff_name;
+          const st = staff?.find(s => s.name === name);
+          
+          // Find assigned equipment from op
+          const assignedEquipment = op?.equipment_kit ? op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+          
+          staffDetailsList.push({
+            staff_name: name,
+            staff_role: sa.staff_role || st?.role || 'Staff',
+            staff_type: st?.staff_type || 'In-House',
+            mobile: st?.mobile || '',
+            event_name: ord.event_type || 'Main Event',
+            event_date: ord.event_date || '',
+            reporting_date: ord.Reporting_date || lead?.Reporting_date || ord.event_date || '',
+            reporting_time: ord.reporting_time || op?.reporting_time || '',
+            status: isStaffBusyOnDate(name, ord.event_date || '', ord.order_id) ? 'Busy' : 'Available',
+            google_maps_link: lead?.google_maps_link || '',
+            assigned_equipment: assignedEquipment,
+            event_time: ord.event_time || ''
+          });
+        });
+      }
+    }
+    
+    return staffDetailsList;
   };
 
   // Helper to generate personalized WhatsApp message for a staff member
@@ -1268,18 +1413,21 @@ export const OperationsLeads: React.FC = () => {
                     <td className="p-4 font-mono text-zinc-300">
                       {op?.reporting_time || <span className="text-zinc-600 italic">—</span>}
                     </td>
-                    <td className="p-4 text-[11px] text-zinc-350 min-w-[200px]">
-                      {crewNames.length > 0 ? (
-                        <div className="flex flex-col gap-1.5">
-                          {crewNames.map((member, idx) => (
-                            <span key={idx} className="bg-zinc-850 text-zinc-250 px-1.5 py-1 rounded border border-zinc-800 text-[10px] font-mono break-words whitespace-normal leading-tight">
-                              {member}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-zinc-500 font-mono text-[10.5px]">Unassigned</span>
-                      )}
+                    <td className="p-4 text-xs font-mono text-zinc-300">
+                      {(() => {
+                        const assignedStaffNames = getAssignedStaffNamesForOrder(ord);
+                        return assignedStaffNames.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => setViewingStaffOrderId(ord.order_id)}
+                            className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 border border-indigo-500/20 hover:border-indigo-500/45 rounded-xl font-bold font-mono text-xs transition-all flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                          >
+                            👥 {assignedStaffNames.length} Staff
+                          </button>
+                        ) : (
+                          <span className="text-zinc-500 font-mono text-[10.5px]">Unassigned</span>
+                        );
+                      })()}
                     </td>
                     <td className="p-4">
                       <StatusText status={currentStage} />
@@ -1358,23 +1506,17 @@ export const OperationsLeads: React.FC = () => {
                             }
                           });
 
-                          // 2. Share WhatsApp: valid when crewNames has elements
-                          if (crewNames.length > 0) {
+                          // 2. Share WhatsApp: valid when staff is assigned
+                          const assignedStaffNames = getAssignedStaffNamesForOrder(ord);
+                          if (assignedStaffNames.length > 0) {
                             actionItems.push({
                               label: 'Share WhatsApp',
                               onClick: () => {
-                                const assignedStaffNames = getAssignedStaffNamesForOrder(ord);
-                                if (assignedStaffNames.length === 1) {
-                                  const msgText = generateWhatsAppMessageForStaff(ord, assignedStaffNames[0]);
-                                  const url = `https://wa.me/?text=${encodeURIComponent(msgText)}`;
-                                  window.open(url, '_blank');
-                                } else {
-                                  setWhatsappShareModalData({
-                                    orderId: ord.order_id,
-                                    order: ord,
-                                    staffNames: assignedStaffNames
-                                  });
-                                }
+                                setWhatsappShareModalData({
+                                  orderId: ord.order_id,
+                                  order: ord,
+                                  staffNames: assignedStaffNames
+                                });
                                 setActiveMenuOrderId(null);
                               }
                             });
@@ -1492,27 +1634,30 @@ export const OperationsLeads: React.FC = () => {
                           const isOpen = activeMenuOrderId === ord.order_id;
 
                           return (
-                            <div className="relative inline-block text-left">
+                            <div className="relative inline-block text-left actions-menu-container">
                               <button
                                 type="button"
                                 onClick={() => setActiveMenuOrderId(isOpen ? null : ord.order_id)}
-                                className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded-lg text-xs font-mono font-bold border border-zinc-700 cursor-pointer transition-all inline-flex items-center gap-1.5"
+                                className="px-3.5 py-1.5 bg-gradient-to-r from-zinc-800 to-zinc-900 hover:from-indigo-600 hover:to-indigo-700 active:scale-95 text-white rounded-xl text-xs font-mono font-bold border border-zinc-750 hover:border-indigo-500 shadow-lg cursor-pointer transition-all inline-flex items-center gap-1.5"
                               >
-                                Actions <span className="text-[10px] text-zinc-400">▼</span>
+                                Actions <span className={`text-[9px] text-zinc-400 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : ''}`}>▼</span>
                               </button>
                               {isOpen && (
-                                <div className="absolute right-0 mt-1 w-48 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl z-[150] py-1 text-left animate-in fade-in slide-in-from-top-1 duration-100">
+                                <div className="absolute right-0 mt-2 w-52 bg-zinc-950/95 backdrop-blur-md border border-zinc-800/80 rounded-2xl shadow-2xl z-[150] py-1.5 text-left animate-in fade-in slide-in-from-top-2 duration-150">
+                                  <div className="px-3.5 py-1 border-b border-zinc-900/60 mb-1">
+                                    <span className="text-[9px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Options</span>
+                                  </div>
                                   {actionItems.map((act, aIdx) => (
                                     <button
                                       key={aIdx}
                                       onClick={act.onClick}
-                                      className="w-full text-left px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-850 hover:text-white transition-colors cursor-pointer block font-mono border-b border-zinc-900/40 last:border-0"
+                                      className="w-full text-left px-3.5 py-2.5 text-xs text-zinc-300 hover:bg-indigo-600/10 hover:text-indigo-400 active:bg-indigo-600/20 transition-all cursor-pointer block font-mono border-b border-zinc-900/20 last:border-0"
                                     >
-                                      {act.label}
+                                      ⚡ {act.label}
                                     </button>
                                   ))}
                                   {actionItems.length === 0 && (
-                                    <div className="px-3 py-2 text-xs text-zinc-500 italic font-mono">
+                                    <div className="px-3.5 py-2 text-xs text-zinc-500 italic font-mono">
                                       No actions available
                                     </div>
                                   )}
