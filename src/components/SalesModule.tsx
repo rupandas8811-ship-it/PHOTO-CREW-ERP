@@ -2667,27 +2667,44 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return;
     }
     const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
-    if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD' && pkgId && supabaseClient) {
-      const updateSupabase = async () => {
+    if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD' && pkgId) {
+      const updateDatabase = async () => {
         try {
-          await supabaseClient
-            .from('lead_packages')
-            .update({
+          const activePackagesList = (leadPackages || []).filter(lp => lp.lead_id === selectedLead.lead_id);
+          const payloadToSave = activePackagesList.map(lp => {
+            const isPrimary = lp.package_id === pkgId;
+            const incStr = (editableInclusions[lp.package_id!] || []).join(', ');
+            const delStr = (editableDeliverables[lp.package_id!] || []).join(', ');
+            return {
+              package_id: lp.package_id!,
+              package_name: lp.package_name || 'Selected Package',
+              package_cost: isPrimary ? Number(wizardLeadData.package_cost) : lp.package_cost,
+              quantity: lp.quantity || 1,
+              total_amount: isPrimary ? Number(wizardLeadData.package_cost) : lp.total_amount,
+              discount: lp.discount || 0,
+              final_amount: isPrimary ? Number(wizardLeadData.package_cost) : lp.final_amount,
+              deliverables_description: isPrimary ? wizardLeadData.deliverables : lp.deliverables_description,
+              notes_special_customizations: isPrimary ? wizardLeadData.notes : lp.notes_special_customizations,
+              additional_services_cost: lp.additional_services_cost || 0,
+              team_members: incStr || lp.team_members || '',
+              deliverables: delStr || lp.deliverables || '',
+              editable_inclusions: editableInclusions,
               editable_deliverables: editableDeliverables,
-              editable_inclusions: editableInclusions
-            })
-            .eq('lead_id', selectedLead.lead_id)
-            .eq('package_id', pkgId);
+            };
+          });
+
+          await saveLeadPackages(selectedLead.lead_id, payloadToSave);
         } catch (e) {
-          console.error('Error updating lead_package in Supabase', e);
+          console.error('Error updating lead_package via saveLeadPackages', e);
         }
       };
       const timeoutId = setTimeout(() => {
-        updateSupabase();
+        updateDatabase();
       }, 500);
       return () => clearTimeout(timeoutId);
     }
-  }, [editableDeliverables, editableInclusions, selectedLead?.lead_id, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, supabaseClient]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editableDeliverables, editableInclusions, selectedLead?.lead_id, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option]);
 
   // Auto-scroll and focus transitions for Sales Popups & Forms
   React.useEffect(() => {
