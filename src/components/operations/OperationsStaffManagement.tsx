@@ -130,6 +130,15 @@ export const OperationsStaffManagement: React.FC = () => {
     }
   };
 
+  const handleStatusChange = async (staffId: string, newStatus: 'Active' | 'Inactive') => {
+    try {
+      await updateStaff(staffId, { status: newStatus });
+      alert('✅ Staff status updated successfully.');
+    } catch (err: any) {
+      alert(`Operation failed: ${err.message || err}`);
+    }
+  };
+
   // Keep list filtered to crew profiles (photographers, videographers, drone operators, assistants) for high specificity
   const operationsCrew = staff;
 
@@ -500,8 +509,8 @@ export const OperationsStaffManagement: React.FC = () => {
                           </span>
                         </button>
                       </td>
-                      <td className="p-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1">
+                       <td className="p-3.5 text-right">
+                        <div className="flex items-center justify-end gap-2">
                           {canEdit && (
                             <>
                               <button
@@ -511,13 +520,14 @@ export const OperationsStaffManagement: React.FC = () => {
                               >
                                 <Edit className="w-3.5 h-3.5" />
                               </button>
-                              <button
-                                onClick={() => handleDelete(st.staff_id, st.name)}
-                                className="p-1.5 hover:bg-zinc-850 text-zinc-400 hover:text-red-400 rounded transition-all cursor-pointer"
-                                title="De-register Operative"
+                              <select
+                                value={st.status}
+                                onChange={(e) => handleStatusChange(st.staff_id, e.target.value as 'Active' | 'Inactive')}
+                                className="bg-zinc-950 border border-zinc-850 hover:border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-zinc-300 focus:outline-none focus:border-amber-500/50 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                                <option value="Active">Active</option>
+                                <option value="Inactive">Inactive</option>
+                              </select>
                             </>
                           )}
                         </div>
