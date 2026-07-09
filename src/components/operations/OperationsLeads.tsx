@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useRole } from '../RoleContext';
 import { 
-  Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin
+  X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin
 } from 'lucide-react';
 import { Order, CurrentStage, Staff, Equipment } from '../../types';
 import { StatusText } from '../ui/StatusText';
@@ -113,6 +113,7 @@ export const OperationsLeads: React.FC = () => {
   const [activeAssignments, setActiveAssignments] = useState<{ staff_role: string; staff_id: string; staff_name: string }[]>([]);
   const [selectedRole, setSelectedRole] = useState('Lead Photographer');
   const [selectedStaffByEvent, setSelectedStaffByEvent] = useState<Record<string, string>>({});
+  const [staffTypeByEvent, setStaffTypeByEvent] = useState<Record<string, 'In-House' | 'Freelancer'>>({});
   const [selectedStaff, setSelectedStaff] = useState('');
   
   const [assignForm, setAssignForm] = useState<any>({
@@ -370,6 +371,22 @@ export const OperationsLeads: React.FC = () => {
         if (statusFilter === 'Raw Footage Received' && o.current_stage !== 'Raw Footage Received') return false;
 
         // Custom stats click metrics
+        if (statusFilter === 'New Orders') {
+          if (o.current_stage !== 'Order Confirmed' && o.current_stage !== 'New Order Received') return false;
+        }
+        if (statusFilter === "Today's Events") {
+          const todayStr = new Date().toISOString().split('T')[0];
+          const hasTodayEvent = (!o.events || o.events.length === 0) 
+            ? o.event_date === todayStr
+            : o.events.some(e => e.event_date === todayStr);
+          if (!hasTodayEvent) return false;
+        }
+        if (statusFilter === 'Scheduled Events' && o.current_stage !== 'Event Scheduled') return false;
+        if (statusFilter === 'Pending Assignments') {
+          if (o.current_stage !== 'Operations Assigned' && !(o.current_stage === 'Order Confirmed' && !isStaffAssigned)) return false;
+        }
+        if (statusFilter === 'Completed' && !isCompletedEvent(o)) return false;
+        
         if (statusFilter === 'Pending' && (o.current_stage !== 'Order Confirmed' && o.current_stage !== 'Operations Assigned')) return false;
         if (statusFilter === 'Raw Footage Pending') {
           const rf = rawFootage ? rawFootage.find(f => f.order_id === o.order_id) : null;
@@ -449,8 +466,28 @@ export const OperationsLeads: React.FC = () => {
     if (targetLead?.events && targetLead.events.length > 0) {
       targetLead.events.forEach((ev, index) => {
         const evId = ev.id || `EV-N/A-${index}`;
-        // REQUIRED FIX: Do NOT pre-select any staff. Staff selection must always be blank.
         const staffList: any[] = [];
+        if (ev.assigned_staff_names) {
+          const names = ev.assigned_staff_names.split(',').map(n => n.trim()).filter(Boolean);
+          names.forEach(name => {
+            const st = staff?.find(s => s.name === name);
+            if (st) {
+               staffList.push({
+                 staff_role: st.role,
+                 staff_id: st.staff_id,
+                 staff_name: st.name,
+                 mobile: st.mobile
+               });
+            } else {
+               staffList.push({
+                 staff_role: 'Staff',
+                 staff_id: 'MOCK-' + Math.random().toString(36).substr(2, 4),
+                 staff_name: name,
+                 mobile: ''
+               });
+            }
+          });
+        }
 
         initialAllocations[evId] = {
            reporting_date: targetLead.Reporting_date || ev.event_date || '',
@@ -763,35 +800,34 @@ export const OperationsLeads: React.FC = () => {
   };
 
   const stats = useMemo(() => {
-    const totalLeads = operationsOrders.length;
-    
-    const scheduled = operationsOrders.filter(o => o.current_stage === 'Event Scheduled').length;
-    
-    const completed = operationsOrders.filter(o => isCompletedEvent(o)).length;
-    
-    const pending = operationsOrders.filter(o => 
-      o.current_stage === 'Order Confirmed' || 
-      o.current_stage === 'Operations Assigned'
-    ).length;
+    const todayStr = new Date().toISOString().split('T')[0];
 
-    const rawFootagePending = operationsOrders.filter(o => {
-      const rf = rawFootage ? rawFootage.find(f => f.order_id === o.order_id) : null;
-      return o.current_stage === 'Event Completed' && (!rf || !rf.raw_received || rf.ingest_status === 'Pending');
+    const newOrders = operationsOrders.filter(o => 
+      o.current_stage === 'Order Confirmed' || o.current_stage === 'New Order Received'
+    ).length;
+    
+    const todaysEvents = operationsOrders.filter(o => {
+      if (!o.events || o.events.length === 0) return o.event_date === todayStr;
+      return o.events.some(e => e.event_date === todayStr);
     }).length;
 
-    const readyForProduction = operationsOrders.filter(o => 
-      ['Raw Footage Received', 'Editor Assigned', 'Editing Started'].includes(o.current_stage)
+    const scheduled = operationsOrders.filter(o => o.current_stage === 'Event Scheduled').length;
+    
+    const pendingAssignments = operationsOrders.filter(o => 
+      o.current_stage === 'Operations Assigned' || 
+      (o.current_stage === 'Order Confirmed' && !staffAssignments?.some(x => x.order_id === o.order_id))
     ).length;
 
+    const completed = operationsOrders.filter(o => isCompletedEvent(o)).length;
+
     return {
-      totalLeads,
+      newOrders,
+      todaysEvents,
       scheduled,
-      completed,
-      pending,
-      rawFootagePending,
-      readyForProduction
+      pendingAssignments,
+      completed
     };
-  }, [orders, operationsOrders, rawFootage, operations]);
+  }, [operationsOrders, rawFootage, operations, staffAssignments]);
 
   const availableGearOptions = useMemo(() => {
     if (!equipment) return [];
@@ -827,11 +863,11 @@ export const OperationsLeads: React.FC = () => {
       {/* 1. Results Summary Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
         {[
-          { label: "Total Operations Leads", val: stats.totalLeads, theme: 'purple' as CameraLensTheme, filterValue: 'All', trendText: 'Active', chartPoints: [10, 18, 14, 25, 20, 31, 35] },
-          { label: "Scheduled Events", val: stats.scheduled, theme: 'cyan' as CameraLensTheme, filterValue: 'Event Scheduled', trendText: 'Rostered', chartPoints: [5, 9, 7, 14, 11, 16, 15] },
-          { label: "Completed Events", val: stats.completed, theme: 'green' as CameraLensTheme, filterValue: 'Event Completed', trendText: 'Closed Out', chartPoints: [8, 15, 12, 20, 16, 25, 24] },
-          { label: "Raw Footage Pending", val: stats.rawFootagePending, theme: 'red' as CameraLensTheme, filterValue: 'Raw Footage Pending', trendText: 'Ingest Lag', chartPoints: [2, 4, 1, 5, 3, 6, 2] },
-          { label: "Ready for Production", val: stats.readyForProduction, theme: 'purple' as CameraLensTheme, filterValue: 'Ready for Production', trendText: 'In Suite', chartPoints: [11, 14, 12, 18, 15, 20, 17] },
+          { label: "New Orders Received", val: stats.newOrders, theme: 'purple' as CameraLensTheme, filterValue: 'New Orders', trendText: 'Fresh', chartPoints: [10, 18, 14, 25, 20, 31, 35] },
+          { label: "Today's Events", val: stats.todaysEvents, theme: 'cyan' as CameraLensTheme, filterValue: "Today's Events", trendText: 'Live', chartPoints: [5, 9, 7, 14, 11, 16, 15] },
+          { label: "Scheduled Events", val: stats.scheduled, theme: 'green' as CameraLensTheme, filterValue: 'Scheduled Events', trendText: 'Rostered', chartPoints: [8, 15, 12, 20, 16, 25, 24] },
+          { label: "Pending Assignments", val: stats.pendingAssignments, theme: 'red' as CameraLensTheme, filterValue: 'Pending Assignments', trendText: 'Action Req', chartPoints: [2, 4, 1, 5, 3, 6, 2] },
+          { label: "Completed", val: stats.completed, theme: 'purple' as CameraLensTheme, filterValue: 'Completed', trendText: 'Closed Out', chartPoints: [11, 14, 12, 18, 15, 20, 17] },
         ].map((card, idx) => (
           <CameraLensStatsCard
             key={idx}
@@ -847,91 +883,6 @@ export const OperationsLeads: React.FC = () => {
             lensLabel={card.label.slice(0, 10).toUpperCase()}
           />
         ))}
-      </div>
-
-      {/* ### New Orders Received */}
-      <div id="new_orders_received_section" className="bg-zinc-950/80 border border-amber-500/25 p-5 rounded-2xl mb-6 space-y-4 shadow-xl">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping" />
-            <h3 className="text-sm font-black text-amber-400 uppercase tracking-widest font-mono">
-              ### New Orders Received
-            </h3>
-          </div>
-          <span className="text-[10px] font-mono text-zinc-500">
-            {operationsOrders.filter(o => o.current_stage === 'Order Confirmed' || o.current_stage === 'New Order Received').length} Pending Action
-          </span>
-        </div>
-
-        <div className="overflow-x-auto border border-zinc-900 rounded-xl">
-          <table className="w-full border-collapse text-left text-xs text-zinc-300 min-w-[1200px]">
-            <thead>
-              <tr className="border-b border-zinc-900 bg-zinc-900/40 text-[9px] font-mono uppercase tracking-wider text-zinc-400">
-                <th className="p-3 font-bold">Order ID</th>
-                <th className="p-3 font-bold">Customer Name</th>
-                <th className="p-3 font-bold">Event Type</th>
-                <th className="p-3 font-bold">Event Date</th>
-                <th className="p-3 font-bold">Event Time</th>
-                <th className="p-3 font-bold">Reporting Time</th>
-                <th className="p-3 font-bold">Package Name</th>
-                <th className="p-3 font-bold">Order Confirmation Date</th>
-                <th className="p-3 font-bold">Current Status</th>
-                <th className="p-3 font-bold text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-900">
-              {(() => {
-                const newOrdersList = operationsOrders.filter(o => o.current_stage === 'Order Confirmed' || o.current_stage === 'New Order Received');
-                if (newOrdersList.length === 0) {
-                  return (
-                    <tr>
-                      <td colSpan={10} className="p-6 text-center text-zinc-500 italic">
-                        No new confirmed orders waiting in receiving bay.
-                      </td>
-                    </tr>
-                  );
-                }
-                return newOrdersList.map(ord => {
-                  const op = operations.find(o => o.order_id === ord.order_id);
-                  const confDate = ord.created_at ? ord.created_at.split('T')[0] : new Date().toISOString().split('T')[0];
-                  return (
-                    <tr key={ord.order_id} className="hover:bg-zinc-900/40 transition-all font-mono">
-                      <td className="p-3 text-amber-400 font-bold">{ord.order_id}</td>
-                      <td className="p-3 font-sans font-bold text-white">{ord.customer_name}</td>
-                      <td className="p-3 text-zinc-300 font-sans">{ord.event_type === 'Other' ? (ord.custom_event_name || ord.custom_event_type || 'Other') : ord.event_type}</td>
-                      <td className="p-3 text-zinc-405">{ord.event_date || '—'}</td>
-                      <td className="p-3 text-zinc-405">{ord.event_time || '—'}</td>
-                      <td className="p-3 text-zinc-405">{op?.reporting_time || '—'}</td>
-                      <td className="p-3 text-zinc-300 font-sans">{ord.package_name}</td>
-                      <td className="p-3 text-zinc-405">{confDate}</td>
-                      <td className="p-3">
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase border ${
-                          ord.current_stage === 'Order Confirmed' 
-                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse' 
-                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                        }`}>
-                          {ord.current_stage}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {(ord.current_stage === 'Order Confirmed' || ord.current_stage === 'New Order Received') && (
-                            <button
-                              onClick={() => startAssigning(ord)}
-                              className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 text-[10px] font-bold rounded cursor-pointer transition-all uppercase"
-                            >
-                              Schedule / Assign
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                });
-              })()}
-            </tbody>
-          </table>
-        </div>
       </div>
 
       {/* Search & Simplified Filters Bar */}
@@ -1042,12 +993,7 @@ export const OperationsLeads: React.FC = () => {
           </thead>
           <tbody className="divide-y divide-zinc-850/60 text-xs">
             {(() => {
-              const mainBoardList = sortedOrders.filter(o => {
-                if (statusFilter === 'All') {
-                  return o.current_stage !== 'Order Confirmed' && o.current_stage !== 'New Order Received';
-                }
-                return true;
-              });
+              const mainBoardList = sortedOrders;
 
               if (mainBoardList.length === 0) {
                 return (
@@ -1474,18 +1420,38 @@ export const OperationsLeads: React.FC = () => {
                 </div>
 
                 {/* Multiple Events Iteration */}
-                {parentLeadInstance?.events && parentLeadInstance.events.map((ev, index) => {
-                  const evId = ev.id || `EV-N/A-${index}`;
-                  const allocation = eventAllocations[evId] || { staff: [] };
-                  const allocStaff = allocation.staff || [];
-                  
-                  return (
-                    <div key={evId} className="bg-zinc-950/60 border border-zinc-850 p-5 rounded-2xl space-y-6 relative overflow-hidden">
-                      <div className="absolute top-0 right-0 p-3 text-[10px] text-zinc-655 select-none uppercase">
-                        🎥 EVENT {index + 1}
-                      </div>
-                      
-                      {/* 2. Event & Package Coordinates */}
+                {(() => {
+                  const targetLeadQuotations = quotations?.filter(q => q.lead_id === parentLeadInstance?.lead_id) || [];
+                  targetLeadQuotations.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                  const targetLatestQuote = targetLeadQuotations[0];
+                  let targetEditableInclusions: Record<string, string[]> = {};
+                  if (targetLatestQuote) {
+                     if (targetLatestQuote.editableInclusions) {
+                        targetEditableInclusions = targetLatestQuote.editableInclusions;
+                     } else if (targetLatestQuote.terms_conditions && targetLatestQuote.terms_conditions.includes('METADATA:')) {
+                        try {
+                           const meta = JSON.parse(targetLatestQuote.terms_conditions.split('METADATA:')[1]);
+                           if (meta.editableInclusions) targetEditableInclusions = meta.editableInclusions;
+                        } catch (e) {}
+                     }
+                  }
+
+                  return parentLeadInstance?.events && parentLeadInstance.events.map((ev, index) => {
+                    const evId = ev.id || `EV-N/A-${index}`;
+                    const allocation = eventAllocations[evId] || { staff: [] };
+                    const allocStaff = allocation.staff || [];
+                    
+                    const matchingKey = Object.keys(targetEditableInclusions).find(k => k.includes(evId)) || index.toString();
+                    const eventRoles = targetEditableInclusions[matchingKey] || targetEditableInclusions[evId] || targetEditableInclusions[index.toString()] || [];
+                    const includedRoles = eventRoles.length > 0 ? eventRoles : ['Photographer', 'Videographer'];
+
+                    return (
+                      <div key={evId} className="bg-zinc-950/60 border border-zinc-850 p-5 rounded-2xl space-y-6 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-3 text-[10px] text-zinc-655 select-none uppercase">
+                          🎥 EVENT {index + 1}
+                        </div>
+                        
+                        {/* 2. Event & Package Coordinates */}
                       <div className="space-y-3">
                         <h4 className="text-[11px] font-mono font-bold uppercase text-amber-500 tracking-wider">
                           Event & Package Coordinates
@@ -1534,60 +1500,134 @@ export const OperationsLeads: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* 3. Staff Assignment */}
-                      <div className="space-y-3 pt-2">
+                      {/* 3. Team Members Included (Editable) & Staff Assignment */}
+                      <div className="space-y-4 pt-2">
                         <h4 className="text-[11px] font-mono font-bold uppercase text-sky-400 tracking-wider">
-                          Staff Assignments
+                          Team Members Included (Editable)
                         </h4>
-                        <div className="flex flex-col sm:flex-row gap-2 items-end">
-                           <div className="flex-1">
-                             <label className="block text-[10px] font-mono text-zinc-400 mb-1">Select Member</label>
-                             <select
-                               value={selectedStaffByEvent[evId] || ''}
-                               onChange={(e) => setSelectedStaffByEvent(prev => ({ ...prev, [evId]: e.target.value }))}
-                               className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-100"
-                             >
-                               <option value="">-- Choose Staff member --</option>
-                               {staff && staff.filter(s => s.status === 'Active').map(st => (
-                                 <option key={st.staff_id} value={st.name}>{st.name} - {st.role}</option>
-                               ))}
-                             </select>
-                           </div>
-                           <button
-                             type="button"
-                             onClick={() => {
-                               const selectedStaff = selectedStaffByEvent[evId];
-                               if (!selectedStaff) return;
-                               const memberInfo = staff?.find(st => st.name === selectedStaff);
-                               const staffId = memberInfo?.staff_id || 'MOCK-' + Math.random().toString(36).substr(2, 4);
-                               
-                               setEventAllocations(prev => {
-                                 const existingAlloc = prev[evId] || { staff: [] };
-                                 if (existingAlloc.staff.some(s => s.staff_name === selectedStaff)) return prev;
-                                 return {
-                                   ...prev,
-                                   [evId]: {
-                                     ...existingAlloc,
-                                     staff: [...(existingAlloc.staff || []), { staff_role: memberInfo?.role || 'Staff', staff_id: staffId, staff_name: selectedStaff, mobile: memberInfo?.mobile || '' }]
-                                   }
-                                 };
-                               });
-                               setSelectedStaffByEvent(prev => ({ ...prev, [evId]: '' }));
-                             }}
-                             className="px-3 py-2 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 text-xs font-mono font-bold rounded-lg border border-sky-500/30 transition-all uppercase w-full sm:w-auto"
-                           >
-                             + Add
-                           </button>
-                        </div>
                         
+                        <div className="space-y-4">
+                          {includedRoles.map((roleStr, roleIdx) => {
+                            const assignedToRole = allocStaff.filter((s: any) => s.staff_role === roleStr);
+                            const selectKey = `${evId}_${roleIdx}`;
+
+                            const firstAssignedStaff = assignedToRole[0];
+                            const firstAssignedStaffFull = firstAssignedStaff ? staff?.find(s => s.staff_name === firstAssignedStaff.staff_name) : null;
+                            const defaultStaffType = firstAssignedStaffFull?.staff_type || 'In-House';
+                            const currentStaffType = staffTypeByEvent[selectKey] || defaultStaffType;
+
+                            return (
+                              <div key={roleIdx} className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 space-y-3">
+                                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                                  <span className="text-xs font-bold text-white uppercase">{roleStr}</span>
+                                </div>
+                                
+                                {/* List currently assigned staff for this role */}
+                                {assignedToRole.length > 0 && (
+                                  <div className="space-y-2">
+                                    {assignedToRole.map((st: any, stIdx: number) => {
+                                      const stFull = staff?.find(s => s.staff_name === st.staff_name);
+                                      return (
+                                        <div key={stIdx} className="flex items-center justify-between bg-zinc-950 p-2 rounded border border-zinc-850">
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-xs font-medium text-zinc-200">{st.staff_name}</span>
+                                            {stFull?.staff_type && <span className="text-[9px] px-1.5 py-0.5 rounded border border-zinc-800 bg-zinc-900 text-zinc-400 font-mono uppercase">{stFull.staff_type}</span>}
+                                            {st.mobile && <span className="text-[10px] text-zinc-500 font-mono">{st.mobile}</span>}
+                                          </div>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setEventAllocations((prev: any) => {
+                                                const existingAlloc = prev[evId] || { staff: [] };
+                                                return {
+                                                  ...prev,
+                                                  [evId]: {
+                                                    ...existingAlloc,
+                                                    staff: existingAlloc.staff.filter((s: any) => !(s.staff_name === st.staff_name && s.staff_role === roleStr))
+                                                  }
+                                                };
+                                              });
+                                            }}
+                                            className="text-red-400 hover:text-red-300 p-1"
+                                          >
+                                            <X className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+
+                                {/* Add Staff to this role */}
+                                <div className="flex flex-col sm:flex-row gap-2 items-end">
+                                   <div className="w-1/3">
+                                     <select
+                                       value={currentStaffType}
+                                       onChange={(e) => {
+                                         setStaffTypeByEvent(prev => ({ ...prev, [selectKey]: e.target.value as 'In-House' | 'Freelancer' }));
+                                         setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: '' }));
+                                       }}
+                                       className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-100"
+                                     >
+                                       <option value="In-House">In-House</option>
+                                       <option value="Freelancer">Freelancer</option>
+                                     </select>
+                                   </div>
+                                   <div className="flex-1">
+                                     <select
+                                       value={selectedStaffByEvent[selectKey] || ''}
+                                       onChange={(e) => setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: e.target.value }))}
+                                       className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-100"
+                                     >
+                                       <option value="">-- Assign Staff --</option>
+                                       {staff && staff.filter(s => s.status === 'Active' && (s.staff_type || 'In-House') === currentStaffType).map(st => (
+                                         <option key={st.staff_id} value={st.name}>{st.name} - {st.role}</option>
+                                       ))}
+                                     </select>
+                                   </div>
+                                   <button
+                                     type="button"
+                                     onClick={() => {
+                                       const selectedStaff = selectedStaffByEvent[selectKey];
+                                       if (!selectedStaff) return;
+                                       const memberInfo = staff?.find(st => st.name === selectedStaff);
+                                       const staffId = memberInfo?.staff_id || 'MOCK-' + Math.random().toString(36).substr(2, 4);
+                                         
+                                       setEventAllocations((prev: any) => {
+                                         const existingAlloc = prev[evId] || { staff: [] };
+                                         if (existingAlloc.staff.some((s: any) => s.staff_name === selectedStaff && s.staff_role === roleStr)) return prev;
+                                         return {
+                                           ...prev,
+                                           [evId]: {
+                                             ...existingAlloc,
+                                             staff: [...(existingAlloc.staff || []), { staff_role: roleStr, staff_id: staffId, staff_name: selectedStaff, mobile: memberInfo?.mobile || '' }]
+                                           }
+                                         };
+                                       });
+                                       setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: '' }));
+                                     }}
+                                     className="px-3 py-2 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 text-xs font-mono font-bold rounded-lg border border-sky-500/30 transition-all uppercase w-full sm:w-auto"
+                                   >
+                                     + Add
+                                   </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
                         {/* Staff Schedule Card */}
                         {(() => {
                            const staffNamesToCheck: string[] = [];
-                           const currentDropdownStaff = selectedStaffByEvent[evId];
-                           if (currentDropdownStaff) {
-                             staffNamesToCheck.push(currentDropdownStaff);
-                           }
-                           allocStaff.forEach(s => {
+                           
+                           // Check all dropdowns for this event
+                           Object.keys(selectedStaffByEvent).forEach(key => {
+                             if (key.startsWith(`${evId}_`) && selectedStaffByEvent[key]) {
+                               staffNamesToCheck.push(selectedStaffByEvent[key]);
+                             }
+                           });
+
+                           allocStaff.forEach((s: any) => {
                              if (s.staff_name && !staffNamesToCheck.includes(s.staff_name)) {
                                staffNamesToCheck.push(s.staff_name);
                              }
@@ -1848,7 +1888,8 @@ export const OperationsLeads: React.FC = () => {
                       )}
                     </div>
                   );
-                })}
+                })
+                })()}
                 
               </div>
               

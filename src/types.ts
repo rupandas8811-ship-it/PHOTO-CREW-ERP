@@ -391,6 +391,7 @@ export interface Staff {
   role: string;
   department: string;
   status: 'Active' | 'Inactive';
+  staff_type?: 'In-House' | 'Freelancer';
   joining_date: string;
   profile_photo?: string;
   notes?: string;

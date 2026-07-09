@@ -22,6 +22,7 @@ export const OperationsStaffManagement: React.FC = () => {
     whatsapp_number: '',
     department: 'Operations',
     status: 'Active' as Staff['status'],
+    staff_type: 'In-House' as 'In-House' | 'Freelancer',
     joining_date: new Date().toISOString().split('T')[0],
     profile_photo: '',
     notes: ''
@@ -37,6 +38,7 @@ export const OperationsStaffManagement: React.FC = () => {
       whatsapp_number: st.whatsapp_number || '',
       department: st.department || 'Operations',
       status: st.status,
+      staff_type: st.staff_type || 'In-House',
       joining_date: st.joining_date || new Date().toISOString().split('T')[0],
       profile_photo: st.profile_photo || '',
       notes: st.notes || ''
@@ -55,6 +57,7 @@ export const OperationsStaffManagement: React.FC = () => {
       whatsapp_number: '',
       department: 'Operations',
       status: 'Active',
+      staff_type: 'In-House',
       joining_date: new Date().toISOString().split('T')[0],
       profile_photo: '',
       notes: ''
@@ -191,6 +194,21 @@ export const OperationsStaffManagement: React.FC = () => {
 
             <div className="min-w-0">
               <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
+                Staff Type *
+              </label>
+              <select
+                required
+                value={form.staff_type}
+                onChange={(e) => setForm({ ...form, staff_type: e.target.value as 'In-House' | 'Freelancer' })}
+                className="w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
+              >
+                <option value="In-House">In-House</option>
+                <option value="Freelancer">Freelancer</option>
+              </select>
+            </div>
+
+            <div className="min-w-0">
+              <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
                 Skills
               </label>
               <div className="flex flex-wrap gap-2 mb-2 min-h-[40px] p-2 bg-zinc-950 border border-zinc-850 rounded-xl items-center w-full">
@@ -309,6 +327,9 @@ export const OperationsStaffManagement: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-1.5 text-zinc-500 font-mono text-[10px]">
                           <span>Dept: {st.department}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-zinc-500 font-mono text-[10px]">
+                          <span>Type: {st.staff_type || 'In-House'}</span>
                         </div>
                       </td>
                       <td className="p-3.5">
