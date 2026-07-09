@@ -2222,6 +2222,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     transaction_id: '',
   });
 
+  const [showFinalReportingModal, setShowFinalReportingModal] = useState(false);
+  const [finalReportingForm, setFinalReportingForm] = useState({
+    reporting_date: '',
+    reporting_time: ''
+  });
+
   // Quotation System State
   const [quotationTerms, setQuotationTerms] = useState(
     "1. Payments are non-refundable.\n" +
@@ -2728,8 +2734,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   React.useEffect(() => {
     if (showConfirmModal) {
       triggerAutoScrollAndFocus('#confirm_booking_modal', 150);
+      if (selectedLead) {
+         setConfirmForm(prev => ({
+            ...prev,
+            quotation_amount: Number(selectedLead.Final_Quotation_Amount) || Number(selectedLead.final_amount) || 0
+         }));
+      }
     }
-  }, [showConfirmModal]);
+  }, [showConfirmModal, selectedLead]);
+
+  React.useEffect(() => {
+    if (showFinalReportingModal) {
+      triggerAutoScrollAndFocus('#final_reporting_modal', 150);
+    }
+  }, [showFinalReportingModal]);
 
   React.useEffect(() => {
     if (showStep3Popup) {
@@ -5730,6 +5748,27 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
   };
 
+  const handleFinalReportingSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLead || isSaving) return;
+
+    try {
+      setIsSaving(true);
+      await updateLead(selectedLead.lead_id, {
+        Reporting_date: finalReportingForm.reporting_date,
+        reporting_time: finalReportingForm.reporting_time
+      });
+      setShowFinalReportingModal(false);
+      setSelectedLead(null);
+      showToastMsg("Reporting Details Saved Successfully.", "success");
+    } catch (err) {
+      console.error(err);
+      showToastMsg("Failed to save Reporting Details.", "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // Handle Order Confirmation Process
   const handleConfirmOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -5768,8 +5807,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       );
 
       setShowConfirmModal(false);
-      setSelectedLead(null);
       showToastMsg("Order Confirmed Successfully.", "success");
+      
+      const repDate = selectedLead.Reporting_date || confirmForm.event_date || '';
+      const repTime = selectedLead.reporting_time || confirmForm.event_time || '';
+      
+      setFinalReportingForm({
+        reporting_date: repDate,
+        reporting_time: repTime
+      });
+      setShowFinalReportingModal(true);
     } catch (err: any) {
       console.error("Failed to convert order:", err);
       const errMsg = err?.message || String(err);
@@ -6090,7 +6137,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               <div className="border-t border-slate-800 pt-4">
                 <button
                   id="btn_confirm_order"
-                  onClick={() => setShowConfirmModal(true)}
+                  onClick={() => {
+                    const today = new Date().toISOString().split('T')[0];
+                    setConfirmForm({
+                      ...confirmForm,
+                      package_name: selectedLead.Select_Package_Option || '',
+                      quotation_amount: Number(selectedLead.Final_Quotation_Amount) || Number(selectedLead.final_amount) || 0,
+                      advance_received: 0,
+                      event_date: selectedLead.event_date || today,
+                      event_time: selectedLead.event_time || ''
+                    });
+                    setShowConfirmModal(true);
+                  }}
                   className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold py-2.5 px-4 rounded-xl shadow-lg shadow-emerald-950/20 text-xs transition-all cursor-pointer"
                 >
                   <CheckSquare className="w-4 h-4" />
@@ -8277,9 +8335,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                             setConfirmForm({
                                               ...confirmForm,
                                               package_name: lead.Select_Package_Option || '',
-                                              quotation_amount: Number(lead.final_amount) || 0,
+                                              quotation_amount: Number(lead.Final_Quotation_Amount) || Number(lead.final_amount) || 0,
                                               advance_received: 0,
-                                              event_date: today,
+                                              event_date: lead.event_date || today,
+                                              event_time: lead.event_time || ''
                                             });
                                             setOpenDropdownLeadId(null);
                                             handleSelectLead(lead);
@@ -8427,9 +8486,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   <input
                     type="number"
                     required
+                    readOnly
                     value={confirmForm.quotation_amount}
-                    onChange={(e) => setConfirmForm({ ...confirmForm, quotation_amount: Number(e.target.value) })}
-                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono opacity-80 cursor-not-allowed"
                   />
                 </div>
 
@@ -8503,6 +8562,66 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 >
                   <span>{isSaving ? 'Processing...' : 'Approve & Book Contract'}</span>
                   {!isSaving && <ArrowRight className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Final Reporting Details Popup */}
+      {showFinalReportingModal && selectedLead && (
+        <div className="fixed inset-0 bg-black/85 z-[70] flex items-center justify-center p-4 backdrop-blur-md">
+          <div id="final_reporting_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4">
+             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
+                <span>⏰</span> Final Reporting Details
+              </h4>
+              <button 
+                onClick={() => {
+                  setShowFinalReportingModal(false);
+                  setSelectedLead(null);
+                }}
+                className="text-slate-500 hover:text-slate-350 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleFinalReportingSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-medium text-slate-400 mb-1">
+                  Reporting Date *
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={finalReportingForm.reporting_date}
+                  onChange={(e) => setFinalReportingForm({ ...finalReportingForm, reporting_date: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block font-medium text-slate-400 mb-1">
+                  Reporting Time *
+                </label>
+                <input
+                  type="time"
+                  required
+                  value={finalReportingForm.reporting_time}
+                  onChange={(e) => setFinalReportingForm({ ...finalReportingForm, reporting_time: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                />
+              </div>
+              
+              <div className="flex justify-end pt-2">
+                 <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold shadow-lg shadow-indigo-900/20 transition-all cursor-pointer"
+                >
+                  {isSaving ? 'Saving...' : 'Save Reporting Details'}
                 </button>
               </div>
             </form>
