@@ -292,16 +292,21 @@ export const OperationsLeads: React.FC = () => {
 
   const [viewingStaffOrderId, setViewingStaffOrderId] = useState<string | null>(null);
   const [editedMessages, setEditedMessages] = useState<Record<string, string>>({});
+  const [selectedStaffForShare, setSelectedStaffForShare] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (whatsappShareModalData) {
       const initialMsgs: Record<string, string> = {};
+      const initialSelected: Record<string, boolean> = {};
       whatsappShareModalData.staffNames.forEach(name => {
         initialMsgs[name] = generateWhatsAppMessageForStaff(whatsappShareModalData.order, name);
+        initialSelected[name] = true;
       });
       setEditedMessages(initialMsgs);
+      setSelectedStaffForShare(initialSelected);
     } else {
       setEditedMessages({});
+      setSelectedStaffForShare({});
     }
   }, [whatsappShareModalData]);
 
@@ -1638,9 +1643,9 @@ export const OperationsLeads: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => setActiveMenuOrderId(isOpen ? null : ord.order_id)}
-                                className="px-3.5 py-1.5 bg-gradient-to-r from-zinc-800 to-zinc-900 hover:from-indigo-600 hover:to-indigo-700 active:scale-95 text-white rounded-xl text-xs font-mono font-bold border border-zinc-750 hover:border-indigo-500 shadow-lg cursor-pointer transition-all inline-flex items-center gap-1.5"
+                                className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 focus:ring-2 focus:ring-indigo-500/40 active:scale-95 text-white rounded-xl text-xs font-sans font-black border border-indigo-500/25 shadow-lg shadow-indigo-500/20 cursor-pointer transition-all inline-flex items-center gap-1.5 outline-none"
                               >
-                                Actions <span className={`text-[9px] text-zinc-400 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : ''}`}>▼</span>
+                                🎯 Actions <span className={`text-[9px] text-indigo-200 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : ''}`}>▼</span>
                               </button>
                               {isOpen && (
                                 <div className="absolute right-0 mt-2 w-52 bg-zinc-950/95 backdrop-blur-md border border-zinc-800/80 rounded-2xl shadow-2xl z-[150] py-1.5 text-left animate-in fade-in slide-in-from-top-2 duration-150">
@@ -2576,8 +2581,8 @@ export const OperationsLeads: React.FC = () => {
 
       {/* Multi-Staff WhatsApp Share picker */}
       {whatsappShareModalData && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-md shadow-2xl p-6 relative animate-in zoom-in duration-200">
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl shadow-2xl p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
             <button 
               onClick={() => setWhatsappShareModalData(null)}
               className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
@@ -2585,72 +2590,250 @@ export const OperationsLeads: React.FC = () => {
             >
               ✕
             </button>
-            <div className="text-center space-y-4">
-              <div className="w-12 h-12 bg-indigo-500/10 border border-indigo-500/25 rounded-full flex items-center justify-center mx-auto text-indigo-400 text-xl font-bold">
-                📱
+            
+            <div className="flex items-center gap-2.5 mb-4 border-b border-zinc-800 pb-3">
+              <span className="text-xl">📱</span>
+              <div className="text-left">
+                <h3 className="text-base font-bold text-white">
+                  Personalized WhatsApp Share
+                </h3>
+                <p className="text-[11px] text-zinc-400">
+                  Review and share work assignments for Order <span className="font-mono text-indigo-400 font-bold">{whatsappShareModalData.orderId}</span>
+                </p>
               </div>
-              <h3 className="text-base font-bold text-white">
-                Share WhatsApp Message
-              </h3>
-              <p className="text-xs text-zinc-400">
-                Select an assigned staff member to generate their personalized message.
-              </p>
+            </div>
 
-              {/* Share via WhatsApp list */}
-              <div className="bg-zinc-950/50 border border-zinc-850 rounded-2xl p-4 text-left space-y-3">
-                <h4 className="text-[10px] font-mono font-bold uppercase text-indigo-400 tracking-wider">
-                  Assigned Team Members
-                </h4>
-                
-                {(() => {
-                  if (whatsappShareModalData.staffNames.length === 0) {
-                    return (
-                      <div className="text-xs text-zinc-500 italic">No staff assigned yet.</div>
-                    );
-                  }
+            <div className="overflow-y-auto space-y-5 flex-1 pr-1 text-left">
+              {whatsappShareModalData.staffNames.length === 0 ? (
+                <div className="text-center py-8 text-zinc-500 italic text-xs font-mono">
+                  No staff assigned yet.
+                </div>
+              ) : (
+                whatsappShareModalData.staffNames.map((name, idx) => {
+                  const stObj = staff?.find(s => s.name === name);
+                  const isSelected = !!selectedStaffForShare[name];
+                  const msgText = editedMessages[name] || '';
 
                   return (
-                    <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
-                      {whatsappShareModalData.staffNames.map((name, idx) => {
-                        const stObj = staff?.find(s => s.name === name);
-                        return (
-                          <div key={idx} className="flex items-center justify-between p-2 bg-zinc-900/50 rounded-xl border border-zinc-800/60">
-                            <div>
-                              <div className="text-xs font-bold text-white">{name}</div>
-                              {stObj?.role && <div className="text-[9.5px] text-zinc-500 font-mono">{stObj.role}</div>}
+                    <div 
+                      key={idx} 
+                      className={`border rounded-2xl p-4 transition-all duration-200 ${
+                        isSelected 
+                          ? 'bg-zinc-950/65 border-zinc-800/80 shadow-md' 
+                          : 'bg-zinc-900/30 border-zinc-850/40 opacity-60'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="flex items-start gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedStaffForShare(prev => ({
+                                ...prev,
+                                [name]: !prev[name]
+                              }));
+                            }}
+                            className="text-lg text-indigo-400 hover:text-indigo-300 transition-all active:scale-90 cursor-pointer pt-0.5"
+                          >
+                            {isSelected ? '☑️' : '⬛'}
+                          </button>
+                          
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-black text-white">{name}</span>
+                              {stObj?.role && (
+                                <span className="text-[9.5px] font-mono text-zinc-400 bg-zinc-850 px-1.5 py-0.5 rounded border border-zinc-800">
+                                  {stObj.role}
+                                </span>
+                              )}
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const msgText = generateWhatsAppMessageForStaff(whatsappShareModalData.order, name);
-                                const url = `https://wa.me/?text=${encodeURIComponent(msgText)}`;
-                                window.open(url, '_blank');
-                              }}
-                              className="px-2.5 py-1 bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#25D366] border border-[#25D366]/20 rounded-lg text-[10px] font-mono font-bold cursor-pointer transition-colors"
-                            >
-                              Share Msg
-                            </button>
+                            {stObj?.mobile && (
+                              <div className="text-[10px] text-zinc-400 font-mono flex items-center gap-1 mt-0.5">
+                                📱 {stObj.mobile}
+                              </div>
+                            )}
                           </div>
-                        );
-                      })}
+                        </div>
+
+                        {isSelected && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const cleanPhone = stObj?.mobile ? stObj.mobile.replace(/\D/g, '') : '';
+                              const shareUrl = cleanPhone 
+                                ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msgText)}`
+                                : `https://wa.me/?text=${encodeURIComponent(msgText)}`;
+                              window.open(shareUrl, '_blank');
+                            }}
+                            className="px-3.5 py-1.5 bg-[#25D366] hover:bg-[#20ba5a] active:scale-95 text-black font-extrabold text-[11px] rounded-xl flex items-center gap-1.5 shadow-md shadow-[#25D366]/10 hover:shadow-[#25D366]/25 transition-all cursor-pointer"
+                          >
+                            <span className="text-xs">💬</span> Share
+                          </button>
+                        )}
+                      </div>
+
+                      {isSelected && (
+                        <div className="space-y-1.5">
+                          <label className="text-[9.5px] font-mono uppercase tracking-wider text-zinc-500 font-bold block">
+                            📝 Edit Message Preview:
+                          </label>
+                          <textarea
+                            value={msgText}
+                            onChange={(e) => {
+                              setEditedMessages(prev => ({
+                                ...prev,
+                                [name]: e.target.value
+                              }));
+                            }}
+                            rows={6}
+                            className="w-full bg-zinc-950 border border-zinc-850 text-zinc-300 text-xs font-mono p-3 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-y leading-relaxed"
+                          />
+                        </div>
+                      )}
                     </div>
                   );
-                })()}
-              </div>
+                })
+              )}
+            </div>
 
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={() => setWhatsappShareModalData(null)}
-                  className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono font-bold rounded-xl transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-              </div>
+            <div className="pt-4 border-t border-zinc-800 mt-4 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setWhatsappShareModalData(null)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 active:scale-98 text-zinc-300 text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Assigned Staff Popup (Triggered by Team Count click) */}
+      {viewingStaffOrderId && (() => {
+        const ord = orders.find(o => o.order_id === viewingStaffOrderId);
+        if (!ord) return null;
+        const staffDetails = getAssignedStaffDetailsForOrder(ord);
+
+        // Group by event name
+        const groupedByEvent: Record<string, typeof staffDetails> = {};
+        staffDetails.forEach(sd => {
+          const evName = sd.event_name || ord.event_type || 'Main Event';
+          if (!groupedByEvent[evName]) {
+            groupedByEvent[evName] = [];
+          }
+          groupedByEvent[evName].push(sd);
+        });
+
+        const eventNames = Object.keys(groupedByEvent);
+
+        return (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-xl shadow-2xl p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+              <button 
+                onClick={() => setViewingStaffOrderId(null)}
+                className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
+                type="button"
+              >
+                ✕
+              </button>
+              
+              <div className="flex items-center gap-2 mb-4 border-b border-zinc-800 pb-3">
+                <span className="text-xl">👥</span>
+                <div className="text-left">
+                  <h3 className="text-base font-bold text-white font-sans">
+                    Assigned Team Members
+                  </h3>
+                  <p className="text-[11px] text-zinc-400">
+                    Order <span className="font-mono text-indigo-400 font-bold">{ord.order_id}</span> • {ord.customer_name}
+                  </p>
+                </div>
+              </div>
+
+              <div className="overflow-y-auto space-y-4 flex-1 pr-1 text-left">
+                {eventNames.length === 0 ? (
+                  <div className="text-center py-8 text-zinc-500 italic text-xs font-mono">
+                    No staff assigned yet.
+                  </div>
+                ) : (
+                  eventNames.map((evName, evIdx) => {
+                    const members = groupedByEvent[evName];
+                    return (
+                      <div key={evIdx} className="bg-zinc-950/40 border border-zinc-850/60 rounded-2xl p-4 space-y-3">
+                        <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+                          <h4 className="text-xs font-bold text-indigo-400 font-sans flex items-center gap-1.5">
+                            🎬 {evName}
+                          </h4>
+                          {members[0] && (
+                            <span className="text-[10px] font-mono text-zinc-500">
+                              {members[0].event_date}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          {members.map((member, mIdx) => (
+                            <div key={mIdx} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-zinc-900/40 rounded-xl border border-zinc-800/40 hover:border-zinc-700/60 transition-all gap-2">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs font-bold text-white">{member.staff_name}</span>
+                                  <span className="text-[10px] font-mono bg-zinc-800 text-zinc-300 px-1.5 py-0.5 rounded border border-zinc-700">
+                                    {member.staff_role}
+                                  </span>
+                                  <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full ${
+                                    member.staff_type === 'In-House' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
+                                  }`}>
+                                    {member.staff_type}
+                                  </span>
+                                </div>
+                                
+                                <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-400 font-mono">
+                                  {member.mobile && (
+                                    <span className="flex items-center gap-1">
+                                      📱 {member.mobile}
+                                    </span>
+                                  )}
+                                  {member.reporting_time && (
+                                    <span className="flex items-center gap-1">
+                                      ⏰ Report: {member.reporting_time}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 self-end sm:self-auto">
+                                {member.status === 'Busy' ? (
+                                  <span className="text-[9.5px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" /> Busy
+                                  </span>
+                                ) : (
+                                  <span className="text-[9.5px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" /> Available
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="pt-4 border-t border-zinc-800 mt-4">
+                <button
+                  type="button"
+                  onClick={() => setViewingStaffOrderId(null)}
+                  className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 active:scale-98 text-zinc-350 text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
