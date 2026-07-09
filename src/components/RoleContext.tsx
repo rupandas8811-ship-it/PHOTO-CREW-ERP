@@ -4214,13 +4214,26 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const targetPayment = augmentedPayments.find((p) => p.order_id === orderId);
     if (!targetPayment) return;
 
-    const totalPaid = targetPayment.advance_received + targetPayment.final_payment_received + amountReceived;
+    let actualAmountReceived = amountReceived;
+    const totalPaidBefore = targetPayment.advance_received + targetPayment.final_payment_received;
+    
+    // Prevent Paid Amount greater than Final Quotation Amount
+    if (totalPaidBefore + actualAmountReceived > targetPayment.quotation_amount) {
+      actualAmountReceived = targetPayment.quotation_amount - totalPaidBefore;
+    }
+    
+    if (actualAmountReceived <= 0 && totalPaidBefore >= targetPayment.quotation_amount) {
+      // Already fully paid, do not process duplicate payments
+      return;
+    }
+
+    const totalPaid = totalPaidBefore + actualAmountReceived;
     const outstanding = Math.max(0, targetPayment.quotation_amount - totalPaid);
     isFullyPaid = outstanding === 0;
     const resolvedProofUrl = proofUrl || 'https://photocrew-receipts.s3.amazonaws.com/rec-custom.pdf';
 
     const rPay = await pushUpdate('payments', 'payment_id', targetPayment.payment_id, {
-      final_payment_received: targetPayment.final_payment_received + amountReceived,
+      final_payment_received: targetPayment.final_payment_received + actualAmountReceived,
       balance_due: outstanding,
       payment_date: paymentDate,
       payment_proof_url: resolvedProofUrl,
@@ -4230,6 +4243,23 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!rPay?.success) {
       throw new Error("Failed to record payment in database: " + rPay?.error);
     }
+
+    setPayments(prev => {
+      const exists = prev.some(p => p.payment_id === targetPayment.payment_id);
+      const updatedPayment = {
+        ...targetPayment,
+        final_payment_received: targetPayment.final_payment_received + actualAmountReceived,
+        balance_due: outstanding,
+        payment_date: paymentDate,
+        payment_proof_url: resolvedProofUrl,
+        payment_status: isFullyPaid ? 'Fully Paid' : 'Partially Paid',
+        transaction_id: transactionId || targetPayment.transaction_id || undefined
+      };
+      if (exists) {
+        return prev.map(p => p.payment_id === targetPayment.payment_id ? { ...p, ...updatedPayment } : p);
+      }
+      return [...prev, updatedPayment];
+    });
 
     // If fully paid, move order status to next transition or check if delivered first.
     // If fully paid AND previous stage was delivered, we can transition stage to Closed!
@@ -4245,7 +4275,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         nextStage = 'Payment Pending';
       }
 
-      const nextOutstanding = Math.max(0, currentOrder.balance_amount - amountReceived);
+      const nextOutstanding = Math.max(0, currentOrder.balance_amount - actualAmountReceived);
       const rOrd = await pushUpdate('orders', 'order_id', orderId, {
         current_stage: nextStage,
         order_status: nextStage === 'Closed' ? 'Closed' : currentOrder.order_status,
@@ -4257,6 +4287,20 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error("Failed to update order status: " + rOrd?.error);
       }
 
+      setOrders(prev => prev.map(o => {
+        if (o.order_id === orderId) {
+          return {
+            ...o,
+            current_stage: nextStage,
+            order_status: nextStage === 'Closed' ? 'Closed' : o.order_status,
+            balance_amount: nextOutstanding,
+            updated_by: currentUserName,
+            updated_at: timestamp
+          };
+        }
+        return o;
+      }));
+
       const rLead = await pushUpdate('leads', 'lead_id', currentOrder.lead_id, { 
         status: nextStage,
         current_status: nextStage,
@@ -4266,11 +4310,22 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!rLead?.success) {
         throw new Error("Failed to update lead: " + rLead?.error);
       }
+
+      setLeads(prev => prev.map(l => {
+        if (l.lead_id === currentOrder.lead_id) {
+          return {
+            ...l,
+            status: nextStage,
+            current_status: nextStage,
+            updated_by: currentUserName,
+            updated_at: timestamp
+          };
+        }
+        return l;
+      }));
     }
 
-    //  // Disabled to prevent full reload
-
-    logActivity(`Recorded payment of ₹${amountReceived} for Order ${orderId}. Fully paid: ${isFullyPaid}`, 'Finance', orderId, previousStage, nextStage);
+    logActivity(`Recorded payment of ₹${actualAmountReceived} for Order ${orderId}. Fully paid: ${isFullyPaid}`, 'Finance', orderId, previousStage, nextStage);
   };
 
   // User Management Admin features

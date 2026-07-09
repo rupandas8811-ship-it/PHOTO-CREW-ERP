@@ -1506,6 +1506,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     package_includes: ''
   });
   const [pkgTeamMembers, setPkgTeamMembers] = useState<string[]>(['']);
+  const [pkgDeliverablesList, setPkgDeliverablesList] = useState<string[]>([]);
+  const [pkgDeliverableInput, setPkgDeliverableInput] = useState('');
   const [customCategory, setCustomCategory] = useState('');
   const [isComparingPkgs, setIsComparingPkgs] = useState(false);
   const [dbCategoryError, setDbCategoryError] = useState<string | null>(null);
@@ -6833,6 +6835,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       package_includes: ''
                     });
                     setPkgTeamMembers(['']);
+                    setPkgDeliverablesList([]);
+                    setPkgDeliverableInput('');
                     setCustomCategory('');
                     setIsAddFormOpen(true);
                   }}
@@ -6953,13 +6957,73 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     {/* Deliverables (Spanning both cols) */}
                     <div className="md:col-span-2">
                       <label className="block text-slate-400 font-semibold mb-1">Deliverables</label>
-                      <textarea
-                        placeholder="e.g. 2 Candid Photographers, 1 Cinematic Videographer, Standard Album..."
-                        value={pkgForm.deliverables}
-                        onChange={(e) => setPkgForm({ ...pkgForm, deliverables: e.target.value })}
-                        rows={3}
-                        className="w-full bg-slate-955 border border-slate-800 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans resize-y"
-                      />
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. 2 Candid Photographers"
+                          value={pkgDeliverableInput}
+                          onChange={(e) => setPkgDeliverableInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (pkgDeliverableInput.trim()) {
+                                const newDeliverables = [...pkgDeliverablesList, pkgDeliverableInput.trim()];
+                                setPkgDeliverablesList(newDeliverables);
+                                setPkgDeliverableInput('');
+                                setPkgForm({ ...pkgForm, deliverables: newDeliverables.join('\n') });
+                              }
+                            }
+                          }}
+                          className="flex-1 bg-slate-950 border border-slate-855 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (pkgDeliverableInput.trim()) {
+                              const newDeliverables = [...pkgDeliverablesList, pkgDeliverableInput.trim()];
+                              setPkgDeliverablesList(newDeliverables);
+                              setPkgDeliverableInput('');
+                              setPkgForm({ ...pkgForm, deliverables: newDeliverables.join('\n') });
+                            }
+                          }}
+                          className="px-4 py-1.5 text-[10px] bg-slate-800 hover:bg-slate-755 text-slate-300 rounded-lg transition-all cursor-pointer font-medium border border-slate-700 uppercase tracking-wider whitespace-nowrap"
+                        >
+                          Add More
+                        </button>
+                      </div>
+                      
+                      {pkgDeliverablesList.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          {pkgDeliverablesList.map((del, index) => (
+                            <div key={index} className="flex items-center gap-2 animate-fade-in">
+                              <span className="text-emerald-400 font-bold text-xs shrink-0">✓</span>
+                              <input
+                                type="text"
+                                value={del}
+                                onChange={(e) => {
+                                  const newList = [...pkgDeliverablesList];
+                                  newList[index] = e.target.value;
+                                  setPkgDeliverablesList(newList);
+                                  setPkgForm({ ...pkgForm, deliverables: newList.join('\n') });
+                                }}
+                                className="flex-1 bg-slate-950/50 border border-slate-855 rounded-lg py-1 px-2.5 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans text-xs"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newList = pkgDeliverablesList.filter((_, idx) => idx !== index);
+                                  setPkgDeliverablesList(newList);
+                                  setPkgForm({ ...pkgForm, deliverables: newList.join('\n') });
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-rose-450 bg-slate-950 hover:bg-slate-900 border border-slate-855 hover:border-rose-900/30 rounded-lg transition-all cursor-pointer shrink-0"
+                                title="Remove item"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -6983,6 +7047,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           package_includes: ''
                         });
                         setPkgTeamMembers(['']);
+                        setPkgDeliverablesList([]);
+                        setPkgDeliverableInput('');
                         setCustomCategory('');
                       }}
                       className="px-4 py-1.5 text-xs bg-slate-800 hover:bg-slate-755 text-slate-300 rounded-lg transition-all cursor-pointer font-medium border border-transparent"
@@ -7042,6 +7108,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             package_includes: ''
                           });
                           setPkgTeamMembers(['']);
+                          setPkgDeliverablesList([]);
+                          setPkgDeliverableInput('');
                           setCustomCategory('');
                         } catch (err: any) {
                           alert(`Failed to save package: ${err.message || err}`);
@@ -7184,6 +7252,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                     });
                                     const parsed = parseTeamMembers(pkg.team_members);
                                     setPkgTeamMembers(parsed.length > 0 ? parsed : ['']);
+                                    const parsedDel = pkg.deliverables ? pkg.deliverables.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean) : [];
+                                    setPkgDeliverablesList(parsedDel);
+                                    setPkgDeliverableInput('');
                                     setCustomCategory('');
                                     setIsAddFormOpen(true);
                                   }}
@@ -8863,7 +8934,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             </p>
                           )}
                           
-                          {(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option) && !isPackageSelectedAndSaved && !isLeadLocked && (
+                          {!!(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option) && !isPackageSelectedAndSaved && !isLeadLocked && (
                             <div className="mt-3 flex justify-end">
                               <button
                                 type="button"
@@ -10161,6 +10232,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           });
                           const parsed = parseTeamMembers(pkg.team_members);
                           setPkgTeamMembers(parsed.length > 0 ? parsed : ['']);
+                          const parsedDel = pkg.deliverables ? pkg.deliverables.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean) : [];
+                          setPkgDeliverablesList(parsedDel);
+                          setPkgDeliverableInput('');
                           setIsAddFormOpen(false);
                           setViewingPkgDetails(null);
                         }}

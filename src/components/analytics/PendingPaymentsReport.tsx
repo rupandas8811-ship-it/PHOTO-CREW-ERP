@@ -35,6 +35,7 @@ export const PendingPaymentsReport: React.FC = () => {
   const [paymentAmount, setPaymentAmount] = useState<number | ''>( '');
   const [paymentNotes, setPaymentNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [updateSuccessMsg, setUpdateSuccessMsg] = useState('');
   
   // Start date default: 3 months ago to 1 year ahead
   const defaultStartDate = useMemo(() => {
@@ -76,6 +77,8 @@ export const PendingPaymentsReport: React.FC = () => {
       const finalPackageAmount = order ? order.quotation_amount : lead.budget;
       const advanceReceived = order ? order.advance_received : 0;
       
+      const totalPaidAmount = payment ? ((payment.advance_received || 0) + (payment.final_payment_received || 0)) : advanceReceived;
+      
       // Use payments table for balance if available, otherwise fallback to order balance
       const remainingAmount = payment ? payment.balance_due : (order ? order.balance_amount : finalPackageAmount - advanceReceived);
       const rawPaymentStatus = payment ? payment.payment_status : (advanceReceived > 0 ? 'Partially Paid' : 'Pending');
@@ -114,6 +117,7 @@ export const PendingPaymentsReport: React.FC = () => {
         eventDate: lead.event_date || '',
         finalPackageAmount,
         advanceReceived,
+        totalPaidAmount,
         remainingAmount,
         paymentStatus,
         isOverdue,
@@ -231,7 +235,7 @@ export const PendingPaymentsReport: React.FC = () => {
 
   // Export functions (PDF, CSV, Excel, Print)
   const downloadCSV = () => {
-    const headers = ['Order ID', 'Customer Name', 'Mobile Number', 'Event Type', 'Event Date', 'Final Package Amount', 'Advance Received', 'Remaining Amount', 'Payment Status', 'Project Status', 'Last Updated'];
+    const headers = ['Order ID', 'Customer Name', 'Mobile Number', 'Event Type', 'Event Date', 'Final Package Amount', 'Total Paid Amount', 'Remaining Amount', 'Payment Status', 'Project Status', 'Last Updated'];
     const rows = filteredRecords.map(r => [
       r.orderId,
       r.customerName,
@@ -239,7 +243,7 @@ export const PendingPaymentsReport: React.FC = () => {
       r.eventType,
       r.eventDate,
       r.finalPackageAmount,
-      r.advanceReceived,
+      r.totalPaidAmount,
       r.remainingAmount,
       r.paymentStatus === 'Partial' ? 'Partial' : 'Pending',
       r.currentProjectStatus,
@@ -260,9 +264,9 @@ export const PendingPaymentsReport: React.FC = () => {
 
   const downloadExcelMock = () => {
     // Generate simple tab-separated content mimicking XLS format
-    let excelContent = "Order ID\tCustomer Name\tMobile Number\tEvent Type\tEvent Date\tFinal Package Amount\tAdvance Received\tRemaining Amount\tPayment Status\tProject Status\tLast Updated\n";
+    let excelContent = "Order ID\tCustomer Name\tMobile Number\tEvent Type\tEvent Date\tFinal Package Amount\tTotal Paid Amount\tRemaining Amount\tPayment Status\tProject Status\tLast Updated\n";
     filteredRecords.forEach(r => {
-      excelContent += `${r.orderId}\t${r.customerName}\t${r.mobileNumber}\t${r.eventType}\t${r.eventDate}\t${r.finalPackageAmount}\t${r.advanceReceived}\t${r.remainingAmount}\t${r.paymentStatus}\t${r.currentProjectStatus}\t${new Date(r.lastUpdatedDate).toLocaleDateString()}\n`;
+      excelContent += `${r.orderId}\t${r.customerName}\t${r.mobileNumber}\t${r.eventType}\t${r.eventDate}\t${r.finalPackageAmount}\t${r.totalPaidAmount}\t${r.remainingAmount}\t${r.paymentStatus}\t${r.currentProjectStatus}\t${new Date(r.lastUpdatedDate).toLocaleDateString()}\n`;
     });
 
     const blob = new Blob([excelContent], { type: 'application/vnd.ms-excel' });
@@ -322,7 +326,7 @@ export const PendingPaymentsReport: React.FC = () => {
     doc.text('Event Type', 115, currentY + 5.5);
     doc.text('Event Date', 150, currentY + 5.5);
     doc.text('Package Cost', 180, currentY + 5.5);
-    doc.text('Paid (Adv)', 210, currentY + 5.5);
+    doc.text('Total Paid', 210, currentY + 5.5);
     doc.text('Balance Due', 240, currentY + 5.5);
     doc.text('Status', 270, currentY + 5.5);
 
@@ -358,7 +362,7 @@ export const PendingPaymentsReport: React.FC = () => {
       doc.text(rec.eventDate, 150, currentY + 5);
       
       doc.text(`INR ${rec.finalPackageAmount.toLocaleString('en-IN')}`, 180, currentY + 5);
-      doc.text(`INR ${rec.advanceReceived.toLocaleString('en-IN')}`, 210, currentY + 5);
+      doc.text(`INR ${rec.totalPaidAmount.toLocaleString('en-IN')}`, 210, currentY + 5);
       
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(185, 28, 28); // red for outstanding
@@ -433,6 +437,17 @@ export const PendingPaymentsReport: React.FC = () => {
           </span>
         </div>
       </div>
+
+      {updateSuccessMsg && (
+        <div className="bg-emerald-950/40 border border-emerald-500/50 text-emerald-400 p-3 rounded-xl flex items-center justify-between animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold">{updateSuccessMsg}</span>
+          </div>
+          <button onClick={() => setUpdateSuccessMsg('')} className="text-emerald-500 hover:text-emerald-300 transition-colors">
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Pending Payment Analytics Cards (Photocrew Lens-Inspired layout) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -744,7 +759,7 @@ export const PendingPaymentsReport: React.FC = () => {
 
                     {/* Paid Amount */}
                     <td className="px-4 py-4 text-xs text-zinc-400 text-right font-mono text-emerald-400">
-                      {formatPercentageOrINR(rec.advanceReceived)}
+                      {formatPercentageOrINR(rec.totalPaidAmount)}
                     </td>
 
                     {/* Pending Amount */}
@@ -889,12 +904,15 @@ export const PendingPaymentsReport: React.FC = () => {
               </button>
               <button
                 onClick={async () => {
+                  if (isSaving) return;
                   const amt = Number(paymentAmount);
                   if (amt > 0) {
                     try {
                       setIsSaving(true);
                       await recordPayment(paymentModalRecord.orderId, amt, new Date().toISOString().split('T')[0], undefined, paymentNotes);
+                      setUpdateSuccessMsg('✅ Payment updated successfully.');
                       setShowPaymentModal(false);
+                      setTimeout(() => setUpdateSuccessMsg(''), 5000);
                     } catch (err: any) {
                       alert(`Failed to save payment: ${err.message || err}`);
                     } finally {
