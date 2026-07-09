@@ -143,6 +143,7 @@ export interface LeadEvent {
   google_maps_link?: string;
   assigned_staff_names?: string;
   assigned_staff_mobiles?: string;
+  reporting_date?: string;
   reporting_time?: string;
 }
 

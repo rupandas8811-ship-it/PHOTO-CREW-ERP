@@ -5414,7 +5414,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           guest_pax: String(ev.guest_pax) !== '' && ev.guest_pax != null ? Number(ev.guest_pax) : null,
           staff_pax: String(ev.staff_pax) !== '' && ev.staff_pax != null ? Number(ev.staff_pax) : null,
           assigned_staff_names: ev.assigned_staff_names || '',
-          assigned_staff_mobiles: ev.assigned_staff_mobiles || ''
+          assigned_staff_mobiles: ev.assigned_staff_mobiles || '',
+          reporting_date: ev.reporting_date || null,
+          reporting_time: ev.reporting_time || null
         };
 
         if (isNew) {

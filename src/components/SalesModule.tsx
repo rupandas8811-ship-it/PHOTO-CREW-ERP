@@ -2242,10 +2242,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   });
 
   const [showFinalReportingModal, setShowFinalReportingModal] = useState(false);
-  const [finalReportingForm, setFinalReportingForm] = useState({
-    reporting_date: '',
-    reporting_time: ''
-  });
+  const [finalReportingForm, setFinalReportingForm] = useState<Record<string, { reporting_date: string, reporting_time: string }>>({});
 
   // Quotation System State
   const [quotationTerms, setQuotationTerms] = useState(
@@ -5773,10 +5770,33 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     try {
       setIsSaving(true);
-      await updateLead(selectedLead.lead_id, {
-        Reporting_date: finalReportingForm.reporting_date,
-        reporting_time: finalReportingForm.reporting_time
-      });
+      
+      const crmEvents = selectedLead.events || [];
+      if (crmEvents.length > 0) {
+        // Save event-wise reporting details
+        const updatedEvents = crmEvents.map(ev => {
+          const fd = finalReportingForm[ev.id] || { reporting_date: '', reporting_time: '' };
+          return {
+            ...ev,
+            reporting_date: fd.reporting_date,
+            reporting_time: fd.reporting_time
+          };
+        });
+        
+        await updateLead(selectedLead.lead_id, {
+          events: updatedEvents,
+          Reporting_date: updatedEvents[0]?.reporting_date || '', // fallback
+          reporting_time: updatedEvents[0]?.reporting_time || ''
+        });
+      } else {
+        // Fallback for leads without explicit events
+        const fd = finalReportingForm['default'] || { reporting_date: '', reporting_time: '' };
+        await updateLead(selectedLead.lead_id, {
+          Reporting_date: fd.reporting_date,
+          reporting_time: fd.reporting_time
+        });
+      }
+
       setShowFinalReportingModal(false);
       setSelectedLead(null);
       showToastMsg("Reporting Details Saved Successfully.", "success");
@@ -5831,10 +5851,24 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const repDate = selectedLead.Reporting_date || confirmForm.event_date || '';
       const repTime = selectedLead.reporting_time || confirmForm.event_time || '';
       
-      setFinalReportingForm({
-        reporting_date: repDate,
-        reporting_time: repTime
-      });
+      const crmEvents = selectedLead.events || [];
+      const initialFormState: Record<string, { reporting_date: string, reporting_time: string }> = {};
+
+      if (crmEvents.length > 0) {
+        crmEvents.forEach((ev) => {
+          initialFormState[ev.id] = {
+            reporting_date: ev.reporting_date || ev.event_date || repDate || '',
+            reporting_time: ev.reporting_time || ev.event_time || repTime || ''
+          };
+        });
+      } else {
+        initialFormState['default'] = {
+          reporting_date: repDate,
+          reporting_time: repTime
+        };
+      }
+
+      setFinalReportingForm(initialFormState);
       setShowFinalReportingModal(true);
     } catch (err: any) {
       console.error("Failed to convert order:", err);
@@ -8607,34 +8641,93 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </button>
             </div>
             
-            <form onSubmit={handleFinalReportingSubmit} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-medium text-slate-400 mb-1">
-                  Reporting Date *
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={finalReportingForm.reporting_date}
-                  onChange={(e) => setFinalReportingForm({ ...finalReportingForm, reporting_date: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
-                />
-              </div>
+            <form onSubmit={handleFinalReportingSubmit} className="space-y-4 text-xs max-h-[70vh] overflow-y-auto pr-2">
+              {(selectedLead.events && selectedLead.events.length > 0) ? (
+                selectedLead.events.map((ev, idx) => {
+                  const evData = finalReportingForm[ev.id] || { reporting_date: '', reporting_time: '' };
+                  return (
+                    <div key={ev.id} className="bg-slate-900/50 p-4 rounded-lg border border-slate-750 mb-3 space-y-3">
+                      <h5 className="font-bold text-slate-200 border-b border-slate-700/50 pb-1.5 mb-2 flex items-center justify-between">
+                        <span>Event {idx + 1}: {ev.event_name}</span>
+                      </h5>
+                      
+                      <div className="text-[11px] text-slate-400 mb-2 flex items-center gap-1.5">
+                         <Calendar className="w-3.5 h-3.5" />
+                         <span>Scheduled Date: <span className="font-semibold text-slate-300">{ev.event_date || 'N/A'}</span></span>
+                      </div>
 
-              <div>
-                <label className="block font-medium text-slate-400 mb-1">
-                  Reporting Time *
-                </label>
-                <input
-                  type="time"
-                  required
-                  value={finalReportingForm.reporting_time}
-                  onChange={(e) => setFinalReportingForm({ ...finalReportingForm, reporting_time: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
-                />
-              </div>
-              
-              <div className="flex justify-end pt-2">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block font-medium text-slate-400 mb-1">
+                            Reporting Date *
+                          </label>
+                          <input
+                            type="date"
+                            required
+                            value={evData.reporting_date}
+                            onChange={(e) => setFinalReportingForm({ 
+                              ...finalReportingForm, 
+                              [ev.id]: { ...evData, reporting_date: e.target.value } 
+                            })}
+                            className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-2 text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-[11px]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-medium text-slate-400 mb-1">
+                            Reporting Time *
+                          </label>
+                          <input
+                            type="time"
+                            required
+                            value={evData.reporting_time}
+                            onChange={(e) => setFinalReportingForm({ 
+                              ...finalReportingForm, 
+                              [ev.id]: { ...evData, reporting_time: e.target.value } 
+                            })}
+                            className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-2 text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-[11px]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block font-medium text-slate-400 mb-1">
+                      Reporting Date *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={finalReportingForm['default']?.reporting_date || ''}
+                      onChange={(e) => setFinalReportingForm({ 
+                        ...finalReportingForm, 
+                        'default': { ...finalReportingForm['default'], reporting_date: e.target.value } 
+                      })}
+                      className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-medium text-slate-400 mb-1">
+                      Reporting Time *
+                    </label>
+                    <input
+                      type="time"
+                      required
+                      value={finalReportingForm['default']?.reporting_time || ''}
+                      onChange={(e) => setFinalReportingForm({ 
+                        ...finalReportingForm, 
+                        'default': { ...finalReportingForm['default'], reporting_time: e.target.value } 
+                      })}
+                      className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                    />
+                  </div>
+                </div>
+              )}
+                
+              <div className="flex justify-end pt-2 sticky bottom-0 bg-slate-850 pb-1">
                  <button
                   type="submit"
                   disabled={isSaving}
