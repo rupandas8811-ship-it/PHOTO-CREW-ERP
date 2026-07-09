@@ -89,41 +89,21 @@ export const EquipmentManagement: React.FC = () => {
   // Form states
   const [form, setForm] = useState({
     equipment_name: '',
-    equipment_type: 'Camera',
     brand: '',
-    model: '',
-    serial_number: '',
-    quantity: 1,
-    available_quantity: 1,
-    status: 'Available' as Equipment['status'],
-    purchase_date: '',
-    purchase_price: 0,
-    storage_location: '',
-    condition: 'Excellent',
-    assigned_staff_name: '',
-    notes: ''
+    equipment_type: 'Camera',
+    status: 'Active' as string
   });
 
   // Handle selecting an item for editing
   const handleSelectEdit = (eq: Equipment, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const meta = parseEquipmentNotes(eq.notes);
     setEditingId(eq.equipment_id);
+    const mappedStatus = ['Active', 'Available', 'Assigned', 'In Use'].includes(eq.status) ? 'Active' : 'Inactive';
     setForm({
       equipment_name: eq.equipment_name,
-      equipment_type: eq.equipment_type,
-      brand: eq.brand,
-      model: eq.model,
-      serial_number: eq.serial_number,
-      quantity: eq.quantity,
-      available_quantity: eq.available_quantity ?? eq.quantity,
-      status: eq.status,
-      purchase_date: eq.purchase_date || '',
-      purchase_price: eq.purchase_price || 0,
-      storage_location: eq.storage_location || '',
-      condition: meta.condition,
-      assigned_staff_name: meta.assignedStaff,
-      notes: meta.notes
+      brand: eq.brand || '',
+      equipment_type: eq.equipment_type || 'Camera',
+      status: mappedStatus
     });
   };
 
@@ -131,19 +111,9 @@ export const EquipmentManagement: React.FC = () => {
     setEditingId(null);
     setForm({
       equipment_name: '',
-      equipment_type: 'Camera',
       brand: '',
-      model: '',
-      serial_number: '',
-      quantity: 1,
-      available_quantity: 1,
-      status: 'Available',
-      purchase_date: '',
-      purchase_price: 0,
-      storage_location: '',
-      condition: 'Excellent',
-      assigned_staff_name: '',
-      notes: ''
+      equipment_type: 'Camera',
+      status: 'Active'
     });
   };
 
@@ -164,48 +134,39 @@ export const EquipmentManagement: React.FC = () => {
       showToast('error', 'Unauthorized! Operations Team or Business Owner privileges required.');
       return;
     }
-    if (!form.equipment_name || !form.equipment_type || !form.serial_number) {
-      showToast('error', 'Please fill out Name, Category, and Serial Number.');
+    if (!form.equipment_name || !form.brand || !form.equipment_type || !form.status) {
+      showToast('error', 'Please fill out all required fields: Name, Brand, Category, and Status.');
       return;
     }
-
-    if (form.available_quantity > form.quantity) {
-      showToast('error', 'Available quantity cannot exceed total quantity.');
-      return;
-    }
-
-    const serializedNotes = serializeEquipmentNotes({
-      condition: form.condition,
-      assignedStaff: form.assigned_staff_name,
-      notes: form.notes
-    });
-
-    const payload = {
-      equipment_name: form.equipment_name,
-      equipment_type: form.equipment_type,
-      brand: form.brand,
-      model: form.model,
-      serial_number: form.serial_number,
-      quantity: form.quantity,
-      available_quantity: form.available_quantity,
-      status: form.status,
-      purchase_date: form.purchase_date,
-      purchase_price: form.purchase_price,
-      storage_location: form.storage_location,
-      notes: serializedNotes
-    };
 
     try {
       if (editingId) {
+        // Editing: Only allow updating the 4 fields!
+        const payload = {
+          equipment_name: form.equipment_name,
+          brand: form.brand,
+          equipment_type: form.equipment_type,
+          status: form.status,
+        };
         await updateEquipment(editingId, payload);
         showToast('success', 'Equipment details updated successfully.');
       } else {
-        // Check duplicate serial number locally
-        const isDuplicate = equipment.some(item => item.serial_number.toLowerCase() === form.serial_number.toLowerCase());
-        if (isDuplicate) {
-          showToast('error', 'Equipment with this Serial Number already exists.');
-          return;
-        }
+        // Registering new: Save the 4 fields, and provide defaults for required/unnecessary fields
+        const payload = {
+          equipment_name: form.equipment_name,
+          brand: form.brand,
+          equipment_type: form.equipment_type,
+          status: form.status,
+          // DB required defaults
+          quantity: 1,
+          available_quantity: 1,
+          serial_number: '',
+          model: '',
+          purchase_date: '',
+          purchase_price: 0,
+          storage_location: '',
+          notes: ''
+        };
         await addEquipment(payload);
         showToast('success', 'New equipment registered successfully.');
       }
@@ -482,7 +443,7 @@ export const EquipmentManagement: React.FC = () => {
           <form onSubmit={handleSubmit} className="space-y-4 text-xs">
             <fieldset disabled={!canEdit} className="space-y-4">
               <div>
-                <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-550 mb-1">
+                <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-500 mb-1 font-semibold">
                   Equipment Name *
                 </label>
                 <input
@@ -491,206 +452,53 @@ export const EquipmentManagement: React.FC = () => {
                   placeholder="e.g. Sony FX3 Full Cinema body"
                   value={form.equipment_name}
                   onChange={(e) => setForm({ ...form, equipment_name: e.target.value })}
-                  className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
+                  className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono"
                 />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-550 mb-1">
-                    Brand *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Sony"
-                    value={form.brand}
-                    onChange={(e) => setForm({ ...form, brand: e.target.value })}
-                    className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-550 mb-1">
-                    Model / Variant
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. ILME-FX3"
-                    value={form.model}
-                    onChange={(e) => setForm({ ...form, model: e.target.value })}
-                    className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-550 mb-1">
-                    Equipment Category *
-                  </label>
-                  <select
-                    value={form.equipment_type}
-                    onChange={(e) => setForm({ ...form, equipment_type: e.target.value })}
-                    className="w-full bg-zinc-955 border border-zinc-800 rounded-xl px-3 py-2 text-white"
-                  >
-                    {['Camera', 'Lens', 'Drone', 'Gimbal', 'Tripod', 'Light', 'Audio Equipment', 'Memory Cards', 'Batteries', 'Other'].map(t => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-550 mb-1">
-                    Serial Number *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="SN-XXX-XXXX"
-                    value={form.serial_number}
-                    onChange={(e) => setForm({ ...form, serial_number: e.target.value })}
-                    className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-550 mb-1">
-                    Total Quantity *
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    required
-                    value={form.quantity}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value) || 1;
-                      setForm({ ...form, quantity: val, available_quantity: Math.min(form.available_quantity, val) });
-                    }}
-                    className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-550 mb-1">
-                    Available Qty *
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={form.quantity}
-                    required
-                    value={form.available_quantity}
-                    onChange={(e) => setForm({ ...form, available_quantity: parseInt(e.target.value) || 0 })}
-                    className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-550 mb-1">
-                    Lifecycle Status
-                  </label>
-                  <select
-                    value={form.status}
-                    onChange={(e) => setForm({ ...form, status: e.target.value as Equipment['status'] })}
-                    className="w-full bg-zinc-955 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono"
-                  >
-                    {['Available', 'Assigned', 'In Use', 'Under Maintenance', 'Damaged', 'Lost', 'Retired'].map(s => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-550 mb-1">
-                    Equipment Condition
-                  </label>
-                  <select
-                    value={form.condition}
-                    onChange={(e) => setForm({ ...form, condition: e.target.value })}
-                    className="w-full bg-zinc-955 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono"
-                  >
-                    {['Excellent', 'Good', 'Fair', 'Needs Repair', 'Damaged', 'Retired'].map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-550 mb-1">
-                    Assigned Staff
-                  </label>
-                  <select
-                    value={form.assigned_staff_name}
-                    onChange={(e) => setForm({ ...form, assigned_staff_name: e.target.value })}
-                    className="w-full bg-zinc-955 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono"
-                  >
-                    <option value="">Unassigned</option>
-                    {staff.map(s => (
-                      <option key={s.staff_id} value={s.name}>{s.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-550 mb-1">
-                    Storage Location
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Shelf A-1"
-                    value={form.storage_location}
-                    onChange={(e) => setForm({ ...form, storage_location: e.target.value })}
-                    className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-550 mb-1">
-                    Purchase Date
-                  </label>
-                  <input
-                    type="date"
-                    value={form.purchase_date}
-                    onChange={(e) => setForm({ ...form, purchase_date: e.target.value })}
-                    className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-550 mb-1">
-                    Purchase Price
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="Price"
-                    value={form.purchase_price}
-                    onChange={(e) => setForm({ ...form, purchase_price: parseFloat(e.target.value) || 0 })}
-                    className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white font-mono"
-                  />
-                </div>
               </div>
 
               <div>
-                <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-550 mb-1">
-                  Notes & Field Reports
+                <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-500 mb-1 font-semibold">
+                  Brand *
                 </label>
-                <textarea
-                  rows={3}
-                  placeholder="Mention custom cages, accessories, compatibility, or battery details..."
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  className="w-full bg-zinc-955 border border-zinc-850 rounded-xl p-2.5 text-white focus:outline-none"
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Sony"
+                  value={form.brand}
+                  onChange={(e) => setForm({ ...form, brand: e.target.value })}
+                  className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono"
                 />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-500 mb-1 font-semibold">
+                  Equipment Category *
+                </label>
+                <select
+                  required
+                  value={form.equipment_type}
+                  onChange={(e) => setForm({ ...form, equipment_type: e.target.value })}
+                  className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono"
+                >
+                  {['Camera', 'Lens', 'Drone', 'Gimbal', 'Tripod', 'Light', 'Audio Equipment', 'Memory Cards', 'Batteries', 'Other'].map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-500 mb-1 font-semibold">
+                  Equipment Status *
+                </label>
+                <select
+                  required
+                  value={form.status}
+                  onChange={(e) => setForm({ ...form, status: e.target.value })}
+                  className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono"
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
               </div>
             </fieldset>
 

@@ -268,6 +268,134 @@ export const OperationsLeads: React.FC = () => {
     assignments: { staff_role: string; staff_name: string }[];
   } | null>(null);
 
+  // Multi-Staff WhatsApp Share Modal State
+  const [whatsappShareModalData, setWhatsappShareModalData] = useState<{
+    orderId: string;
+    order: Order;
+    staffNames: string[];
+  } | null>(null);
+
+  // Helper to get assigned staff names for an order
+  const getAssignedStaffNamesForOrder = (ord: Order): string[] => {
+    const lead = leads.find(l => l.lead_id === ord.lead_id);
+    const fromEvents: string[] = [];
+    if (lead?.events) {
+      lead.events.forEach((ev) => {
+        if (ev.assigned_staff_names) {
+          ev.assigned_staff_names.split(',').forEach((n: string) => {
+            const trimmed = n.trim();
+            if (trimmed) {
+              fromEvents.push(trimmed);
+            }
+          });
+        }
+      });
+    }
+    
+    if (fromEvents.length > 0) {
+      return Array.from(new Set(fromEvents));
+    }
+    
+    // Fallback to order assignments
+    const orderAssigns = staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id) : [];
+    const fromAssigns = orderAssigns.map(sa => sa.staff_name).filter(Boolean);
+    return Array.from(new Set(fromAssigns));
+  };
+
+  // Helper to generate personalized WhatsApp message for a staff member
+  const generateWhatsAppMessageForStaff = (ord: Order, staffName: string) => {
+    const lead = leads.find(l => l.lead_id === ord.lead_id);
+    const coordinatorStaff = staff?.find(s => s.name === currentUserName);
+    const coordinatorContact = coordinatorStaff ? `${coordinatorStaff.name} (${coordinatorStaff.mobile || 'N/A'})` : `${currentUserName || 'Operations Team'}`;
+    
+    const clientName = ord.customer_name;
+    const clientContact = ord.mobile || (lead ? lead.mobile : 'N/A');
+
+    // Find all events for this lead where this staff member is assigned
+    const assignedEvents = lead?.events?.filter(ev => {
+      const names = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
+      return names.includes(staffName.toLowerCase());
+    }) || [];
+
+    let text = `*STAFF WORK ASSIGNMENT*\n`;
+    text += `Hello *${staffName}*, here are your shoot details:\n\n`;
+    text += `*Client Name*: ${clientName}\n`;
+    text += `*Client Contact Number*: ${clientContact}\n`;
+    text += `*Coordinator / Operations Contact*: ${coordinatorContact}\n\n`;
+
+    if (assignedEvents.length === 0) {
+      // Fallback if events are empty or staff is assigned generally to the order
+      const shootType = ord.shoot_type || (lead ? lead.shoot_type : 'N/A');
+      const eventName = ord.event_type;
+      const eventDate = ord.event_date;
+      const eventTime = ord.event_time;
+      const location = lead?.event_location || ord.event_location || 'N/A';
+      const mapsLink = (lead as any)?.google_maps_link || 'N/A';
+      const staffObj = staff?.find(s => s.name === staffName);
+      const assignedRole = staffObj ? staffObj.role : 'Crew';
+      
+      text += `*EVENT DETAILS*\n`;
+      text += `• *Event Name*: ${eventName}\n`;
+      text += `• *Shoot Type*: ${shootType}\n`;
+      text += `• *Event Date*: ${eventDate}\n`;
+      text += `• *Event Time*: ${eventTime}\n`;
+      text += `• *Reporting Date*: ${lead?.Reporting_date || eventDate || 'N/A'}\n`;
+      text += `• *Reporting Time*: ${lead?.reporting_time || 'N/A'}\n`;
+      text += `• *Reporting Location*: ${location}\n`;
+      if (mapsLink && mapsLink !== 'N/A') {
+        text += `• *Google Maps Link*: ${mapsLink}\n`;
+      }
+      text += `• *Assigned Role*: ${assignedRole}\n`;
+      
+      // Assigned Equipment
+      const op = operations?.find(o => o.order_id === ord.order_id);
+      const assignedEquipment = op?.equipment_kit || 'None';
+      text += `• *Assigned Equipment*: ${assignedEquipment}\n`;
+    } else {
+      assignedEvents.forEach((ev, idx) => {
+        const eventName = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');
+        const shootType = ev.event_shoot_type || 'N/A';
+        const eventDate = ev.event_date || 'N/A';
+        const eventTime = (ev.event_start_time || ev.event_end_time) ? `${ev.event_start_time || ''} - ${ev.event_end_time || ''}` : 'N/A';
+        const reportingDate = ev.reporting_date || ev.event_date || 'N/A';
+        const reportingTime = ev.reporting_time || 'N/A';
+        const location = ev.event_location || lead?.event_location || 'N/A';
+        const mapsLink = ev.google_maps_link || 'N/A';
+        const staffObj = staff?.find(s => s.name === staffName);
+        const assignedRole = staffObj ? staffObj.role : 'Crew';
+        
+        // Parse event equipment
+        let assignedEquipment = 'None';
+        const mobilesRaw = ev.assigned_staff_mobiles || '';
+        if (mobilesRaw.includes(' || EQUIPMENT: ')) {
+          const parts = mobilesRaw.split(' || EQUIPMENT: ');
+          assignedEquipment = parts[1] || 'None';
+        }
+
+        text += `*EVENT ${idx + 1}: ${eventName}*\n`;
+        text += `• *Shoot Type*: ${shootType}\n`;
+        text += `• *Event Date*: ${eventDate}\n`;
+        text += `• *Event Time*: ${eventTime}\n`;
+        text += `• *Reporting Date*: ${reportingDate}\n`;
+        text += `• *Reporting Time*: ${reportingTime}\n`;
+        text += `• *Reporting Location*: ${location}\n`;
+        if (mapsLink && mapsLink !== 'N/A') {
+          text += `• *Google Maps Link*: ${mapsLink}\n`;
+        }
+        text += `• *Assigned Role*: ${assignedRole}\n`;
+        text += `• *Assigned Equipment*: ${assignedEquipment}\n\n`;
+      });
+    }
+
+    // Get Team Name / Package Name
+    const leadPkg = leadPackages?.find(lp => lp.lead_id === ord.lead_id);
+    if (leadPkg?.package_name) {
+      text += `*Team Name / Package*: ${leadPkg.package_name}\n`;
+    }
+
+    return text;
+  };
+
   // Filter orders to show confirmed ones for Operations
   const allowedStages = ['Order Confirmed', 'New Order Received', 'Operations Assigned', 'Event Scheduled', 'Staff Assigned', 'Event Completed', 'Raw Footage Received', 'Event Cancelled'];
   const operationsOrders = orders.filter(o => {
@@ -590,7 +718,7 @@ export const OperationsLeads: React.FC = () => {
           alert(`Equipment "${kitName}" not found in inventory.`);
           return;
         }
-        if (found.status !== 'Available') {
+        if (found.status !== 'Available' && found.status !== 'Active') {
           alert(`Equipment "${kitName}" is currently ${found.status} and cannot be assigned.`);
           return;
         }
@@ -732,7 +860,7 @@ export const OperationsLeads: React.FC = () => {
       }
 
       setAssigningOrderId(null);
-      alert("Crew Assigned Successfully");
+      alert("✅ Staff assigned successfully.");
     } catch (e: any) {
       console.error("Failed to save assignment:", e);
       if (e.message && (
@@ -1228,17 +1356,25 @@ export const OperationsLeads: React.FC = () => {
                         {crewNames.length > 0 && (
                           <button
                             onClick={() => {
-                              setSuccessModalData({
-                                orderId: ord.order_id,
-                                customerName: ord.customer_name,
-                                order: ord,
-                                assignments: orderAssignments.map(a => ({ staff_role: a.staff_role, staff_name: a.staff_name }))
-                              });
+                              const assignedStaffNames = getAssignedStaffNamesForOrder(ord);
+                              if (assignedStaffNames.length === 1) {
+                                // Exactly one staff member: Open WhatsApp directly
+                                const msgText = generateWhatsAppMessageForStaff(ord, assignedStaffNames[0]);
+                                const url = `https://wa.me/?text=${encodeURIComponent(msgText)}`;
+                                window.open(url, '_blank');
+                              } else {
+                                // Multiple staff members: Open picker modal
+                                setWhatsappShareModalData({
+                                  orderId: ord.order_id,
+                                  order: ord,
+                                  staffNames: assignedStaffNames
+                                });
+                              }
                             }}
-                            className="px-2 py-1 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 rounded text-[10px] font-mono font-bold cursor-pointer transition-all uppercase"
-                            title="Share roster with team on WhatsApp"
+                            className="px-2 py-1 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 rounded text-[10px] font-mono font-bold cursor-pointer transition-all uppercase flex items-center gap-1"
+                            title="Share WhatsApp"
                           >
-                            WhatsApp
+                            <span>📱</span> Share WhatsApp
                           </button>
                         )}
                         {/* Before Event Actions: Assign Staff */}
@@ -1981,15 +2117,20 @@ export const OperationsLeads: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => {
-                              const text = `*Event Schedule & Assignment*\n\n`
-                                + `Customer: ${activeOrderInstance?.customer_name}\n`
-                                + `Event: ${ev.event_type === 'Other' ? ev.event_name : ev.event_type}\n`
-                                + `Location: ${parentLeadInstance?.event_location}\n`
-                                + `Reporting: ${allocation.reporting_date} at ${allocation.reporting_time}\n\n`
-                                + `*Team:*\n` + allocStaff.map(s => `- ${s.staff_role}: ${s.staff_name}`).join('\n');
-                                
-                              const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-                              window.open(url, '_blank');
+                              if (activeOrderInstance) {
+                                const assignedStaffNames = getAssignedStaffNamesForOrder(activeOrderInstance);
+                                if (assignedStaffNames.length === 1) {
+                                  const msgText = generateWhatsAppMessageForStaff(activeOrderInstance, assignedStaffNames[0]);
+                                  const url = `https://wa.me/?text=${encodeURIComponent(msgText)}`;
+                                  window.open(url, '_blank');
+                                } else {
+                                  setWhatsappShareModalData({
+                                    orderId: activeOrderInstance.order_id,
+                                    order: activeOrderInstance,
+                                    staffNames: assignedStaffNames
+                                  });
+                                }
+                              }
                             }}
                             className="flex items-center gap-2 px-3 py-1.5 bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/30 text-[#25D366] text-[10px] font-mono font-bold rounded cursor-pointer transition-all uppercase"
                           >
@@ -2187,6 +2328,164 @@ export const OperationsLeads: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Staff Assignment Success Modal */}
+      {successModalData && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-md shadow-2xl p-6 relative animate-in zoom-in duration-200">
+            <button 
+              onClick={() => setSuccessModalData(null)}
+              className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
+              type="button"
+            >
+              ✕
+            </button>
+            <div className="text-center space-y-4">
+              <div className="w-12 h-12 bg-emerald-500/10 border border-emerald-500/25 rounded-full flex items-center justify-center mx-auto text-emerald-400 text-xl font-bold">
+                ✓
+              </div>
+              <h3 className="text-base font-bold text-white">
+                ✅ Staff assigned successfully.
+              </h3>
+              <p className="text-xs text-zinc-400">
+                Roster updated for order <span className="font-mono text-indigo-400 font-bold">{successModalData.orderId}</span>.
+              </p>
+
+              {/* Share via WhatsApp section */}
+              <div className="bg-zinc-950/50 border border-zinc-850 rounded-2xl p-4 text-left space-y-3">
+                <h4 className="text-[10px] font-mono font-bold uppercase text-emerald-400 tracking-wider">
+                  📱 Share via WhatsApp
+                </h4>
+                
+                {(() => {
+                  const assignedStaffNames = getAssignedStaffNamesForOrder(successModalData.order);
+
+                  if (assignedStaffNames.length === 0) {
+                    return (
+                      <div className="text-xs text-zinc-500 italic">No staff assigned yet.</div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
+                      {assignedStaffNames.map((name, idx) => {
+                        const stObj = staff?.find(s => s.name === name);
+                        return (
+                          <div key={idx} className="flex items-center justify-between p-2 bg-zinc-900/50 rounded-xl border border-zinc-800/60">
+                            <div>
+                              <div className="text-xs font-bold text-white">{name}</div>
+                              {stObj?.role && <div className="text-[9.5px] text-zinc-500 font-mono">{stObj.role}</div>}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const msgText = generateWhatsAppMessageForStaff(successModalData.order, name);
+                                const url = `https://wa.me/?text=${encodeURIComponent(msgText)}`;
+                                window.open(url, '_blank');
+                              }}
+                              className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-[10px] font-mono font-bold cursor-pointer transition-colors"
+                            >
+                              Share
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSuccessModalData(null)}
+                  className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono font-bold rounded-xl transition-colors cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Multi-Staff WhatsApp Share picker */}
+      {whatsappShareModalData && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-md shadow-2xl p-6 relative animate-in zoom-in duration-200">
+            <button 
+              onClick={() => setWhatsappShareModalData(null)}
+              className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
+              type="button"
+            >
+              ✕
+            </button>
+            <div className="text-center space-y-4">
+              <div className="w-12 h-12 bg-indigo-500/10 border border-indigo-500/25 rounded-full flex items-center justify-center mx-auto text-indigo-400 text-xl font-bold">
+                📱
+              </div>
+              <h3 className="text-base font-bold text-white">
+                Share WhatsApp Message
+              </h3>
+              <p className="text-xs text-zinc-400">
+                Select an assigned staff member to generate their personalized message.
+              </p>
+
+              {/* Share via WhatsApp list */}
+              <div className="bg-zinc-950/50 border border-zinc-850 rounded-2xl p-4 text-left space-y-3">
+                <h4 className="text-[10px] font-mono font-bold uppercase text-indigo-400 tracking-wider">
+                  Assigned Team Members
+                </h4>
+                
+                {(() => {
+                  if (whatsappShareModalData.staffNames.length === 0) {
+                    return (
+                      <div className="text-xs text-zinc-500 italic">No staff assigned yet.</div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
+                      {whatsappShareModalData.staffNames.map((name, idx) => {
+                        const stObj = staff?.find(s => s.name === name);
+                        return (
+                          <div key={idx} className="flex items-center justify-between p-2 bg-zinc-900/50 rounded-xl border border-zinc-800/60">
+                            <div>
+                              <div className="text-xs font-bold text-white">{name}</div>
+                              {stObj?.role && <div className="text-[9.5px] text-zinc-500 font-mono">{stObj.role}</div>}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const msgText = generateWhatsAppMessageForStaff(whatsappShareModalData.order, name);
+                                const url = `https://wa.me/?text=${encodeURIComponent(msgText)}`;
+                                window.open(url, '_blank');
+                              }}
+                              className="px-2.5 py-1 bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#25D366] border border-[#25D366]/20 rounded-lg text-[10px] font-mono font-bold cursor-pointer transition-colors"
+                            >
+                              Share Msg
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setWhatsappShareModalData(null)}
+                  className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono font-bold rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
