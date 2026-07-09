@@ -1116,6 +1116,17 @@ export const OperationsLeads: React.FC = () => {
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                        {(currentStage === 'Order Confirmed' || currentStage === 'New Order Received') ? (
+                          canEdit && !isLocked && (
+                            <button
+                              onClick={() => startAssigning(ord)}
+                              className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 font-mono font-bold text-[10px] border border-amber-500/30 rounded cursor-pointer transition-all uppercase"
+                            >
+                              Assign Staff
+                            </button>
+                          )
+                        ) : (
+                          <>
                         {/* Always visible: View Details */}
                         <button
                           onClick={() => setProjectDossierId(ord.order_id)}
@@ -1204,7 +1215,7 @@ export const OperationsLeads: React.FC = () => {
                           </button>
                         )}
                         {/* Before Event Actions: Assign Staff */}
-                        {canEdit && !isLocked && (currentStage === 'Order Confirmed' || currentStage === 'New Order Received' || currentStage === 'Operations Assigned') && (
+                        {canEdit && !isLocked && (currentStage === 'Operations Assigned') && (
                           <button
                             onClick={() => startAssigning(ord)}
                             className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 font-mono font-bold text-[10px] border border-amber-500/30 rounded cursor-pointer transition-all uppercase"
@@ -1328,6 +1339,8 @@ export const OperationsLeads: React.FC = () => {
                             </div>
                           );
                         })()}
+                        </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1454,48 +1467,46 @@ export const OperationsLeads: React.FC = () => {
                         {/* 2. Event & Package Coordinates */}
                       <div className="space-y-3">
                         <h4 className="text-[11px] font-mono font-bold uppercase text-amber-500 tracking-wider">
-                          Event & Package Coordinates
+                          Event Details
                         </h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 text-xs bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/80">
                           <div>
-                            <span className="text-[10px] text-zinc-505 block uppercase font-mono">Event Type</span>
+                            <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Event Name</span>
                             <span className="font-semibold text-white uppercase text-[11px] block">
                               {ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A')}
                             </span>
                           </div>
                           <div>
-                            <span className="text-[10px] text-zinc-505 block uppercase font-mono">Shoot Type</span>
+                            <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Event Date</span>
+                            <span className="text-zinc-200 text-[11px] font-mono block">
+                              {ev.event_date || 'N/A'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Event Time</span>
+                            <span className="text-zinc-200 text-[11px] font-mono block">
+                              {ev.event_start_time || 'N/A'} {ev.event_end_time ? `- ${ev.event_end_time}` : ''}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Shoot Type</span>
                             <span className="text-zinc-350 font-medium uppercase text-[11px] block">
                               {ev.event_shoot_type || 'N/A'}
                             </span>
                           </div>
                           <div>
-                            <span className="text-[10px] text-zinc-505 block uppercase font-mono">Guest Pax</span>
-                            <span className="font-mono text-zinc-300 block">{ev.guest_pax || 0}</span>
+                            <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Reporting Date</span>
+                            <span className="text-zinc-200 text-[11px] font-mono block">{allocation.reporting_date || ev.reporting_date || ev.event_date || 'N/A'}</span>
                           </div>
                           <div>
-                            <span className="text-[10px] text-zinc-505 block uppercase font-mono">Staff Pax</span>
-                            <span className="font-mono text-zinc-300 block">{ev.staff_pax || 0}</span>
+                            <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Reporting Time</span>
+                            <span className="text-zinc-200 text-[11px] font-mono block">{allocation.reporting_time || ev.reporting_time || 'N/A'}</span>
                           </div>
-                          
-                          {/* 8. Reporting Information (Read-only) */}
-                          <div className="col-span-1 sm:col-span-2 md:col-span-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800">
-                            <div>
-                              <span className="text-[10px] text-zinc-505 block uppercase font-mono">Reporting Date</span>
-                              <span className="text-zinc-200 text-xs font-mono block mt-1">{allocation.reporting_date || 'N/A'}</span>
-                            </div>
-                            <div>
-                              <span className="text-[10px] text-zinc-505 block uppercase font-mono">Reporting Time</span>
-                              <span className="text-zinc-200 text-xs font-mono block mt-1">{allocation.reporting_time || 'N/A'}</span>
-                            </div>
-                            <div>
-                              <span className="text-[10px] text-zinc-505 block uppercase font-mono">Event Start</span>
-                              <span className="text-zinc-200 text-xs font-mono block mt-1">{allocation.event_start_time || 'N/A'}</span>
-                            </div>
-                            <div>
-                              <span className="text-[10px] text-zinc-505 block uppercase font-mono">Event End</span>
-                              <span className="text-zinc-200 text-xs font-mono block mt-1">{allocation.event_end_time || 'N/A'}</span>
-                            </div>
+                          <div className="col-span-1 sm:col-span-2 lg:col-span-2">
+                            <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Venue / Location</span>
+                            <span className="text-zinc-200 text-[11px] font-sans block leading-tight">
+                              {ev.event_location || parentLeadInstance?.event_location || 'N/A'}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -1731,102 +1742,6 @@ export const OperationsLeads: React.FC = () => {
                                            </span>
                                          )}
                                        </div>
-                                     </div>
-
-                                     {/* Conflict Warning */}
-                                     {hasConflict && (
-                                       <div className="bg-red-500/10 border border-red-500/30 p-3 rounded-lg text-red-400 text-xs space-y-1">
-                                         <div className="font-bold flex items-center gap-1.5">
-                                           <span>⚠️</span> Schedule Conflict
-                                         </div>
-                                         <div>
-                                           This staff member is already assigned during the selected time.
-                                         </div>
-                                       </div>
-                                     )}
-
-                                     {/* Schedule Detail Section */}
-                                     <div className="space-y-3">
-                                       <span className="text-[10px] text-zinc-500 uppercase font-mono block font-bold tracking-wider">
-                                         {hasConflict ? 'Conflicting & Upcoming Events' : 'Upcoming Assigned Events'}
-                                       </span>
-
-                                       {staffEvents.length === 0 ? (
-                                         <div className="text-zinc-500 text-xs italic font-mono pl-1">
-                                           No other scheduled events found.
-                                         </div>
-                                       ) : (
-                                         <div className="space-y-3 divide-y divide-zinc-850/60">
-                                           {staffEvents.map((se, idx) => {
-                                             const isSeConflicting = conflictingEvents.some(c => c.event.id === se.event.id);
-                                             return (
-                                               <div key={se.event.id || idx} className={`pt-3 first:pt-0 space-y-2 ${isSeConflicting ? 'border-l-2 border-red-500 pl-3 bg-red-500/5 p-2 rounded-r-lg' : ''}`}>
-                                                 <div className="flex justify-between items-start gap-2">
-                                                   <div>
-                                                     <span className="text-xs font-bold text-zinc-100 font-sans block">
-                                                       • Event Name: {se.event.event_name || se.event.event_type || 'Unnamed Event'}
-                                                     </span>
-                                                     <span className="text-[10px] text-zinc-400 font-sans">
-                                                       Event Type: {se.event.event_type || 'N/A'} | Shoot Type: {se.event.event_shoot_type || 'N/A'}
-                                                     </span>
-                                                   </div>
-                                                   {isSeConflicting && (
-                                                     <span className="text-[10px] font-mono font-bold uppercase text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">
-                                                       Conflict
-                                                     </span>
-                                                   )}
-                                                 </div>
-
-                                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-[11px] font-mono text-zinc-300">
-                                                   <div>
-                                                     <span className="text-[9px] text-zinc-500 uppercase block">Reporting Date</span>
-                                                     <span>{se.lead.Reporting_date || se.event.event_date || 'N/A'}</span>
-                                                   </div>
-                                                   <div>
-                                                     <span className="text-[9px] text-zinc-500 uppercase block">Reporting Time</span>
-                                                     <span>{se.event.reporting_time || 'N/A'}</span>
-                                                   </div>
-                                                   <div>
-                                                     <span className="text-[9px] text-zinc-500 uppercase block">Event Date</span>
-                                                     <span>{se.event.event_date || 'N/A'}</span>
-                                                   </div>
-                                                   <div>
-                                                     <span className="text-[9px] text-zinc-500 uppercase block">Event Start Time</span>
-                                                     <span>{se.event.event_start_time || 'N/A'}</span>
-                                                   </div>
-                                                   <div>
-                                                     <span className="text-[9px] text-zinc-500 uppercase block">Event End Time</span>
-                                                     <span>{se.event.event_end_time || 'N/A'}</span>
-                                                   </div>
-                                                   <div>
-                                                     <span className="text-[9px] text-zinc-500 uppercase block">Lead ID</span>
-                                                     <span>{se.lead.lead_id || 'N/A'}</span>
-                                                   </div>
-                                                 </div>
-
-                                                 <div className="text-[11px] font-sans text-zinc-300">
-                                                   <span className="text-[9px] text-zinc-500 uppercase font-mono block">Event Location</span>
-                                                   <span>{se.event.event_location || se.lead.event_location || se.lead.address || 'N/A'}</span>
-                                                 </div>
-
-                                                 {se.event.google_maps_link && (
-                                                   <div className="text-[11px] font-sans">
-                                                     <span className="text-[9px] text-zinc-500 uppercase font-mono block">Google Maps Link</span>
-                                                     <a 
-                                                       href={se.event.google_maps_link} 
-                                                       target="_blank" 
-                                                       rel="noopener noreferrer" 
-                                                       className="text-blue-400 hover:text-blue-300 underline break-all"
-                                                     >
-                                                       {se.event.google_maps_link}
-                                                     </a>
-                                                   </div>
-                                                 )}
-                                               </div>
-                                             );
-                                           })}
-                                         </div>
-                                       )}
                                      </div>
                                    </div>
                                  );
