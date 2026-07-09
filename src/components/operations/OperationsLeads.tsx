@@ -92,6 +92,21 @@ export const OperationsLeads: React.FC = () => {
   const [customEndDate, setCustomEndDate] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
 
+  // Track which order's action dropdown is open
+  const [activeMenuOrderId, setActiveMenuOrderId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!activeMenuOrderId) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.actions-menu-container')) {
+        setActiveMenuOrderId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [activeMenuOrderId]);
+
   // Multi-Select Searchable Equipment States
   const [selectedKits, setSelectedKits] = useState<string[]>([]);
   const [equipmentSearchQuery, setEquipmentSearchQuery] = useState('');
@@ -1271,28 +1286,7 @@ export const OperationsLeads: React.FC = () => {
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                        {(currentStage === 'Order Confirmed' || currentStage === 'New Order Received') ? (
-                          canEdit && !isLocked && (
-                            <button
-                              onClick={() => startAssigning(ord)}
-                              className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 font-mono font-bold text-[10px] border border-amber-500/30 rounded cursor-pointer transition-all uppercase"
-                            >
-                              Assign Staff
-                            </button>
-                          )
-                        ) : (
-                          <>
-                        {/* Always visible: View Details */}
-                        <button
-                          onClick={() => setProjectDossierId(ord.order_id)}
-                          className="px-2 py-1 bg-zinc-805 hover:bg-zinc-700 text-zinc-300 rounded text-[10px] font-mono font-bold border border-zinc-700 cursor-pointer transition-all uppercase flex items-center gap-1"
-                          title="View Details"
-                        >
-                          <Eye className="w-3 h-3" /> Details
-                        </button>
-
-                        {/* Update Status */}
-                        {canEdit && !isLocked && (
+                        {canEdit && !isLocked && (currentStage !== 'Order Confirmed' && currentStage !== 'New Order Received') && (
                           <select
                             value=""
                             disabled={isSaving}
@@ -1352,158 +1346,181 @@ export const OperationsLeads: React.FC = () => {
                           </select>
                         )}
 
-                        {/* WhatsApp Staff: visible when assignment exists */}
-                        {crewNames.length > 0 && (
-                          <button
-                            onClick={() => {
-                              const assignedStaffNames = getAssignedStaffNamesForOrder(ord);
-                              if (assignedStaffNames.length === 1) {
-                                // Exactly one staff member: Open WhatsApp directly
-                                const msgText = generateWhatsAppMessageForStaff(ord, assignedStaffNames[0]);
-                                const url = `https://wa.me/?text=${encodeURIComponent(msgText)}`;
-                                window.open(url, '_blank');
-                              } else {
-                                // Multiple staff members: Open picker modal
-                                setWhatsappShareModalData({
-                                  orderId: ord.order_id,
-                                  order: ord,
-                                  staffNames: assignedStaffNames
-                                });
-                              }
-                            }}
-                            className="px-2 py-1 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 rounded text-[10px] font-mono font-bold cursor-pointer transition-all uppercase flex items-center gap-1"
-                            title="Share WhatsApp"
-                          >
-                            <span>📱</span> Share WhatsApp
-                          </button>
-                        )}
-                        {/* Before Event Actions: Assign Staff */}
-                        {canEdit && !isLocked && (currentStage === 'Operations Assigned') && (
-                          <button
-                            onClick={() => startAssigning(ord)}
-                            className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 font-mono font-bold text-[10px] border border-amber-500/30 rounded cursor-pointer transition-all uppercase"
-                          >
-                            Assign Staff
-                          </button>
-                        )}
+                        {(() => {
+                          const actionItems: { label: string; onClick: () => void }[] = [];
 
-                        {/* Edit Assignment: visible in post-assignment stages if canEdit */}
-                        {canEdit && !isLocked && (currentStage === 'Staff Assigned' || currentStage === 'Event Scheduled') && (
-                          <button
-                            onClick={() => startAssigning(ord)}
-                            className="px-2 py-1 bg-sky-505/10 hover:bg-sky-505/20 text-zinc-400 hover:text-zinc-300 font-mono text-[9px] border border-zinc-750 rounded cursor-pointer transition-all uppercase"
-                          >
-                             Roster
-                          </button>
-                        )}
+                          // 1. View Details: Always visible except let's keep it based on business rules or always there
+                          actionItems.push({
+                            label: 'View Details',
+                            onClick: () => {
+                              setProjectDossierId(ord.order_id);
+                              setActiveMenuOrderId(null);
+                            }
+                          });
 
-                        {/* Step 4 - Event Completed: Receive Raw Footage */}
-                        {canEdit && (currentStage === 'Event Completed') && (
-                          <button
-                            onClick={() => {
-                              setReceivingFootageOrderId(ord.order_id);
-                              const existingRf = rawFootage?.find(f => f.order_id === ord.order_id);
-                              const op = getOpDetails(ord.order_id);
-                              setFootageForm({
-                                footage_link: op?.Raw_Footage_Drive_Link || op?.raw_footage_drive_link || ((existingRf && (existingRf.raw_received || existingRf.status === 'Received')) ? (existingRf.server_path || '') : ''),
-                                storage_type: 'Google Drive',
-                                upload_notes: ''
-                              });
-
-                              // Initialize footageHandoverStates for each assigned equipment item
-                              const kits = op?.equipment_kit ? op.equipment_kit.split(',').map((sName: string) => sName.trim()).filter(Boolean) : [];
-                              const initialHandovers: Record<string, {
-                                return_status: 'Returned' | 'Not Returned' | 'Damaged' | 'Missing';
-                                returned_by: string;
-                                return_date: string;
-                                notes: string;
-                              }> = {};
-                              kits.forEach((k: string) => {
-                                initialHandovers[k] = {
-                                  return_status: 'Returned',
-                                  returned_by: currentUserName || 'Operations Team',
-                                  return_date: new Date().toISOString().split('T')[0],
-                                  notes: ''
-                                };
-                              });
-                              setFootageHandoverStates(initialHandovers);
-                              
-                              setHardDiskReceived(false);
-                              setMemoryCardReceived(false);
-                              
-                              const existingPay = payments?.find(p => p.order_id === ord.order_id);
-                              if (existingPay) {
-                                if (existingPay.payment_collection_status) {
-                                  setPaymentCollectionStatus(existingPay.payment_collection_status as any);
+                          // 2. Share WhatsApp: valid when crewNames has elements
+                          if (crewNames.length > 0) {
+                            actionItems.push({
+                              label: 'Share WhatsApp',
+                              onClick: () => {
+                                const assignedStaffNames = getAssignedStaffNamesForOrder(ord);
+                                if (assignedStaffNames.length === 1) {
+                                  const msgText = generateWhatsAppMessageForStaff(ord, assignedStaffNames[0]);
+                                  const url = `https://wa.me/?text=${encodeURIComponent(msgText)}`;
+                                  window.open(url, '_blank');
                                 } else {
-                                  if (existingPay.payment_status === 'Fully Paid') {
-                                    setPaymentCollectionStatus('Full Payment Received');
-                                  } else if (existingPay.payment_status === 'Partially Paid') {
-                                    setPaymentCollectionStatus('Partial Payment Received');
-                                  } else {
-                                    setPaymentCollectionStatus('Payment Pending');
-                                  }
+                                  setWhatsappShareModalData({
+                                    orderId: ord.order_id,
+                                    order: ord,
+                                    staffNames: assignedStaffNames
+                                  });
                                 }
-                                setAdditionalReceived(existingPay.additional_received || existingPay.final_payment_received || 0);
-                              } else {
-                                setPaymentCollectionStatus('Payment Pending');
-                                setAdditionalReceived(0);
+                                setActiveMenuOrderId(null);
                               }
-                            }}
-                            className="px-2 py-1 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-400 font-mono font-bold text-[10px] rounded cursor-pointer transition-all uppercase animate-pulse"
-                          >
-                            Receive Raw Footage
-                          </button>
-                        )}
-
-                        {/* After Footage Uploaded View/Copy/Open Actions */}
-                        {currentStage === 'Raw Footage Received' && (() => {
-                          const rf = rawFootage ? rawFootage.find(f => f.order_id === ord.order_id) : null;
-                          const path = rf?.server_path || '';
-                          
-                          if (!path) {
-                            return (
-                              <span className="text-zinc-550 italic font-mono text-[10px] bg-zinc-950/50 px-2 py-1 rounded border border-zinc-800/50">
-                                No Raw Footage Link Available
-                              </span>
-                            );
+                            });
                           }
 
-                          return (
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => alert(`Footage Link (via ${rf?.storage_type || 'Google Drive'}): \n\n${path}`)}
-                                className="px-1.5 py-1 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/20 text-emerald-450 font-mono text-[9px] font-bold rounded cursor-pointer"
-                                title="View Footage Link"
-                              >
-                                View Link
-                              </button>
-                              <button
-                                onClick={() => {
-                                  if (path) {
-                                    navigator.clipboard.writeText(path);
-                                    alert('Copied raw footage drive link to clipboard!');
+                          // 3. Assign Staff (before assignments exist / Order Confirmed / New Order Received / Operations Assigned)
+                          if (canEdit && !isLocked && (currentStage === 'Order Confirmed' || currentStage === 'New Order Received' || currentStage === 'Operations Assigned')) {
+                            actionItems.push({
+                              label: 'Assign Staff',
+                              onClick: () => {
+                                startAssigning(ord);
+                                setActiveMenuOrderId(null);
+                              }
+                            });
+                          }
+
+                          // 4. View Roster (Staff Assigned / Event Scheduled)
+                          if (canEdit && !isLocked && (currentStage === 'Staff Assigned' || currentStage === 'Event Scheduled')) {
+                            actionItems.push({
+                              label: 'View Roster',
+                              onClick: () => {
+                                startAssigning(ord);
+                                setActiveMenuOrderId(null);
+                              }
+                            });
+                          }
+
+                          // 5. Receive Raw Footage (Event Completed)
+                          if (canEdit && (currentStage === 'Event Completed')) {
+                            actionItems.push({
+                              label: 'Receive Raw Footage',
+                              onClick: () => {
+                                setReceivingFootageOrderId(ord.order_id);
+                                const existingRf = rawFootage?.find(f => f.order_id === ord.order_id);
+                                const op = getOpDetails(ord.order_id);
+                                setFootageForm({
+                                  footage_link: op?.Raw_Footage_Drive_Link || op?.raw_footage_drive_link || ((existingRf && (existingRf.raw_received || existingRf.status === 'Received')) ? (existingRf.server_path || '') : ''),
+                                  storage_type: 'Google Drive',
+                                  upload_notes: ''
+                                });
+
+                                const kits = op?.equipment_kit ? op.equipment_kit.split(',').map((sName: string) => sName.trim()).filter(Boolean) : [];
+                                const initialHandovers: Record<string, {
+                                  return_status: 'Returned' | 'Not Returned' | 'Damaged' | 'Missing';
+                                  returned_by: string;
+                                  return_date: string;
+                                  notes: string;
+                                }> = {};
+                                kits.forEach((k: string) => {
+                                  initialHandovers[k] = {
+                                    return_status: 'Returned',
+                                    returned_by: currentUserName || 'Operations Team',
+                                    return_date: new Date().toISOString().split('T')[0],
+                                    notes: ''
+                                  };
+                                });
+                                setFootageHandoverStates(initialHandovers);
+                                
+                                setHardDiskReceived(false);
+                                setMemoryCardReceived(false);
+                                
+                                const existingPay = payments?.find(p => p.order_id === ord.order_id);
+                                if (existingPay) {
+                                  if (existingPay.payment_collection_status) {
+                                    setPaymentCollectionStatus(existingPay.payment_collection_status as any);
+                                  } else {
+                                    if (existingPay.payment_status === 'Fully Paid') {
+                                      setPaymentCollectionStatus('Full Payment Received');
+                                    } else if (existingPay.payment_status === 'Partially Paid') {
+                                      setPaymentCollectionStatus('Partial Payment Received');
+                                    } else {
+                                      setPaymentCollectionStatus('Payment Pending');
+                                    }
                                   }
-                                }}
-                                className="px-1.5 py-1 bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-450 font-mono text-[9px] font-bold rounded cursor-pointer"
-                                title="Copy Footage Link"
+                                  setAdditionalReceived(existingPay.additional_received || existingPay.final_payment_received || 0);
+                                } else {
+                                  setPaymentCollectionStatus('Payment Pending');
+                                  setAdditionalReceived(0);
+                                }
+                                setActiveMenuOrderId(null);
+                              }
+                            });
+                          }
+
+                          // 6. View Link, Copy Link, Open Link (Raw Footage Received)
+                          if (currentStage === 'Raw Footage Received') {
+                            const rf = rawFootage ? rawFootage.find(f => f.order_id === ord.order_id) : null;
+                            const path = rf?.server_path || '';
+                            if (path) {
+                              actionItems.push({
+                                label: 'View Footage Link',
+                                onClick: () => {
+                                  alert(`Footage Link (via ${rf?.storage_type || 'Google Drive'}): \n\n${path}`);
+                                  setActiveMenuOrderId(null);
+                                }
+                              });
+                              actionItems.push({
+                                label: 'Copy Footage Link',
+                                onClick: () => {
+                                  navigator.clipboard.writeText(path);
+                                  alert('Copied raw footage drive link to clipboard!');
+                                  setActiveMenuOrderId(null);
+                                }
+                              });
+                              actionItems.push({
+                                label: 'Open Footage Link',
+                                onClick: () => {
+                                  window.open(path, '_blank');
+                                  setActiveMenuOrderId(null);
+                                }
+                              });
+                            }
+                          }
+
+                          const isOpen = activeMenuOrderId === ord.order_id;
+
+                          return (
+                            <div className="relative inline-block text-left">
+                              <button
+                                type="button"
+                                onClick={() => setActiveMenuOrderId(isOpen ? null : ord.order_id)}
+                                className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded-lg text-xs font-mono font-bold border border-zinc-700 cursor-pointer transition-all inline-flex items-center gap-1.5"
                               >
-                                Copy Link
+                                Actions <span className="text-[10px] text-zinc-400">▼</span>
                               </button>
-                              <a
-                                href={path}
-                                target="_blank"
-                                referrerPolicy="no-referrer"
-                                className="px-1.5 py-1 bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-505/20 text-indigo-400 font-mono text-[9px] font-bold rounded cursor-pointer inline-block"
-                                title="Open Drive Link"
-                              >
-                                Open Link
-                              </a>
+                              {isOpen && (
+                                <div className="absolute right-0 mt-1 w-48 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl z-[150] py-1 text-left animate-in fade-in slide-in-from-top-1 duration-100">
+                                  {actionItems.map((act, aIdx) => (
+                                    <button
+                                      key={aIdx}
+                                      onClick={act.onClick}
+                                      className="w-full text-left px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-850 hover:text-white transition-colors cursor-pointer block font-mono border-b border-zinc-900/40 last:border-0"
+                                    >
+                                      {act.label}
+                                    </button>
+                                  ))}
+                                  {actionItems.length === 0 && (
+                                    <div className="px-3 py-2 text-xs text-zinc-500 italic font-mono">
+                                      No actions available
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           );
                         })()}
-                        </>
-                        )}
                       </div>
                     </td>
                   </tr>
