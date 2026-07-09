@@ -28,7 +28,7 @@ import { AppLogo } from './components/AppLogo';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Briefcase, Camera, Video, Landmark, Shield, Users, Search, Info, Target, Sparkles, Menu, RefreshCw, Activity, Bell,
-  UserPlus, Truck, Layers, CheckSquare, Clock, Play, BarChart3, LogOut, Calendar, TrendingUp, DollarSign, FileText
+  UserPlus, Truck, Layers, CheckSquare, Clock, Play, BarChart3, LogOut, Calendar, TrendingUp, DollarSign, FileText, Package
 } from 'lucide-react';
 
 const AccessDeniedView: React.FC<{ section: string }> = ({ section }) => {
@@ -381,7 +381,8 @@ const MainAppContent: React.FC = () => {
             {[
               { id: 'operations_leads', label: 'Operations Leads', icon: Briefcase },
               { id: 'operations_calendar', label: 'Operations Calendar', icon: Calendar },
-              { id: 'operations_staff', label: 'Staff Directory', icon: Users }
+              { id: 'operations_staff', label: 'Staff Directory', icon: Users },
+              { id: 'equipment_management', label: 'Equipment Inventory', icon: Package }
             ].map((tab) => {
               const IconComponent = tab.icon;
               const isSelected = activeOpSubTab === tab.id;
