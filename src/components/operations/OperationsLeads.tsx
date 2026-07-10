@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useRole } from '../RoleContext';
 import { 
   X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin
@@ -2828,7 +2829,7 @@ export const OperationsLeads: React.FC = () => {
       })()}
 
       {/* Floating Action Menu */}
-      {activeMenuOrderId && (
+      {activeMenuOrderId && createPortal(
         <div 
           className="fixed z-[9999] min-w-[150px] max-w-[200px] w-max bg-zinc-950/95 backdrop-blur-md border border-zinc-800/80 rounded-xl shadow-2xl py-1 text-left animate-in fade-in zoom-in-95 duration-150 flex flex-col overflow-hidden actions-menu-container"
           style={{
@@ -2857,7 +2858,7 @@ export const OperationsLeads: React.FC = () => {
             )}
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   );
 };
