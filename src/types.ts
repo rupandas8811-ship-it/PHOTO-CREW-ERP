@@ -191,6 +191,7 @@ export interface Lead {
   Specify_Custom_Lead_Source_Name?: string | null;
   package_price?: number;
   deliverables_description?: string;
+  Team_Members?: string;
   notes_special_customizations?: string;
   quotation_discount?: number;
   additional_services_cost?: number;

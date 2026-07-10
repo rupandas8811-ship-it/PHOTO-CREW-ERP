@@ -2271,13 +2271,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const leadId = selectedLead?.lead_id;
     if (!leadId || leadId === 'DRAFT-LEAD' || !pkgId || !supabaseClient) return;
 
-    const selectedPkg = packages.find(p => p.package_id === pkgId);
-    
-    const cost = Number(wizardLeadData.package_cost) || Number(selectedPkg?.price) || 0;
-    const delivStr = wizardLeadData.deliverables || selectedPkg?.deliverables || '';
-    const noteStr = wizardLeadData.notes || '';
-
-    // Generate JSON for Team_Members_Included based on updatedInclusions
+    // Generate JSON for Team_Members based on updatedInclusions
     const inclusionsList = updatedInclusions[pkgId] || [];
     const teamMembersJson = (crmEvents && crmEvents.length > 0)
       ? crmEvents.map(event => {
@@ -2295,91 +2289,35 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           }
         ];
 
-    // Generate JSON for deliverables_descriptionn based on updatedDeliverables
+    // Generate JSON for deliverables_description based on updatedDeliverables
     const deliverablesList = updatedDeliverables[pkgId] || [];
-    const deliverablesJson = (crmEvents && crmEvents.length > 0)
-      ? crmEvents.map(event => {
-          return {
-            event_name: event.event_name || event.event_type || 'Unnamed Event',
-            deliverables: deliverablesList.filter(Boolean)
-          };
-        })
-      : [
-          {
-            event_name: "General",
-            deliverables: deliverablesList.filter(Boolean)
-          }
-        ];
+    const deliverablesJson = deliverablesList.filter(Boolean);
 
-    const teamMembersTxt = (updatedInclusions[pkgId] || []).join(', ');
-    const deliverablesTxt = (updatedDeliverables[pkgId] || []).join(', ');
-
-    const qty = 1;
-    const totalAmt = cost * qty;
-    const disc = 0;
-    const finalAmt = totalAmt - disc;
-
-    const payload = {
-      lead_id: leadId,
-      package_id: pkgId,
-      package_name: selectedPkg?.package_name || 'Selected Package',
-      package_cost: cost,
-      quantity: qty,
-      total_amount: totalAmt,
-      discount: disc,
-      final_amount: finalAmt,
-      deliverables_description: delivStr,
-      notes_special_customizations: noteStr,
-      additional_services_cost: Number(quoteAdditional || 0),
-      team_members: teamMembersTxt,
-      deliverables: deliverablesTxt,
-      editable_inclusions: updatedInclusions,
-      editable_deliverables: updatedDeliverables,
-      Team_Members_Included: teamMembersJson,
-      deliverables_descriptionn: deliverablesJson,
-    };
+    const teamMembersText = JSON.stringify(teamMembersJson);
+    const deliverablesText = JSON.stringify(deliverablesJson);
 
     try {
-      // Check if record exists
-      const { data: existing, error: checkError } = await supabaseClient
-        .from('lead_packages')
-        .select('lead_package_id')
-        .eq('lead_id', leadId)
-        .eq('package_id', pkgId)
-        .maybeSingle();
+      // Always UPDATE the existing lead record
+      const { error: updateError } = await supabaseClient
+        .from('leads')
+        .update({
+          Team_Members: teamMembersText,
+          deliverables_description: deliverablesText
+        })
+        .eq('lead_id', leadId);
 
-      if (checkError) {
-        console.error("Error checking lead_package:", checkError);
-      }
-
-      if (existing) {
-        // UPDATE existing record
-        const { error: updateError } = await supabaseClient
-          .from('lead_packages')
-          .update(payload)
-          .eq('lead_package_id', existing.lead_package_id);
-
-        if (updateError) {
-          console.error("Error updating lead_package:", updateError);
-        } else {
-          showToastMsg("✅ Package updated successfully.", "success");
-        }
+      if (updateError) {
+        console.error("Error updating leads table via saveStep3DataRealtime:", updateError);
       } else {
-        // INSERT new record
-        const newRecordId = `LP-${leadId}-${pkgId}`;
-        const { error: insertError } = await supabaseClient
-          .from('lead_packages')
-          .insert({
-            ...payload,
-            lead_package_id: newRecordId,
-            created_at: new Date().toISOString(),
-          });
-
-        if (insertError) {
-          console.error("Error inserting lead_package:", insertError);
-        } else {
-          showToastMsg("✅ Package updated successfully.", "success");
-        }
+        // Update local React state to ensure 100% synchronization
+        setSelectedLead(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            Team_Members: teamMembersText,
+            deliverables_description: deliverablesText
+          };
+        });
       }
     } catch (err) {
       console.error("Exception in saveStep3DataRealtime:", err);
@@ -2782,60 +2720,69 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const fetchSupabasePackageData = async () => {
         try {
           const { data, error } = await supabaseClient
-            .from('lead_packages')
-            .select('editable_deliverables, editable_inclusions, Team_Members_Included, deliverables_descriptionn')
+            .from('leads')
+            .select('Team_Members, deliverables_description')
             .eq('lead_id', selectedLead.lead_id)
-            .eq('package_id', pkgId)
-            .limit(1)
             .maybeSingle();
           
           if (!error && data) {
             const newInclusions: Record<string, string[]> = {};
             const newDeliverables: Record<string, string[]> = {};
-            let hasLoadedInclusions = false;
-            let hasLoadedDeliverables = false;
 
-            if (data.Team_Members_Included && Array.isArray(data.Team_Members_Included)) {
-              data.Team_Members_Included.forEach((item: any) => {
-                const eventName = item.event_name;
-                const members = Array.isArray(item.team_members) ? item.team_members : [];
-                if (eventName === 'General') {
-                  newInclusions[pkgId] = members;
-                } else if (crmEvents && crmEvents.length > 0) {
-                  const matchingEvent = crmEvents.find(e => 
-                    (e.event_name || e.event_type || 'Unnamed Event') === eventName
-                  );
-                  if (matchingEvent) {
-                    newInclusions[`${pkgId}_${matchingEvent.id}`] = members;
-                  } else {
-                    newInclusions[`${pkgId}_${eventName}`] = members;
-                  }
-                } else {
-                  newInclusions[`${pkgId}_${eventName}`] = members;
+            if (data.Team_Members) {
+              try {
+                const parsedTeam = JSON.parse(data.Team_Members);
+                if (Array.isArray(parsedTeam)) {
+                  parsedTeam.forEach((item: any) => {
+                    const eventName = item.event_name;
+                    const members = Array.isArray(item.team_members) ? item.team_members : [];
+                    if (eventName === 'General') {
+                      newInclusions[pkgId] = members;
+                    } else if (crmEvents && crmEvents.length > 0) {
+                      const matchingEvent = crmEvents.find(e => 
+                        (e.event_name || e.event_type || 'Unnamed Event') === eventName
+                      );
+                      if (matchingEvent) {
+                        newInclusions[`${pkgId}_${matchingEvent.id}`] = members;
+                      } else {
+                        newInclusions[`${pkgId}_${eventName}`] = members;
+                      }
+                    } else {
+                      newInclusions[`${pkgId}_${eventName}`] = members;
+                    }
+                  });
+                  setEditableInclusions(newInclusions);
                 }
-              });
-              setEditableInclusions(newInclusions);
-              hasLoadedInclusions = true;
-            }
-
-            if (data.deliverables_descriptionn && Array.isArray(data.deliverables_descriptionn)) {
-              const firstItem = data.deliverables_descriptionn[0];
-              if (firstItem && Array.isArray(firstItem.deliverables)) {
-                newDeliverables[pkgId] = firstItem.deliverables;
+              } catch (e) {
+                console.error('Error parsing Team_Members from leads:', e);
               }
-              setEditableDeliverables(newDeliverables);
-              hasLoadedDeliverables = true;
             }
 
-            if (!hasLoadedInclusions && data.editable_inclusions && Object.keys(data.editable_inclusions).length > 0) {
-              setEditableInclusions(data.editable_inclusions as Record<string, string[]>);
-            }
-            if (!hasLoadedDeliverables && data.editable_deliverables && Object.keys(data.editable_deliverables).length > 0) {
-              setEditableDeliverables(data.editable_deliverables as Record<string, string[]>);
+            if (data.deliverables_description) {
+              try {
+                const parsedDel = JSON.parse(data.deliverables_description);
+                if (Array.isArray(parsedDel)) {
+                  if (typeof parsedDel[0] === 'string') {
+                    newDeliverables[pkgId] = parsedDel;
+                  } else if (parsedDel[0] && Array.isArray(parsedDel[0].deliverables)) {
+                    newDeliverables[pkgId] = parsedDel[0].deliverables;
+                  }
+                  setEditableDeliverables(newDeliverables);
+                }
+              } catch (e) {
+                // Not JSON, handle as comma/newline separated list
+                const delList = data.deliverables_description
+                  ? data.deliverables_description.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
+                  : [];
+                if (delList.length > 0) {
+                  newDeliverables[pkgId] = delList;
+                  setEditableDeliverables(newDeliverables);
+                }
+              }
             }
           }
         } catch (e) {
-          console.error('Error fetching lead_package from Supabase', e);
+          console.error('Error fetching leads details from Supabase', e);
         }
       };
       fetchSupabasePackageData();
