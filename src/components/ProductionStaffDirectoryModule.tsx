@@ -44,7 +44,15 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
   const [formDepartment, setFormDepartment] = useState('Post-Production');
   const [formStatus, setFormStatus] = useState<'Active' | 'Inactive'>('Active');
   const [formSpeciality, setFormSpeciality] = useState('');
-  const [formStaffType, setFormStaffType] = useState<'In-House' | 'Freelancer'>('In-House');
+  const [formStaffType, setFormStaffType] = useState<'In-House' | 'Freelancer' | ''>('');
+  
+  const [staffTypeError, setStaffTypeError] = useState(false);
+  const [toastMessage, setToastMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+
+  const showToast = (type: 'success' | 'error', text: string) => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   // Open the add form
   const openAddForm = () => {
@@ -64,7 +72,8 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     // Default to the first active speciality or empty
     const firstActiveSpec = specialities.find(s => s.active)?.name || '';
     setFormSpeciality(firstActiveSpec);
-    setFormStaffType('In-House');
+    setFormStaffType('');
+    setStaffTypeError(false);
     
     setIsFormOpen(true);
   };
@@ -82,7 +91,8 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     setFormDepartment(member.department || 'Post-Production');
     setFormStatus(member.status);
     setFormSpeciality(member.production_role_speciality || '');
-    setFormStaffType(member.staff_type || (member as any).Staff_Type || 'In-House');
+    setFormStaffType(member.staff_type || (member as any).Staff_Type || '');
+    setStaffTypeError(false);
     setIsFormOpen(true);
   };
 
@@ -96,6 +106,12 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     if (!formEmail.trim()) { alert('Email Address is required.'); return; }
     if (!formSpeciality) { alert('Role Speciality is required.'); return; }
     if (!formDepartment) { alert('Department is required.'); return; }
+    
+    setStaffTypeError(false);
+    if (!formStaffType) {
+      setStaffTypeError(true);
+      return;
+    }
 
     const payload = {
       name: formName.trim(),
@@ -120,21 +136,20 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
           ...payload,
           ...{ employee_id: formEmployeeId.trim(), city: formCity.trim() || 'N/A' } as any
         });
-        alert('Staff details updated successfully.');
+        showToast('success', '✅ Production staff saved successfully.');
       } else {
         // New Staff Mode
         const res = await addStaff({
           ...payload,
           ...{ employee_id: formEmployeeId.trim(), city: formCity.trim() || 'N/A' } as any
         });
-        alert('New staff registered successfully.');
+        showToast('success', '✅ Production staff saved successfully.');
       }
       setIsFormOpen(false);
       setEditingStaff(null);
     } catch (err: any) {
       console.warn("Failed saving staff", err?.message || err);
-      const errorMsg = err?.message || "Check network or permissions.";
-      alert(`Error: ${errorMsg}`);
+      showToast('error', '❌ Failed to save Production Staff.');
     }
   };
 
@@ -384,6 +399,23 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in text-zinc-150">
+      {/* TOAST MESSAGE */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className={`fixed top-6 right-6 z-[999] px-6 py-3 rounded-xl shadow-2xl border flex items-center gap-3 font-mono text-xs font-bold uppercase tracking-wider ${
+              toastMessage.type === 'success' 
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+                : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+            }`}
+          >
+            {toastMessage.text}
+          </motion.div>
+        )}
+      </AnimatePresence>
       
       {/* Header Banner */}
       <div className="relative overflow-hidden bg-zinc-950 border border-zinc-900 rounded-2xl p-6 shadow-2xl">
@@ -819,18 +851,24 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                   
                   {/* Staff Type (In-House / Freelancer) */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold block">
+                    <label className={`text-[10px] uppercase tracking-widest font-bold block ${staffTypeError ? 'text-rose-500' : 'text-zinc-500'}`}>
                       Staff Type *
                     </label>
                     <select
                       value={formStaffType}
-                      onChange={(e) => setFormStaffType(e.target.value as any)}
-                      className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-zinc-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-amber-500"
-                      required
+                      onChange={(e) => {
+                        setFormStaffType(e.target.value as any);
+                        if (e.target.value) setStaffTypeError(false);
+                      }}
+                      className={`w-full bg-zinc-900 border rounded-xl px-3.5 py-2.5 text-zinc-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-amber-500 ${staffTypeError ? 'border-rose-500/50' : 'border-zinc-850'}`}
                     >
+                      <option value="">-- Select Staff Type --</option>
                       <option value="In-House">In-House</option>
                       <option value="Freelancer">Freelancer</option>
                     </select>
+                    {staffTypeError && (
+                      <p className="text-[10px] text-rose-500 mt-1">Please select Staff Type.</p>
+                    )}
                   </div>
                 </div>
 
