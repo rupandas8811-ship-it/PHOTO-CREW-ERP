@@ -2793,7 +2793,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else {
           await pushInsert('lead_packages', {
             ...updatedPkgData,
-            lead_package_id: `LP-${leadId}-${index}-${Math.floor(100 + Math.random() * 900)}`,
+            lead_package_id: `LP-${leadId}-${pkg.package_id}`,
             lead_id: leadId,
             created_at: new Date().toISOString()
           } as LeadPackage);

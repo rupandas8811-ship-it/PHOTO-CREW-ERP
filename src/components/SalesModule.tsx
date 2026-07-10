@@ -2271,10 +2271,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const leadId = selectedLead?.lead_id;
     if (!leadId || leadId === 'DRAFT-LEAD' || !pkgId || !supabaseClient) return;
 
+    const selectedPkg = packages.find(p => p.package_id === pkgId);
+    
+    const cost = Number(wizardLeadData.package_cost) || Number(selectedPkg?.price) || 0;
+    const delivStr = wizardLeadData.deliverables || selectedPkg?.deliverables || '';
+    const noteStr = wizardLeadData.notes || '';
+
+    // Generate JSON for Team_Members_Included based on updatedInclusions
+    const inclusionsList = updatedInclusions[pkgId] || [];
     const teamMembersJson = (crmEvents && crmEvents.length > 0)
       ? crmEvents.map(event => {
           const eventKey = `${pkgId}_${event.id}`;
-          const list = updatedInclusions[eventKey] !== undefined ? updatedInclusions[eventKey] : (updatedInclusions[pkgId] || []);
+          const list = updatedInclusions[eventKey] !== undefined ? updatedInclusions[eventKey] : inclusionsList;
           return {
             event_name: event.event_name || event.event_type || 'Unnamed Event',
             team_members: list.filter(Boolean)
@@ -2283,42 +2291,95 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       : [
           {
             event_name: "General",
-            team_members: (updatedInclusions[pkgId] || []).filter(Boolean)
+            team_members: inclusionsList.filter(Boolean)
           }
         ];
 
+    // Generate JSON for deliverables_descriptionn based on updatedDeliverables
+    const deliverablesList = updatedDeliverables[pkgId] || [];
     const deliverablesJson = (crmEvents && crmEvents.length > 0)
       ? crmEvents.map(event => {
           return {
             event_name: event.event_name || event.event_type || 'Unnamed Event',
-            deliverables: (updatedDeliverables[pkgId] || []).filter(Boolean)
+            deliverables: deliverablesList.filter(Boolean)
           };
         })
       : [
           {
             event_name: "General",
-            deliverables: (updatedDeliverables[pkgId] || []).filter(Boolean)
+            deliverables: deliverablesList.filter(Boolean)
           }
         ];
 
-    try {
-      const { error } = await supabaseClient
-        .from('lead_packages')
-        .update({
-          Team_Members_Included: teamMembersJson,
-          deliverables_descriptionn: deliverablesJson,
-          editable_inclusions: updatedInclusions,
-          editable_deliverables: updatedDeliverables,
-          team_members: (updatedInclusions[pkgId] || []).join(', '),
-          deliverables: (updatedDeliverables[pkgId] || []).join(', ')
-        })
-        .eq('lead_id', leadId)
-        .eq('package_id', pkgId);
+    const teamMembersTxt = (updatedInclusions[pkgId] || []).join(', ');
+    const deliverablesTxt = (updatedDeliverables[pkgId] || []).join(', ');
 
-      if (error) {
-        console.error("Error in saveStep3DataRealtime:", error);
+    const qty = 1;
+    const totalAmt = cost * qty;
+    const disc = 0;
+    const finalAmt = totalAmt - disc;
+
+    const payload = {
+      lead_id: leadId,
+      package_id: pkgId,
+      package_name: selectedPkg?.package_name || 'Selected Package',
+      package_cost: cost,
+      quantity: qty,
+      total_amount: totalAmt,
+      discount: disc,
+      final_amount: finalAmt,
+      deliverables_description: delivStr,
+      notes_special_customizations: noteStr,
+      additional_services_cost: Number(quoteAdditional || 0),
+      team_members: teamMembersTxt,
+      deliverables: deliverablesTxt,
+      editable_inclusions: updatedInclusions,
+      editable_deliverables: updatedDeliverables,
+      Team_Members_Included: teamMembersJson,
+      deliverables_descriptionn: deliverablesJson,
+    };
+
+    try {
+      // Check if record exists
+      const { data: existing, error: checkError } = await supabaseClient
+        .from('lead_packages')
+        .select('lead_package_id')
+        .eq('lead_id', leadId)
+        .eq('package_id', pkgId)
+        .maybeSingle();
+
+      if (checkError) {
+        console.error("Error checking lead_package:", checkError);
+      }
+
+      if (existing) {
+        // UPDATE existing record
+        const { error: updateError } = await supabaseClient
+          .from('lead_packages')
+          .update(payload)
+          .eq('lead_package_id', existing.lead_package_id);
+
+        if (updateError) {
+          console.error("Error updating lead_package:", updateError);
+        } else {
+          showToastMsg("✅ Package updated successfully.", "success");
+        }
       } else {
-        showToastMsg("✅ Package updated successfully.", "success");
+        // INSERT new record
+        const newRecordId = `LP-${leadId}-${pkgId}`;
+        const { error: insertError } = await supabaseClient
+          .from('lead_packages')
+          .insert({
+            ...payload,
+            lead_package_id: newRecordId,
+            created_at: new Date().toISOString(),
+          });
+
+        if (insertError) {
+          console.error("Error inserting lead_package:", insertError);
+        } else {
+          showToastMsg("✅ Package updated successfully.", "success");
+        }
       }
     } catch (err) {
       console.error("Exception in saveStep3DataRealtime:", err);
@@ -2792,32 +2853,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD' && pkgId) {
       const updateDatabase = async () => {
         try {
-          const activePackagesList = (leadPackages || []).filter(lp => lp.lead_id === selectedLead.lead_id);
-          const payloadToSave = activePackagesList.map(lp => {
-            const isPrimary = lp.package_id === pkgId;
-            const incStr = (editableInclusions[lp.package_id!] || []).join(', ');
-            const delStr = (editableDeliverables[lp.package_id!] || []).join(', ');
-            return {
-              package_id: lp.package_id!,
-              package_name: lp.package_name || 'Selected Package',
-              package_cost: isPrimary ? Number(wizardLeadData.package_cost) : lp.package_cost,
-              quantity: lp.quantity || 1,
-              total_amount: isPrimary ? Number(wizardLeadData.package_cost) : lp.total_amount,
-              discount: lp.discount || 0,
-              final_amount: isPrimary ? Number(wizardLeadData.package_cost) : lp.final_amount,
-              deliverables_description: isPrimary ? wizardLeadData.deliverables : lp.deliverables_description,
-              notes_special_customizations: isPrimary ? wizardLeadData.notes : lp.notes_special_customizations,
-              additional_services_cost: lp.additional_services_cost || 0,
-              team_members: incStr || lp.team_members || '',
-              deliverables: delStr || lp.deliverables || '',
-              editable_inclusions: editableInclusions,
-              editable_deliverables: editableDeliverables,
-            };
-          });
-
-          await saveLeadPackages(selectedLead.lead_id, payloadToSave);
+          await saveStep3DataRealtime(editableInclusions, editableDeliverables);
         } catch (e) {
-          console.error('Error updating lead_package via saveLeadPackages', e);
+          console.error('Error updating lead_package via saveStep3DataRealtime', e);
         }
       };
       const timeoutId = setTimeout(() => {
@@ -3831,29 +3869,106 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         : [];
       const defaultDel = delList.length > 0 ? delList : ['High Resolution Edited Photos'];
 
-      setEditableInclusions((prevInclusions) => {
-        const newInclusions = { ...prevInclusions };
-        newInclusions[packageId] = defaultInc;
-        
-        if (crmEvents && crmEvents.length > 0) {
-          crmEvents.forEach((ev) => {
-            newInclusions[`${packageId}_${ev.id}`] = [...defaultInc];
-          });
-        }
-        return newInclusions;
-      });
+      const newInclusions = { ...editableInclusions };
+      newInclusions[packageId] = defaultInc;
+      
+      if (crmEvents && crmEvents.length > 0) {
+        crmEvents.forEach((ev) => {
+          newInclusions[`${packageId}_${ev.id}`] = [...defaultInc];
+        });
+      }
 
-      setEditableDeliverables((prev) => {
-        const newDeliverables = { ...prev };
-        newDeliverables[packageId] = defaultDel;
-        return newDeliverables;
-      });
+      const newDeliverables = { ...editableDeliverables };
+      newDeliverables[packageId] = defaultDel;
+
+      setEditableInclusions(newInclusions);
+      setEditableDeliverables(newDeliverables);
+
+      // Immediately save the selected package with default inclusions and deliverables to Supabase
+      saveStep3DataRealtime(newInclusions, newDeliverables);
     } else {
       setWizardLeadData((prev) => ({
         ...prev,
         selected_package_id: '',
         Select_Package_Option: '',
       }));
+    }
+  };
+
+  const handleSavePackageOnly = async () => {
+    if (!selectedLead) return;
+    setIsSaving(true);
+    try {
+      // 1. Validate Sales Executive details as required
+      if (!salesStaffName || !salesStaffName.trim()) {
+        showToastMsg("Please enter Sales Staff Name.", "error");
+        setIsSaving(false);
+        return;
+      }
+      if (!salesStaffMobile || !salesStaffMobile.trim() || salesStaffMobile.trim().length !== 10 || !/^\d+$/.test(salesStaffMobile.trim())) {
+        showToastMsg("Please enter a valid 10-digit Sales Staff Mobile Number.", "error");
+        setIsSaving(false);
+        return;
+      }
+
+      const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
+      if (!pkgId || pkgId.trim() === '') {
+        showToastMsg("Please select a package before continuing.", "error");
+        setIsSaving(false);
+        return;
+      }
+
+      // 2. Perform the full save of lead_packages to Supabase using our robust real-time save logic
+      await saveStep3DataRealtime(editableInclusions, editableDeliverables);
+
+      // 3. Update the lead record in Supabase with latest Step 3 package / pricing / staff info
+      const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
+      
+      const updatedEvents = crmEvents.map(ev => ({
+        ...ev,
+        assigned_staff_names: salesStaffName,
+        assigned_staff_mobiles: salesStaffMobile
+      }));
+
+      await updateLead(selectedLead.lead_id, {
+        budget: Number(wizardLeadData.package_cost),
+        package_price: Number(wizardLeadData.package_cost),
+        deliverables_description: wizardLeadData.deliverables,
+        notes_special_customizations: wizardLeadData.notes,
+        remarks: updatedRemarks,
+        Select_Package_Option: pkgId,
+        Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
+        Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
+        Final_Quotation_Amount: Math.max(0, Number(wizardLeadData.package_cost) + Number(quoteAdditional || 0) - Number(quoteDiscount || 0)),
+        events: updatedEvents
+      });
+
+      // Update the local selectedLead state so that the UI reflects it
+      setSelectedLead(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          budget: Number(wizardLeadData.package_cost),
+          package_price: Number(wizardLeadData.package_cost),
+          deliverables_description: wizardLeadData.deliverables,
+          notes_special_customizations: wizardLeadData.notes,
+          remarks: updatedRemarks,
+          Select_Package_Option: pkgId,
+          sales_staff_name: salesStaffName,
+          sales_staff_mobile: salesStaffMobile,
+          Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
+          Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
+          Final_Quotation_Amount: Math.max(0, Number(wizardLeadData.package_cost) + Number(quoteAdditional || 0) - Number(quoteDiscount || 0)),
+        };
+      });
+
+      setIsPackageDetailsSaved(true);
+      showToastMsg("✅ Package saved successfully.", "success");
+    } catch (err: any) {
+      console.error("Save package only failed:", err);
+      showToastMsg(`Failed to save package: ${err.message || String(err)}`, "error");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -4026,50 +4141,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           return;
         }
         if (wizardLeadData.selected_package_id) {
-          const selectedPkg = packages.find((p) => p.package_id === wizardLeadData.selected_package_id);
-          const activePackagesList = (leadPackages || []).filter(lp => lp.lead_id === selectedLead.lead_id);
-          
-          // Ensure the actively selected package is included and updated
-          if (!activePackagesList.some(lp => lp.package_id === wizardLeadData.selected_package_id)) {
-            activePackagesList.push({
-              package_id: wizardLeadData.selected_package_id,
-              package_name: selectedPkg?.package_name || 'Selected Package',
-              package_cost: Number(wizardLeadData.package_cost),
-              quantity: 1,
-              total_amount: Number(wizardLeadData.package_cost),
-              discount: 0,
-              final_amount: Number(wizardLeadData.package_cost),
-              deliverables_description: wizardLeadData.deliverables,
-              notes_special_customizations: wizardLeadData.notes,
-              additional_services_cost: 0,
-              team_members: '',
-              deliverables: ''
-            } as any);
-          }
-          
-          const payloadToSave = activePackagesList.map(lp => {
-            const isPrimary = lp.package_id === wizardLeadData.selected_package_id;
-            const incStr = (editableInclusions[lp.package_id!] || []).join(', ');
-            const delStr = (editableDeliverables[lp.package_id!] || []).join(', ');
-            return {
-              package_id: lp.package_id!,
-              package_name: lp.package_name || 'Selected Package',
-              package_cost: isPrimary ? Number(wizardLeadData.package_cost) : lp.package_cost,
-              quantity: lp.quantity || 1,
-              total_amount: isPrimary ? Number(wizardLeadData.package_cost) : lp.total_amount,
-              discount: lp.discount || 0,
-              final_amount: isPrimary ? Number(wizardLeadData.package_cost) : lp.final_amount,
-              deliverables_description: isPrimary ? wizardLeadData.deliverables : lp.deliverables_description,
-              notes_special_customizations: isPrimary ? wizardLeadData.notes : lp.notes_special_customizations,
-              additional_services_cost: lp.additional_services_cost || 0,
-              team_members: incStr || lp.team_members || '',
-              deliverables: delStr || lp.deliverables || '',
-              editable_inclusions: editableInclusions,
-              editable_deliverables: editableDeliverables,
-            };
-          });
-
-          await saveLeadPackages(selectedLead.lead_id, payloadToSave);
+          await saveStep3DataRealtime(editableInclusions, editableDeliverables);
         }
         const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
         
@@ -9461,7 +9533,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 <div className="mt-4 flex justify-end pb-2">
                                   <button
                                     type="button"
-                                    onClick={() => { setIsPackageDetailsSaved(true); handleSaveStep(3); }}
+                                    onClick={handleSavePackageOnly}
                                     className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] font-bold uppercase tracking-wider rounded-lg shadow transition-colors flex items-center gap-2"
                                   >
                                     Save Package
