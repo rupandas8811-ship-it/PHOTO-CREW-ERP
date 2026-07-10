@@ -994,7 +994,7 @@ ${coordinatorName}`;
           'CUSTOMER NAME': order?.customer_name || '',
           'EVENT TYPE': order?.event_type || '',
           'EVENT DATE': order?.event_date || '',
-          'ASSIGNED EDITOR': prod.editor_assigned || 'Unassigned',
+          'ASSIGNED TEAM': getAssignedEditorsText(prod),
           'CURRENT STATUS': getProductionStatus(prod),
           'EXPECTED DELIVERY DATE': prod.expected_delivery_date || '',
           'PRIORITY': prod.project_priority || 'Medium'
@@ -1005,7 +1005,7 @@ ${coordinatorName}`;
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Production Leads");
       
-      const keys = ['ORDER ID', 'CUSTOMER NAME', 'EVENT TYPE', 'EVENT DATE', 'ASSIGNED EDITOR', 'CURRENT STATUS', 'EXPECTED DELIVERY DATE', 'PRIORITY'];
+      const keys = ['ORDER ID', 'CUSTOMER NAME', 'EVENT TYPE', 'EVENT DATE', 'ASSIGNED TEAM', 'CURRENT STATUS', 'EXPECTED DELIVERY DATE', 'PRIORITY'];
       const maxColLengths = keys.map(k => {
         const kLen = k.length;
         const vals = data.map(item => String(item[k as keyof typeof item] ?? '').length);
@@ -1048,7 +1048,7 @@ ${coordinatorName}`;
     doc.text("Order ID", colX[0], 55);
     doc.text("Customer Name", colX[1], 55);
     doc.text("Event Date", colX[2], 55);
-    doc.text("Assigned Editor", colX[3], 55);
+    doc.text("Assigned Team", colX[3], 55);
     doc.text("Current Status", colX[4], 55);
     doc.text("Priority", colX[5], 55);
     
@@ -1070,7 +1070,7 @@ ${coordinatorName}`;
         doc.text("Order ID", colX[0], y);
         doc.text("Customer Name", colX[1], y);
         doc.text("Event Date", colX[2], y);
-        doc.text("Assigned Editor", colX[3], y);
+        doc.text("Assigned Team", colX[3], y);
         doc.text("Current Status", colX[4], y);
         doc.text("Priority", colX[5], y);
         doc.line(14, y + 2, 196, y + 2);
@@ -1086,7 +1086,7 @@ ${coordinatorName}`;
       const ordId = order?.order_id || 'N/A';
       const custName = order?.customer_name || 'N/A';
       const evDate = order?.event_date || 'N/A';
-      const edName = prod.editor_assigned || 'Unassigned';
+      const edName = getAssignedEditorsText(prod);
       const pStatus = getProductionStatus(prod);
       const pPriority = prod.project_priority || 'Medium';
       
@@ -1120,7 +1120,7 @@ ${coordinatorName}`;
           <td style="padding: 8px; border-bottom: 1px solid #ddd;">${order?.customer_name || ''}</td>
           <td style="padding: 8px; border-bottom: 1px solid #ddd;">${order?.event_type || ''}</td>
           <td style="padding: 8px; border-bottom: 1px solid #ddd;">${order?.event_date || ''}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${prod.editor_assigned || 'Unassigned'}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${getAssignedEditorsText(prod)}</td>
           <td style="padding: 8px; border-bottom: 1px solid #ddd;">${getProductionStatus(prod)}</td>
           <td style="padding: 8px; border-bottom: 1px solid #ddd;">${prod.expected_delivery_date || ''}</td>
           <td style="padding: 8px; border-bottom: 1px solid #ddd; font-weight: bold;">${prod.project_priority || 'Medium'}</td>
@@ -1158,7 +1158,7 @@ ${coordinatorName}`;
                 <th>Customer Name</th>
                 <th>Event Type</th>
                 <th>Event Date</th>
-                <th>Assigned Editor</th>
+                <th>Assigned Team</th>
                 <th>Current Status</th>
                 <th>Target Delivery</th>
                 <th>Priority</th>
@@ -1944,7 +1944,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         <th className="p-3 font-bold">Customer Name</th>
                         <th className="p-3 font-bold">Event Type</th>
                         <th className="p-3 font-bold">Event Date</th>
-                        <th className="p-3 font-bold">Assigned Team</th>
+                        <th className="p-3 font-bold text-center">Assigned Team</th>
                         <th className="p-3 font-bold">Raw Footage Drive Link</th>
                         <th className="p-3 font-bold">Current Production Status</th>
                         <th className="p-3 font-bold text-right pr-4">Action</th>
@@ -1959,30 +1959,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         const op = operations?.find(o => o.order_id === order.order_id);
                         const matchedSa = staffAssignments ? staffAssignments.filter(sa => sa.order_id === order.order_id) : [];
 
-                        const roleMap: Record<string, string[]> = {};
-                        const addStaff = (role: string, name: string | null | undefined) => {
-                          if (!name || name.trim() === '' || name.toLowerCase() === 'unassigned' || name.toLowerCase() === 'none') return;
-                          if (!roleMap[role]) {
-                            roleMap[role] = [];
-                          }
-                          if (!roleMap[role].includes(name.trim())) {
-                            roleMap[role].push(name.trim());
-                          }
-                        };
-
-                        if (op) {
-                          addStaff('Photographer', op.photographer_assigned);
-                          addStaff('Videographer', op.videographer_assigned);
-                          addStaff('Drone Operator', op.drone_operator_assigned);
-                          addStaff('Assistant', op.assistant_assigned);
-                        }
-
-                        matchedSa.forEach(sa => {
-                          if (sa.assignment_status !== 'Cancelled') {
-                            const role = sa.staff_role || 'Staff';
-                            addStaff(role, sa.staff_name);
-                          }
-                        });
+                        const editorsList = getAssignedEditorsList(prod);
 
                         const prodStatus = getProductionStatus(prod);
 
@@ -1992,22 +1969,17 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             <td className="p-3 font-sans font-bold text-white">{order.customer_name}</td>
                             <td className="p-3 text-zinc-300 font-sans">{order.event_type === 'Other' ? (order.custom_event_name || order.custom_event_type || 'Other') : order.event_type}</td>
                             <td className="p-3 text-zinc-400">{order.event_date || 'N/A'}</td>
-                            <td className="p-3 font-sans text-zinc-330">
-                              {Object.keys(roleMap).length > 0 ? (
-                                <div className="space-y-1.5 text-left">
-                                  {Object.entries(roleMap).map(([role, names]) => (
-                                    <div key={role} className="text-[10.5px]">
-                                      <span className="font-bold text-zinc-400 block">{role}:</span>
-                                      <ul className="list-disc pl-4 space-y-0.5 text-white font-medium">
-                                        {names.map(name => (
-                                          <li key={name}>{name}</li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  ))}
-                                </div>
+                            <td className="p-3 font-sans text-center">
+                              {editorsList.length > 0 ? (
+                                <span 
+                                  onClick={() => setAssignedEditorsModalProd(prod)}
+                                  className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline underline-offset-2 px-2 py-1 bg-indigo-500/10 rounded font-bold"
+                                  title="View Assigned Team"
+                                >
+                                  👥 {editorsList.length}
+                                </span>
                               ) : (
-                                <span className="text-zinc-650 italic">No Team Assigned</span>
+                                <span className="text-zinc-650 italic text-[10px]">No Production Staff Assigned.</span>
                               )}
                             </td>
                             <td className="p-3">
@@ -2104,7 +2076,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     <th className="p-4 font-black">Event Type</th>
                     <th className="p-4 font-black">Event Date</th>
                     <th className="p-4 font-black">Raw Footage Link</th>
-                    <th className="p-4 font-black">Assigned Editor(s)</th>
+                    <th className="p-4 font-black text-center">Assigned Team</th>
                     <th className="p-4 font-black">Current Status</th>
                     <th className="p-4 font-black">Target Delivery Date</th>
                     <th className="p-4 font-black">Delivery Status</th>
@@ -2321,15 +2293,15 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               {(() => {
                                 const editorsList = getAssignedEditorsList(prod);
                                 if (editorsList.length === 0) {
-                                  return <span className="text-zinc-600 text-[10px]">No editors assigned.</span>;
+                                  return <span className="text-zinc-650 italic text-[10px]">No Production Staff Assigned.</span>;
                                 }
                                 return (
                                   <span 
                                     onClick={() => setAssignedEditorsModalProd(prod)}
-                                    className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline underline-offset-2 px-2 py-1 bg-indigo-500/10 rounded"
-                                    title="View Assigned Editors"
+                                    className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline underline-offset-2 px-2 py-1 bg-indigo-500/10 rounded font-bold"
+                                    title="View Assigned Team"
                                   >
-                                    {editorsList.length}
+                                    👥 {editorsList.length}
                                   </span>
                                 );
                               })()}
@@ -6725,8 +6697,17 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               <span className="text-zinc-300 font-mono">{order?.event_date || '—'}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-zinc-550 font-mono">Assigned Editor(s):</span>
-                              <span className="text-violet-400 font-bold">{activeWorkflowProd.editor_assigned || 'Unassigned'}</span>
+                              <span className="text-zinc-550 font-mono">Assigned Team:</span>
+                              <span className="text-violet-400 font-bold">
+                                {getAssignedEditorsList(activeWorkflowProd).length > 0 ? (
+                                  <span 
+                                    onClick={() => setAssignedEditorsModalProd(activeWorkflowProd)}
+                                    className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline underline-offset-2"
+                                  >
+                                    👥 {getAssignedEditorsList(activeWorkflowProd).length}
+                                  </span>
+                                ) : 'Unassigned'}
+                              </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-zinc-550 font-mono">Current Status:</span>
@@ -7144,7 +7125,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             <div className="p-5 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
               <div>
                 <span className="text-[9px] font-mono font-black uppercase tracking-widest text-indigo-400 block mb-0.5">
-                  Production Lead • Assigned Editors
+                  Production Lead • Assigned Team
                 </span>
                 <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">
                   {assignedEditorsModalProd.production_id}
@@ -7164,7 +7145,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   <tr className="border-b border-zinc-900 bg-zinc-950/70 text-zinc-500 font-mono text-[9px] uppercase tracking-wider">
                     <th className="p-3 font-bold">Staff Name</th>
                     <th className="p-3 font-bold">Staff Type</th>
-                    <th className="p-3 font-bold">Assigned Deliverable</th>
+                    <th className="p-3 font-bold">Assigned Deliverable(s)</th>
                     <th className="p-3 font-bold">Assigned Role</th>
                     <th className="p-3 font-bold">Mobile Number</th>
                     <th className="p-3 font-bold">Current Status</th>
