@@ -50,7 +50,7 @@ const serializeEquipmentNotes = (metadata: EquipmentMetadata): string => {
 };
 
 export const EquipmentManagement: React.FC = () => {
-  const { currentRole, equipment, staff, addEquipment, updateEquipment, deleteEquipment, refreshData } = useRole();
+  const { currentRole, currentUserName, equipment, staff, addEquipment, updateEquipment, deleteEquipment, refreshData } = useRole();
   const canEdit = currentRole === 'Operations Team' || currentRole === 'Business Owner';
 
   // Core management states
@@ -181,14 +181,27 @@ export const EquipmentManagement: React.FC = () => {
         handleCancelEdit();
       } else {
         // Registering new
+        const now = new Date().toISOString();
         const { error } = await supabaseClient.from('equipment').insert([
           {
             equipment_name: form.equipment_name,
             brand: form.brand,
             Equipment_Category: form.equipment_type,
             Equipment_Status: form.status,
+            equipment_type: form.equipment_type,
+            status: form.status,
+            model: '',
+            serial_number: null,
             quantity: 1,
-            available_quantity: 1
+            available_quantity: 1,
+            purchase_date: null,
+            purchase_price: null,
+            storage_location: null,
+            notes: null,
+            created_by: currentUserName || 'Operations Team',
+            updated_by: currentUserName || 'Operations Team',
+            created_at: now,
+            updated_at: now
           }
         ]);
 
