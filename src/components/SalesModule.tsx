@@ -262,8 +262,9 @@ const generateQuotationPDF = (
       incKeys.forEach((key) => {
         const eventId = key.substring(pkgId.length + 1);
         const eventObj = (lead.events || []).find((e: any) => e.id === eventId);
-        const eventName = eventObj ? (eventObj.event_name || eventObj.event_type || 'Event') : 'Event';
-        const eventShootType = eventObj ? (eventObj.event_shoot_type || lead.desired_event_shoot_type || lead.shoot_type || 'N/A') : (lead.desired_event_shoot_type || lead.shoot_type || 'N/A');
+        if (!eventObj) return; // Skip if event doesn't exist
+        const eventName = eventObj.event_name || eventObj.event_type || 'Event';
+        const eventShootType = eventObj.event_shoot_type || lead.desired_event_shoot_type || lead.shoot_type || 'N/A';
         if (!eventInclusionsMap[eventName]) eventInclusionsMap[eventName] = { members: [], shootType: eventShootType };
         eventInclusionsMap[eventName].members.push(...(editableInclusions![key] || []).filter(Boolean));
       });
@@ -276,7 +277,8 @@ const generateQuotationPDF = (
       delKeys.forEach((key) => {
         const eventId = key.substring(pkgId.length + 1);
         const eventObj = (lead.events || []).find((e: any) => e.id === eventId);
-        const eventName = eventObj ? eventObj.event_name : 'Event';
+        if (!eventObj) return; // Skip if event doesn't exist
+        const eventName = eventObj.event_name || eventObj.event_type || 'Event';
         if (!eventDeliverablesMap[eventName]) eventDeliverablesMap[eventName] = { pkgName, items: [] };
         eventDeliverablesMap[eventName].items.push(...(editableDeliverables![key] || []).filter(Boolean));
       });

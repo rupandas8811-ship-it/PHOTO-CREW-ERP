@@ -3869,17 +3869,17 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           try {
             if (editingStaffId) {
               // Update explicit record being edited
-              await updateProductionStaff(editingStaffId, {
+              await updateStaff(editingStaffId, {
                 name,
                 mobile,
                 whatsapp_number: whatsapp,
-                production_role_speciality: skillsString,
-                staff_type: newStaffType as any
+                Skill: skillsString,
+                Staff_Type: newStaffType as any
               });
               setAddStaffSuccess('✅ Staff details updated successfully.');
             } else {
               // Check if duplicate exists (name or mobile matching)
-              const existingStaff = productionStaff.find(
+              const existingStaff = staff.find(
                 (s) =>
                   s.name.toLowerCase() === name.toLowerCase() ||
                   s.mobile === mobile
@@ -3887,21 +3887,21 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
               if (existingStaff) {
                 // Update existing staff
-                await updateProductionStaff(existingStaff.staff_id, {
+                await updateStaff(existingStaff.staff_id, {
                   mobile,
                   whatsapp_number: whatsapp,
-                  production_role_speciality: skillsString,
-                  staff_type: newStaffType as any
+                  Skill: skillsString,
+                  Staff_Type: newStaffType as any
                 });
                 setAddStaffSuccess('✅ Staff details updated successfully.');
               } else {
-                // Create new staff record in production_staff table
-                await addProductionStaff({
+                // Create new staff record in operations_staff table
+                await addStaff({
                   name,
                   mobile,
                   whatsapp_number: whatsapp,
-                  production_role_speciality: skillsString,
-                  staff_type: newStaffType as any,
+                  Skill: skillsString,
+                  Staff_Type: newStaffType as any,
                   email: `${name.toLowerCase().replace(/\s+/g, '')}@photocrew.com`,
                   role: 'Editor',
                   department: 'Post-Production',
@@ -3931,16 +3931,24 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           }
         };
 
-        const addSkill = (skillName: string) => {
+        const addSkill = async (skillName: string) => {
           const trimmed = skillName.trim();
           if (trimmed && !newStaffSkills.includes(trimmed)) {
-            setNewStaffSkills([...newStaffSkills, trimmed]);
+            const updatedSkills = [...newStaffSkills, trimmed];
+            setNewStaffSkills(updatedSkills);
+            if (editingStaffId) {
+              try {
+                await updateStaff(editingStaffId, { Skill: updatedSkills.join(', ') });
+              } catch (e) {
+                console.error('Failed real-time skill save', e);
+              }
+            }
           }
           setNewSkillText('');
         };
 
         // Use productionStaff directly from the dedicated production_staff database table
-        const productionStaffList = productionStaff;
+        const productionStaffList = staff.filter(s => s.department === 'Post-Production' || s.role === 'Editor' || s.Staff_Type || (s.Skill && s.Skill.length > 0));
 
         return (
           <div className="space-y-6 animate-fade-in">
@@ -4009,7 +4017,17 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       </label>
                       <select
                         value={newStaffType}
-                        onChange={(e) => setNewStaffType(e.target.value)}
+                        onChange={async (e) => {
+                          const val = e.target.value;
+                          setNewStaffType(val);
+                          if (editingStaffId) {
+                            try {
+                              await updateStaff(editingStaffId, { Staff_Type: val as any });
+                            } catch (err) {
+                              console.error('Failed real-time staff type save', err);
+                            }
+                          }
+                        }}
                         className={`w-full bg-zinc-900 border px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans cursor-pointer ${addStaffError === 'Please select Staff Type.' ? 'border-rose-500/50' : 'border-zinc-850'}`}
                       >
                         <option value="">-- Select Staff Type --</option>
@@ -4086,7 +4104,17 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               <span>{skill}</span>
                               <button
                                 type="button"
-                                onClick={() => setNewStaffSkills(newStaffSkills.filter((_, i) => i !== index))}
+                                onClick={async () => {
+                                  const updatedSkills = newStaffSkills.filter((_, i) => i !== index);
+                                  setNewStaffSkills(updatedSkills);
+                                  if (editingStaffId) {
+                                    try {
+                                      await updateStaff(editingStaffId, { Skill: updatedSkills.join(', ') });
+                                    } catch (e) {
+                                      console.error('Failed real-time skill save', e);
+                                    }
+                                  }
+                                }}
                                 className="text-purple-450 hover:text-purple-300 font-black focus:outline-none transition-colors"
                               >
                                 ✕
@@ -4231,7 +4259,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               <td className="px-4 py-3 font-medium text-white">
                                 <div className="flex flex-col">
                                   <span className="font-bold text-sm text-zinc-100">{member.name}</span>
-                                  <span className="text-[10px] text-purple-400 font-mono mt-0.5">{member.production_role_speciality || 'Editor'}</span>
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {(member.Skill || member.production_role_speciality || 'Editor').split(',').map((s: string, idx: number) => (
+                                      <span key={idx} className="px-1.5 py-0.5 bg-purple-500/10 border border-purple-500/20 rounded text-[9px] text-purple-400 font-mono">
+                                        {s.trim()}
+                                      </span>
+                                    ))}
+                                  </div>
                                   <span className="text-[9px] text-zinc-500 font-mono">{member.email}</span>
                                 </div>
                               </td>
@@ -4304,10 +4338,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     onClick={() => {
                                       setEditingStaffId(member.staff_id);
                                       setNewStaffName(member.name);
-                                      setNewStaffType(member.staff_type || '');
+                                      setNewStaffType(member.Staff_Type || member.staff_type || '');
                                       setNewStaffMobile(member.mobile);
                                       setNewStaffWhatsapp(member.whatsapp_number || '');
-                                      setNewStaffSkills(member.production_role_speciality ? member.production_role_speciality.split(',').map(s => s.trim()).filter(Boolean) : []);
+                                      setNewStaffSkills(member.Skill ? member.Skill.split(',').map((s: string) => s.trim()).filter(Boolean) : member.production_role_speciality ? member.production_role_speciality.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
                                     }}
                                     className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-amber-500 hover:text-amber-400 border border-zinc-850 rounded font-bold cursor-pointer transition-colors text-[10px] font-mono"
                                   >
