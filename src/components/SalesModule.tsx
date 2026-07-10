@@ -7697,7 +7697,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       <span className="font-medium">
                         {selectedPkgIds.length === 0
                           ? 'Select Package...'
-                          : `${selectedPkgIds.length} Packages Selected (Total: ₹${finalTotal.toLocaleString('en-IN')})`}
+                          : (PACKAGES_LIST.flatMap(cat => cat.items).find(item => item.id === selectedPkgIds[0])?.name || '1 Package Selected')}
                       </span>
                       <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isPkgDropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
@@ -7781,19 +7781,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 {highlightText(category.categoryName, pkgSearchQuery)}
                               </span>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
-                                {category.items.map((pkg) => {
-                                  const isChecked = selectedPkgIds.includes(pkg.id);
-                                  return (
-                                    <button
-                                      key={pkg.id}
-                                      type="button"
-                                      onClick={() => {
-                                        if (isChecked) {
-                                          setSelectedPkgIds(selectedPkgIds.filter(id => id !== pkg.id));
-                                        } else {
-                                          setSelectedPkgIds([...selectedPkgIds, pkg.id]);
-                                        }
-                                      }}
+                                  {category.items.map((pkg) => {
+                                    const isChecked = selectedPkgIds.includes(pkg.id);
+                                    return (
+                                      <button
+                                        key={pkg.id}
+                                        type="button"
+                                        onClick={() => {
+                                          if (isChecked) {
+                                            setSelectedPkgIds([]);
+                                          } else {
+                                            setSelectedPkgIds([pkg.id]);
+                                            setIsPkgDropdownOpen(false);
+                                          }
+                                        }}
                                       className={`flex items-center justify-between text-left px-2.5 py-2 rounded-lg border text-xs cursor-pointer transition-all duration-150 ${
                                         isChecked
                                           ? 'bg-[#0c2d24] border-emerald-500 text-emerald-100 shadow-[0_0_12px_rgba(16,185,129,0.1)]'
@@ -7833,9 +7834,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     <div id="create_lead_pkg_summary_panel" className="bg-[#0F172A] border border-slate-800 rounded-xl p-4.5 space-y-4 animate-fade-in text-xs text-left">
                       <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-slate-350">Selected Packages</span>
+                          <span className="text-xs font-bold text-slate-350">Selected Package</span>
                           <span className="bg-emerald-990/90 text-emerald-400 px-2 py-0.5 rounded-full font-mono text-[10px] font-bold border border-emerald-900/40">
-                            {selectedPkgIds.length} Packages
+                            {selectedPkgIds.length} Package
                           </span>
                         </div>
                         

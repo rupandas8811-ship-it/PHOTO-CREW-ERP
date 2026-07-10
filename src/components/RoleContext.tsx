@@ -796,7 +796,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (postSalesStages.includes(ld.status)) {
         const orderExists = list.some(o => o.lead_id === ld.lead_id || o.order_id === ld.lead_id);
         if (!orderExists) {
-          const ordId = `ORD-${ld.lead_id.replace(/\D/g, '') || ld.lead_id}`;
+          const isNewFormat = ld.lead_id.match(/^LD(\d+)$/);
+          const ordId = isNewFormat ? `OR${isNewFormat[1]}` : `ORD-${ld.lead_id.replace(/\D/g, '') || ld.lead_id}`;
           list.push({
             order_id: ordId,
             lead_id: ld.lead_id,
@@ -2600,7 +2601,43 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    const leadId = `LD-${Math.floor(9012 + Math.random() * 988)}`;
+    let nextLeadNum = 101;
+    const existingLeadIds = new Set<string>();
+    if (leads) {
+      leads.forEach(ld => {
+        if (ld.lead_id) existingLeadIds.add(ld.lead_id);
+      });
+    }
+
+    if (supabaseClient) {
+      try {
+        const { data: dbLeads } = await supabaseClient.from('leads').select('lead_id');
+        if (dbLeads) {
+          dbLeads.forEach((ld: any) => {
+            if (ld.lead_id) existingLeadIds.add(ld.lead_id);
+          });
+        }
+      } catch (e) {
+        console.warn("Error fetching lead_ids from DB for unique ID generation:", e);
+      }
+    }
+
+    let maxLeadNum = 100;
+    existingLeadIds.forEach(id => {
+      const match = id.match(/^LD(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxLeadNum) {
+          maxLeadNum = num;
+        }
+      }
+    });
+    nextLeadNum = maxLeadNum + 1;
+
+    while (existingLeadIds.has(`LD${nextLeadNum}`)) {
+      nextLeadNum++;
+    }
+    const leadId = `LD${nextLeadNum}`;
     // We still keep notes_special_customizations plain without serialized events, 
     // or we can keep it as is for backward compatibility but save events to table anyway
     const serializedNotes = leadDetails.notes_special_customizations || '';
@@ -2898,7 +2935,43 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     if (!masterOrderId) {
-      masterOrderId = existingOrder ? existingOrder.order_id : `ORD-${Math.floor(1012 + Math.random() * 800)}`;
+      if (existingOrder && existingOrder.order_id) {
+        masterOrderId = existingOrder.order_id;
+      } else {
+        // Generate a new Order ID starting with OR101
+        let nextOrderNum = 101;
+        const existingOrderIds = new Set<string>();
+        orders.forEach(o => { if (o.order_id) existingOrderIds.add(o.order_id); });
+        augmentedOrders.forEach(o => { if (o.order_id) existingOrderIds.add(o.order_id); });
+
+        if (supabaseClient) {
+          try {
+            const { data: dbOrders } = await supabaseClient.from('orders').select('order_id');
+            if (dbOrders) {
+              dbOrders.forEach((o: any) => { if (o.order_id) existingOrderIds.add(o.order_id); });
+            }
+          } catch (e) {
+            console.warn("Error fetching order_ids from DB for unique ID generation:", e);
+          }
+        }
+
+        let maxOrderNum = 100;
+        existingOrderIds.forEach(id => {
+          const match = id.match(/^OR(\d+)$/);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            if (num > maxOrderNum) {
+              maxOrderNum = num;
+            }
+          }
+        });
+        nextOrderNum = maxOrderNum + 1;
+
+        while (existingOrderIds.has(`OR${nextOrderNum}`)) {
+          nextOrderNum++;
+        }
+        masterOrderId = `OR${nextOrderNum}`;
+      }
     }
 
     if (!masterOrderId) {
