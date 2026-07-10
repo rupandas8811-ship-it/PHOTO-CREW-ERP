@@ -3708,8 +3708,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   };
 
   const handlePackageChange = (packageId: string) => {
-    setIsPackageSelectedAndSaved(false);
-    setIsPackageDetailsSaved(false);
+    setIsPackageSelectedAndSaved(true);
+    setIsPackageDetailsSaved(true);
     const pkg = packages.find((p) => String(p.package_id) === String(packageId));
     if (pkg) {
       setWizardLeadData((prev) => ({
@@ -9123,89 +9123,67 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 onChange={(e) => setWizardLeadData({ ...wizardLeadData, Specify_Custom_Lead_Source_Name: e.target.value })}
                                 className="w-full bg-slate-955 border border-amber-500/50 rounded-lg py-2 px-3 text-xs text-amber-200 focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all"
                               />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                             </div>
+                           )}
+                         </div>
+                       </div>
+                     </div>
+                   )}
 
-                  {crmWizardStep === 2 && (
-                    <div className="space-y-4 animate-fade-in text-left">
-                      <div className="border-b border-slate-800 pb-1.5">
-                        <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                          <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">2</span>
-                          <span>Event Details</span>
-                        </h3>
-                        <p className="text-[11px] text-zinc-400 mt-1">Configure event metadata, starting schedules, reporting times, shoot types, and lead origins.</p>
-                      </div>
-                      
-                      {renderEventDetailsSection(true)}
-                    </div>
-                  )}
+                   {crmWizardStep === 2 && (
+                     <div className="space-y-4 animate-fade-in text-left">
+                       <div className="border-b border-slate-800 pb-1.5">
+                         <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                           <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">2</span>
+                           <span>Event Details</span>
+                         </h3>
+                         <p className="text-[11px] text-zinc-400 mt-1">Configure event metadata, starting schedules, reporting times, shoot types, and lead origins.</p>
+                       </div>
+                       
+                       {renderEventDetailsSection(true)}
+                     </div>
+                   )}
 
-                  {crmWizardStep === 3 && (
-                    <div className="space-y-4 animate-fade-in text-left">
-                      <div className="border-b border-slate-800 pb-1.5">
-                        <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                          <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">3</span>
-                          <span>Quotation Workspace</span>
-                        </h3>
-                        <p className="text-[10px] text-zinc-400 mt-0.5">Select from standard configured packages, customize team members and deliverables, adjust pricing, and generate the quotation.</p>
-                      </div>
-                      <div className="space-y-3.5 text-left">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Select Package Option *</label>
-                          <select
-                            value={wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || ''}
-                            disabled={isLeadLocked || isPackageSelectedAndSaved}
-                            onChange={(e) => handlePackageChange(e.target.value)}
-                            className={`w-full bg-slate-950 border focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer ${
-                              !(wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id) || (wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id).trim() === ''
-                                ? 'border-rose-500/40 focus:border-rose-500 text-rose-200'
-                                : 'border-slate-800 focus:border-indigo-500 text-white'
-                            }`}
-                          >
-                            <option value="">── Choose configuration package ──</option>
-                            {packages.filter(p => p.status === 'Active').map((pkg) => (
-                              <option key={pkg.package_id} value={pkg.package_id}>
-                                {pkg.package_name} (₹{Number(pkg.price).toLocaleString('en-IN')})
-                              </option>
-                            ))}
-                          </select>
-                          {!(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option) && (
-                            <p className="text-rose-450 font-bold text-xs mt-1 font-mono animate-pulse flex items-center gap-1.5">
-                              ⚠️ Please select a package before continuing.
-                            </p>
-                          )}
-                          
-                          {!!(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option) && !isPackageSelectedAndSaved && !isLeadLocked && (
-                            <div className="mt-3 flex justify-end">
-                              <button
-                                type="button"
-                                onClick={() => setIsPackageSelectedAndSaved(true)}
-                                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] font-bold uppercase tracking-wider rounded-lg shadow transition-colors flex items-center gap-2"
-                              >
-                                Save Package
-                              </button>
-                            </div>
-                          )}
-                          {(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option) && isPackageSelectedAndSaved && !isLeadLocked && (
-                            <div className="mt-2 flex justify-end">
-                              <button
-                                type="button"
-                                onClick={() => setIsPackageSelectedAndSaved(false)}
-                                className="text-xs text-indigo-400 hover:text-indigo-300 underline font-mono cursor-pointer"
-                              >
-                                Edit Package Selection
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                   {crmWizardStep === 3 && (
+                     <div className="space-y-4 animate-fade-in text-left">
+                       <div className="border-b border-slate-800 pb-1.5">
+                         <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                           <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">3</span>
+                           <span>Quotation Workspace</span>
+                         </h3>
+                         <p className="text-[10px] text-zinc-400 mt-0.5">Select from standard configured packages, customize team members and deliverables, adjust pricing, and generate the quotation.</p>
+                       </div>
+                       <div className="space-y-3.5 text-left">
+                         <div>
+                           <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Select Package Option *</label>
+                           <select
+                             value={wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || ''}
+                             disabled={isLeadLocked}
+                             onChange={(e) => handlePackageChange(e.target.value)}
+                             className={`w-full bg-slate-955 border focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer ${
+                               !(wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id) || (wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id).trim() === ''
+                                 ? 'border-rose-500/40 focus:border-rose-500 text-rose-200'
+                                 : 'border-slate-800 focus:border-indigo-500 text-white'
+                             }`}
+                           >
+                             <option value="">── Choose configuration package ──</option>
+                             {packages.filter(p => p.status === 'Active').map((pkg) => (
+                               <option key={pkg.package_id} value={pkg.package_id}>
+                                 {pkg.package_name} (₹{Number(pkg.price).toLocaleString('en-IN')})
+                               </option>
+                             ))}
+                           </select>
+                           {!(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option) && (
+                             <p className="text-rose-450 font-bold text-xs mt-1 font-mono animate-pulse flex items-center gap-1.5">
+                               ⚠️ Please select a package before continuing.
+                             </p>
+                           )}
+                         </div>
+ 
+                         {(() => {
+                           const selectedPkg = packages.find(p => String(p.package_id) === String(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option));
+                           if (!selectedPkg) return null;
 
-                        {(() => {
-                          const selectedPkg = packages.find(p => String(p.package_id) === String(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option));
-                          if (!selectedPkg || !isPackageSelectedAndSaved) return null;
                           const selectedPkgId = selectedPkg.package_id;
                           const inclusionsList = editableInclusions[selectedPkgId] || [];
                           const deliverablesList = editableDeliverables[selectedPkgId] || [];
