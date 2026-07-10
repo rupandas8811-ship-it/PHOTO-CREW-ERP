@@ -4185,9 +4185,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const orderId = targetFootage.order_id;
     const previousStage = augmentedOrders.find((o) => o.order_id === orderId)?.current_stage || 'Approved';
 
-    const payment = augmentedPayments.find((p) => p.order_id === orderId);
-    const balanceDue = payment ? payment.balance_due : 1;
-    const targetStage: CurrentStage = balanceDue === 0 ? 'Closed' : 'Payment Pending';
+    const targetStage: CurrentStage = 'Closed';
     const timestamp = new Date().toISOString();
 
     const targetProd = augmentedProduction.find((p) => p.tracking_id === trackingId);
@@ -4257,6 +4255,19 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error("Failed to update order status: " + rOrd?.error);
     }
 
+    setOrders(prev => prev.map(o => {
+      if (o.order_id === orderId) {
+        return {
+          ...o,
+          current_stage: targetStage,
+          order_status: 'Delivered',
+          updated_by: currentUserName,
+          updated_at: timestamp
+        };
+      }
+      return o;
+    }));
+
     const tgtOrder = augmentedOrders.find((o) => o.order_id === orderId);
     if (tgtOrder) {
       const rLead = await pushUpdate('leads', 'lead_id', tgtOrder.lead_id, { 
@@ -4268,6 +4279,19 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!rLead?.success) {
         throw new Error("Failed to update lead status: " + rLead?.error);
       }
+
+      setLeads(prev => prev.map(l => {
+        if (l.lead_id === tgtOrder.lead_id) {
+          return {
+            ...l,
+            status: targetStage,
+            current_status: targetStage,
+            updated_by: currentUserName,
+            updated_at: timestamp
+          };
+        }
+        return l;
+      }));
     }
 
     //  // Disabled to prevent full reload
@@ -4336,22 +4360,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // If fully paid, move order status to next transition or check if delivered first.
     // If fully paid AND previous stage was delivered, we can transition stage to Closed!
-    let nextStage: CurrentStage = 'Payment Pending';
     const currentOrder = augmentedOrders.find((o) => o.order_id === orderId);
-    const previousStage = currentOrder ? currentOrder.current_stage : 'Payment Pending';
+    const currentStage = currentOrder ? currentOrder.current_stage : 'Payment Pending';
     const timestamp = new Date().toISOString();
 
     if (currentOrder) {
-      if (isFullyPaid) {
-        nextStage = 'Closed';
-      } else {
-        nextStage = 'Payment Pending';
-      }
-
       const nextOutstanding = Math.max(0, currentOrder.balance_amount - actualAmountReceived);
       const rOrd = await pushUpdate('orders', 'order_id', orderId, {
-        current_stage: nextStage,
-        order_status: nextStage === 'Closed' ? 'Closed' : currentOrder.order_status,
         balance_amount: nextOutstanding,
         updated_by: currentUserName,
         updated_at: timestamp
@@ -4364,8 +4379,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (o.order_id === orderId) {
           return {
             ...o,
-            current_stage: nextStage,
-            order_status: nextStage === 'Closed' ? 'Closed' : o.order_status,
             balance_amount: nextOutstanding,
             updated_by: currentUserName,
             updated_at: timestamp
@@ -4373,32 +4386,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         return o;
       }));
-
-      const rLead = await pushUpdate('leads', 'lead_id', currentOrder.lead_id, { 
-        status: nextStage,
-        current_status: nextStage,
-        updated_by: currentUserName,
-        updated_at: timestamp
-      });
-      if (!rLead?.success) {
-        throw new Error("Failed to update lead: " + rLead?.error);
-      }
-
-      setLeads(prev => prev.map(l => {
-        if (l.lead_id === currentOrder.lead_id) {
-          return {
-            ...l,
-            status: nextStage,
-            current_status: nextStage,
-            updated_by: currentUserName,
-            updated_at: timestamp
-          };
-        }
-        return l;
-      }));
     }
 
-    logActivity(`Recorded payment of ₹${actualAmountReceived} for Order ${orderId}. Fully paid: ${isFullyPaid}`, 'Finance', orderId, previousStage, nextStage);
+    logActivity(`Recorded payment of ₹${actualAmountReceived} for Order ${orderId}. Fully paid: ${isFullyPaid}`, 'Finance', orderId, currentStage, currentStage);
   };
 
   // User Management Admin features
