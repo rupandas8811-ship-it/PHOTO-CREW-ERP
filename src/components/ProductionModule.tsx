@@ -1272,6 +1272,7 @@ ${coordinatorName}`;
 
   // Simplified Add Staff Form states
   const [newStaffName, setNewStaffName] = useState('');
+  const [newStaffType, setNewStaffType] = useState('');
   const [newStaffMobile, setNewStaffMobile] = useState('');
   const [newStaffWhatsapp, setNewStaffWhatsapp] = useState('');
   const [newStaffSkills, setNewStaffSkills] = useState<string[]>([]);
@@ -3851,6 +3852,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             setIsSubmittingStaff(false);
             return;
           }
+          if (!newStaffType) {
+            setAddStaffError('Please select Staff Type.');
+            setIsSubmittingStaff(false);
+            return;
+          }
           if (!mobile) {
             setAddStaffError('Mobile Number is required.');
             setIsSubmittingStaff(false);
@@ -3867,9 +3873,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 name,
                 mobile,
                 whatsapp_number: whatsapp,
-                production_role_speciality: skillsString
+                production_role_speciality: skillsString,
+                staff_type: newStaffType as any
               });
-              setAddStaffSuccess('Staff details updated successfully.');
+              setAddStaffSuccess('✅ Staff details updated successfully.');
             } else {
               // Check if duplicate exists (name or mobile matching)
               const existingStaff = productionStaff.find(
@@ -3883,9 +3890,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 await updateProductionStaff(existingStaff.staff_id, {
                   mobile,
                   whatsapp_number: whatsapp,
-                  production_role_speciality: skillsString
+                  production_role_speciality: skillsString,
+                  staff_type: newStaffType as any
                 });
-                setAddStaffSuccess('Staff details updated successfully.');
+                setAddStaffSuccess('✅ Staff details updated successfully.');
               } else {
                 // Create new staff record in production_staff table
                 await addProductionStaff({
@@ -3893,24 +3901,31 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   mobile,
                   whatsapp_number: whatsapp,
                   production_role_speciality: skillsString,
+                  staff_type: newStaffType as any,
                   email: `${name.toLowerCase().replace(/\s+/g, '')}@photocrew.com`,
                   role: 'Editor',
                   department: 'Post-Production',
                   status: 'Active',
                   joining_date: new Date().toISOString().split('T')[0]
                 });
-                setAddStaffSuccess('Staff member onboarded successfully.');
+                setAddStaffSuccess('✅ Staff details updated successfully.');
               }
             }
 
+            // Set timeout to clear success message
+            setTimeout(() => {
+              setAddStaffSuccess('');
+            }, 3000);
+
             // Reset form
             setNewStaffName('');
+            setNewStaffType('');
             setNewStaffMobile('');
             setNewStaffWhatsapp('');
             setNewStaffSkills([]);
             setEditingStaffId(null);
           } catch (err: any) {
-            setAddStaffError(err.message || 'Failed to save staff details.');
+            setAddStaffError('❌ Failed to update staff details.');
           } finally {
             setIsSubmittingStaff(false);
           }
@@ -3954,7 +3969,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 <form onSubmit={handleSaveStaff} className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-4 shadow-xl">
                   <div>
                     <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
-                      <Plus className="w-4 h-4 text-purple-400" /> {editingStaffId ? 'Edit Staff details' : 'Add Staff'}
+                      <Plus className="w-4 h-4 text-purple-400" /> {editingStaffId ? 'Edit Staff Details' : 'Add Staff'}
                     </h3>
                     <p className="text-[11px] text-zinc-400 mt-1">
                       {editingStaffId ? 'Update details of this production specialist.' : 'Onboard a new production specialist or update skills.'}
@@ -3986,6 +4001,21 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         placeholder="e.g. Rahul Das"
                         className="w-full bg-zinc-900 border border-zinc-850 px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans"
                       />
+                    </div>
+
+                    <div>
+                      <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 font-mono ${addStaffError === 'Please select Staff Type.' ? 'text-rose-500' : 'text-zinc-400'}`}>
+                        Staff Type <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        value={newStaffType}
+                        onChange={(e) => setNewStaffType(e.target.value)}
+                        className={`w-full bg-zinc-900 border px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans cursor-pointer ${addStaffError === 'Please select Staff Type.' ? 'border-rose-500/50' : 'border-zinc-850'}`}
+                      >
+                        <option value="">-- Select Staff Type --</option>
+                        <option value="In-House">In-House</option>
+                        <option value="Freelancer">Freelancer</option>
+                      </select>
                     </div>
 
                     <div>
@@ -4081,6 +4111,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       onClick={() => {
                         setEditingStaffId(null);
                         setNewStaffName('');
+                        setNewStaffType('');
                         setNewStaffMobile('');
                         setNewStaffWhatsapp('');
                         setNewStaffSkills([]);
@@ -4273,6 +4304,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     onClick={() => {
                                       setEditingStaffId(member.staff_id);
                                       setNewStaffName(member.name);
+                                      setNewStaffType(member.staff_type || '');
                                       setNewStaffMobile(member.mobile);
                                       setNewStaffWhatsapp(member.whatsapp_number || '');
                                       setNewStaffSkills(member.production_role_speciality ? member.production_role_speciality.split(',').map(s => s.trim()).filter(Boolean) : []);
@@ -5840,37 +5872,37 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                         return (
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 text-xs font-sans">
-                            <div className="space-y-0.5">
+                            <div className="space-y-1">
                               <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Lead ID</span>
-                              <span className="text-zinc-200 font-semibold block bg-zinc-950 px-2 py-1.5 rounded border border-zinc-900">{leadId}</span>
+                              <div className="text-zinc-200 font-semibold flex items-center bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-900 min-h-[38px]">{leadId}</div>
                             </div>
-                            <div className="space-y-0.5">
+                            <div className="space-y-1">
                               <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Customer Name</span>
-                              <span className="text-zinc-200 font-semibold block bg-zinc-950 px-2 py-1.5 rounded border border-zinc-900">{customerName}</span>
+                              <div className="text-zinc-200 font-semibold flex items-center bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-900 min-h-[38px]">{customerName}</div>
                             </div>
-                            <div className="space-y-0.5">
+                            <div className="space-y-1">
                               <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Event Name</span>
-                              <span className="text-zinc-200 font-semibold block bg-zinc-950 px-2 py-1.5 rounded border border-zinc-900">{eventName}</span>
+                              <div className="text-zinc-200 font-semibold flex items-center bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-900 min-h-[38px]">{eventName}</div>
                             </div>
-                            <div className="space-y-0.5">
+                            <div className="space-y-1">
                               <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Event Type</span>
-                              <span className="text-zinc-200 font-semibold block bg-zinc-950 px-2 py-1.5 rounded border border-zinc-900">{eventType}</span>
+                              <div className="text-zinc-200 font-semibold flex items-center bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-900 min-h-[38px]">{eventType}</div>
                             </div>
-                            <div className="space-y-0.5">
+                            <div className="space-y-1">
                               <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Event Shoot Type</span>
-                              <span className="text-zinc-200 font-semibold block bg-zinc-950 px-2 py-1.5 rounded border border-zinc-900">{eventShootType}</span>
+                              <div className="text-zinc-200 font-semibold flex items-center bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-900 min-h-[38px]">{eventShootType}</div>
                             </div>
-                            <div className="space-y-0.5 lg:col-span-2">
+                            <div className="space-y-1 lg:col-span-2">
                               <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Deliverables</span>
-                              <span className="text-zinc-200 font-semibold block bg-zinc-950 px-2 py-1.5 rounded border border-zinc-900 break-words">{deliverables}</span>
+                              <div className="text-zinc-200 font-semibold flex items-center bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-900 min-h-[38px] break-words">{deliverables}</div>
                             </div>
-                            <div className="space-y-0.5">
+                            <div className="space-y-1 lg:col-span-1">
                               <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Event Date</span>
-                              <span className="text-zinc-200 font-semibold block bg-zinc-950 px-2 py-1.5 rounded border border-zinc-900">{eventDate}</span>
+                              <div className="text-zinc-200 font-semibold flex items-center bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-900 min-h-[38px]">{eventDate}</div>
                             </div>
-                            <div className="space-y-0.5 md:col-span-2 lg:col-span-5">
+                            <div className="space-y-1 md:col-span-2 lg:col-span-2">
                               <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Current Production Status</span>
-                              <span className="text-violet-400 font-extrabold block bg-purple-950/20 px-2.5 py-1.5 rounded border border-purple-900/30 font-mono">{currentStatus}</span>
+                              <div className="text-violet-400 font-extrabold flex items-center bg-purple-950/20 px-3 py-2 rounded-xl border border-purple-900/30 font-mono min-h-[38px]">{currentStatus}</div>
                             </div>
                           </div>
                         );
@@ -5937,7 +5969,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               </div>
 
                               {/* Target Date and Staff Assignment */}
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
                                 {/* Target Finish Date for this deliverable */}
                                 <div className="space-y-1">
                                   <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
@@ -5952,8 +5984,28 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                         [deliverable]: e.target.value
                                       }));
                                     }}
-                                    className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-xs text-zinc-300 rounded-xl px-3 py-2 font-mono focus:outline-none focus:border-purple-500"
+                                    className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-xs text-zinc-300 rounded-xl px-3 py-2 font-mono focus:outline-none focus:border-purple-500 min-h-[38px]"
                                   />
+                                </div>
+
+                                {/* Staff Type Filter */}
+                                <div className="space-y-1">
+                                  <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
+                                    Staff Type
+                                  </label>
+                                  <select
+                                    value={wfStaffTypeByDeliverable[deliverable] || 'In-House'}
+                                    onChange={(e) => {
+                                      setWfStaffTypeByDeliverable(prev => ({
+                                        ...prev,
+                                        [deliverable]: e.target.value as 'In-House' | 'Freelancer'
+                                      }));
+                                    }}
+                                    className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-850 text-xs text-zinc-300 rounded-xl px-3 py-2 font-sans focus:outline-none focus:border-purple-500 cursor-pointer min-h-[38px]"
+                                  >
+                                    <option value="In-House">In-House</option>
+                                    <option value="Freelancer">Freelancer</option>
+                                  </select>
                                 </div>
 
                                 {/* Multi-select staff assignment */}
@@ -5962,60 +6014,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     Assigned Staff
                                   </label>
                                   
-                                  {/* Pills */}
-                                  <div className="flex flex-wrap gap-1 mb-2">
-                                    {selectedStaffIds.map(sId => {
-                                      const s = productionStaff.find(st => st.staff_id === sId);
-                                      if (!s) return null;
-                                      return (
-                                        <span key={sId} className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-950/40 border border-purple-800/30 text-purple-300 rounded-full text-[10px] font-medium">
-                                          {s.name}
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setSelectedWfStaffByDeliverable(prev => ({
-                                                ...prev,
-                                                [deliverable]: (prev[deliverable] || []).filter(id => id !== sId)
-                                              }));
-                                            }}
-                                            className="text-purple-400 hover:text-white transition-colors ml-0.5 font-bold cursor-pointer"
-                                          >
-                                            ✕
-                                          </button>
-                                        </span>
-                                      );
-                                    })}
-                                    {selectedStaffIds.length === 0 && (
-                                      <span className="text-zinc-600 text-[10px] italic py-0.5">No staff assigned</span>
-                                    )}
-                                  </div>
-
-                                  {/* Staff Type Filter */}
-                                  <div className="space-y-1 mb-3">
-                                    <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
-                                      Staff Type
-                                    </label>
-                                    <select
-                                      value={wfStaffTypeByDeliverable[deliverable] || 'In-House'}
-                                      onChange={(e) => {
-                                        setWfStaffTypeByDeliverable(prev => ({
-                                          ...prev,
-                                          [deliverable]: e.target.value as 'In-House' | 'Freelancer'
-                                        }));
-                                      }}
-                                      className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-850 text-xs text-zinc-300 rounded-xl px-3 py-2 font-sans focus:outline-none focus:border-purple-500 cursor-pointer"
-                                    >
-                                      <option value="In-House">In-House</option>
-                                      <option value="Freelancer">Freelancer</option>
-                                    </select>
-                                  </div>
-
                                   {/* Custom dropdown trigger */}
                                   <div className="relative">
                                     <button
                                       type="button"
                                       onClick={() => setOpenDropdownDeliverable(openDropdownDeliverable === deliverable ? null : deliverable)}
-                                      className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-850 text-xs text-zinc-400 rounded-xl px-3 py-2 text-left flex items-center justify-between cursor-pointer"
+                                      className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-850 text-xs text-zinc-400 rounded-xl px-3 py-2 text-left flex items-center justify-between cursor-pointer min-h-[38px]"
                                     >
                                       <span className="text-[11px]">Select Team Member...</span>
                                       <span className="text-zinc-600 text-[9px]">{openDropdownDeliverable === deliverable ? '▲' : '▼'}</span>
@@ -6062,6 +6066,36 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   </div>
                                 </div>
                               </div>
+
+                              {/* Pills row (if any staff selected) */}
+                              <div className="pt-2">
+                                <div className="flex flex-wrap gap-1">
+                                  {selectedStaffIds.map(sId => {
+                                    const s = productionStaff.find(st => st.staff_id === sId);
+                                    if (!s) return null;
+                                    return (
+                                      <span key={sId} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-950/40 border border-purple-800/30 text-purple-300 rounded-full text-[10px] font-medium">
+                                        {s.name}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setSelectedWfStaffByDeliverable(prev => ({
+                                              ...prev,
+                                              [deliverable]: (prev[deliverable] || []).filter(id => id !== sId)
+                                            }));
+                                          }}
+                                          className="text-purple-400 hover:text-white transition-colors ml-0.5 font-bold cursor-pointer"
+                                        >
+                                          ✕
+                                        </button>
+                                      </span>
+                                    );
+                                  })}
+                                  {selectedStaffIds.length === 0 && (
+                                    <span className="text-zinc-600 text-[10px] italic py-0.5">No staff assigned</span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           );
                         })}
@@ -6105,34 +6139,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         </div>
                       </div>
 
-                      {/* Global target delivery date */}
-                      <div className="space-y-1.5 border-t border-zinc-900/60 pt-4">
-                        <label className="text-[10px] text-zinc-400 uppercase font-black tracking-wider block font-mono">
-                          Global Target Delivery Date <span className="text-rose-500">*</span>
-                        </label>
-                        <input
-                          type="date"
-                          value={wfTargetDeliveryDate}
-                          onChange={(e) => setWfTargetDeliveryDate(e.target.value)}
-                          className="w-full bg-zinc-950 border border-zinc-850 hover:border-zinc-800 text-xs text-zinc-100 rounded-xl px-3.5 py-2.5 font-mono focus:outline-none focus:border-purple-500"
-                          required
-                        />
-                      </div>
-
-                      {/* Notes / Instructions */}
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] text-zinc-400 uppercase font-black tracking-wider block font-mono">
-                          Project Notes / Instructions
-                        </label>
-                        <textarea
-                          rows={2}
-                          value={wfProjectNotes}
-                          onChange={(e) => setWfProjectNotes(e.target.value)}
-                          placeholder="Special instructions for the post-production crew..."
-                          className="w-full bg-zinc-950 border border-zinc-850 hover:border-zinc-800 text-xs text-zinc-100 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-purple-500 font-sans"
-                        />
-                      </div>
-
                       {/* Save & Assign Action Buttons */}
                       <div className="pt-2 flex items-center gap-3">
                         <button
@@ -6153,10 +6159,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           onClick={async () => {
                             setWfError('');
                             setWfSuccess('');
-                            if (!wfTargetDeliveryDate) {
-                              setWfError('Global Target Delivery Date is mandatory.');
-                              return;
-                            }
 
                             // Validate at least one assignment is made
                             const hasAssignments = Object.values(selectedWfStaffByDeliverable).some((arr: any) => arr && arr.length > 0);
@@ -6182,7 +6184,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                               for (const d of customDeliverables) {
                                 const staffIds = selectedWfStaffByDeliverable[d] || [];
-                                const tDate = deliverablesTargetDates[d] || wfTargetDeliveryDate;
+                                const tDate = deliverablesTargetDates[d] || '';
                                 
                                 for (const sId of staffIds) {
                                   const staffMem = activeStaffList.find(s => s.staff_id === sId);
@@ -6225,10 +6227,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               await updateProduction(activeWorkflowProd.production_id, {
                                 editor_assigned: primaryEditor,
                                 assigned_staff: assignedStaffJoined,
-                                target_delivery_date: wfTargetDeliveryDate,
                                 editing_status: 'Editor Assigned',
                                 production_status: 'Editor Assigned',
-                                project_notes: wfProjectNotes,
                                 production_role: rolesJoined,
                                 assigned_role: rolesJoined
                               } as any);

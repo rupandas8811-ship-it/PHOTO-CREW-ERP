@@ -554,6 +554,7 @@ export const mapProductionStaffFromDb = (item: any): Staff => {
     mobile,
     whatsapp_number,
     production_role_speciality,
+    staff_type: item.Staff_Type || item.staff_type || extra.Staff_Type || extra.staff_type,
     email: item.email || `${name.toLowerCase().replace(/\s+/g, '')}@photocrew.com`,
     role: item.role || 'Editor',
     department: item.department || 'Post-Production',
@@ -593,6 +594,26 @@ export const mapProductionStaffToDb = async (member: Staff | Partial<Staff>) => 
       dbRecord.whatsapp_number = member.whatsapp_number;
     } else {
       extra.whatsapp_number = member.whatsapp_number;
+    }
+  }
+
+  if (member.staff_type !== undefined) {
+    if (cols.includes('Staff_Type')) {
+      dbRecord.Staff_Type = member.staff_type;
+    } else if (cols.includes('staff_type')) {
+      dbRecord.staff_type = member.staff_type;
+    } else {
+      extra.Staff_Type = member.staff_type;
+    }
+  }
+
+  if ((member as any).Staff_Type !== undefined) {
+    if (cols.includes('Staff_Type')) {
+      dbRecord.Staff_Type = (member as any).Staff_Type;
+    } else if (cols.includes('staff_type')) {
+      dbRecord.staff_type = (member as any).Staff_Type;
+    } else {
+      extra.Staff_Type = (member as any).Staff_Type;
     }
   }
 
