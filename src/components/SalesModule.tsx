@@ -2262,6 +2262,69 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   // Customizable inclusions, deliverables, discount, and additional charges states
   const [editableInclusions, setEditableInclusions] = useState<Record<string, string[]>>({});
   const [editableDeliverables, setEditableDeliverables] = useState<Record<string, string[]>>({});
+  
+  const saveStep3DataRealtime = async (
+    updatedInclusions: Record<string, string[]>,
+    updatedDeliverables: Record<string, string[]>
+  ) => {
+    const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
+    const leadId = selectedLead?.lead_id;
+    if (!leadId || leadId === 'DRAFT-LEAD' || !pkgId || !supabaseClient) return;
+
+    const teamMembersJson = (crmEvents && crmEvents.length > 0)
+      ? crmEvents.map(event => {
+          const eventKey = `${pkgId}_${event.id}`;
+          const list = updatedInclusions[eventKey] !== undefined ? updatedInclusions[eventKey] : (updatedInclusions[pkgId] || []);
+          return {
+            event_name: event.event_name || event.event_type || 'Unnamed Event',
+            team_members: list.filter(Boolean)
+          };
+        })
+      : [
+          {
+            event_name: "General",
+            team_members: (updatedInclusions[pkgId] || []).filter(Boolean)
+          }
+        ];
+
+    const deliverablesJson = (crmEvents && crmEvents.length > 0)
+      ? crmEvents.map(event => {
+          return {
+            event_name: event.event_name || event.event_type || 'Unnamed Event',
+            deliverables: (updatedDeliverables[pkgId] || []).filter(Boolean)
+          };
+        })
+      : [
+          {
+            event_name: "General",
+            deliverables: (updatedDeliverables[pkgId] || []).filter(Boolean)
+          }
+        ];
+
+    try {
+      const { error } = await supabaseClient
+        .from('lead_packages')
+        .update({
+          Team_Members_Included: teamMembersJson,
+          deliverables_descriptionn: deliverablesJson,
+          editable_inclusions: updatedInclusions,
+          editable_deliverables: updatedDeliverables,
+          team_members: (updatedInclusions[pkgId] || []).join(', '),
+          deliverables: (updatedDeliverables[pkgId] || []).join(', ')
+        })
+        .eq('lead_id', leadId)
+        .eq('package_id', pkgId);
+
+      if (error) {
+        console.error("Error in saveStep3DataRealtime:", error);
+      } else {
+        showToastMsg("✅ Package updated successfully.", "success");
+      }
+    } catch (err) {
+      console.error("Exception in saveStep3DataRealtime:", err);
+    }
+  };
+
   const [salesStaffName, setSalesStaffName] = useState<string>('');
   const [salesStaffMobile, setSalesStaffMobile] = useState<string>('');
   const [quoteDiscount, setQuoteDiscount] = useState<number | ''>('');
@@ -2659,18 +2722,55 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         try {
           const { data, error } = await supabaseClient
             .from('lead_packages')
-            .select('editable_deliverables, editable_inclusions')
+            .select('editable_deliverables, editable_inclusions, Team_Members_Included, deliverables_descriptionn')
             .eq('lead_id', selectedLead.lead_id)
             .eq('package_id', pkgId)
             .limit(1)
             .maybeSingle();
           
           if (!error && data) {
-            if (data.editable_deliverables && Object.keys(data.editable_deliverables).length > 0) {
-              setEditableDeliverables(data.editable_deliverables as Record<string, string[]>);
+            const newInclusions: Record<string, string[]> = {};
+            const newDeliverables: Record<string, string[]> = {};
+            let hasLoadedInclusions = false;
+            let hasLoadedDeliverables = false;
+
+            if (data.Team_Members_Included && Array.isArray(data.Team_Members_Included)) {
+              data.Team_Members_Included.forEach((item: any) => {
+                const eventName = item.event_name;
+                const members = Array.isArray(item.team_members) ? item.team_members : [];
+                if (eventName === 'General') {
+                  newInclusions[pkgId] = members;
+                } else if (crmEvents && crmEvents.length > 0) {
+                  const matchingEvent = crmEvents.find(e => 
+                    (e.event_name || e.event_type || 'Unnamed Event') === eventName
+                  );
+                  if (matchingEvent) {
+                    newInclusions[`${pkgId}_${matchingEvent.id}`] = members;
+                  } else {
+                    newInclusions[`${pkgId}_${eventName}`] = members;
+                  }
+                } else {
+                  newInclusions[`${pkgId}_${eventName}`] = members;
+                }
+              });
+              setEditableInclusions(newInclusions);
+              hasLoadedInclusions = true;
             }
-            if (data.editable_inclusions && Object.keys(data.editable_inclusions).length > 0) {
+
+            if (data.deliverables_descriptionn && Array.isArray(data.deliverables_descriptionn)) {
+              const firstItem = data.deliverables_descriptionn[0];
+              if (firstItem && Array.isArray(firstItem.deliverables)) {
+                newDeliverables[pkgId] = firstItem.deliverables;
+              }
+              setEditableDeliverables(newDeliverables);
+              hasLoadedDeliverables = true;
+            }
+
+            if (!hasLoadedInclusions && data.editable_inclusions && Object.keys(data.editable_inclusions).length > 0) {
               setEditableInclusions(data.editable_inclusions as Record<string, string[]>);
+            }
+            if (!hasLoadedDeliverables && data.editable_deliverables && Object.keys(data.editable_deliverables).length > 0) {
+              setEditableDeliverables(data.editable_deliverables as Record<string, string[]>);
             }
           }
         } catch (e) {
@@ -2679,7 +2779,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       };
       fetchSupabasePackageData();
     }
-  }, [selectedLead?.lead_id, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, supabaseClient]);
+  }, [selectedLead?.lead_id, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, supabaseClient, crmEvents]);
 
   // Save to Supabase directly for the JSON columns
   const isFirstRender = React.useRef(true);
@@ -3900,8 +4000,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
 
         // Open Step 2 Follow-up details modal before moving to Step 3
-        setStep2FollowUpDate('');
-        setStep2FollowUpNotes('');
+        const currentId = selectedLead?.lead_id;
+        const savedDate = currentId ? (localStorage.getItem(`follow_up_date_${currentId}`) || selectedLead?.next_follow_up_date || '') : '';
+        const savedNotes = currentId ? (localStorage.getItem(`follow_up_notes_${currentId}`) || selectedLead?.follow_up_notes || '') : '';
+        setStep2FollowUpDate(savedDate);
+        setStep2FollowUpNotes(savedNotes);
         setShowStep2Popup(true);
         setIsSaving(false);
         return; // Halt here. The rest of the Step 2 saving is handled in handleSaveStep2FollowUp
@@ -4256,6 +4359,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         step2FollowUpNotes || 'Saved event details'
       );
 
+      localStorage.setItem(`follow_up_date_${currentLeadId}`, step2FollowUpDate);
+      localStorage.setItem(`follow_up_notes_${currentLeadId}`, step2FollowUpNotes);
+
       if (isCreateFlow) {
         setSalesStatus(targetStatus as CurrentStage);
         setWizardStep(3);
@@ -4277,14 +4383,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             ...prev,
             status: targetStatus as CurrentStage,
             current_status: targetStatus,
-            remarks: updatedRemarks
+            remarks: updatedRemarks,
+            follow_up_notes: step2FollowUpNotes,
+            next_follow_up_date: step2FollowUpDate
           };
         });
 
         setCrmWizardStep(3);
       }
 
-      showToastMsg("Event details and follow-up saved successfully. Status set to Follow-up.", "success");
+      showToastMsg("✅ Follow-up updated successfully.", "success");
       setShowStep2Popup(false);
     } catch (err: any) {
       console.error("Step 2 Follow-up save failed:", err);
@@ -5421,8 +5529,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       try {
         // Open Step 2 Follow-up details modal before moving to Step 3
-        setStep2FollowUpDate('');
-        setStep2FollowUpNotes('');
+        const currentId = createdLeadId;
+        const savedDate = currentId ? (localStorage.getItem(`follow_up_date_${currentId}`) || '') : '';
+        const savedNotes = currentId ? (localStorage.getItem(`follow_up_notes_${currentId}`) || '') : '';
+        setStep2FollowUpDate(savedDate);
+        setStep2FollowUpNotes(savedNotes);
         setShowStep2Popup(true);
         setIsSaving(false);
       } catch (err: any) {
@@ -7650,182 +7761,40 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">3. Package Selection</span>
                   </div>
 
-                  <div className="relative">
+                  <div>
                     <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                      Packages Required
+                      Select Package Option *
                     </label>
 
-                    {/* Selected Packages Tags/Chips */}
-                    {selectedPkgIds.length > 0 && (
-                      <div id="pkg_selected_tags_chips" className="flex flex-wrap gap-1.5 mb-3 pt-0.5 animate-fade-in">
-                        {selectedPkgIds.map((id) => {
-                          const pkg = PACKAGES_LIST.flatMap(cat => cat.items).find(item => item.id === id);
-                          if (!pkg) return null;
-                          return (
-                            <span
-                              key={id}
-                              className="inline-flex items-center gap-1 bg-emerald-950/70 border border-emerald-500/30 text-emerald-300 text-[11px] font-medium px-2.5 py-1 rounded-full hover:bg-emerald-900/60 transition-all duration-150"
-                            >
-                              <span>{pkg.name} — ₹{pkg.cost.toLocaleString('en-IN')}</span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedPkgIds(selectedPkgIds.filter(x => x !== id));
-                                }}
-                                className="hover:bg-emerald-850 rounded-full p-0.5 focus:outline-none cursor-pointer transition-colors inline-flex items-center justify-center ml-0.5"
-                                title="Remove Package"
-                              >
-                                <X className="w-3 h-3 text-emerald-450 stroke-[2.5px]" />
-                              </button>
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    <button
+                    <select
                       id="wizard_step3_first_field"
-                      type="button"
-                      onClick={() => setIsPkgDropdownOpen(!isPkgDropdownOpen)}
-                      className={`w-full bg-[#0F172A] border rounded-lg py-2.5 px-3.5 text-xs flex items-center justify-between focus:outline-none transition-all cursor-pointer ${
+                      value={selectedPkgIds[0] || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val) {
+                          setSelectedPkgIds([val]);
+                        } else {
+                          setSelectedPkgIds([]);
+                        }
+                      }}
+                      className={`w-full bg-[#0F172A] border rounded-lg py-2.5 px-3.5 text-xs cursor-pointer focus:outline-none transition-all ${
                         selectedPkgIds.length === 0
-                          ? 'border-rose-500/40 hover:border-rose-500 text-rose-300'
-                          : 'border-slate-800 hover:border-emerald-600 text-white'
+                          ? 'border-rose-500/40 focus:border-rose-500 text-rose-300'
+                          : 'border-slate-800 focus:border-emerald-600 text-white'
                       }`}
                     >
-                      <span className="font-medium">
-                        {selectedPkgIds.length === 0
-                          ? 'Select Package...'
-                          : (PACKAGES_LIST.flatMap(cat => cat.items).find(item => item.id === selectedPkgIds[0])?.name || '1 Package Selected')}
-                      </span>
-                      <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isPkgDropdownOpen ? 'rotate-180' : ''}`} />
-                    </button>
+                      <option value="" className="text-slate-400">── Choose configuration package ──</option>
+                      {PACKAGES_LIST.flatMap(cat => cat.items).map((pkg) => (
+                        <option key={pkg.id} value={pkg.id} className="text-white bg-[#0F172A]">
+                          {pkg.name} (₹{pkg.cost.toLocaleString('en-IN')})
+                        </option>
+                      ))}
+                    </select>
+
                     {selectedPkgIds.length === 0 && (
                       <p className="text-rose-450 font-bold text-xs mt-1.5 font-mono animate-pulse flex items-center gap-1.5">
                         ⚠️ Please select a package before continuing.
                       </p>
-                    )}
-
-                    {isPkgDropdownOpen && (
-                      <div id="pkg_multiselect_dropdown" className="absolute z-30 left-0 right-0 mt-1 max-h-72 overflow-y-auto bg-[#0F172A] border border-slate-800 rounded-xl shadow-2xl p-3.5 space-y-4">
-                        {/* Search Input Filter */}
-                        <div className="relative" onClick={(e) => e.stopPropagation()}>
-                          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-500 pointer-events-none" />
-                          <input
-                            type="text"
-                            placeholder="Search packages by name, category, or service..."
-                            value={pkgSearchQuery}
-                            onChange={(e) => setPkgSearchQuery(e.target.value)}
-                            className="w-full bg-[#1e293b] border border-slate-800 rounded-lg pl-8.5 pr-8 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition-all font-sans"
-                            autoFocus
-                          />
-                          {pkgSearchQuery && (
-                            <button
-                              type="button"
-                              onClick={() => setPkgSearchQuery('')}
-                              className="absolute right-2.5 top-2.5 hover:bg-slate-800 p-0.5 rounded cursor-pointer text-slate-400 hover:text-slate-200 transition-colors"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-
-                        {(() => {
-                          if (PACKAGES_LIST.flatMap(cat => cat.items).length === 0) {
-                            return (
-                              <div className="text-center py-6 text-slate-400 space-y-3" onClick={(e) => e.stopPropagation()}>
-                                <div className="font-mono text-xs font-semibold">No Packages Available</div>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setIsPkgDropdownOpen(false);
-                                    setActiveTab('packages');
-                                  }}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg text-xs transition-colors cursor-pointer border border-transparent"
-                                >
-                                  <Plus className="w-3.5 h-3.5" />
-                                  <span>Create Package</span>
-                                </button>
-                              </div>
-                            );
-                          }
-
-                          const searchLower = pkgSearchQuery.toLowerCase().trim();
-                          const filteredCategories = PACKAGES_LIST.map((category) => {
-                            const categoryMatch = category.categoryName.toLowerCase().includes(searchLower);
-                            const matchedItems = category.items.filter((item) => {
-                              return (
-                                item.name.toLowerCase().includes(searchLower) ||
-                                categoryMatch
-                              );
-                            });
-                            return {
-                              ...category,
-                              categoryMatch,
-                              items: matchedItems,
-                            };
-                          }).filter((cat) => cat.items.length > 0);
-
-                          if (filteredCategories.length === 0) {
-                            return (
-                              <div className="text-center py-5 text-xs text-slate-500 font-mono" onClick={(e) => e.stopPropagation()}>
-                                No matching packages found for "{pkgSearchQuery}"
-                              </div>
-                            );
-                          }
-
-                          return filteredCategories.map((category) => (
-                            <div key={category.categoryName} className="space-y-2" onClick={(e) => e.stopPropagation()}>
-                              <span className="text-[10px] font-black text-slate-500 font-mono tracking-wider block uppercase border-b border-slate-900/50 pb-1">
-                                {highlightText(category.categoryName, pkgSearchQuery)}
-                              </span>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
-                                  {category.items.map((pkg) => {
-                                    const isChecked = selectedPkgIds.includes(pkg.id);
-                                    return (
-                                      <button
-                                        key={pkg.id}
-                                        type="button"
-                                        onClick={() => {
-                                          if (isChecked) {
-                                            setSelectedPkgIds([]);
-                                          } else {
-                                            setSelectedPkgIds([pkg.id]);
-                                            setIsPkgDropdownOpen(false);
-                                          }
-                                        }}
-                                      className={`flex items-center justify-between text-left px-2.5 py-2 rounded-lg border text-xs cursor-pointer transition-all duration-150 ${
-                                        isChecked
-                                          ? 'bg-[#0c2d24] border-emerald-500 text-emerald-100 shadow-[0_0_12px_rgba(16,185,129,0.1)]'
-                                          : 'bg-[#1b2234] border-slate-850 text-slate-250 hover:border-slate-700 hover:bg-[#242d45]'
-                                      }`}
-                                    >
-                                      <div className="flex items-center gap-2 overflow-hidden">
-                                        <div className={`w-3.5 h-3.5 flex items-center justify-center rounded border transition-all duration-150 shrink-0 ${isChecked ? 'bg-emerald-500 border-emerald-600' : 'border-slate-600'}`}>
-                                          {isChecked && <Check className="w-2.5 h-2.5 text-white stroke-[3.5px]" />}
-                                        </div>
-                                        <span className="font-medium break-words">{highlightText(pkg.name, pkgSearchQuery)}</span>
-                                      </div>
-                                      <span className="font-mono text-[10px] opacity-85 pl-2.5 shrink-0 text-emerald-400">₹{pkg.cost.toLocaleString('en-IN')}</span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ));
-                        })()}
-
-                        <div className="flex justify-end pt-1.5 border-t border-slate-900/55" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            onClick={() => setIsPkgDropdownOpen(false)}
-                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition-all cursor-pointer shadow-md"
-                          >
-                            Done Selecting
-                          </button>
-                        </div>
-                      </div>
                     )}
                   </div>
 
@@ -9291,10 +9260,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                               onClick={() => {
                                                 const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
                                                 currentList.push('');
-                                                setEditableInclusions({
+                                                const updated = {
                                                   ...editableInclusions,
                                                   [eventKey]: currentList
-                                                });
+                                                };
+                                                setEditableInclusions(updated);
+                                                saveStep3DataRealtime(updated, editableDeliverables);
                                               }}
                                               className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded transition-all cursor-pointer"
                                             >
@@ -9314,10 +9285,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                                     onChange={(e) => {
                                                       const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
                                                       currentList[idx] = e.target.value;
-                                                      setEditableInclusions({
+                                                      const updated = {
                                                         ...editableInclusions,
                                                         [eventKey]: currentList
-                                                      });
+                                                      };
+                                                      setEditableInclusions(updated);
+                                                      saveStep3DataRealtime(updated, editableDeliverables);
                                                     }}
                                                     className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
                                                   />
@@ -9327,10 +9300,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                                       onClick={() => {
                                                         const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
                                                         currentList.splice(idx, 1);
-                                                        setEditableInclusions({
+                                                        const updated = {
                                                           ...editableInclusions,
                                                           [eventKey]: currentList
-                                                        });
+                                                        };
+                                                        setEditableInclusions(updated);
+                                                        saveStep3DataRealtime(updated, editableDeliverables);
                                                       }}
                                                       className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer"
                                                     >
@@ -9355,10 +9330,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                         onClick={() => {
                                           const currentList = [...(editableInclusions[selectedPkgId] || [])];
                                           currentList.push('');
-                                          setEditableInclusions({
+                                          const updated = {
                                             ...editableInclusions,
                                             [selectedPkgId]: currentList
-                                          });
+                                          };
+                                          setEditableInclusions(updated);
+                                          saveStep3DataRealtime(updated, editableDeliverables);
                                         }}
                                         className="text-xs text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded"
                                       >
@@ -9378,10 +9355,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                               onChange={(e) => {
                                                 const currentList = [...(editableInclusions[selectedPkgId] || [])];
                                                 currentList[idx] = e.target.value;
-                                                setEditableInclusions({
+                                                const updated = {
                                                   ...editableInclusions,
                                                   [selectedPkgId]: currentList
-                                                });
+                                                };
+                                                setEditableInclusions(updated);
+                                                saveStep3DataRealtime(updated, editableDeliverables);
                                               }}
                                               className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
                                             />
@@ -9391,10 +9370,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                                 onClick={() => {
                                                   const currentList = [...(editableInclusions[selectedPkgId] || [])];
                                                   currentList.splice(idx, 1);
-                                                  setEditableInclusions({
+                                                  const updated = {
                                                     ...editableInclusions,
                                                     [selectedPkgId]: currentList
-                                                  });
+                                                  };
+                                                  setEditableInclusions(updated);
+                                                  saveStep3DataRealtime(updated, editableDeliverables);
                                                 }}
                                                 className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono"
                                               >
@@ -9418,10 +9399,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                     onClick={() => {
                                       const currentList = [...(editableDeliverables[selectedPkgId] || [])];
                                       currentList.unshift('');
-                                      setEditableDeliverables({
+                                      const updated = {
                                         ...editableDeliverables,
                                         [selectedPkgId]: currentList
-                                      });
+                                      };
+                                      setEditableDeliverables(updated);
+                                      saveStep3DataRealtime(editableInclusions, updated);
                                     }}
                                     className="text-xs text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded"
                                   >
@@ -9441,10 +9424,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                           onChange={(e) => {
                                             const currentList = [...(editableDeliverables[selectedPkgId] || [])];
                                             currentList[idx] = e.target.value;
-                                            setEditableDeliverables({
+                                            const updated = {
                                               ...editableDeliverables,
                                               [selectedPkgId]: currentList
-                                            });
+                                            };
+                                            setEditableDeliverables(updated);
+                                            saveStep3DataRealtime(editableInclusions, updated);
                                           }}
                                           className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
                                         />
@@ -9454,10 +9439,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                             onClick={() => {
                                               const currentList = [...(editableDeliverables[selectedPkgId] || [])];
                                               currentList.splice(idx, 1);
-                                              setEditableDeliverables({
+                                              const updated = {
                                                 ...editableDeliverables,
                                                 [selectedPkgId]: currentList
-                                              });
+                                              };
+                                              setEditableDeliverables(updated);
+                                              saveStep3DataRealtime(editableInclusions, updated);
                                             }}
                                             className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono"
                                           >

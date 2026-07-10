@@ -2725,6 +2725,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     packagesSelected: Omit<LeadPackage, 'lead_package_id' | 'lead_id'>[]
   ) => {
     const existing = leadPackages.filter(lp => lp.lead_id === leadId);
+    const targetLead = leads.find(l => l.lead_id === leadId);
+    const leadEventsList = targetLead?.events || [];
 
     if (packagesSelected && packagesSelected.length > 0) {
       const newPkgIds = new Set(packagesSelected.map(p => p.package_id));
@@ -2738,13 +2740,59 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       for (const [index, pkg] of packagesSelected.entries()) {
         const existingPkg = existing.find(ex => ex.package_id === pkg.package_id);
         
+        const edInclusions = pkg.editable_inclusions || (existingPkg ? existingPkg.editable_inclusions : undefined);
+        const edDeliverables = pkg.editable_deliverables || (existingPkg ? existingPkg.editable_deliverables : undefined);
+
+        let teamMembersJson = pkg.Team_Members_Included || (existingPkg ? existingPkg.Team_Members_Included : null);
+        let deliverablesJson = pkg.deliverables_descriptionn || (existingPkg ? existingPkg.deliverables_descriptionn : null);
+
+        if (!teamMembersJson && edInclusions) {
+          teamMembersJson = (leadEventsList && leadEventsList.length > 0)
+            ? leadEventsList.map(event => {
+                const eventKey = `${pkg.package_id}_${event.id}`;
+                const list = edInclusions[eventKey] !== undefined ? edInclusions[eventKey] : (edInclusions[pkg.package_id] || []);
+                return {
+                  event_name: event.event_name || event.event_type || 'Unnamed Event',
+                  team_members: list.filter(Boolean)
+                };
+              })
+            : [
+                {
+                  event_name: "General",
+                  team_members: (edInclusions[pkg.package_id] || []).filter(Boolean)
+                }
+              ];
+        }
+
+        if (!deliverablesJson && edDeliverables) {
+          deliverablesJson = (leadEventsList && leadEventsList.length > 0)
+            ? leadEventsList.map(event => {
+                return {
+                  event_name: event.event_name || event.event_type || 'Unnamed Event',
+                  deliverables: (edDeliverables[pkg.package_id] || []).filter(Boolean)
+                };
+              })
+            : [
+                {
+                  event_name: "General",
+                  deliverables: (edDeliverables[pkg.package_id] || []).filter(Boolean)
+                }
+              ];
+        }
+
+        const updatedPkgData = {
+          ...pkg,
+          ...(teamMembersJson ? { Team_Members_Included: teamMembersJson } : {}),
+          ...(deliverablesJson ? { deliverables_descriptionn: deliverablesJson } : {})
+        };
+
         if (existingPkg) {
           await pushUpdate('lead_packages', 'lead_package_id', existingPkg.lead_package_id, {
-            ...pkg
+            ...updatedPkgData
           });
         } else {
           await pushInsert('lead_packages', {
-            ...pkg,
+            ...updatedPkgData,
             lead_package_id: `LP-${leadId}-${index}-${Math.floor(100 + Math.random() * 900)}`,
             lead_id: leadId,
             created_at: new Date().toISOString()
@@ -2852,6 +2900,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             current_status: normalizedStatus,
             budget: quotationAmount !== undefined ? quotationAmount : ld.budget,
             remarks: `${ld.remarks || ''}\n[Update ${timestamp.split('T')[0]}]: ${callNotes}. ${negotiationNotes ? 'Neg Notes: ' + negotiationNotes : ''}. Next follow-up: ${nextFollowUpDate}`,
+            follow_up_notes: callNotes || undefined,
+            next_follow_up_date: nextFollowUpDate || undefined,
             updated_by: currentUserName,
             updated_at: timestamp
           };

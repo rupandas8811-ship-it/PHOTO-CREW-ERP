@@ -231,6 +231,8 @@ export interface LeadPackage {
   deliverables?: string;
   editable_inclusions?: Record<string, string[]>;
   editable_deliverables?: Record<string, string[]>;
+  Team_Members_Included?: any;
+  deliverables_descriptionn?: any;
 }
 
 export interface Order {
