@@ -772,6 +772,39 @@ ${coordinatorName}`;
     return status;
   };
 
+  const getAssignedEditorsList = (prod: Production) => {
+    const fromAssignments = editorAssignments.filter(a => a.production_id === prod.production_id);
+    if (fromAssignments.length > 0) {
+      return fromAssignments.map(a => {
+        const staffRec = productionStaff.find(s => s.staff_id === a.staff_id);
+        return {
+          name: a.staff_name,
+          deliverable: a.speciality,
+          role: staffRec?.role || 'Editor',
+          mobile: staffRec?.mobile || 'N/A',
+          type: staffRec?.staff_type || (staffRec as any)?.Staff_Type || 'In-House',
+          status: staffRec?.status || 'Active'
+        };
+      });
+    }
+    const staffStr = prod.assigned_staff || prod.editor_assigned;
+    if (staffStr && staffStr !== 'Unassigned') {
+      return staffStr.split(',').map(s => {
+        const name = s.trim();
+        const staffRec = productionStaff.find(st => st.name === name);
+        return {
+          name: name,
+          deliverable: 'Unspecified',
+          role: staffRec?.role || 'Editor',
+          mobile: staffRec?.mobile || 'N/A',
+          type: staffRec?.staff_type || (staffRec as any)?.Staff_Type || 'In-House',
+          status: staffRec?.status || 'Active'
+        };
+      });
+    }
+    return [];
+  };
+
   const getAssignedEditorsText = (prod: Production): string => {
     const assigned_editors = (() => {
       const fromAssignments = editorAssignments.filter(a => a.production_id === prod.production_id);
@@ -1227,6 +1260,7 @@ ${coordinatorName}`;
   // New Deliverable-wise assignment states
   const [deliverablesTargetDates, setDeliverablesTargetDates] = useState<Record<string, string>>({});
   const [selectedWfStaffByDeliverable, setSelectedWfStaffByDeliverable] = useState<Record<string, string[]>>({});
+  const [wfStaffTypeByDeliverable, setWfStaffTypeByDeliverable] = useState<Record<string, 'In-House' | 'Freelancer'>>({});
   const [whatsappShareModalOpen, setWhatsappShareModalOpen] = useState(false);
   const [whatsappShareData, setWhatsappShareData] = useState<any | null>(null);
   const [previewStaffMessage, setPreviewStaffMessage] = useState<{ staffName: string; message: string } | null>(null);
@@ -1234,6 +1268,7 @@ ${coordinatorName}`;
   const [customDeliverables, setCustomDeliverables] = useState<string[]>([]);
   const [newDeliverableInput, setNewDeliverableInput] = useState('');
   const [openDropdownDeliverable, setOpenDropdownDeliverable] = useState<string | null>(null);
+  const [assignedEditorsModalProd, setAssignedEditorsModalProd] = useState<Production | null>(null);
 
   // Simplified Add Staff Form states
   const [newStaffName, setNewStaffName] = useState('');
@@ -1335,6 +1370,7 @@ ${coordinatorName}`;
         // Load existing staff map & dates map
         const initialStaffMap: Record<string, string[]> = {};
         const initialDatesMap: Record<string, string> = {};
+        const initialStaffTypeMap: Record<string, 'In-House' | 'Freelancer'> = {};
         
         assignedForThis.forEach(a => {
           const deliverable = a.speciality;
@@ -1346,11 +1382,17 @@ ${coordinatorName}`;
               initialStaffMap[deliverable].push(a.staff_id);
             }
             initialDatesMap[deliverable] = a.target_finish_date || '';
+            
+            const st = productionStaff.find(s => s.staff_id === a.staff_id);
+            if (st && (st.staff_type || (st as any).Staff_Type)) {
+              initialStaffTypeMap[deliverable] = (st.staff_type || (st as any).Staff_Type) as 'In-House' | 'Freelancer';
+            }
           }
         });
         
         setSelectedWfStaffByDeliverable(initialStaffMap);
         setDeliverablesTargetDates(initialDatesMap);
+        setWfStaffTypeByDeliverable(initialStaffTypeMap);
         setWfProjectNotes(activeWorkflowProd?.project_notes || activeWorkflowProd?.remarks || '');
 
         if (assignedForThis.length === 0) {
@@ -2274,9 +2316,23 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                            </td>
 
                           {/* Editor Assigned */}
-                          <td className="p-4 text-left font-sans">
+                          <td className="p-4 text-center font-sans">
                             <div className="font-bold text-zinc-200">
-                              {getAssignedEditorsText(prod)}
+                              {(() => {
+                                const editorsList = getAssignedEditorsList(prod);
+                                if (editorsList.length === 0) {
+                                  return <span className="text-zinc-600 text-[10px]">No editors assigned.</span>;
+                                }
+                                return (
+                                  <span 
+                                    onClick={() => setAssignedEditorsModalProd(prod)}
+                                    className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline underline-offset-2 px-2 py-1 bg-indigo-500/10 rounded"
+                                    title="View Assigned Editors"
+                                  >
+                                    {editorsList.length}
+                                  </span>
+                                );
+                              })()}
                             </div>
                           </td>
 
@@ -5895,6 +5951,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       delete copy[deliverable];
                                       return copy;
                                     });
+                                    setWfStaffTypeByDeliverable(prev => {
+                                      const copy = { ...prev };
+                                      delete copy[deliverable];
+                                      return copy;
+                                    });
                                   }}
                                   className="text-zinc-600 hover:text-rose-400 transition-colors p-1 cursor-pointer"
                                   title="Remove Deliverable"
@@ -5957,6 +6018,26 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     )}
                                   </div>
 
+                                  {/* Staff Type Filter */}
+                                  <div className="space-y-1 mb-3">
+                                    <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
+                                      Staff Type
+                                    </label>
+                                    <select
+                                      value={wfStaffTypeByDeliverable[deliverable] || 'In-House'}
+                                      onChange={(e) => {
+                                        setWfStaffTypeByDeliverable(prev => ({
+                                          ...prev,
+                                          [deliverable]: e.target.value as 'In-House' | 'Freelancer'
+                                        }));
+                                      }}
+                                      className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-850 text-xs text-zinc-300 rounded-xl px-3 py-2 font-sans focus:outline-none focus:border-purple-500 cursor-pointer"
+                                    >
+                                      <option value="In-House">In-House</option>
+                                      <option value="Freelancer">Freelancer</option>
+                                    </select>
+                                  </div>
+
                                   {/* Custom dropdown trigger */}
                                   <div className="relative">
                                     <button
@@ -5980,6 +6061,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                         />
                                         {productionStaff
                                           .filter(s => s.status === 'Active')
+                                          .filter(s => (s.staff_type || (s as any).Staff_Type || 'In-House') === (wfStaffTypeByDeliverable[deliverable] || 'In-House'))
                                           .filter(s => s.name.toLowerCase().includes(editorSearchQuery.toLowerCase()))
                                           .map(s => {
                                             const isChecked = selectedStaffIds.includes(s.staff_id);
@@ -7053,6 +7135,86 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           </div>
         );
       })()}
+
+      {/* ASSIGNED EDITORS POPUP */}
+      {assignedEditorsModalProd && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all duration-300">
+            {/* Header */}
+            <div className="p-5 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
+              <div>
+                <span className="text-[9px] font-mono font-black uppercase tracking-widest text-indigo-400 block mb-0.5">
+                  Production Lead • Assigned Editors
+                </span>
+                <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">
+                  {assignedEditorsModalProd.production_id}
+                </h3>
+              </div>
+              <button
+                onClick={() => setAssignedEditorsModalProd(null)}
+                className="text-zinc-500 hover:text-white transition-colors p-2 cursor-pointer bg-zinc-900/50 hover:bg-zinc-900 rounded-xl"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="p-5 overflow-y-auto font-sans flex-1">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-zinc-900 bg-zinc-950/70 text-zinc-500 font-mono text-[9px] uppercase tracking-wider">
+                    <th className="p-3 font-bold">Staff Name</th>
+                    <th className="p-3 font-bold">Staff Type</th>
+                    <th className="p-3 font-bold">Assigned Deliverable</th>
+                    <th className="p-3 font-bold">Assigned Role</th>
+                    <th className="p-3 font-bold">Mobile Number</th>
+                    <th className="p-3 font-bold">Current Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-900 text-zinc-300">
+                  {(() => {
+                    const editorsList = getAssignedEditorsList(assignedEditorsModalProd);
+                    if (editorsList.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={6} className="p-6 text-center text-zinc-600 italic">
+                            No editors assigned.
+                          </td>
+                        </tr>
+                      );
+                    }
+                    return editorsList.map((editor, idx) => (
+                      <tr key={idx} className="hover:bg-zinc-900/40">
+                        <td className="p-3 font-bold text-zinc-200">{editor.name}</td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium ${
+                            editor.type === 'In-House' 
+                              ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' 
+                              : 'bg-orange-500/10 text-orange-400 border border-orange-500/20'
+                          }`}>
+                            {editor.type}
+                          </span>
+                        </td>
+                        <td className="p-3 text-emerald-400">{editor.deliverable}</td>
+                        <td className="p-3">{editor.role}</td>
+                        <td className="p-3 font-mono text-zinc-400">{editor.mobile}</td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium ${
+                            editor.status === 'Active'
+                              ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                              : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                          }`}>
+                            {editor.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* WHATSAPP SHARE POPUP */}
       {whatsappShareModalOpen && whatsappShareData && (

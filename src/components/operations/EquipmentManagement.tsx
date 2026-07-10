@@ -139,6 +139,18 @@ export const EquipmentManagement: React.FC = () => {
       return;
     }
 
+    // Check for duplicate equipment
+    const isDuplicate = equipment.some(eq => 
+      eq.equipment_name.toLowerCase() === form.equipment_name.toLowerCase() && 
+      eq.brand.toLowerCase() === form.brand.toLowerCase() &&
+      eq.equipment_id !== editingId
+    );
+
+    if (isDuplicate) {
+      showToast('error', 'Equipment with this name and brand already exists.');
+      return;
+    }
+
     try {
       if (editingId) {
         // Editing: Only allow updating the 4 fields!

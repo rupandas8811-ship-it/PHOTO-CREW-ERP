@@ -32,7 +32,7 @@ export const OperationsStaffManagement: React.FC = () => {
   const [selectedStaffBookings, setSelectedStaffBookings] = useState<{ staffName: string; bookings: any[] } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const handleSelectEdit = (st: Staff) => {
+  const handleSelectEdit = (st: any) => {
     setEditingId(st.staff_id);
     setForm({
       name: st.name,
@@ -42,12 +42,14 @@ export const OperationsStaffManagement: React.FC = () => {
       whatsapp_number: st.whatsapp_number || '',
       department: st.department || 'Operations',
       status: st.status,
-      staff_type: st.staff_type || 'In-House',
+      staff_type: st.Staff_Type || st.staff_type || 'In-House',
       joining_date: st.joining_date || new Date().toISOString().split('T')[0],
       profile_photo: st.profile_photo || '',
       notes: st.notes || ''
     });
-    const loadedSkills = st.notes ? st.notes.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const loadedSkills = st.Skill 
+      ? (typeof st.Skill === 'string' ? st.Skill.split(',').map((s: string) => s.trim()).filter(Boolean) : (Array.isArray(st.Skill) ? st.Skill : []))
+      : (st.notes ? st.notes.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
     setSkills(loadedSkills);
   };
 
@@ -102,7 +104,9 @@ export const OperationsStaffManagement: React.FC = () => {
     const submissionPayload = {
       ...form,
       email: finalEmail,
-      notes: finalNotes
+      notes: finalNotes,
+      Skill: finalNotes,
+      Staff_Type: form.staff_type
     };
 
     try {

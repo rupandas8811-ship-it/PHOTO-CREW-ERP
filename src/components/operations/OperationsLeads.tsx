@@ -1648,24 +1648,26 @@ export const OperationsLeads: React.FC = () => {
                                 🎯 Actions <span className={`text-[9px] text-indigo-200 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : ''}`}>▼</span>
                               </button>
                               {isOpen && (
-                                <div className="absolute right-0 mt-2 w-52 bg-zinc-950/95 backdrop-blur-md border border-zinc-800/80 rounded-2xl shadow-2xl z-[150] py-1.5 text-left animate-in fade-in slide-in-from-top-2 duration-150">
-                                  <div className="px-3.5 py-1 border-b border-zinc-900/60 mb-1">
+                                <div className="absolute right-0 mt-1 min-w-[150px] max-w-[200px] w-max bg-zinc-950/95 backdrop-blur-md border border-zinc-800/80 rounded-xl shadow-2xl z-[200] py-1 text-left animate-in fade-in slide-in-from-top-1 duration-150 flex flex-col overflow-hidden">
+                                  <div className="px-3 py-1 border-b border-zinc-900/60 mb-1 flex-shrink-0">
                                     <span className="text-[9px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Options</span>
                                   </div>
-                                  {actionItems.map((act, aIdx) => (
-                                    <button
-                                      key={aIdx}
-                                      onClick={act.onClick}
-                                      className="w-full text-left px-3.5 py-2.5 text-xs text-zinc-300 hover:bg-indigo-600/10 hover:text-indigo-400 active:bg-indigo-600/20 transition-all cursor-pointer block font-mono border-b border-zinc-900/20 last:border-0"
-                                    >
-                                      ⚡ {act.label}
-                                    </button>
-                                  ))}
-                                  {actionItems.length === 0 && (
-                                    <div className="px-3.5 py-2 text-xs text-zinc-500 italic font-mono">
-                                      No actions available
-                                    </div>
-                                  )}
+                                  <div className="max-h-44 overflow-y-auto divide-y divide-zinc-900/40">
+                                    {actionItems.map((act, aIdx) => (
+                                      <button
+                                        key={aIdx}
+                                        onClick={act.onClick}
+                                        className="w-full text-left px-3 py-2 text-[11px] text-zinc-300 hover:bg-indigo-600/10 hover:text-indigo-400 active:bg-indigo-600/20 transition-all cursor-pointer block font-mono whitespace-nowrap"
+                                      >
+                                        ⚡ {act.label}
+                                      </button>
+                                    ))}
+                                    {actionItems.length === 0 && (
+                                      <div className="px-3 py-1.5 text-[11px] text-zinc-500 italic font-mono">
+                                        No actions available
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               )}
                             </div>

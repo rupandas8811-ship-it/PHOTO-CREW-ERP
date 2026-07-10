@@ -44,6 +44,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
   const [formDepartment, setFormDepartment] = useState('Post-Production');
   const [formStatus, setFormStatus] = useState<'Active' | 'Inactive'>('Active');
   const [formSpeciality, setFormSpeciality] = useState('');
+  const [formStaffType, setFormStaffType] = useState<'In-House' | 'Freelancer'>('In-House');
 
   // Open the add form
   const openAddForm = () => {
@@ -63,6 +64,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     // Default to the first active speciality or empty
     const firstActiveSpec = specialities.find(s => s.active)?.name || '';
     setFormSpeciality(firstActiveSpec);
+    setFormStaffType('In-House');
     
     setIsFormOpen(true);
   };
@@ -80,6 +82,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     setFormDepartment(member.department || 'Post-Production');
     setFormStatus(member.status);
     setFormSpeciality(member.production_role_speciality || '');
+    setFormStaffType(member.staff_type || (member as any).Staff_Type || 'In-House');
     setIsFormOpen(true);
   };
 
@@ -106,7 +109,8 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
       production_role_speciality: formSpeciality,
       experience: 'Professional Specialist',
       employee_id: formEmployeeId.trim(),
-      city: formCity.trim() || 'N/A'
+      city: formCity.trim() || 'N/A',
+      staff_type: formStaffType
     };
 
     try {
@@ -810,6 +814,22 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                     >
                       <option value="Active">Active / Ready to Assign</option>
                       <option value="Inactive">Inactive / Suspended</option>
+                    </select>
+                  </div>
+                  
+                  {/* Staff Type (In-House / Freelancer) */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold block">
+                      Staff Type *
+                    </label>
+                    <select
+                      value={formStaffType}
+                      onChange={(e) => setFormStaffType(e.target.value as any)}
+                      className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-zinc-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      required
+                    >
+                      <option value="In-House">In-House</option>
+                      <option value="Freelancer">Freelancer</option>
                     </select>
                   </div>
                 </div>

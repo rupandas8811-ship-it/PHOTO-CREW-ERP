@@ -985,7 +985,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const merged = existing ? { ...existing, ...cloned } : cloned;
       
       const extra: any = {};
-      const localKeys = ['whatsapp_number', 'production_role_speciality', 'custom_role_specialty', 'experience', 'employee_id', 'address', 'city', 'phone', 'commission_rate', 'rating', 'bio', 'Skill'];
+      const localKeys = ['whatsapp_number', 'production_role_speciality', 'custom_role_specialty', 'experience', 'employee_id', 'address', 'city', 'phone', 'commission_rate', 'rating', 'bio', 'Skill', 'Staff_Type'];
       for (const k of localKeys) {
         if (k in merged) {
           extra[k] = merged[k];
@@ -1022,7 +1022,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         joining_date: merged.joining_date || new Date().toISOString().split('T')[0],
         profile_photo: merged.profile_photo || '',
         notes: JSON.stringify(extra),
-        created_at: merged.created_at || new Date().toISOString()
+        created_at: merged.created_at || new Date().toISOString(),
+        Skill: Array.isArray(merged.Skill) ? merged.Skill.join(', ') : (merged.Skill || ''),
+        Staff_Type: merged.Staff_Type || merged.staff_type || 'In-House'
       } as any;
 
       // Only add extra fields if they are explicitly in the record and we want to try saving them as columns
@@ -1033,6 +1035,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           cloned[k] = merged[k];
         }
       }
+    }
+
+    if (table === 'equipment') {
+      cloned.Equipment_Category = cloned.equipment_type || cloned.Equipment_Category || 'Camera';
+      cloned.Equipment_Status = cloned.status || cloned.Equipment_Status || 'Active';
     }
 
     const allowedColumns: Record<string, string[]> = {
@@ -1110,13 +1117,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'is_read', 'recipient_role'
       ],
       equipment: [
-        'equipment_id', 'equipment_name', 'equipment_type', 'brand', 'model', 'serial_number', 
-        'quantity', 'available_quantity', 'status', 'purchase_date', 'purchase_price', 
-        'storage_location', 'notes', 'created_by', 'updated_by', 'created_at', 'updated_at'
+        'equipment_id', 'equipment_name', 'brand', 'Equipment_Category', 'Equipment_Status'
       ],
       operations_staff: [
         'staff_id', 'name', 'mobile', 'whatsapp_number', 'email', 'role', 'department', 'status', 'joining_date', 
-        'profile_photo', 'notes', 'production_role_speciality', 'experience', 'employee_id', 'city', 'Skill',
+        'profile_photo', 'notes', 'production_role_speciality', 'experience', 'employee_id', 'city', 'Skill', 'Staff_Type',
         'created_by', 'updated_by', 'created_at', 'updated_at'
       ]
     };
@@ -1882,7 +1887,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
               ...item,
               ...extra,
               staff_id: mapFromDbStaffId(item.staff_id),
-              notes: (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) ? (extra.notes || '') : item.notes
+              notes: (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) ? (extra.notes || '') : item.notes, Skill: item.Skill || extra.Skill || '', Staff_Type: item.Staff_Type || extra.Staff_Type || 'In-House'
             };
          }));
       }
@@ -1895,7 +1900,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setNotifications(dbNotifications.map(mapNotificationFromDb));
       }
       if (dbEquipment) {
-        setEquipment(dbEquipment.map((item: any) => ({ ...item, equipment_id: mapFromDbEquipmentId(item.equipment_id) })));
+        setEquipment(dbEquipment.map((item: any) => ({ ...item, equipment_id: mapFromDbEquipmentId(item.equipment_id), equipment_type: item.Equipment_Category || item.equipment_type || 'Camera', status: item.Equipment_Status || item.status || 'Active' })));
       }
       if (dbLeadPackages) setLeadPackages(dbLeadPackages);
       if (dbPackages) setPackages(dbPackages.map(mapDbRecordToPackage));
