@@ -1,16 +1,11 @@
-    // 2. Team Members Included section
-  const drawTeamMembers = (eventName: string | null, members: string[]) => {
-    if (members.length === 0) return;
-    const title = eventName ? `${eventName} - TEAM MEMBERS INCLUDED` : 'TEAM MEMBERS INCLUDED';
-    const mapped = members.map((m, i) => ({ id: String(i), name: m, qty: 1, price: 0 }));
-    drawTable(title, mapped);
-  };
+      
+      const matchedOrder = orders.find(o => o.order_id === assigningOrderId);
+      
+      // Set status to Event Scheduled as requested
+      const targetStage: CurrentStage = 'Event Scheduled';
 
-
-  if (hasEventsInclusions) {
-    Object.entries(eventInclusionsMap).forEach(([eventName, members]) => {
-      drawTeamMembers(eventName, members);
-    });
-  } else if (generalInclusions.length > 0) {
-    drawTeamMembers(null, generalInclusions);
-  }
+      console.log("Saving assignment for order:", assigningOrderId, {
+        photographer,
+        videographer,
+        droneOp,
+        assistant,

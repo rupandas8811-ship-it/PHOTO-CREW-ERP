@@ -105,14 +105,22 @@ export const OperationsLeads: React.FC = () => {
         setActiveMenuOrderId(null);
       }
     };
-    const handleScroll = () => {
+    const handleScroll = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (target && target.closest && target.closest('.actions-menu-container')) {
+        return;
+      }
       setActiveMenuOrderId(null);
     };
     document.addEventListener('mousedown', handleOutsideClick);
-    window.addEventListener('scroll', handleScroll, true); // true for capture phase to catch scroll on any element
+    window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
+    window.addEventListener('wheel', handleScroll, { passive: true, capture: true });
+    window.addEventListener('touchmove', handleScroll, { passive: true, capture: true });
     return () => {
       document.removeEventListener('mousedown', handleOutsideClick);
-      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('scroll', handleScroll, { capture: true });
+      window.removeEventListener('wheel', handleScroll, { capture: true });
+      window.removeEventListener('touchmove', handleScroll, { capture: true });
     };
   }, [activeMenuOrderId]);
 
@@ -321,26 +329,7 @@ export const OperationsLeads: React.FC = () => {
 
   // Helper to get assigned staff names for an order
   const getAssignedStaffNamesForOrder = (ord: Order): string[] => {
-    const lead = leads.find(l => l.lead_id === ord.lead_id);
-    const fromEvents: string[] = [];
-    if (lead?.events) {
-      lead.events.forEach((ev) => {
-        if (ev.assigned_staff_names) {
-          ev.assigned_staff_names.split(',').forEach((n: string) => {
-            const trimmed = n.trim();
-            if (trimmed && trimmed.toLowerCase() !== 'unassigned' && trimmed.toLowerCase() !== 'none') {
-              fromEvents.push(trimmed);
-            }
-          });
-        }
-      });
-    }
-    
-    if (fromEvents.length > 0) {
-      return Array.from(new Set(fromEvents));
-    }
-    
-    // Fallback to order assignments
+    // The Assigned Team count must be generated ONLY from the actual assigned production/operations staff records.
     const orderAssigns = staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id) : [];
     const fromAssigns = orderAssigns.map(sa => sa.staff_name).filter(n => n && n.toLowerCase() !== 'unassigned' && n.toLowerCase() !== 'none');
     return Array.from(new Set(fromAssigns));
@@ -995,7 +984,7 @@ export const OperationsLeads: React.FC = () => {
       const matchedOrder = orders.find(o => o.order_id === assigningOrderId);
       
       // Set status to Event Scheduled as requested
-      const targetStage: CurrentStage = 'Event Scheduled';
+      const currentOrderStage = matchedOrder?.current_stage || 'Operations Assigned'; const isStaffAssigned = finalAssignments.length > 0; const targetStage: CurrentStage = isStaffAssigned ? 'Event Scheduled' : (currentOrderStage as CurrentStage);
 
       console.log("Saving assignment for order:", assigningOrderId, {
         photographer,

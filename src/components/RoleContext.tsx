@@ -3578,7 +3578,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!resOp.success) throw new Error(`Error updating operations record:\n\n${resOp.error}`);
       }
 
-      // STEP 5: UPDATE LEAD STATUS
+      if (assignments.length > 0) { // STEP 5: UPDATE LEAD STATUS
       const statusHist = {
         lead_id: leadId,
         order_id: orderId,
@@ -3605,7 +3605,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!resOrder.success) throw new Error(`Error updating order stage:\n\n${resOrder.error}`);
     }
 
-    // STEP 6: REFRESH DASHBOARD
+    } // STEP 6: REFRESH DASHBOARD
     
 
     // Create notifications for assigned staff
