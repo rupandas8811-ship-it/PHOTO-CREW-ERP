@@ -1577,6 +1577,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [crmHighestStep, setCrmHighestStep] = useState<number>(1);
   const [isPackageSelectedAndSaved, setIsPackageSelectedAndSaved] = useState(false);
   const [isPackageDetailsSaved, setIsPackageDetailsSaved] = useState(false);
+  const [saveErrorPopup, setSaveErrorPopup] = useState<{ title: string; message: string } | null>(null);
 
   const appendCompletedStep = (existingRemarks: string | undefined, step: number) => {
     const cleanRemarks = (existingRemarks || '').replace(/\[CRM_COMPLETED_STEP:\s*\d+\]/g, '').trim();
@@ -1645,17 +1646,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       el.focus();
-      el.classList.add('border-rose-500', 'ring-1', 'ring-rose-500');
+      el.classList.add('!border-red-500', 'ring-1', '!ring-red-500');
       let msgEl = el.nextElementSibling as HTMLElement;
       if (!msgEl || !msgEl.classList.contains('validation-error-msg')) {
         msgEl = document.createElement('div');
-        msgEl.className = 'validation-error-msg text-rose-500 text-[10px] mt-1 font-bold animate-fade-in';
+        msgEl.className = 'validation-error-msg text-red-550 text-[10px] mt-1 font-bold animate-fade-in';
         el.parentNode?.insertBefore(msgEl, el.nextSibling);
       }
       msgEl.textContent = msg;
       
       const removeHighlight = () => {
-        el.classList.remove('border-rose-500', 'ring-1', 'ring-rose-500');
+        el.classList.remove('!border-red-500', 'ring-1', '!ring-red-500');
         if (msgEl && msgEl.parentNode) msgEl.parentNode.removeChild(msgEl);
         el.removeEventListener('input', removeHighlight);
         el.removeEventListener('change', removeHighlight);
@@ -2265,9 +2266,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   
   const saveStep3DataRealtime = async (
     updatedInclusions: Record<string, string[]>,
-    updatedDeliverables: Record<string, string[]>
+    updatedDeliverables: Record<string, string[]>,
+    activePkgId?: string
   ) => {
-    const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
+    const pkgId = activePkgId || wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
     const leadId = selectedLead?.lead_id;
     if (!leadId || leadId === 'DRAFT-LEAD' || !pkgId || !supabaseClient) return;
 
@@ -2289,12 +2291,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           }
         ];
 
-    // Generate JSON for deliverables_description based on updatedDeliverables
+    // Generate plain-text newline-separated list for deliverables_description based on updatedDeliverables
     const deliverablesList = updatedDeliverables[pkgId] || [];
     const deliverablesJson = deliverablesList.filter(Boolean);
+    const deliverablesText = deliverablesJson.join('\n');
 
     const teamMembersText = JSON.stringify(teamMembersJson);
-    const deliverablesText = JSON.stringify(deliverablesJson);
 
     try {
       // Always UPDATE the existing lead record
@@ -2318,6 +2320,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             deliverables_description: deliverablesText
           };
         });
+
+        // Also sync wizardLeadData deliverables state
+        setWizardLeadData(prev => ({
+          ...prev,
+          deliverables: deliverablesText,
+          deliverables_description: deliverablesText
+        }));
       }
     } catch (err) {
       console.error("Exception in saveStep3DataRealtime:", err);
@@ -3688,20 +3697,84 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setSalesStaffMobile(latestQuote.sales_staff_mobile || lead.sales_staff_mobile || evtStaffMobile || '');
     }
 
-    if (latestQuote?.editableInclusions) {
-      setEditableInclusions(latestQuote.editableInclusions);
-    } else if (primaryLP?.editable_inclusions) {
-      setEditableInclusions(primaryLP.editable_inclusions);
-    }
-
-    if (latestQuote?.editableDeliverables) {
-      setEditableDeliverables(latestQuote.editableDeliverables);
-    } else if (primaryLP?.editable_deliverables) {
-      setEditableDeliverables(primaryLP.editable_deliverables);
-    }
-
     const matchedPkgId = latestQuote?.package_id || primaryLP?.package_id || lead.Select_Package_Option || '';
     const matchedPkg = (packages || []).find(p => p.package_id === matchedPkgId);
+
+    // Load deliverables from leads.deliverables_description directly to prevent stale/cached data
+    if (matchedPkgId && lead.deliverables_description) {
+      const newDeliverables: Record<string, string[]> = {};
+      try {
+        const parsedDel = JSON.parse(lead.deliverables_description);
+        if (Array.isArray(parsedDel)) {
+          if (typeof parsedDel[0] === 'string') {
+            newDeliverables[matchedPkgId] = parsedDel;
+          } else if (parsedDel[0] && Array.isArray(parsedDel[0].deliverables)) {
+            newDeliverables[matchedPkgId] = parsedDel[0].deliverables;
+          } else {
+            newDeliverables[matchedPkgId] = [];
+          }
+        } else {
+          newDeliverables[matchedPkgId] = [];
+        }
+      } catch (e) {
+        // Fallback if not JSON (e.g. newline-separated text)
+        const delList = lead.deliverables_description
+          ? lead.deliverables_description.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
+          : [];
+        newDeliverables[matchedPkgId] = delList;
+      }
+      setEditableDeliverables(newDeliverables);
+    } else {
+      if (latestQuote?.editableDeliverables) {
+        setEditableDeliverables(latestQuote.editableDeliverables);
+      } else if (primaryLP?.editable_deliverables) {
+        setEditableDeliverables(primaryLP.editable_deliverables);
+      } else {
+        setEditableDeliverables({});
+      }
+    }
+
+    // Load team members from leads.Team_Members directly to prevent stale/cached data
+    if (matchedPkgId && lead.Team_Members) {
+      try {
+        const parsedTeam = JSON.parse(lead.Team_Members);
+        if (Array.isArray(parsedTeam)) {
+          const newInclusions: Record<string, string[]> = {};
+          parsedTeam.forEach((item: any) => {
+            const eventName = item.event_name;
+            const members = Array.isArray(item.team_members) ? item.team_members : [];
+            if (eventName === 'General') {
+              newInclusions[matchedPkgId] = members;
+            } else if (lead.events && lead.events.length > 0) {
+              const matchingEvent = lead.events.find(e => 
+                (e.event_name || e.event_type || 'Unnamed Event') === eventName
+              );
+              if (matchingEvent) {
+                newInclusions[`${matchedPkgId}_${matchingEvent.id}`] = members;
+              } else {
+                newInclusions[`${matchedPkgId}_${eventName}`] = members;
+              }
+            } else {
+              newInclusions[`${matchedPkgId}_${eventName}`] = members;
+            }
+          });
+          setEditableInclusions(newInclusions);
+        } else {
+          setEditableInclusions({});
+        }
+      } catch (e) {
+        console.error('Error parsing Team_Members from leads in handleSelectLead:', e);
+        setEditableInclusions({});
+      }
+    } else {
+      if (latestQuote?.editableInclusions) {
+        setEditableInclusions(latestQuote.editableInclusions);
+      } else if (primaryLP?.editable_inclusions) {
+        setEditableInclusions(primaryLP.editable_inclusions);
+      } else {
+        setEditableInclusions({});
+      }
+    }
 
     const firstEvent = lead.events && lead.events.length > 0 ? lead.events[0] : null;
     const evName = firstEvent?.event_name || lead.custom_event_name || '';
@@ -3842,28 +3915,84 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
   };
 
+  const validateStep3Data = (mode: 'package' | 'all'): boolean => {
+    // Validate package selection
+    const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
+    if (!pkgId || pkgId.trim() === '') {
+      showValidationError("select_package_option", "Please select a package before continuing.");
+      showToastMsg("❌ Please complete all required fields before saving the package.", "error");
+      return false;
+    }
+
+    // Validate Sales Executive details
+    if (!salesStaffName || !salesStaffName.trim()) {
+      showValidationError("input_sales_staff_name", "Please enter Sales Staff Name.");
+      showToastMsg("❌ Please complete all required fields before saving the package.", "error");
+      return false;
+    }
+
+    const mobileVal = (salesStaffMobile || '').trim();
+    if (!mobileVal || mobileVal.length !== 10 || !/^\d+$/.test(mobileVal)) {
+      showValidationError("input_sales_staff_mobile", "Please enter a valid 10-digit Sales Staff Mobile Number.");
+      showToastMsg("❌ Please complete all required fields before saving the package.", "error");
+      return false;
+    }
+
+    if (mode === 'all') {
+      if (wizardLeadData.status === 'Order Confirmed') {
+        if (!wizardLeadData.confirmed_event_date) {
+          showValidationError("input_confirmed_event_date", "Please provide Confirmed Event Date.");
+          showToastMsg("❌ Please complete all required fields before saving.", "error");
+          return false;
+        }
+        if (!wizardLeadData.confirmed_event_time) {
+          showValidationError("input_confirmed_event_time", "Please provide Confirmed Event Time.");
+          showToastMsg("❌ Please complete all required fields before saving.", "error");
+          return false;
+        }
+        if (wizardLeadData.final_amount === undefined || wizardLeadData.final_amount === null || isNaN(wizardLeadData.final_amount) || wizardLeadData.final_amount <= 0) {
+          showValidationError("input_final_amount", "Please provide Final Amount.");
+          showToastMsg("❌ Please complete all required fields before saving.", "error");
+          return false;
+        }
+        if (wizardLeadData.advance_received === undefined || wizardLeadData.advance_received === null || isNaN(wizardLeadData.advance_received)) {
+          showValidationError("input_advance_received", "Please provide Advance Payment Received.");
+          showToastMsg("❌ Please complete all required fields before saving.", "error");
+          return false;
+        }
+
+        if (crmEvents && crmEvents.length > 0) {
+          for (const ev of crmEvents) {
+            const rDate = ev.reporting_date || ev.event_date || wizardLeadData.confirmed_event_date;
+            if (!rDate) {
+              showValidationError(`reporting_date_${ev.id}`, "Reporting Date is required.");
+              showToastMsg("❌ Please complete all required fields before saving.", "error");
+              return false;
+            }
+            if (!ev.reporting_time) {
+              showValidationError(`reporting_time_${ev.id}`, "Reporting Time is required.");
+              showToastMsg("❌ Please complete all required fields before saving.", "error");
+              return false;
+            }
+          }
+        }
+      }
+    }
+
+    return true;
+  };
+
   const handleSavePackageOnly = async () => {
     if (!selectedLead) return;
     setIsSaving(true);
     try {
-      // 1. Validate Sales Executive details as required
-      if (!salesStaffName || !salesStaffName.trim()) {
-        showToastMsg("Please enter Sales Staff Name.", "error");
-        setIsSaving(false);
-        return;
-      }
-      if (!salesStaffMobile || !salesStaffMobile.trim() || salesStaffMobile.trim().length !== 10 || !/^\d+$/.test(salesStaffMobile.trim())) {
-        showToastMsg("Please enter a valid 10-digit Sales Staff Mobile Number.", "error");
+      // 1. Perform unified validation
+      if (!validateStep3Data('package')) {
         setIsSaving(false);
         return;
       }
 
       const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
-      if (!pkgId || pkgId.trim() === '') {
-        showToastMsg("Please select a package before continuing.", "error");
-        setIsSaving(false);
-        return;
-      }
 
       // 2. Perform the full save of lead_packages to Supabase using our robust real-time save logic
       await saveStep3DataRealtime(editableInclusions, editableDeliverables);
@@ -3913,7 +4042,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       showToastMsg("✅ Package saved successfully.", "success");
     } catch (err: any) {
       console.error("Save package only failed:", err);
-      showToastMsg(`Failed to save package: ${err.message || String(err)}`, "error");
+      setSaveErrorPopup({
+        title: "Failed to save package",
+        message: "❌ Failed to save package.\nPlease try again."
+      });
     } finally {
       setIsSaving(false);
     }
@@ -4071,23 +4203,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         setIsSaving(false);
         return; // Halt here. The rest of the Step 2 saving is handled in handleSaveStep2FollowUp
       } else if (step === 3) {
-        if (!salesStaffName || !salesStaffName.trim()) {
-          showToastMsg("Please enter Sales Staff Name.", "error");
+        if (!validateStep3Data('all')) {
           setIsSaving(false);
           return;
         }
-        if (!salesStaffMobile || !salesStaffMobile.trim() || salesStaffMobile.trim().length !== 10 || !/^\d+$/.test(salesStaffMobile.trim())) {
-          showToastMsg("Please enter a valid 10-digit Sales Staff Mobile Number.", "error");
-          setIsSaving(false);
-          return;
-        }
-
-        if (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '') {
-          showToastMsg("Please select a package before continuing.", "error");
-          setIsSaving(false);
-          return;
-        }
-        if (wizardLeadData.selected_package_id) {
+        const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
+        if (pkgId) {
           await saveStep3DataRealtime(editableInclusions, editableDeliverables);
         }
         const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
@@ -9145,6 +9266,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                          <div>
                            <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Select Package Option *</label>
                            <select
+                             id="select_package_option"
                              value={wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || ''}
                              disabled={isLeadLocked}
                              onChange={(e) => handlePackageChange(e.target.value)}
@@ -9529,6 +9651,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               <div>
                                 <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Confirmed Event Date *</label>
                                 <input
+                                  id="input_confirmed_event_date"
                                   type="date"
                                   value={wizardLeadData.confirmed_event_date || ''}
                                   disabled={isLeadLocked}
@@ -9540,6 +9663,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               <div>
                                 <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Confirmed Event Time *</label>
                                 <input
+                                  id="input_confirmed_event_time"
                                   type="time"
                                   value={wizardLeadData.confirmed_event_time || ''}
                                   disabled={isLeadLocked}
@@ -9551,6 +9675,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               <div>
                                 <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Contract Final Amount (₹) *</label>
                                 <input
+                                  id="input_final_amount"
                                   type="number"
                                   value={wizardLeadData.final_amount || 0}
                                   disabled={isLeadLocked}
@@ -9562,6 +9687,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               <div>
                                 <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Advance Payment Received (₹) *</label>
                                 <input
+                                  id="input_advance_received"
                                   type="number"
                                   value={wizardLeadData.advance_received || 0}
                                   disabled={isLeadLocked}
@@ -9580,6 +9706,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       <div>
                                          <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting Date *</label>
                                          <input 
+                                           id={`reporting_date_${ev.id}`}
                                            type="date" 
                                            value={ev.reporting_date || ev.event_date || ''} 
                                            onChange={(e) => {
@@ -9593,6 +9720,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       <div>
                                          <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting Time *</label>
                                          <input 
+                                           id={`reporting_time_${ev.id}`}
                                            type="time" 
                                            value={ev.reporting_time || ''} 
                                            onChange={(e) => {
@@ -9664,6 +9792,30 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
           </div>
         )}
+
+      {saveErrorPopup && (
+        <div id="save_error_popup" className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[70] flex items-center justify-center p-4 animate-fade-in text-left">
+          <div className="bg-slate-900 border border-red-500/30 rounded-2xl w-full max-w-sm shadow-2xl p-6 text-center space-y-4">
+            <div className="w-12 h-12 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mx-auto text-xl font-bold font-mono">
+              ❌
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+                {saveErrorPopup.title}
+              </h3>
+              <p className="text-xs text-zinc-300 whitespace-pre-line leading-relaxed">
+                {saveErrorPopup.message}
+              </p>
+            </div>
+            <button
+              onClick={() => setSaveErrorPopup(null)}
+              className="w-full py-2 bg-red-600 hover:bg-red-500 text-white font-mono text-xs font-bold uppercase rounded-lg transition-all border-0 shadow-md"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* MODAL: Proceed Status Pop-up */}
       {showStep3Popup && (

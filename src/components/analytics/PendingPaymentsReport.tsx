@@ -37,6 +37,37 @@ export const PendingPaymentsReport: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [updateSuccessMsg, setUpdateSuccessMsg] = useState('');
   
+  // Modal level feedback states
+  const [modalSuccessMsg, setModalSuccessMsg] = useState('');
+  const [modalErrorMsg, setModalErrorMsg] = useState('');
+
+  // Parse event date robustly and compute overdue days
+  const getOverdueDays = (eventDateStr: string, remainingAmount: number) => {
+    if (!eventDateStr || remainingAmount <= 0) return 0;
+    const [ey, em, ed] = eventDateStr.split('-').map(Number);
+    const eventDate = new Date(ey, em - 1, ed);
+    eventDate.setHours(0, 0, 0, 0);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (today <= eventDate) {
+      return 0; // Not overdue
+    }
+
+    const diffTime = today.getTime() - eventDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  // Format date to local style like "10 July 2026"
+  const formatEventDate = (dateStr: string) => {
+    if (!dateStr) return 'N/A';
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    return dateObj.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+  };
+  
   // Start date default: 3 months ago to 1 year ahead
   const defaultStartDate = useMemo(() => {
     const d = new Date();
@@ -91,7 +122,7 @@ export const PendingPaymentsReport: React.FC = () => {
         paymentStatus = 'Fully Paid';
       }
 
-      const isOverdue = lead.event_date && lead.event_date < TODAY_STR;
+      const isOverdue = lead.event_date && lead.event_date < TODAY_STR && remainingAmount > 0;
       
       // Get the semantic stage of the lead
       // We'll use the logic directly here or via context if available
@@ -145,6 +176,25 @@ export const PendingPaymentsReport: React.FC = () => {
       return hasBalance || isPending;
     });
   }, [leads, orders, payments]);
+
+  // Dynamically retrieve the real-time record to keep modal updated
+  const currentRecord = useMemo(() => {
+    if (!paymentModalRecord) return null;
+    const order = orders.find(o => o.order_id === paymentModalRecord.orderId || o.lead_id === paymentModalRecord.lead.lead_id);
+    const payment = order ? payments.find(p => p.order_id === order.order_id) : null;
+    const lead = leads.find(l => l.lead_id === paymentModalRecord.lead.lead_id) || paymentModalRecord.lead;
+    
+    const finalPackageAmount = order ? order.quotation_amount : lead.budget;
+    const advanceReceived = order ? order.advance_received : 0;
+    const totalPaidAmount = payment ? ((payment.advance_received || 0) + (payment.final_payment_received || 0)) : advanceReceived;
+    const remainingAmount = payment ? payment.balance_due : (order ? order.balance_amount : finalPackageAmount - advanceReceived);
+    
+    return {
+      finalPackageAmount,
+      totalPaidAmount,
+      remainingAmount
+    };
+  }, [allPendingRecords, paymentModalRecord, orders, payments, leads]);
 
   // Compute metrics for the Pending Payment Analytics Cards
   const stats = useMemo(() => {
@@ -696,8 +746,120 @@ export const PendingPaymentsReport: React.FC = () => {
           </span>
         </div>
 
+      {/* Cards View for Mobile/Tablet, Table View for Desktop */}
+      <div className="block lg:hidden space-y-4">
+        {filteredRecords.length === 0 ? (
+          <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-8 text-center text-zinc-550">
+            <AlertTriangle className="w-8 h-8 text-zinc-750 mx-auto mb-2" />
+            <span>No pending payments fit the selected parameters.</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredRecords.map((rec) => {
+              const daysOverdue = getOverdueDays(rec.eventDate, rec.remainingAmount);
+              const isOverdue = daysOverdue > 0;
+              const formattedEventDate = formatEventDate(rec.eventDate);
+
+              return (
+                <div 
+                  key={`card-${rec.lead.lead_id}`}
+                  className="bg-zinc-950 border border-zinc-850 rounded-2xl p-5 space-y-3.5 shadow-xl hover:border-zinc-800 transition relative overflow-hidden text-left"
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-widest block">Order ID</span>
+                      <span className="text-xs font-mono font-black text-zinc-350">{rec.orderId}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-widest block">Payment Status</span>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                        rec.paymentStatus === 'Partial' 
+                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' 
+                          : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                      }`}>
+                        {rec.paymentStatus}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-zinc-900/60 pt-2.5">
+                    <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-widest block">Client Name</span>
+                    <span className="text-sm font-extrabold text-white">{rec.customerName}</span>
+                    <span className="text-xs text-zinc-500 block font-mono">{rec.mobileNumber}</span>
+                  </div>
+
+                  <div className="border-t border-zinc-900/60 pt-2.5 grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-widest block">Event Details</span>
+                      <span className="font-bold text-zinc-350">{rec.eventType}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-widest block">Project Stage</span>
+                      <span className="font-bold text-zinc-400">{rec.currentProjectStatus}</span>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-zinc-900/60 pt-2.5 grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-widest block">Event Date</span>
+                      <span className="font-semibold text-zinc-300">{formattedEventDate}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-widest block">Overdue Since</span>
+                      <span className="font-semibold text-zinc-300">{formattedEventDate}</span>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-zinc-900/60 pt-2.5 grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-widest block">Overdue</span>
+                      {isOverdue ? (
+                        <span className="text-rose-500 font-bold font-mono bg-rose-500/10 px-2 py-0.5 rounded inline-block mt-0.5">{daysOverdue} Days</span>
+                      ) : (
+                        <span className="text-emerald-500 font-bold inline-block mt-0.5">-</span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-mono font-bold text-rose-500 uppercase tracking-widest block">Pending Amount</span>
+                      <span className="text-sm font-black text-rose-400 font-mono">₹{rec.remainingAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-zinc-900/60 pt-3">
+                    <button 
+                      onClick={() => {
+                        setPaymentModalRecord(rec);
+                        setPaymentAmount('');
+                        setPaymentNotes('');
+                        setModalSuccessMsg('');
+                        setModalErrorMsg('');
+                        setShowPaymentModal(true);
+                      }}
+                      className="w-full py-2 bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/20 text-emerald-400 rounded-xl transition font-black text-[10px] uppercase tracking-wider font-mono cursor-pointer"
+                    >
+                      Update Payment
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Main Datatable (Desktop) */}
+      <div className="hidden lg:block bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden shadow-2xl">
+        <div className="p-4 border-b border-zinc-850 flex items-center justify-between">
+          <span className="text-xs uppercase font-mono font-extrabold tracking-widest text-zinc-400">
+            PENDING ACCOUNT CORES
+          </span>
+          <span className="bg-zinc-900 border border-zinc-800 text-[10px] font-mono uppercase font-black tracking-wider text-zinc-400 px-2.5 py-1 rounded-lg">
+            Active Records displayed: {filteredRecords.length}
+          </span>
+        </div>
+
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[1000px]">
+          <table className="w-full text-left border-collapse min-w-[1100px]">
             <thead>
               <tr className="border-b border-zinc-850 bg-zinc-900/30">
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-left">Order ID</th>
@@ -706,7 +868,8 @@ export const PendingPaymentsReport: React.FC = () => {
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-right">Total Amount</th>
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-right">Paid Amount</th>
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-rose-450 font-mono text-right">Pending Amount</th>
-                <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Due Date</th>
+                <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Event Date</th>
+                <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Overdue Since</th>
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Days Overdue</th>
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Payment Status</th>
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Project Status</th>
@@ -716,20 +879,15 @@ export const PendingPaymentsReport: React.FC = () => {
             <tbody>
               {filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="text-center py-12 text-zinc-500 font-medium">
+                  <td colSpan={12} className="text-center py-12 text-zinc-500 font-medium">
                     <AlertTriangle className="w-8 h-8 text-zinc-750 mx-auto mb-2" />
                     <span>No pending payments fit the selected parameters.</span>
                   </td>
                 </tr>
               ) : (
                 filteredRecords.map((rec, i) => {
-                  const dueDate = rec.eventDate ? new Date(rec.eventDate) : null;
-                  const today = new Date();
-                  let daysOverdue = 0;
-                  if (dueDate && dueDate < today && rec.remainingAmount > 0) {
-                    const diffTime = Math.abs(today.getTime() - dueDate.getTime());
-                    daysOverdue = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                  }
+                  const daysOverdue = getOverdueDays(rec.eventDate, rec.remainingAmount);
+                  const formattedEventDate = formatEventDate(rec.eventDate);
 
                   return (
                   <tr 
@@ -767,9 +925,14 @@ export const PendingPaymentsReport: React.FC = () => {
                       {formatPercentageOrINR(rec.remainingAmount)}
                     </td>
 
-                    {/* Due Date */}
+                    {/* Event Date */}
                     <td className="px-4 py-4 text-xs text-center font-mono text-zinc-300">
-                      {dueDate ? dueDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}
+                      {formattedEventDate}
+                    </td>
+
+                    {/* Overdue Since */}
+                    <td className="px-4 py-4 text-xs text-center font-mono text-zinc-300">
+                      {rec.eventDate ? formattedEventDate : 'N/A'}
                     </td>
 
                     {/* Days Overdue */}
@@ -808,9 +971,11 @@ export const PendingPaymentsReport: React.FC = () => {
                           setPaymentModalRecord(rec);
                           setPaymentAmount('');
                           setPaymentNotes('');
+                          setModalSuccessMsg('');
+                          setModalErrorMsg('');
                           setShowPaymentModal(true);
                         }}
-                        className="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/20 text-emerald-400 rounded transition font-bold text-[10px] uppercase tracking-wider "
+                        className="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/20 text-emerald-400 rounded transition font-bold text-[10px] uppercase tracking-wider cursor-pointer"
                       >
                         Update
                       </button>
@@ -823,6 +988,7 @@ export const PendingPaymentsReport: React.FC = () => {
             </tbody>
           </table>
         </div>
+      </div>
       </div>
 
       {showPaymentModal && paymentModalRecord && (
@@ -843,85 +1009,137 @@ export const PendingPaymentsReport: React.FC = () => {
                 </p>
               </div>
               <button 
-                onClick={() => setShowPaymentModal(false)}
+                onClick={() => {
+                  setShowPaymentModal(false);
+                  setModalSuccessMsg('');
+                  setModalErrorMsg('');
+                }}
                 className="p-1 px-2 hover:bg-zinc-900 rounded text-zinc-400 uppercase font-mono text-[10px]"
               >
-                Cancel
+                Close
               </button>
             </div>
             
+            {/* Modal level success and error messages */}
+            {modalSuccessMsg && (
+              <div className="bg-emerald-950/40 border-b border-emerald-500/30 text-emerald-400 text-xs px-4 py-2.5 font-bold text-center">
+                {modalSuccessMsg}
+              </div>
+            )}
+            {modalErrorMsg && (
+              <div className="bg-rose-950/40 border-b border-rose-500/30 text-rose-400 text-xs px-4 py-2.5 font-bold text-center">
+                {modalErrorMsg}
+              </div>
+            )}
+
             <div className="p-5 space-y-4">
               <div className="space-y-2">
                 <div className="p-3 bg-zinc-900 rounded-lg flex justify-between items-center border border-zinc-850">
                   <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Final Quotation Amount</span>
                   <span className="text-sm font-black text-white font-mono">
-                    {formatPercentageOrINR(paymentModalRecord.finalPackageAmount)}
+                    {formatPercentageOrINR(currentRecord ? currentRecord.finalPackageAmount : paymentModalRecord.finalPackageAmount)}
                   </span>
                 </div>
                 <div className="p-3 bg-zinc-900 rounded-lg flex justify-between items-center border border-zinc-850">
                   <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Total Payment Received</span>
                   <span className="text-sm font-black text-emerald-450 font-mono">
-                    {formatPercentageOrINR(paymentModalRecord.finalPackageAmount - paymentModalRecord.remainingAmount)}
+                    {formatPercentageOrINR(currentRecord ? currentRecord.totalPaidAmount : (paymentModalRecord.finalPackageAmount - paymentModalRecord.remainingAmount))}
                   </span>
                 </div>
                 <div className="p-3 bg-zinc-900 rounded-lg flex justify-between items-center border border-zinc-850">
                   <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Total Pending Amount</span>
-                  <span className="text-sm font-black text-rose-450 font-mono">
-                    {formatPercentageOrINR(paymentModalRecord.remainingAmount)}
+                  <span className={`text-sm font-black font-mono ${currentRecord && currentRecord.remainingAmount === 0 ? 'text-emerald-400' : 'text-rose-450'}`}>
+                    {formatPercentageOrINR(currentRecord ? currentRecord.remainingAmount : paymentModalRecord.remainingAmount)}
                   </span>
                 </div>
               </div>
               
-              <div className="space-y-1">
-                <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Payment Received</label>
-                <input
-                  type="number"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono font-bold"
-                  placeholder="0"
-                />
-              </div>
-              
-              <div className="space-y-1">
-                <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Transaction ID</label>
-                <input
-                  type="text"
-                  value={paymentNotes}
-                  onChange={(e) => setPaymentNotes(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                  placeholder="Enter Transaction ID"
-                />
-              </div>
+              {currentRecord && currentRecord.remainingAmount === 0 ? (
+                <div className="p-4 bg-emerald-950/20 border border-emerald-500/30 rounded-xl text-center text-emerald-400 text-xs font-bold">
+                  🎉 This order is Fully Paid. No outstanding dues remain.
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Payment Received</label>
+                    <input
+                      type="number"
+                      value={paymentAmount}
+                      onChange={(e) => setPaymentAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono font-bold"
+                      placeholder="0"
+                    />
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Transaction ID</label>
+                    <input
+                      type="text"
+                      value={paymentNotes}
+                      onChange={(e) => setPaymentNotes(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                      placeholder="Enter Transaction ID"
+                    />
+                  </div>
+                </>
+              )}
             </div>
             
             <div className="p-4 border-t border-zinc-850 bg-zinc-900/50 flex gap-3">
               <button
-                onClick={() => setShowPaymentModal(false)}
-                className="flex-1 py-2 rounded-xl text-xs font-bold text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-750 transition"
+                onClick={() => {
+                  setShowPaymentModal(false);
+                  setModalSuccessMsg('');
+                  setModalErrorMsg('');
+                }}
+                className="flex-1 py-2 rounded-xl text-xs font-bold text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-750 transition cursor-pointer"
               >
-                Cancel
+                Close Panel
               </button>
               <button
                 onClick={async () => {
                   if (isSaving) return;
                   const amt = Number(paymentAmount);
-                  if (amt > 0) {
-                    try {
-                      setIsSaving(true);
-                      await recordPayment(paymentModalRecord.orderId, amt, new Date().toISOString().split('T')[0], undefined, paymentNotes);
-                      setUpdateSuccessMsg('✅ Payment updated successfully.');
-                      setShowPaymentModal(false);
-                      setTimeout(() => setUpdateSuccessMsg(''), 5000);
-                    } catch (err: any) {
-                      alert(`Failed to save payment: ${err.message || err}`);
-                    } finally {
-                      setIsSaving(false);
-                    }
+                  setModalSuccessMsg('');
+                  setModalErrorMsg('');
+
+                  if (!paymentAmount || amt <= 0) {
+                    setModalErrorMsg('❌ Please enter a valid payment amount.');
+                    return;
+                  }
+
+                  const maxAllowed = currentRecord ? currentRecord.remainingAmount : paymentModalRecord.remainingAmount;
+                  if (amt > maxAllowed) {
+                    setModalErrorMsg(`❌ Payment cannot exceed the pending amount of ₹${maxAllowed.toLocaleString('en-IN')}`);
+                    return;
+                  }
+
+                  try {
+                    setIsSaving(true);
+                    await recordPayment(paymentModalRecord.orderId, amt, new Date().toISOString().split('T')[0], undefined, paymentNotes);
+                    
+                    // Show success message inside popup
+                    setModalSuccessMsg('✅ Payment updated successfully.');
+                    setUpdateSuccessMsg('✅ Payment updated successfully.');
+                    
+                    // Reset input fields
+                    setPaymentAmount('');
+                    setPaymentNotes('');
+                    
+                    // Auto hide the success message after 2.5 seconds
+                    setTimeout(() => {
+                      setModalSuccessMsg('');
+                      setUpdateSuccessMsg('');
+                    }, 2500);
+                  } catch (err: any) {
+                    console.error(err);
+                    setModalErrorMsg('❌ Payment update failed.');
+                  } finally {
+                    setIsSaving(false);
                   }
                 }}
-                disabled={isSaving || !paymentAmount || Number(paymentAmount) <= 0}
-                className="flex-1 py-2 rounded-xl text-xs font-bold text-zinc-950 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition uppercase tracking-wider"
+                disabled={isSaving || (currentRecord && currentRecord.remainingAmount === 0) || !paymentAmount || Number(paymentAmount) <= 0}
+                className="flex-1 py-2 rounded-xl text-xs font-bold text-zinc-950 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition uppercase tracking-wider cursor-pointer"
               >
                 {isSaving ? 'Saving...' : 'Save Payment'}
               </button>
