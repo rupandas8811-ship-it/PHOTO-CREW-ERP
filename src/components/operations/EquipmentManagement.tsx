@@ -6,6 +6,7 @@ import {
   Eye, CheckCircle2, AlertTriangle, Info, User, HelpCircle, MapPin, Tag
 } from 'lucide-react';
 import { Equipment } from '../../types';
+import { supabaseClient } from '../../supabaseClient';
 
 // Helper to parse equipment notes containing structured metadata
 interface EquipmentMetadata {
@@ -49,7 +50,7 @@ const serializeEquipmentNotes = (metadata: EquipmentMetadata): string => {
 };
 
 export const EquipmentManagement: React.FC = () => {
-  const { currentRole, equipment, staff, addEquipment, updateEquipment, deleteEquipment } = useRole();
+  const { currentRole, equipment, staff, addEquipment, updateEquipment, deleteEquipment, refreshData } = useRole();
   const canEdit = currentRole === 'Operations Team' || currentRole === 'Business Owner';
 
   // Core management states
@@ -81,12 +82,13 @@ export const EquipmentManagement: React.FC = () => {
     if (toast) {
       const timer = setTimeout(() => {
         setToast(null);
-      }, 4000);
+      }, 3000);
       return () => clearTimeout(timer);
     }
   }, [toast]);
 
   // Form states
+  const [formErrors, setFormErrors] = useState<string[]>([]);
   const [form, setForm] = useState({
     equipment_name: '',
     brand: '',
@@ -134,8 +136,22 @@ export const EquipmentManagement: React.FC = () => {
       showToast('error', 'Unauthorized! Operations Team or Business Owner privileges required.');
       return;
     }
-    if (!form.equipment_name || !form.brand || !form.equipment_type || !form.status) {
-      showToast('error', 'Please fill out all required fields: Name, Brand, Category, and Status.');
+
+    const errors: string[] = [];
+    if (!form.equipment_name) errors.push('equipment_name');
+    if (!form.brand) errors.push('brand');
+    if (!form.equipment_type) errors.push('equipment_type');
+    if (!form.status) errors.push('status');
+
+    setFormErrors(errors);
+
+    if (errors.length > 0) {
+      setTimeout(() => {
+        const firstErrorEl = document.querySelector('.border-rose-500');
+        if (firstErrorEl) {
+          firstErrorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 50);
       return;
     }
 
@@ -162,27 +178,30 @@ export const EquipmentManagement: React.FC = () => {
         };
         await updateEquipment(editingId, payload);
         showToast('success', 'Equipment details updated successfully.');
+        handleCancelEdit();
       } else {
-        // Registering new: Save the 4 fields, and provide defaults for required/unnecessary fields
-        const payload = {
-          equipment_name: form.equipment_name,
-          brand: form.brand,
-          equipment_type: form.equipment_type,
-          status: form.status,
-          // DB required defaults
-          quantity: 1,
-          available_quantity: 1,
-          serial_number: '',
-          model: '',
-          purchase_date: '',
-          purchase_price: 0,
-          storage_location: '',
-          notes: ''
-        };
-        await addEquipment(payload);
-        showToast('success', 'New equipment registered successfully.');
+        // Registering new
+        const { error } = await supabaseClient.from('equipment').insert([
+          {
+            equipment_name: form.equipment_name,
+            brand: form.brand,
+            Equipment_Category: form.equipment_type,
+            Equipment_Status: form.status,
+            quantity: 1,
+            available_quantity: 1
+          }
+        ]);
+
+        if (error) {
+          console.error('Failed to add equipment:', error);
+          showToast('error', '❌ Failed to add equipment.');
+          return;
+        }
+
+        showToast('success', '✅ Equipment added successfully.');
+        refreshData();
+        handleCancelEdit();
       }
-      handleCancelEdit();
     } catch (err: any) {
       showToast('error', err.message || 'An error occurred while saving equipment.');
     }
@@ -460,12 +479,17 @@ export const EquipmentManagement: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  required
                   placeholder="e.g. Sony FX3 Full Cinema body"
                   value={form.equipment_name}
-                  onChange={(e) => setForm({ ...form, equipment_name: e.target.value })}
-                  className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono"
+                  onChange={(e) => {
+                    setForm({ ...form, equipment_name: e.target.value });
+                    if (e.target.value) setFormErrors(prev => prev.filter(err => err !== 'equipment_name'));
+                  }}
+                  className={`w-full bg-zinc-955 border ${formErrors.includes('equipment_name') ? 'border-rose-500' : 'border-zinc-850'} rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono`}
                 />
+                {formErrors.includes('equipment_name') && (
+                  <p className="text-rose-500 text-[10px] mt-1 font-mono">❌ Please fill all required fields.</p>
+                )}
               </div>
 
               <div>
@@ -474,12 +498,17 @@ export const EquipmentManagement: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  required
                   placeholder="e.g. Sony"
                   value={form.brand}
-                  onChange={(e) => setForm({ ...form, brand: e.target.value })}
-                  className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono"
+                  onChange={(e) => {
+                    setForm({ ...form, brand: e.target.value });
+                    if (e.target.value) setFormErrors(prev => prev.filter(err => err !== 'brand'));
+                  }}
+                  className={`w-full bg-zinc-955 border ${formErrors.includes('brand') ? 'border-rose-500' : 'border-zinc-850'} rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono`}
                 />
+                {formErrors.includes('brand') && (
+                  <p className="text-rose-500 text-[10px] mt-1 font-mono">❌ Please fill all required fields.</p>
+                )}
               </div>
 
               <div>
@@ -487,15 +516,21 @@ export const EquipmentManagement: React.FC = () => {
                   Equipment Category *
                 </label>
                 <select
-                  required
                   value={form.equipment_type}
-                  onChange={(e) => setForm({ ...form, equipment_type: e.target.value })}
-                  className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono"
+                  onChange={(e) => {
+                    setForm({ ...form, equipment_type: e.target.value });
+                    if (e.target.value) setFormErrors(prev => prev.filter(err => err !== 'equipment_type'));
+                  }}
+                  className={`w-full bg-zinc-955 border ${formErrors.includes('equipment_type') ? 'border-rose-500' : 'border-zinc-850'} rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono`}
                 >
+                  <option value="" disabled>Select Category</option>
                   {['Camera', 'Lens', 'Drone', 'Gimbal', 'Tripod', 'Light', 'Audio Equipment', 'Memory Cards', 'Batteries', 'Other'].map(t => (
                     <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
+                {formErrors.includes('equipment_type') && (
+                  <p className="text-rose-500 text-[10px] mt-1 font-mono">❌ Please fill all required fields.</p>
+                )}
               </div>
 
               <div>
@@ -503,14 +538,20 @@ export const EquipmentManagement: React.FC = () => {
                   Equipment Status *
                 </label>
                 <select
-                  required
                   value={form.status}
-                  onChange={(e) => setForm({ ...form, status: e.target.value })}
-                  className="w-full bg-zinc-955 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono"
+                  onChange={(e) => {
+                    setForm({ ...form, status: e.target.value });
+                    if (e.target.value) setFormErrors(prev => prev.filter(err => err !== 'status'));
+                  }}
+                  className={`w-full bg-zinc-955 border ${formErrors.includes('status') ? 'border-rose-500' : 'border-zinc-850'} rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono`}
                 >
+                  <option value="" disabled>Select Status</option>
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
                 </select>
+                {formErrors.includes('status') && (
+                  <p className="text-rose-500 text-[10px] mt-1 font-mono">❌ Please fill all required fields.</p>
+                )}
               </div>
             </fieldset>
 
