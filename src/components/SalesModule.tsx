@@ -2278,7 +2278,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const teamMembersJson = (crmEvents && crmEvents.length > 0)
       ? crmEvents.map(event => {
           const eventKey = `${pkgId}_${event.id}`;
-          const list = updatedInclusions[eventKey] !== undefined ? updatedInclusions[eventKey] : inclusionsList;
+          const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
+          const list = updatedInclusions[eventKey] !== undefined 
+            ? updatedInclusions[eventKey] 
+            : (updatedInclusions[nameKey] !== undefined ? updatedInclusions[nameKey] : inclusionsList);
           return {
             event_name: event.event_name || event.event_type || 'Unnamed Event',
             team_members: list.filter(Boolean)
@@ -2722,10 +2725,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
   }, [wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, packages, crmEvents]);
 
+  const lastLoadedLeadIdRef = React.useRef<string | null>(null);
+
   // Fetch from Supabase directly for the JSON columns
   React.useEffect(() => {
     const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
     if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD' && pkgId && supabaseClient) {
+      if (lastLoadedLeadIdRef.current === selectedLead.lead_id) {
+        return;
+      }
       const fetchSupabasePackageData = async () => {
         try {
           const { data, error } = await supabaseClient
@@ -2735,6 +2743,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             .maybeSingle();
           
           if (!error && data) {
+            lastLoadedLeadIdRef.current = selectedLead.lead_id;
             const newInclusions: Record<string, string[]> = {};
             const newDeliverables: Record<string, string[]> = {};
 
@@ -2753,6 +2762,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       );
                       if (matchingEvent) {
                         newInclusions[`${pkgId}_${matchingEvent.id}`] = members;
+                        newInclusions[`${pkgId}_${eventName}`] = members;
                       } else {
                         newInclusions[`${pkgId}_${eventName}`] = members;
                       }
@@ -2795,6 +2805,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         }
       };
       fetchSupabasePackageData();
+    } else {
+      if (!selectedLead) {
+        lastLoadedLeadIdRef.current = null;
+      }
     }
   }, [selectedLead?.lead_id, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, supabaseClient, crmEvents]);
 
@@ -2821,6 +2835,123 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editableDeliverables, editableInclusions, selectedLead?.lead_id, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option]);
+
+  // Step 2 Automatic Data Persistence & Prefill
+  React.useEffect(() => {
+    const isStep2 = (activeTab === 'create' && wizardStep === 2) || (activeTab === 'crm' && crmWizardStep === 2);
+    const activeLeadId = activeTab === 'create' ? createdLeadId : selectedLead?.lead_id;
+
+    if (!isStep2 || !activeLeadId || !supabaseClient) return;
+
+    let isMounted = true;
+
+    const loadStep2DataFromDB = async () => {
+      try {
+        // 1. Fetch lead details
+        const { data: leadData, error: leadErr } = await supabaseClient
+          .from('leads')
+          .select('*')
+          .eq('lead_id', activeLeadId)
+          .maybeSingle();
+
+        if (leadErr) {
+          console.error("Error fetching lead for step 2:", leadErr);
+          return;
+        }
+
+        if (!isMounted) return;
+
+        // 2. Fetch lead events
+        const { data: eventsData, error: eventsErr } = await supabaseClient
+          .from('lead_events')
+          .select('*')
+          .eq('lead_id', activeLeadId);
+
+        if (eventsErr) {
+          console.error("Error fetching events for step 2:", eventsErr);
+          return;
+        }
+
+        if (!isMounted) return;
+
+        if (leadData) {
+          // Restore follow-up details
+          if (leadData.next_follow_up_date) {
+            setStep2FollowUpDate(leadData.next_follow_up_date);
+          }
+          if (leadData.follow_up_notes) {
+            setStep2FollowUpNotes(leadData.follow_up_notes);
+          }
+          
+          setWizardLeadData(prev => ({
+            ...prev,
+            lead_source: leadData.lead_source || prev.lead_source,
+            Specify_Custom_Lead_Source_Name: leadData.Specify_Custom_Lead_Source_Name || prev.Specify_Custom_Lead_Source_Name,
+            client_residence_address: leadData.client_residence_address || prev.client_residence_address,
+            city: leadData.city || prev.city,
+            state: leadData.state || prev.state,
+            pincode: leadData.pincode || prev.pincode,
+            reference_source: leadData.reference_source || prev.reference_source,
+          }));
+        }
+
+        if (eventsData && eventsData.length > 0) {
+          const mappedEvents: LeadEvent[] = eventsData.map(ev => ({
+            id: ev.id,
+            event_type: ev.event_type,
+            event_name: ev.event_name,
+            event_date: ev.event_date,
+            event_start_date: ev.event_date,
+            event_end_date: ev.event_date,
+            event_location: ev.event_location,
+            event_shoot_type: ev.event_shoot_type,
+            guest_pax: ev.guest_pax,
+            staff_pax: ev.staff_pax,
+            event_start_time: ev.event_start_time,
+            event_end_time: ev.event_end_time,
+            google_maps_link: ev.google_maps_link,
+            assigned_staff_names: ev.assigned_staff_names,
+            assigned_staff_mobiles: ev.assigned_staff_mobiles,
+            reporting_date: ev.reporting_date,
+            reporting_time: ev.reporting_time
+          }));
+
+          if (activeTab === 'create') {
+            setCreateEvents(mappedEvents);
+          } else {
+            setCrmEvents(mappedEvents);
+          }
+
+          // Pre-fill the form with the first event's details
+          const firstEv = mappedEvents[0];
+          setEventForm({
+            event_type: firstEv.event_type || '',
+            event_name: firstEv.event_name || '',
+            event_date: firstEv.event_date || '',
+            event_start_date: firstEv.event_date || '',
+            event_end_date: firstEv.event_date || '',
+            event_location: firstEv.event_location || '',
+            event_shoot_type: firstEv.event_shoot_type || '',
+            guest_pax: firstEv.guest_pax || '',
+            staff_pax: firstEv.staff_pax || '',
+            event_start_time: firstEv.event_start_time || '',
+            event_end_time: firstEv.event_end_time || '',
+            google_maps_link: firstEv.google_maps_link || ''
+          });
+          setEditingEventId(firstEv.id);
+          setShowEventForm(true); // Force form to display so fields are not blank
+        }
+      } catch (err) {
+        console.error("Error in loadStep2DataFromDB effect:", err);
+      }
+    };
+
+    loadStep2DataFromDB();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [wizardStep, crmWizardStep, activeTab, createdLeadId, selectedLead?.lead_id, supabaseClient]);
 
   // Auto-scroll and focus transitions for Sales Popups & Forms
   React.useEffect(() => {
@@ -3895,6 +4026,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       if (crmEvents && crmEvents.length > 0) {
         crmEvents.forEach((ev) => {
           newInclusions[`${packageId}_${ev.id}`] = [...defaultInc];
+          newInclusions[`${packageId}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [...defaultInc];
         });
       }
 
@@ -3905,7 +4037,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setEditableDeliverables(newDeliverables);
 
       // Immediately save the selected package with default inclusions and deliverables to Supabase
-      saveStep3DataRealtime(newInclusions, newDeliverables);
+      saveStep3DataRealtime(newInclusions, newDeliverables, packageId);
     } else {
       setWizardLeadData((prev) => ({
         ...prev,
@@ -9376,9 +9508,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 {crmEvents && crmEvents.length > 0 ? (
                                   crmEvents.map((event) => {
                                     const eventKey = `${selectedPkgId}_${event.id}`;
+                                    const nameKey = `${selectedPkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
                                     const eventInclusions = editableInclusions[eventKey] !== undefined
                                       ? editableInclusions[eventKey]
-                                      : inclusionsList;
+                                      : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList);
 
                                     return (
                                       <div key={event.id} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-3 mt-3 mb-4">
@@ -9399,11 +9532,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                               type="button"
                                               disabled={isLeadLocked}
                                               onClick={() => {
-                                                const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
+                                                const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList))];
                                                 currentList.push('');
                                                 const updated = {
                                                   ...editableInclusions,
-                                                  [eventKey]: currentList
+                                                  [eventKey]: currentList,
+                                                  [nameKey]: currentList
                                                 };
                                                 setEditableInclusions(updated);
                                                 saveStep3DataRealtime(updated, editableDeliverables);
@@ -9424,11 +9558,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                                     value={item}
                                                     disabled={isLeadLocked}
                                                     onChange={(e) => {
-                                                      const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
+                                                      const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList))];
                                                       currentList[idx] = e.target.value;
                                                       const updated = {
                                                         ...editableInclusions,
-                                                        [eventKey]: currentList
+                                                        [eventKey]: currentList,
+                                                        [nameKey]: currentList
                                                       };
                                                       setEditableInclusions(updated);
                                                       saveStep3DataRealtime(updated, editableDeliverables);
@@ -9439,11 +9574,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                                     <button
                                                       type="button"
                                                       onClick={() => {
-                                                        const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : inclusionsList)];
+                                                        const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList))];
                                                         currentList.splice(idx, 1);
                                                         const updated = {
                                                           ...editableInclusions,
-                                                          [eventKey]: currentList
+                                                          [eventKey]: currentList,
+                                                          [nameKey]: currentList
                                                         };
                                                         setEditableInclusions(updated);
                                                         saveStep3DataRealtime(updated, editableDeliverables);
