@@ -94,17 +94,26 @@ export const OperationsLeads: React.FC = () => {
 
   // Track which order's action dropdown is open
   const [activeMenuOrderId, setActiveMenuOrderId] = useState<string | null>(null);
+  const [activeMenuItems, setActiveMenuItems] = useState<{ label: string; onClick: () => void }[]>([]);
+  const [menuCoords, setMenuCoords] = useState<{ x: number, y: number, openUpward: boolean }>({ x: 0, y: 0, openUpward: false });
 
   useEffect(() => {
     if (!activeMenuOrderId) return;
     const handleOutsideClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest('.actions-menu-container')) {
+      if (!target.closest('.actions-menu-container') && !target.closest('.action-button-trigger')) {
         setActiveMenuOrderId(null);
       }
     };
+    const handleScroll = () => {
+      setActiveMenuOrderId(null);
+    };
     document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
+    window.addEventListener('scroll', handleScroll, true); // true for capture phase to catch scroll on any element
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
   }, [activeMenuOrderId]);
 
   // Multi-Select Searchable Equipment States
@@ -319,7 +328,7 @@ export const OperationsLeads: React.FC = () => {
         if (ev.assigned_staff_names) {
           ev.assigned_staff_names.split(',').forEach((n: string) => {
             const trimmed = n.trim();
-            if (trimmed) {
+            if (trimmed && trimmed.toLowerCase() !== 'unassigned' && trimmed.toLowerCase() !== 'none') {
               fromEvents.push(trimmed);
             }
           });
@@ -333,7 +342,7 @@ export const OperationsLeads: React.FC = () => {
     
     // Fallback to order assignments
     const orderAssigns = staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id) : [];
-    const fromAssigns = orderAssigns.map(sa => sa.staff_name).filter(Boolean);
+    const fromAssigns = orderAssigns.map(sa => sa.staff_name).filter(n => n && n.toLowerCase() !== 'unassigned' && n.toLowerCase() !== 'none');
     return Array.from(new Set(fromAssigns));
   };
 
@@ -1427,10 +1436,10 @@ export const OperationsLeads: React.FC = () => {
                             onClick={() => setViewingStaffOrderId(ord.order_id)}
                             className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 border border-indigo-500/20 hover:border-indigo-500/45 rounded-xl font-bold font-mono text-xs transition-all flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
                           >
-                            👥 {assignedStaffNames.length} Staff
+                            👥 {assignedStaffNames.length}
                           </button>
                         ) : (
-                          <span className="text-zinc-500 font-mono text-[10.5px]">Unassigned</span>
+                          <span className="text-zinc-500 font-mono text-[10.5px]">✅ Unassigned</span>
                         );
                       })()}
                     </td>
@@ -1642,34 +1651,26 @@ export const OperationsLeads: React.FC = () => {
                             <div className="relative inline-block text-left actions-menu-container">
                               <button
                                 type="button"
-                                onClick={() => setActiveMenuOrderId(isOpen ? null : ord.order_id)}
-                                className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 focus:ring-2 focus:ring-indigo-500/40 active:scale-95 text-white rounded-xl text-xs font-sans font-black border border-indigo-500/25 shadow-lg shadow-indigo-500/20 cursor-pointer transition-all inline-flex items-center gap-1.5 outline-none"
+                                onClick={(e) => {
+                                  if (isOpen) {
+                                    setActiveMenuOrderId(null);
+                                  } else {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    const spaceBelow = window.innerHeight - rect.bottom;
+                                    const openUpward = spaceBelow < 250;
+                                    setMenuCoords({
+                                      x: rect.right,
+                                      y: openUpward ? rect.top : rect.bottom,
+                                      openUpward
+                                    });
+                                    setActiveMenuItems(actionItems);
+                                    setActiveMenuOrderId(ord.order_id);
+                                  }
+                                }}
+                                className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 focus:ring-2 focus:ring-indigo-500/40 active:scale-95 text-white rounded-xl text-xs font-sans font-black border border-indigo-500/25 shadow-lg shadow-indigo-500/20 cursor-pointer transition-all inline-flex items-center gap-1.5 outline-none action-button-trigger"
                               >
                                 🎯 Actions <span className={`text-[9px] text-indigo-200 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : ''}`}>▼</span>
                               </button>
-                              {isOpen && (
-                                <div className="absolute right-0 mt-1 min-w-[150px] max-w-[200px] w-max bg-zinc-950/95 backdrop-blur-md border border-zinc-800/80 rounded-xl shadow-2xl z-[200] py-1 text-left animate-in fade-in slide-in-from-top-1 duration-150 flex flex-col overflow-hidden">
-                                  <div className="px-3 py-1 border-b border-zinc-900/60 mb-1 flex-shrink-0">
-                                    <span className="text-[9px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Options</span>
-                                  </div>
-                                  <div className="max-h-44 overflow-y-auto divide-y divide-zinc-900/40">
-                                    {actionItems.map((act, aIdx) => (
-                                      <button
-                                        key={aIdx}
-                                        onClick={act.onClick}
-                                        className="w-full text-left px-3 py-2 text-[11px] text-zinc-300 hover:bg-indigo-600/10 hover:text-indigo-400 active:bg-indigo-600/20 transition-all cursor-pointer block font-mono whitespace-nowrap"
-                                      >
-                                        ⚡ {act.label}
-                                      </button>
-                                    ))}
-                                    {actionItems.length === 0 && (
-                                      <div className="px-3 py-1.5 text-[11px] text-zinc-500 italic font-mono">
-                                        No actions available
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           );
                         })()}
@@ -2836,6 +2837,38 @@ export const OperationsLeads: React.FC = () => {
           </div>
         );
       })()}
+
+      {/* Floating Action Menu */}
+      {activeMenuOrderId && (
+        <div 
+          className="fixed z-[9999] min-w-[150px] max-w-[200px] w-max bg-zinc-950/95 backdrop-blur-md border border-zinc-800/80 rounded-xl shadow-2xl py-1 text-left animate-in fade-in zoom-in-95 duration-150 flex flex-col overflow-hidden actions-menu-container"
+          style={{
+            left: `${menuCoords.x}px`,
+            transform: `translateX(-100%) ${menuCoords.openUpward ? 'translateY(-100%)' : ''}`,
+            top: menuCoords.openUpward ? `${menuCoords.y - 4}px` : `${menuCoords.y + 4}px`
+          }}
+        >
+          <div className="px-3 py-1 border-b border-zinc-900/60 mb-1 flex-shrink-0">
+            <span className="text-[9px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Options</span>
+          </div>
+          <div className="max-h-44 overflow-y-auto divide-y divide-zinc-900/40">
+            {activeMenuItems.map((act, aIdx) => (
+              <button
+                key={aIdx}
+                onClick={act.onClick}
+                className="w-full text-left px-3 py-2 text-[11px] text-zinc-300 hover:bg-indigo-600/10 hover:text-indigo-400 active:bg-indigo-600/20 transition-all cursor-pointer block font-mono whitespace-nowrap"
+              >
+                ⚡ {act.label}
+              </button>
+            ))}
+            {activeMenuItems.length === 0 && (
+              <div className="px-3 py-1.5 text-[11px] text-zinc-500 italic font-mono">
+                No actions available
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
