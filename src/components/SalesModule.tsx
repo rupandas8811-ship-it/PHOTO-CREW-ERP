@@ -6240,14 +6240,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       if (crmEvents.length > 0) {
         crmEvents.forEach((ev) => {
           initialFormState[ev.id] = {
-            reporting_date: ev.reporting_date || ev.event_date || repDate || '',
-            reporting_time: ev.reporting_time || ev.event_time || repTime || ''
+            reporting_date: '',
+            reporting_time: ''
           };
         });
       } else {
         initialFormState['default'] = {
-          reporting_date: repDate,
-          reporting_time: repTime
+          reporting_date: '',
+          reporting_time: ''
         };
       }
 
@@ -8890,12 +8890,44 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   return (
                     <div key={ev.id} className="bg-slate-900/50 p-4 rounded-lg border border-slate-750 mb-3 space-y-3">
                       <h5 className="font-bold text-slate-200 border-b border-slate-700/50 pb-1.5 mb-2 flex items-center justify-between">
-                        <span>Event {idx + 1}: {ev.event_name}</span>
+                        <span>Event {idx + 1}</span>
                       </h5>
                       
-                      <div className="text-[11px] text-slate-400 mb-2 flex items-center gap-1.5">
-                         <Calendar className="w-3.5 h-3.5" />
-                         <span>Scheduled Date: <span className="font-semibold text-slate-300">{ev.event_date || 'N/A'}</span></span>
+                      <div>
+                        <label className="block font-medium text-slate-400 mb-1">
+                          Event Name
+                        </label>
+                        <input
+                          type="text"
+                          readOnly
+                          value={ev.event_name || 'N/A'}
+                          className="w-full bg-slate-950/50 border border-slate-800 rounded-lg py-1.5 px-2 text-slate-300 font-mono text-[11px] cursor-not-allowed"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block font-medium text-slate-400 mb-1">
+                            Event Date *
+                          </label>
+                          <input
+                            type="date"
+                            readOnly
+                            value={ev.event_date || ''}
+                            className="w-full bg-slate-950/50 border border-slate-800 rounded-lg py-1.5 px-2 text-slate-300 font-mono text-[11px] cursor-not-allowed"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-medium text-slate-400 mb-1">
+                            Event Start Time *
+                          </label>
+                          <input
+                            type="time"
+                            readOnly
+                            value={ev.event_start_time || ev.event_time || ''}
+                            className="w-full bg-slate-950/50 border border-slate-800 rounded-lg py-1.5 px-2 text-slate-300 font-mono text-[11px] cursor-not-allowed"
+                          />
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
