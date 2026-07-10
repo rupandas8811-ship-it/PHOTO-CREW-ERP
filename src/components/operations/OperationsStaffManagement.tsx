@@ -47,9 +47,9 @@ export const OperationsStaffManagement: React.FC = () => {
       profile_photo: st.profile_photo || '',
       notes: st.notes || ''
     });
-    const loadedSkills = st.Skill 
-      ? (typeof st.Skill === 'string' ? st.Skill.split(',').map((s: string) => s.trim()).filter(Boolean) : (Array.isArray(st.Skill) ? st.Skill : []))
-      : (st.notes ? st.notes.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
+    const loadedSkills = typeof st.Skill === 'string'
+      ? st.Skill.split(',').map((s: string) => s.trim()).filter(Boolean)
+      : (Array.isArray(st.Skill) ? st.Skill : []);
     setSkills(loadedSkills);
   };
 
@@ -72,16 +72,34 @@ export const OperationsStaffManagement: React.FC = () => {
     setNewSkill('');
   };
 
-  const handleAddSkill = () => {
+  const handleAddSkill = async () => {
     const trimmed = newSkill.trim();
     if (trimmed && !skills.includes(trimmed)) {
-      setSkills([...skills, trimmed]);
+      const newSkills = [...skills, trimmed];
+      setSkills(newSkills);
       setNewSkill('');
+      
+      if (editingId) {
+        try {
+          await updateStaff(editingId, { Skill: newSkills.join(', ') });
+        } catch (e) {
+          console.error("Failed to update skills in real-time:", e);
+        }
+      }
     }
   };
 
-  const handleRemoveSkill = (skillToRemove: string) => {
-    setSkills(skills.filter(s => s !== skillToRemove));
+  const handleRemoveSkill = async (skillToRemove: string) => {
+    const newSkills = skills.filter(s => s !== skillToRemove);
+    setSkills(newSkills);
+    
+    if (editingId) {
+      try {
+        await updateStaff(editingId, { Skill: newSkills.join(', ') });
+      } catch (e) {
+        console.error("Failed to update skills in real-time:", e);
+      }
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -99,13 +117,12 @@ export const OperationsStaffManagement: React.FC = () => {
 
     // Auto-generate email and set notes to comma-separated skills
     const finalEmail = form.email || `${form.name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'staff'}@photocrew.com`;
-    const finalNotes = skills.join(', ');
+    const finalSkillsStr = skills.join(', ');
 
     const submissionPayload = {
       ...form,
       email: finalEmail,
-      notes: finalNotes,
-      Skill: finalNotes,
+      Skill: finalSkillsStr,
       Staff_Type: form.staff_type
     };
 
@@ -113,11 +130,19 @@ export const OperationsStaffManagement: React.FC = () => {
       setIsSaving(true);
       if (editingId) {
         await updateStaff(editingId, submissionPayload);
-        alert('Staff profile updated.');
+        const toast = document.createElement('div');
+        toast.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-2 rounded-xl shadow-lg z-50 font-sans text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-5';
+        toast.innerHTML = '✅ Staff details updated successfully.';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
         handleCancel();
       } else {
         await addStaff(submissionPayload);
-        alert('New staff member registered.');
+        const toast = document.createElement('div');
+        toast.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-2 rounded-xl shadow-lg z-50 font-sans text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-5';
+        toast.innerHTML = '✅ New staff member registered.';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
         handleCancel();
       }
     } catch (err: any) {
