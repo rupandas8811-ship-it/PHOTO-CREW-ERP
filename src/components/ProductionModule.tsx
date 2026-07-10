@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRole } from './RoleContext';
 import { motion, AnimatePresence } from 'motion/react';
+import { supabaseClient } from '../supabaseClient';
 import { 
   Play, CheckCircle2, UserCheck, Eye, Calendar, Lock, Layers, AlertCircle, Ban, RefreshCw, Clock,
   PlusSquare, ArrowRight, CheckSquare, AlertTriangle, Truck, Users, BarChart3, TrendingUp, Sparkles, UserPlus, ChevronRight,
@@ -22,6 +23,68 @@ import { Bell } from 'lucide-react';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
 import { ProductionStaffDirectoryModule } from './ProductionStaffDirectoryModule';
 import { ProductionRoleSpecialitiesModule } from './ProductionRoleSpecialitiesModule';
+
+function getIndividualDeliverables(description: string): string[] {
+  if (!description) return [];
+  // Split by newline first
+  let lines = description.split(/\r?\n/);
+  // If there's only 1 line and it has commas, split by comma, but only if they don't look like they are inside parentheses
+  if (lines.length === 1 && description.includes(',')) {
+    lines = description.split(/,(?![^(]*\))/);
+  }
+  
+  return lines
+    .map(line => {
+      // Remove leading numbers like "1.", "1 )", "- ", "* "
+      let cleaned = line.replace(/^\s*([0-9]+\.?\s*\)?|-|\*)\s*/, '').trim();
+      return cleaned;
+    })
+    .filter(line => line.length > 0);
+}
+
+function formatWhatsAppNumber(phone: string) {
+  let cleaned = (phone || '').replace(/[^0-9]/g, '');
+  if (cleaned.length === 10) {
+    cleaned = '91' + cleaned;
+  }
+  return cleaned;
+}
+
+function generatePersonalizedWhatsAppMessage(params: {
+  staffName: string;
+  role: string;
+  event: string;
+  client: string;
+  mobile: string;
+  deliverables: Array<{ name: string; deadline: string }>;
+  deadline: string;
+  notes: string;
+  coordinatorName: string;
+  coordinatorMobile: string;
+}) {
+  const deliverablesText = params.deliverables
+    .map((d, i) => `${i + 1}. ${d.name} (Deadline: ${d.deadline || params.deadline})`)
+    .join('\n');
+
+  return `*PHOTOCREW STUDIO TASK ASSIGNMENT*
+
+*Staff Name:* ${params.staffName}
+*Role:* ${params.role}
+*Event:* ${params.event}
+*Client:* ${params.client}
+*Client Mobile:* ${params.mobile}
+
+*Your Assigned Deliverables:*
+${deliverablesText}
+
+*Deadline:* ${params.deadline}
+
+*Coordinator Details:* ${params.coordinatorName} ${params.coordinatorMobile ? `(${params.coordinatorMobile})` : ''}
+
+*Project Notes:* ${params.notes}
+
+_Please access the PhotoCrew ERP Dashboard to synchronize progress and start work._`;
+}
 
 
 
@@ -171,6 +234,9 @@ export interface ProductionModuleProps {
 export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab, setActiveSubTab }) => {
   const { 
     currentRole, 
+    currentUser,
+    currentUserName,
+    refreshData,
     production, 
     updateProduction, 
     markDelivered, 
@@ -205,6 +271,86 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
   // Role permissions gate
   const canEdit = (currentRole === 'Production Team' || currentRole === 'Business Owner') && 
                   isDepartmentAllowedToEdit(currentRole, 'Raw Footage Received'); // Need to map correctly per project later
+
+  // Local Helper for Singapore WhatsApp Formatting
+  const formatSingaporeWhatsAppNumber = (phone: string) => {
+    let cleaned = (phone || '').replace(/[^0-9]/g, '');
+    if (!cleaned) return '';
+    if (cleaned.length === 8 && (cleaned.startsWith('8') || cleaned.startsWith('9'))) {
+      return '65' + cleaned;
+    }
+    if (cleaned.startsWith('65') && cleaned.length === 10) {
+      return cleaned;
+    }
+    return cleaned;
+  };
+
+  const getPersonalizedMessage = (staff: any, deliverables: any[]) => {
+    const coordinatorName = whatsappShareData?.coordinator_name || currentUserName || 'Operations Coordinator';
+    const coordinatorContact = whatsappShareData?.coordinator_contact || (currentUser?.mobile || currentUser?.phone || '—');
+    const eventName = whatsappShareData?.event_name || 'Event';
+    const clientName = whatsappShareData?.customer_name || '—';
+    const clientMobile = whatsappShareData?.mobile || '—';
+    const notes = whatsappShareData?.notes || 'No special notes.';
+    const globalDeadline = whatsappShareData?.global_deadline || '—';
+    const reportingDate = whatsappShareData?.reporting_date && whatsappShareData.reporting_date !== '—' ? whatsappShareData.reporting_date : null;
+    const reportingTime = whatsappShareData?.reporting_time && whatsappShareData.reporting_time !== '—' ? whatsappShareData.reporting_time : null;
+    const assignedEquipment = whatsappShareData?.assigned_equipment && whatsappShareData.assigned_equipment !== '—' ? whatsappShareData.assigned_equipment : null;
+
+    const deliverableLines = deliverables.map((d: any, index: number) => {
+      return `${index + 1}. ${d.name} (Deadline: ${d.deadline || globalDeadline})`;
+    }).join('\n');
+
+    let msg = `Hi ${staff.name},
+
+You have been assigned as *${staff.role || 'Crew'}* for the project *${eventName}*.
+
+*Client Details:*
+- Client Name: ${clientName}
+- Client Mobile: ${clientMobile}
+
+*Your Assigned Deliverable(s):*
+${deliverableLines}
+
+*Global Project Deadline:* ${globalDeadline}`;
+
+    if (reportingDate || reportingTime) {
+      msg += `\n\n*Reporting Details:*`;
+      if (reportingDate) msg += `\n- Reporting Date: ${reportingDate}`;
+      if (reportingTime) msg += `\n- Reporting Time: ${reportingTime}`;
+    }
+
+    if (assignedEquipment) {
+      msg += `\n\n*Assigned Equipment:* \n${assignedEquipment}`;
+    }
+
+    msg += `\n\n*Coordinator Details:*
+- Coordinator Name: ${coordinatorName}
+- Coordinator Contact: ${coordinatorContact}`;
+
+    if (notes && notes !== 'No special notes.' && notes.trim() !== '') {
+      msg += `\n\n*Special Instructions / Notes:* \n${notes}`;
+    }
+
+    msg += `\n\nPlease acknowledge receipt of this assignment.
+
+Thanks,
+${coordinatorName}`;
+    return msg;
+  };
+
+  const handleSendToWhatsApp = (staff: any, deliverables: any[]) => {
+    const currentNum = editedStaffMobiles[staff.staff_id] !== undefined ? editedStaffMobiles[staff.staff_id] : (staff.mobile || '');
+    if (!currentNum.trim()) {
+      alert("Please enter a valid phone number for " + staff.name);
+      return;
+    }
+    const formattedPhone = formatSingaporeWhatsAppNumber(currentNum);
+    const msg = getPersonalizedMessage(staff, deliverables);
+    const encodedMsg = encodeURIComponent(msg);
+    const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedMsg}`;
+    window.open(whatsappUrl, '_blank');
+  };
 
   // Dynamically compile active production projects/leads from leadsData / Supabase leads table
   const leads = useMemo(() => {
@@ -1078,6 +1224,17 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
   const [lastModalProdId, setLastModalProdId] = useState<string | null>(null);
   const [selectedWfEditor, setSelectedWfEditor] = useState<any | null>(null);
 
+  // New Deliverable-wise assignment states
+  const [deliverablesTargetDates, setDeliverablesTargetDates] = useState<Record<string, string>>({});
+  const [selectedWfStaffByDeliverable, setSelectedWfStaffByDeliverable] = useState<Record<string, string[]>>({});
+  const [whatsappShareModalOpen, setWhatsappShareModalOpen] = useState(false);
+  const [whatsappShareData, setWhatsappShareData] = useState<any | null>(null);
+  const [previewStaffMessage, setPreviewStaffMessage] = useState<{ staffName: string; message: string } | null>(null);
+  const [editedStaffMobiles, setEditedStaffMobiles] = useState<Record<string, string>>({});
+  const [customDeliverables, setCustomDeliverables] = useState<string[]>([]);
+  const [newDeliverableInput, setNewDeliverableInput] = useState('');
+  const [openDropdownDeliverable, setOpenDropdownDeliverable] = useState<string | null>(null);
+
   // Simplified Add Staff Form states
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffMobile, setNewStaffMobile] = useState('');
@@ -1158,11 +1315,47 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
         setClosingNotes('');
       } else if (workflowActionType === 'assign_editor') {
         const assignedForThis = activeWorkflowProd ? editorAssignments.filter(a => a.production_id === activeWorkflowProd.production_id) : [];
-        setWfTargetDeliveryDate('');
+        setWfTargetDeliveryDate(activeWorkflowProd?.target_delivery_date || activeWorkflowProd?.expected_delivery_date || '');
+        
+        // Find deliverables from confirmed quotation
+        let deliverablesText = '';
+        if (activeWorkflowProd) {
+          const rf = rawFootage.find(f => f.tracking_id === activeWorkflowProd.tracking_id || f.order_id === activeWorkflowProd.tracking_id);
+          const order = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === activeWorkflowProd.production_id.replace('PRD-', ''));
+          const lead = leadsData?.find(l => l.lead_id === activeWorkflowProd.tracking_id || l.lead_id === order?.lead_id);
+          deliverablesText = order?.deliverables_description || lead?.deliverables_description || '';
+        }
+        
+        const parsedDeliverables = getIndividualDeliverables(deliverablesText);
+        const assignedDeliverables = Array.from(new Set(assignedForThis.map(a => a.speciality)));
+        const allDeliverables = Array.from(new Set([...parsedDeliverables, ...assignedDeliverables]));
+        
+        setCustomDeliverables(allDeliverables);
+
+        // Load existing staff map & dates map
+        const initialStaffMap: Record<string, string[]> = {};
+        const initialDatesMap: Record<string, string> = {};
+        
+        assignedForThis.forEach(a => {
+          const deliverable = a.speciality;
+          if (deliverable) {
+            if (!initialStaffMap[deliverable]) {
+              initialStaffMap[deliverable] = [];
+            }
+            if (!initialStaffMap[deliverable].includes(a.staff_id)) {
+              initialStaffMap[deliverable].push(a.staff_id);
+            }
+            initialDatesMap[deliverable] = a.target_finish_date || '';
+          }
+        });
+        
+        setSelectedWfStaffByDeliverable(initialStaffMap);
+        setDeliverablesTargetDates(initialDatesMap);
+        setWfProjectNotes(activeWorkflowProd?.project_notes || activeWorkflowProd?.remarks || '');
+
         if (assignedForThis.length === 0) {
           setWfEditor('');
           setWfPriority('Medium');
-          setWfProjectNotes('');
           setWfInternalComments('');
           setAssignmentRows([{ speciality: '', staffId: '', staffName: '' }]);
           setSelectedEditors([]);
@@ -5655,243 +5848,407 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         );
                       })()}
                     </div>
-                     {/* 2. TEAM ASSIGNMENT & ADD EDITOR WORKFLOW */}
-                    <div className="space-y-4">
+
+                     {/* 2. ASSIGN PRODUCTION STAFF (DELIVERABLE-WISE) */}
+                     <div className="space-y-4">
                       <div className="border-b border-zinc-900 pb-2">
                         <h4 className="text-[10px] text-[#a78bfa] uppercase font-black tracking-widest font-mono">
-                          2. Team Assignment
+                          2. Assign Production Staff (Deliverable-Wise)
                         </h4>
                       </div>
 
-                      {(() => {
-                        const activeProductionStaff = productionStaff.filter(s => s.status === 'Active');
+                      {wfError && (
+                        <div className="bg-rose-950/20 border border-rose-900/30 text-rose-400 text-xs p-3 rounded-xl font-mono">
+                          ⚠️ {wfError}
+                        </div>
+                      )}
+                      {wfSuccess && (
+                        <div className="bg-emerald-950/20 border border-emerald-900/30 text-emerald-400 text-xs p-3 rounded-xl font-mono">
+                          {wfSuccess}
+                        </div>
+                      )}
 
-                        const getStaffWorkload = (staffName: string) => {
-                          const active = editorAssignments.filter(a => 
-                            a.staff_name.toLowerCase() === staffName.toLowerCase() && 
-                            a.status !== 'Completed'
-                          );
-                          return { activeCount: active.length };
-                        };
+                      <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
+                        {customDeliverables.map((deliverable) => {
+                          const selectedStaffIds = selectedWfStaffByDeliverable[deliverable] || [];
+                          const targetDate = deliverablesTargetDates[deliverable] || wfTargetDeliveryDate || '';
 
-                        return (
-                          <div className="bg-zinc-900/20 border border-zinc-900 p-4 rounded-2xl space-y-4">
-                            {/* Editor Selection Dropdown */}
-                            <div>
-                              <label className="text-[10px] text-zinc-400 uppercase font-black tracking-wider block font-mono mb-1.5">
-                                Select Editor <span className="text-rose-500">*</span>
-                              </label>
-                              <select
-                                value={selectedWfEditor ? selectedWfEditor.staff_id : ''}
-                                onChange={(e) => {
-                                  const selectedId = e.target.value;
-                                  const editor = activeProductionStaff.find(s => s.staff_id === selectedId);
-                                  setSelectedWfEditor(editor || null);
-                                  setWfSuccess('');
-                                }}
-                                className="w-full bg-zinc-950 border border-zinc-850 hover:border-zinc-800 text-xs text-zinc-100 rounded-xl px-3.5 py-2.5 font-sans focus:outline-none focus:border-purple-500 cursor-pointer"
-                              >
-                                <option value="">-- Choose an Editor --</option>
-                                {activeProductionStaff.map(s => {
-                                  const wl = getStaffWorkload(s.name);
-                                  return (
-                                    <option key={s.staff_id} value={s.staff_id}>
-                                      {s.name} ({wl.activeCount} Active Task{wl.activeCount !== 1 ? 's' : ''})
-                                    </option>
-                                  );
-                                })}
-                              </select>
-                            </div>
-                            
-                            {/* Warnings & Errors & Success (Global to the Assignment) */}
-                            {wfError && (
-                              <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[11px] font-mono rounded-xl flex items-start gap-2">
-                                <span className="font-bold">⚠️ Warning:</span>
-                                <span>{wfError}</span>
+                          return (
+                            <div key={deliverable} className="bg-zinc-900/20 border border-zinc-900 rounded-xl p-3.5 space-y-3">
+                              {/* Deliverable Header */}
+                              <div className="flex items-start justify-between gap-4">
+                                <div>
+                                  <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">Deliverable</span>
+                                  <span className="text-xs font-bold text-zinc-100 font-sans block mt-0.5">{deliverable}</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCustomDeliverables(prev => prev.filter(d => d !== deliverable));
+                                    setSelectedWfStaffByDeliverable(prev => {
+                                      const copy = { ...prev };
+                                      delete copy[deliverable];
+                                      return copy;
+                                    });
+                                    setDeliverablesTargetDates(prev => {
+                                      const copy = { ...prev };
+                                      delete copy[deliverable];
+                                      return copy;
+                                    });
+                                  }}
+                                  className="text-zinc-600 hover:text-rose-400 transition-colors p-1 cursor-pointer"
+                                  title="Remove Deliverable"
+                                >
+                                  ✕
+                                </button>
                               </div>
-                            )}
-                            {wfSuccess && (
-                              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-mono rounded-xl flex items-start gap-2">
-                                <span className="font-bold">✅ Success:</span>
-                                <span>{wfSuccess}</span>
-                              </div>
-                            )}
 
-                            {/* Automatically displayed fields upon selecting editor */}
-                            {selectedWfEditor && (
-                              <div className="space-y-4 pt-4 border-t border-zinc-900/60 animate-fade-in">
-                                {/* NEW: Editor's Current Workload */}
-                                {(() => {
-                                  const activeTasks = editorAssignments.filter(a => 
-                                    a.staff_name.toLowerCase() === selectedWfEditor.name.toLowerCase() && 
-                                    a.status !== 'Completed'
-                                  );
-                                  
-                                  return (
-                                    <div className="space-y-2 mb-4">
-                                      <div className="bg-zinc-900/40 p-3 rounded-xl border border-zinc-800 mb-3">
-                                        <div className="text-white font-bold">{selectedWfEditor.name}</div>
-                                        <div className="text-purple-400 text-xs font-mono mb-1">{(Array.isArray(selectedWfEditor.Skill) && selectedWfEditor.Skill.length > 0) ? selectedWfEditor.Skill.join(' • ') : 'No Skills Defined'}</div>
-                                        <div className="text-zinc-400 text-[11px] font-mono">{activeTasks.length} Active Task{activeTasks.length !== 1 ? 's' : ''}</div>
-                                      </div>
-                                      
-                                      <label className="text-[10px] text-zinc-400 uppercase font-black tracking-wider block font-mono">
-                                        Active Assignments
-                                      </label>
-                                      {activeTasks.length === 0 ? (
-                                        <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] px-3 py-2.5 rounded-xl font-mono">
-                                          Available - No active tasks.
-                                        </div>
-                                      ) : (
-                                        <div className="space-y-2">
-                                          {activeTasks.map(task => {
-                                             const relatedProd = production.find(p => p.production_id === task.production_id);
-                                             return (
-                                               <div key={task.assignment_id} className="bg-zinc-950 border border-zinc-800 p-3 rounded-xl text-xs font-sans text-zinc-300">
-                                                 <div className="grid grid-cols-2 gap-y-2 gap-x-4">
-                                                   <div><span className="text-[9px] text-zinc-500 block uppercase font-mono tracking-wider">Assigned Date</span><span>{task.assigned_date || 'N/A'}</span></div>
-                                                   <div><span className="text-[9px] text-zinc-500 block uppercase font-mono tracking-wider">Delivery Target</span><span>{task.target_finish_date || 'N/A'}</span></div>
-                                                   <div><span className="text-[9px] text-zinc-500 block uppercase font-mono tracking-wider">Task Status</span><span className="text-amber-400 font-medium">{task.status}</span></div>
-                                                   <div className="col-span-2"><span className="text-[9px] text-zinc-500 block uppercase font-mono tracking-wider">Production Stage</span><span className="text-purple-400 font-mono font-bold">{relatedProd?.production_status || relatedProd?.editing_status || 'Unknown'}</span></div>
-                                                 </div>
-                                               </div>
-                                             );
-                                          })}
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })()}
-                                
-                                
-                                {/* Delivery Target Date */}
-                                <div className="space-y-1.5 border-t border-zinc-900/60 pt-4">
-                                  <label className="text-[10px] text-zinc-400 uppercase font-black tracking-wider block font-mono">
-                                    Delivery Target Date <span className="text-rose-500">*</span>
+                              {/* Target Date and Staff Assignment */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Target Finish Date for this deliverable */}
+                                <div className="space-y-1">
+                                  <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
+                                    Target Delivery Date
                                   </label>
                                   <input
                                     type="date"
-                                    value={wfTargetDeliveryDate}
-                                    onChange={(e) => setWfTargetDeliveryDate(e.target.value)}
-                                    className="w-full bg-zinc-950 border border-zinc-850 hover:border-zinc-800 text-xs text-zinc-100 rounded-xl px-3.5 py-2.5 font-mono focus:outline-none focus:border-purple-500"
-                                    required
+                                    value={targetDate}
+                                    onChange={(e) => {
+                                      setDeliverablesTargetDates(prev => ({
+                                        ...prev,
+                                        [deliverable]: e.target.value
+                                      }));
+                                    }}
+                                    className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-xs text-zinc-300 rounded-xl px-3 py-2 font-mono focus:outline-none focus:border-purple-500"
                                   />
                                 </div>
 
-                                {/* Add Editor Action Buttons */}
-                                <div className="pt-2 flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedWfEditor(null);
-                                      setWfTargetDeliveryDate('');
-                                      setWfError('');
-                                      setWfSuccess('');
-                                    }}
-                                    className="flex-1 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-zinc-400 hover:text-white text-xs font-mono font-bold rounded-xl transition-colors cursor-pointer text-center"
-                                  >
-                                    Clear Selection
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={isSaving}
-                                    onClick={async () => {
-                                      setWfError('');
-                                      setWfSuccess('');
-                                      if (!selectedWfEditor) {
-                                        setWfError('At least one editor must be selected.');
-                                        return;
-                                      }
-                                      if (!wfTargetDeliveryDate) {
-                                        setWfError('Delivery Target Date is mandatory.');
-                                        return;
-                                      }
+                                {/* Multi-select staff assignment */}
+                                <div className="space-y-1">
+                                  <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
+                                    Assigned Staff
+                                  </label>
+                                  
+                                  {/* Pills */}
+                                  <div className="flex flex-wrap gap-1 mb-2">
+                                    {selectedStaffIds.map(sId => {
+                                      const s = productionStaff.find(st => st.staff_id === sId);
+                                      if (!s) return null;
+                                      return (
+                                        <span key={sId} className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-950/40 border border-purple-800/30 text-purple-300 rounded-full text-[10px] font-medium">
+                                          {s.name}
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedWfStaffByDeliverable(prev => ({
+                                                ...prev,
+                                                [deliverable]: (prev[deliverable] || []).filter(id => id !== sId)
+                                              }));
+                                            }}
+                                            className="text-purple-400 hover:text-white transition-colors ml-0.5 font-bold cursor-pointer"
+                                          >
+                                            ✕
+                                          </button>
+                                        </span>
+                                      );
+                                    })}
+                                    {selectedStaffIds.length === 0 && (
+                                      <span className="text-zinc-600 text-[10px] italic py-0.5">No staff assigned</span>
+                                    )}
+                                  </div>
 
-                                      try {
-                                        setIsSaving(true);
-                                        
-                                        const determinedSpeciality = (Array.isArray(selectedWfEditor.Skill) && selectedWfEditor.Skill.length > 0) 
-                                          ? selectedWfEditor.Skill.join(', ') 
-                                          : (selectedWfEditor.production_role_speciality || selectedWfEditor.role || 'Editor');
+                                  {/* Custom dropdown trigger */}
+                                  <div className="relative">
+                                    <button
+                                      type="button"
+                                      onClick={() => setOpenDropdownDeliverable(openDropdownDeliverable === deliverable ? null : deliverable)}
+                                      className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-850 text-xs text-zinc-400 rounded-xl px-3 py-2 text-left flex items-center justify-between cursor-pointer"
+                                    >
+                                      <span className="text-[11px]">Select Team Member...</span>
+                                      <span className="text-zinc-600 text-[9px]">{openDropdownDeliverable === deliverable ? '▲' : '▼'}</span>
+                                    </button>
 
-                                        // 1. Save new editor assignment to the local state & backend
-                                        await assignEditorToProject({
-                                          production_id: activeWorkflowProd.production_id,
-                                          staff_id: selectedWfEditor.staff_id,
-                                          staff_name: selectedWfEditor.name,
-                                          speciality: determinedSpeciality,
-                                          target_finish_date: wfTargetDeliveryDate
-                                        });
-
-                                        // 2. Fetch up-to-date assignment strings to set on production record
-                                        const existingAssignments = editorAssignments.filter(a => a.production_id === activeWorkflowProd.production_id);
-                                        const allAssignments = [
-                                          ...existingAssignments,
-                                          {
-                                            production_id: activeWorkflowProd.production_id,
-                                            staff_id: selectedWfEditor.staff_id,
-                                            staff_name: selectedWfEditor.name,
-                                            speciality: determinedSpeciality,
-                                            target_finish_date: wfTargetDeliveryDate,
-                                            status: 'Assigned'
-                                          }
-                                        ];
-
-                                        const finalNames = Array.from(new Set(allAssignments.map(r => r.staff_name).filter(Boolean)));
-                                        const primaryEditor = finalNames[0] || selectedWfEditor.name;
-                                        const assignedStaffJoined = finalNames.join(', ');
-                                        const rolesJoined = Array.from(new Set(allAssignments.map(r => r.speciality).filter(Boolean))).join(', ');
-
-                                        await updateProduction(activeWorkflowProd.production_id, {
-                                          editor_assigned: primaryEditor,
-                                          assigned_staff: assignedStaffJoined,
-                                          target_delivery_date: wfTargetDeliveryDate,
-                                          editing_status: 'Editor Assigned',
-                                          production_role: rolesJoined,
-                                          assigned_role: rolesJoined
-                                        } as any);
-
-                                        // 3. Keep modal open, allow adding another editor
-                                        const editorName = selectedWfEditor.name;
-                                        setSelectedWfEditor(null);
-                                        setWfTargetDeliveryDate('');
-                                        setWfError('');
-                                        setWfSuccess(`Successfully added ${editorName} to the Team Assignment.`);
-                                      } catch (err: any) {
-                                        console.error("Failed to assign editor:", err);
-                                        setWfError("Failed to save assignment. " + (err.message || "Please try again."));
-                                      } finally {
-                                        setIsSaving(false);
-                                      }
-                                    }}
-                                    className="flex-1 px-5 py-2.5 bg-purple-600 hover:bg-purple-500 border border-purple-500 text-white text-xs font-mono font-bold rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
-                                  >
-                                    {isSaving ? 'Adding Editor...' : 'Add Editor'}
-                                  </button>
+                                    {openDropdownDeliverable === deliverable && (
+                                      <div className="absolute z-50 mt-1 w-full bg-zinc-950 border border-zinc-900 rounded-xl shadow-2xl p-2 max-h-48 overflow-y-auto space-y-1">
+                                        <input
+                                          type="text"
+                                          placeholder="Search staff..."
+                                          value={editorSearchQuery}
+                                          onChange={(e) => setEditorSearchQuery(e.target.value)}
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="w-full bg-zinc-900 border border-zinc-855 text-xs rounded-lg px-2.5 py-1.5 text-white mb-1.5 focus:outline-none focus:border-purple-500 font-sans"
+                                        />
+                                        {productionStaff
+                                          .filter(s => s.status === 'Active')
+                                          .filter(s => s.name.toLowerCase().includes(editorSearchQuery.toLowerCase()))
+                                          .map(s => {
+                                            const isChecked = selectedStaffIds.includes(s.staff_id);
+                                            return (
+                                              <label key={s.staff_id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-900 rounded-lg cursor-pointer text-xs text-zinc-300 font-sans select-none">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={isChecked}
+                                                  onChange={() => {
+                                                    const nextList = isChecked
+                                                      ? selectedStaffIds.filter(id => id !== s.staff_id)
+                                                      : [...selectedStaffIds, s.staff_id];
+                                                    setSelectedWfStaffByDeliverable(prev => ({
+                                                      ...prev,
+                                                      [deliverable]: nextList
+                                                    }));
+                                                  }}
+                                                  className="rounded border-zinc-800 bg-zinc-900 text-purple-600 focus:ring-0 h-3.5 w-3.5"
+                                                />
+                                                <span>{s.name} ({s.role})</span>
+                                              </label>
+                                            );
+                                          })}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                            )}
-                          </div>
-                        );
-                      })()}
-                    </div>
+                            </div>
+                          );
+                        })}
 
-                    {/* Footer Cancel Action */}
-                    {!selectedWfEditor && (
-                      <div className="border-t border-zinc-900 pt-4 flex items-center justify-end">
+                        {customDeliverables.length === 0 && (
+                          <div className="text-center py-6 text-zinc-500 text-xs italic font-mono bg-zinc-900/10 border border-dashed border-zinc-900 rounded-xl">
+                            No deliverables found. Use the input below to add them.
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Add Custom Deliverable Input */}
+                      <div className="bg-zinc-900/10 border border-zinc-900/50 rounded-xl p-3 space-y-2">
+                        <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
+                          Add Custom Deliverable
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="e.g. Traditional Wedding Video (60 mins)"
+                            value={newDeliverableInput}
+                            onChange={(e) => setNewDeliverableInput(e.target.value)}
+                            className="flex-1 bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-xs text-zinc-300 rounded-xl px-3 py-2 focus:outline-none focus:border-purple-500 font-sans"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!newDeliverableInput.trim()) return;
+                              if (customDeliverables.includes(newDeliverableInput.trim())) {
+                                setWfError('This deliverable already exists.');
+                                return;
+                              }
+                              setCustomDeliverables(prev => [...prev, newDeliverableInput.trim()]);
+                              setNewDeliverableInput('');
+                              setWfError('');
+                            }}
+                            className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-zinc-300 hover:text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
+                          >
+                            + Add
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Global target delivery date */}
+                      <div className="space-y-1.5 border-t border-zinc-900/60 pt-4">
+                        <label className="text-[10px] text-zinc-400 uppercase font-black tracking-wider block font-mono">
+                          Global Target Delivery Date <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={wfTargetDeliveryDate}
+                          onChange={(e) => setWfTargetDeliveryDate(e.target.value)}
+                          className="w-full bg-zinc-950 border border-zinc-850 hover:border-zinc-800 text-xs text-zinc-100 rounded-xl px-3.5 py-2.5 font-mono focus:outline-none focus:border-purple-500"
+                          required
+                        />
+                      </div>
+
+                      {/* Notes / Instructions */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] text-zinc-400 uppercase font-black tracking-wider block font-mono">
+                          Project Notes / Instructions
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={wfProjectNotes}
+                          onChange={(e) => setWfProjectNotes(e.target.value)}
+                          placeholder="Special instructions for the post-production crew..."
+                          className="w-full bg-zinc-950 border border-zinc-850 hover:border-zinc-800 text-xs text-zinc-100 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-purple-500 font-sans"
+                        />
+                      </div>
+
+                      {/* Save & Assign Action Buttons */}
+                      <div className="pt-2 flex items-center gap-3">
                         <button
                           type="button"
                           onClick={() => {
                             setActiveWorkflowProd(null);
                             setWorkflowActionType(null);
                             setWfError('');
+                            setWfSuccess('');
                           }}
-                          className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-zinc-400 hover:text-white text-xs font-mono font-bold rounded-xl transition-colors cursor-pointer"
+                          className="flex-1 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-855 text-zinc-400 hover:text-white text-xs font-mono font-bold rounded-xl transition-colors cursor-pointer text-center"
                         >
                           Cancel
                         </button>
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={async () => {
+                            setWfError('');
+                            setWfSuccess('');
+                            if (!wfTargetDeliveryDate) {
+                              setWfError('Global Target Delivery Date is mandatory.');
+                              return;
+                            }
+
+                            // Validate at least one assignment is made
+                            const hasAssignments = Object.values(selectedWfStaffByDeliverable).some((arr: any) => arr && arr.length > 0);
+                            if (!hasAssignments) {
+                              setWfError('Please assign at least one staff member to a deliverable.');
+                              return;
+                            }
+
+                            try {
+                              setIsSaving(true);
+                              
+                              // 1. Delete all existing assignments for this production
+                              const { error: deleteError } = await supabaseClient
+                                .from('editor_assignments')
+                                .delete()
+                                .eq('production_id', activeWorkflowProd.production_id);
+
+                              if (deleteError) throw deleteError;
+
+                              // 2. Prepare and insert new assignments
+                              const newAssignments = [];
+                              const activeStaffList = productionStaff.filter(s => s.status === 'Active');
+
+                              for (const d of customDeliverables) {
+                                const staffIds = selectedWfStaffByDeliverable[d] || [];
+                                const tDate = deliverablesTargetDates[d] || wfTargetDeliveryDate;
+                                
+                                for (const sId of staffIds) {
+                                  const staffMem = activeStaffList.find(s => s.staff_id === sId);
+                                  if (staffMem) {
+                                    const id = `EDR-${Math.floor(100000 + Math.random() * 900000)}`;
+                                    newAssignments.push({
+                                      assignment_id: id,
+                                      production_id: activeWorkflowProd.production_id,
+                                      staff_id: staffMem.staff_id,
+                                      staff_name: staffMem.name,
+                                      speciality: d, // Deliverable Name
+                                      assigned_date: new Date().toISOString().split('T')[0],
+                                      target_finish_date: tDate,
+                                      status: 'Assigned',
+                                      created_at: new Date().toISOString()
+                                    });
+                                  }
+                                }
+                              }
+
+                              if (newAssignments.length > 0) {
+                                const { error: insertError } = await supabaseClient
+                                  .from('editor_assignments')
+                                  .insert(newAssignments);
+
+                                if (insertError) throw insertError;
+                              }
+
+                              // 3. Update production table with primary assigned editors details
+                              const uniqueStaffNames = Array.from(new Set(newAssignments.map(a => a.staff_name)));
+                              const primaryEditor = uniqueStaffNames[0] || 'Unassigned';
+                              const assignedStaffJoined = uniqueStaffNames.join(', ');
+                              
+                              const assignedRoles = Array.from(new Set(newAssignments.map(a => {
+                                const staffMem = activeStaffList.find(s => s.staff_name === a.staff_name);
+                                return staffMem?.role || 'Editor';
+                              })));
+                              const rolesJoined = assignedRoles.join(', ');
+
+                              await updateProduction(activeWorkflowProd.production_id, {
+                                editor_assigned: primaryEditor,
+                                assigned_staff: assignedStaffJoined,
+                                target_delivery_date: wfTargetDeliveryDate,
+                                editing_status: 'Editor Assigned',
+                                production_status: 'Editor Assigned',
+                                project_notes: wfProjectNotes,
+                                production_role: rolesJoined,
+                                assigned_role: rolesJoined
+                              } as any);
+
+                              // Refresh page data
+                              if (typeof refreshData === 'function') {
+                                refreshData();
+                              }
+
+                              setWfSuccess('✅ Production staff assigned successfully.');
+
+                              // Extract and bundle staff assignments for WhatsApp Popup
+                              const groupedStaffAssignments: any[] = [];
+                              const uniqueAssignedStaffIds = Array.from(new Set(newAssignments.map(a => a.staff_id)));
+                              
+                              uniqueAssignedStaffIds.forEach(sId => {
+                                const staffMem = activeStaffList.find(s => s.staff_id === sId);
+                                if (staffMem) {
+                                  const staffDeliverables = newAssignments
+                                    .filter(a => a.staff_id === sId)
+                                    .map(a => ({
+                                      name: a.speciality,
+                                      deadline: a.target_finish_date
+                                    }));
+
+                                  groupedStaffAssignments.push({
+                                    staff: staffMem,
+                                    deliverables: staffDeliverables
+                                  });
+                                }
+                              });
+
+                              // Setup raw details for WhatsApp share
+                              const rf = rawFootage.find(f => f.tracking_id === activeWorkflowProd.tracking_id || f.order_id === activeWorkflowProd.tracking_id);
+                              const orderObj = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === activeWorkflowProd.production_id.replace('PRD-', ''));
+                              const leadObj = leadsData?.find(l => l.lead_id === activeWorkflowProd.tracking_id || l.lead_id === orderObj?.lead_id);
+                              const opObj = operations?.find(o => o.order_id === orderObj?.order_id || o.order_id === activeWorkflowProd.tracking_id);
+
+                              setWhatsappShareData({
+                                production_id: activeWorkflowProd.production_id,
+                                customer_name: orderObj?.customer_name || leadObj?.customer_name || 'Customer',
+                                mobile: orderObj?.customer_mobile || orderObj?.mobile || leadObj?.customer_mobile || leadObj?.mobile || '—',
+                                event_name: orderObj?.custom_event_name || leadObj?.custom_event_name || 'Event',
+                                event_type: orderObj?.event_type || leadObj?.event_type || 'Shoot',
+                                notes: wfProjectNotes,
+                                global_deadline: wfTargetDeliveryDate,
+                                staffAssignments: groupedStaffAssignments,
+                                reporting_date: orderObj?.Reporting_date || leadObj?.Reporting_date || '—',
+                                reporting_time: orderObj?.reporting_time || leadObj?.reporting_time || opObj?.reporting_time || '—',
+                                assigned_equipment: opObj?.equipment_kit || '—',
+                                coordinator_name: currentUserName || 'Operations Coordinator',
+                                coordinator_contact: currentUser?.mobile || currentUser?.phone || '—'
+                              });
+
+                              // Close Assign Modal and Open WhatsApp Share Modal instantly
+                              setTimeout(() => {
+                                setActiveWorkflowProd(null);
+                                setWorkflowActionType(null);
+                                setWhatsappShareModalOpen(true);
+                              }, 1500);
+
+                            } catch (err: any) {
+                              console.error("Failed to assign production staff:", err);
+                              setWfError("Failed to save deliverable assignments. " + (err.message || "Please try again."));
+                            } finally {
+                              setIsSaving(false);
+                            }
+                          }}
+                          className="flex-1 px-5 py-2.5 bg-purple-600 hover:bg-purple-500 border border-purple-500 text-white text-xs font-mono font-bold rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                        >
+                          {isSaving ? 'Assigning Crew...' : 'Assign Staff'}
+                        </button>
                       </div>
-                    )}
+                    </div>
                   </div>
                 )}
 
@@ -6696,6 +7053,215 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           </div>
         );
       })()}
+
+      {/* WHATSAPP SHARE POPUP */}
+      {whatsappShareModalOpen && whatsappShareData && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all duration-300">
+            
+            {/* Header */}
+            <div className="p-5 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
+              <div>
+                <span className="text-[9px] font-mono font-black uppercase tracking-widest text-[#a78bfa] block mb-0.5">
+                  Production Desk • WhatsApp Coordination
+                </span>
+                <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">
+                  Share Assignments with Crew
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWhatsappShareModalOpen(false)}
+                className="p-1.5 hover:bg-zinc-900 text-zinc-500 hover:text-white rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-6 max-h-[70vh]">
+              {/* Project Summary Banner */}
+              <div className="bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">Project / Event Name</span>
+                  <span className="text-xs font-bold text-zinc-200 mt-0.5 block">{whatsappShareData.event_name}</span>
+                </div>
+                <div>
+                  <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">Customer</span>
+                  <span className="text-xs font-bold text-zinc-200 mt-0.5 block">{whatsappShareData.customer_name}</span>
+                </div>
+                <div>
+                  <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">Global Deadline</span>
+                  <span className="text-xs font-bold text-violet-400 mt-0.5 block font-mono">{whatsappShareData.global_deadline || 'N/A'}</span>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="text-[10px] text-[#a78bfa] uppercase font-black tracking-widest font-mono border-b border-zinc-900 pb-2">
+                  Assigned Crew & Deliverables
+                </h4>
+
+                <div className="space-y-4">
+                  {whatsappShareData.staffAssignments.map(({ staff, deliverables }: any) => {
+                    const currentMobile = editedStaffMobiles[staff.staff_id] !== undefined 
+                      ? editedStaffMobiles[staff.staff_id] 
+                      : (staff.mobile || '');
+                    const isMissingMobile = !currentMobile.trim();
+
+                    return (
+                      <div key={staff.staff_id} className="bg-zinc-900/20 border border-zinc-900 rounded-xl p-4 space-y-4 text-left">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          {/* Left: Crew Details */}
+                          <div className="space-y-1.5 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-zinc-100 font-sans">{staff.name}</span>
+                              <span className="px-2 py-0.5 bg-purple-950/40 border border-purple-900/30 text-purple-300 rounded text-[9px] font-mono uppercase">
+                                {staff.role || 'Crew'}
+                              </span>
+                            </div>
+                            
+                            {/* Deliverables for this crew */}
+                            <div className="space-y-1 pl-2 border-l border-purple-900/50">
+                              {deliverables.map((d: any, idx: number) => (
+                                <div key={idx} className="text-[11px] text-zinc-400 flex items-center justify-between font-sans">
+                                  <span>• {d.name}</span>
+                                  <span className="text-[10px] text-zinc-500 font-mono">Deadline: {d.deadline || whatsappShareData.global_deadline}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Right: Phone & Action Controls */}
+                          <div className="space-y-2 md:w-72">
+                            <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
+                              Contact Number {isMissingMobile && <span className="text-rose-500">(Required)</span>}
+                            </label>
+                            <input
+                              type="text"
+                              value={currentMobile}
+                              onChange={(e) => {
+                                setEditedStaffMobiles(prev => ({
+                                  ...prev,
+                                  [staff.staff_id]: e.target.value
+                                }));
+                              }}
+                              placeholder="e.g. +65 8123 4567"
+                              className={`w-full bg-zinc-950 border text-xs text-zinc-200 rounded-xl px-3 py-2 font-mono focus:outline-none ${
+                                isMissingMobile 
+                                  ? 'border-rose-500/50 focus:border-rose-500' 
+                                  : 'border-zinc-900 hover:border-zinc-850 focus:border-purple-500'
+                              }`}
+                            />
+                            {isMissingMobile && (
+                              <p className="text-[10px] text-rose-400 font-mono">⚠️ No mobile number saved. Please type before sending.</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Preview / Direct Actions for this crew member */}
+                        <div className="flex justify-end gap-2 pt-2 border-t border-zinc-900/50">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const message = getPersonalizedMessage(staff, deliverables);
+                              setPreviewStaffMessage({
+                                staffName: staff.name,
+                                message: message
+                              });
+                            }}
+                            className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-zinc-300 hover:text-white text-[11px] font-mono font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                          >
+                            👁️ Preview Message
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isMissingMobile}
+                            onClick={() => handleSendToWhatsApp(staff, deliverables)}
+                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 border border-emerald-500 text-white text-[11px] font-mono font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
+                          >
+                            💬 Send via WhatsApp
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer action to close everything */}
+            <div className="p-4 border-t border-zinc-900 bg-[#0c0d10] flex justify-end">
+              <button
+                type="button"
+                onClick={() => setWhatsappShareModalOpen(false)}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 border border-purple-500 text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Close Coordination Panel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* WHATSAPP MESSAGE PREVIEW SUB-POPUP */}
+      {previewStaffMessage && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-fade-in">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+            {/* Header */}
+            <div className="p-4 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
+              <div>
+                <span className="text-[9px] font-mono font-black uppercase tracking-widest text-emerald-400 block mb-0.5">
+                  Message Preview
+                </span>
+                <h3 className="text-xs font-black text-white uppercase tracking-wider font-mono">
+                  For {previewStaffMessage.staffName}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewStaffMessage(null)}
+                className="p-1 hover:bg-zinc-900 text-zinc-500 hover:text-white rounded-lg cursor-pointer font-bold text-xs"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {/* Message Body Box */}
+            <div className="p-5 bg-zinc-950/80 overflow-y-auto flex-1 text-left font-sans">
+              <pre className="text-[11px] text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed bg-zinc-900/60 p-4 rounded-xl border border-zinc-900 select-all overflow-x-auto max-h-[50vh]">
+                {previewStaffMessage.message}
+              </pre>
+              <p className="text-[10px] text-zinc-500 font-mono mt-3 text-center">
+                💡 Tip: You can double-click inside the text box to select/copy the message text manually.
+              </p>
+            </div>
+
+            {/* Footer with Send Action */}
+            <div className="p-4 border-t border-zinc-900 bg-[#0c0d10] flex justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setPreviewStaffMessage(null)}
+                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-zinc-400 hover:text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Back to List
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const staffAss = whatsappShareData.staffAssignments.find((sa: any) => sa.staff.name === previewStaffMessage.staffName);
+                  if (staffAss) {
+                    handleSendToWhatsApp(staffAss.staff, staffAss.deliverables);
+                  }
+                  setPreviewStaffMessage(null);
+                }}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 border border-emerald-500 text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                💬 Send to WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODALS GATEWAY FOR POST-PRODUCTION ROSTER */}
 
