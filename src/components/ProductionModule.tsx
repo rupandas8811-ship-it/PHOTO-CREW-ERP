@@ -16,6 +16,7 @@ import { ProjectDetailModal } from './ProjectDetailModal';
 import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour } from '../utils';
 import { AppLogo } from './AppLogo';
 import { StatusText } from './ui/StatusText';
+import { EventDropdownCell } from './EventDropdownCell';
 import { ProductionCalendar } from './ProductionCalendar';
 import { StaffManagementModule } from './StaffManagementModule';
 import { NotificationsModule } from './NotificationsModule';
@@ -2268,48 +2269,25 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                           {/* Event Type */}
                           <td className="p-4 text-left font-sans text-zinc-300">
-                            {lead?.events && lead.events.length > 0 ? (
-                              <div className="space-y-1.5 inner-cell-scroll">
-                                {lead.events.map((ev: any, evIdx: number) => (
-                                  <div key={ev.id || evIdx} className="text-xs truncate" title={ev.event_name || ev.event_type || 'Other'}>
-                                    {ev.event_name || ev.event_type || 'Other'}
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              order.event_type
-                            )}
+                            <EventDropdownCell 
+                              type="name" 
+                              items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || ev.event_type || 'Other') : [order.event_type || 'Other']} 
+                            />
                           </td>
 
                           {/* Event Date */}
                           <td className="p-4 text-left font-sans text-zinc-350">
-                            {lead?.events && lead.events.length > 0 ? (
-                              <div className="space-y-1.5 inner-cell-scroll">
-                                {lead.events.map((ev: any, evIdx: number) => (
-                                  <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
-                                    <span className="text-zinc-300">{ev.event_date || '—'}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-zinc-600 italic">—</span>
-                            )}
+                            <EventDropdownCell 
+                              type="date" 
+                              items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_date || '—') : []} 
+                            />
                           </td>
                           {/* Event Time */}
                           <td className="p-4 text-left font-sans text-zinc-350">
-                            {lead?.events && lead.events.length > 0 ? (
-                              <div className="space-y-1.5 inner-cell-scroll">
-                                {lead.events.map((ev: any, evIdx: number) => (
-                                  <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
-                                    <span className="text-zinc-300">
-                                      {ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—'}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-zinc-600 italic">—</span>
-                            )}
+                            <EventDropdownCell 
+                              type="time" 
+                              items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—') : []} 
+                            />
                           </td>
 
                            {/* Raw Footage Link */}

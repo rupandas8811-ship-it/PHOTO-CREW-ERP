@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, LeadEvent } from '../types';
 import { StatusText } from './ui/StatusText';
+import { EventDropdownCell } from './EventDropdownCell';
 import { MultiSelectDropdown } from './ui/MultiSelectDropdown';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
 
@@ -8645,45 +8646,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             {formatIndianPhoneNumber(lead.mobile)}
                           </td>
                           <td className="p-3.5 text-zinc-300 font-sans">
-                            {lead.events && lead.events.length > 0 ? (
-                              <div className="space-y-1.5 inner-cell-scroll">
-                                {lead.events.map((ev, evIdx) => (
-                                  <div key={ev.id || evIdx} className="text-xs truncate" title={ev.event_name || ev.event_type || 'Other'}>
-                                    {ev.event_name || ev.event_type || 'Other'}
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              lead.event_type === 'Other' ? (lead.custom_event_name || lead.custom_event_type || 'Other') : lead.event_type
-                            )}
+                            <EventDropdownCell 
+                              type="name" 
+                              items={lead.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || ev.event_type || 'Other') : [lead.event_type === 'Other' ? (lead.custom_event_name || lead.custom_event_type || 'Other') : (lead.event_type || 'Other')]} 
+                            />
                           </td>
                           <td className="p-3.5 font-mono text-zinc-350">
-                            {lead.events && lead.events.length > 0 ? (
-                              <div className="space-y-1.5 inner-cell-scroll">
-                                {lead.events.map((ev, evIdx) => (
-                                  <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
-                                    <span className="text-zinc-300">{ev.event_date || '—'}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-zinc-600 italic">—</span>
-                            )}
+                            <EventDropdownCell 
+                              type="date" 
+                              items={lead.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_date || '—') : []} 
+                            />
                           </td>
                           <td className="p-3.5 font-mono text-zinc-350">
-                            {lead.events && lead.events.length > 0 ? (
-                              <div className="space-y-1.5 inner-cell-scroll">
-                                {lead.events.map((ev, evIdx) => (
-                                  <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
-                                    <span className="text-zinc-300">
-                                      {ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—'}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-zinc-600 italic">—</span>
-                            )}
+                            <EventDropdownCell 
+                              type="time" 
+                              items={lead.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—') : []} 
+                            />
                           </td>
                           <td className="p-3.5">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${

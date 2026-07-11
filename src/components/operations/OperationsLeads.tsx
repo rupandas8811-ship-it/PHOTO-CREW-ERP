@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Order, CurrentStage, Staff, Equipment } from '../../types';
 import { StatusText } from '../ui/StatusText';
+import { EventDropdownCell } from '../EventDropdownCell';
 import { ProjectDetailModal } from '../ProjectDetailModal';
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
 import { convertTimeToDbFormat, triggerAutoScrollAndFocus, convertTo12Hour } from '../../utils';
@@ -269,10 +270,15 @@ export const OperationsLeads: React.FC = () => {
 
   // Raw Footage Modal State
   const [receivingFootageOrderId, setReceivingFootageOrderId] = useState<string | null>(null);
+  const [updatingFootageOrderId, setUpdatingFootageOrderId] = useState<string | null>(null);
+  const [updatingFootageLink, setUpdatingFootageLink] = useState('');
   const [footageForm, setFootageForm] = useState({
     footage_link: '',
     storage_type: 'Google Drive',
-    upload_notes: ''
+    upload_notes: '',
+    media_number: '',
+    received_date: '',
+    received_time: ''
   });
   const [hardDiskReceived, setHardDiskReceived] = useState(false);
   const [memoryCardReceived, setMemoryCardReceived] = useState(false);
@@ -346,6 +352,41 @@ export const OperationsLeads: React.FC = () => {
     const orderAssigns = staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id) : [];
     const fromAssigns = orderAssigns.map(sa => sa.staff_name).filter(n => n && n.toLowerCase() !== 'unassigned' && n.toLowerCase() !== 'none');
     return Array.from(new Set(fromAssigns));
+  };
+
+  const handleOpenReceiveRawFootageModal = (ord: Order) => {
+    setReceivingFootageOrderId(ord.order_id);
+    const existingRf = rawFootage?.find(f => f.order_id === ord.order_id);
+    const op = getOpDetails(ord.order_id);
+    setFootageForm({
+      footage_link: op?.Raw_Footage_Drive_Link || op?.raw_footage_drive_link || ((existingRf && (existingRf.raw_received || existingRf.status === 'Received')) ? (existingRf.server_path || '') : ''),
+      storage_type: 'Google Drive',
+      upload_notes: '',
+      media_number: '',
+      received_date: new Date().toISOString().split('T')[0],
+      received_time: new Date().toTimeString().slice(0, 5)
+    });
+
+    const kits = op?.equipment_kit ? op.equipment_kit.split(',').map((sName: string) => sName.trim()).filter(Boolean) : [];
+    const initialHandovers: Record<string, {
+      return_status: 'Returned' | 'Not Returned' | 'Damaged' | 'Missing';
+      returned_by: string;
+      return_date: string;
+      notes: string;
+    }> = {};
+    kits.forEach((k: string) => {
+      initialHandovers[k] = {
+        return_status: 'Returned',
+        returned_by: currentUserName || 'Operations Team',
+        return_date: new Date().toISOString().split('T')[0],
+        notes: ''
+      };
+    });
+    setFootageHandoverStates(initialHandovers);
+    
+    setHardDiskReceived(false);
+    setMemoryCardReceived(false);
+    setActiveMenuOrderId(null);
   };
 
   interface AssignedStaffDetails {
@@ -1456,23 +1497,33 @@ export const OperationsLeads: React.FC = () => {
         )}
             {/* Main Board Table */}
       <div className="bg-zinc-900/40 border border-zinc-850 rounded-2xl overflow-x-auto shadow-xl">
-        <table className="w-full text-left border-collapse min-w-[1240px]">
+        <table className="w-full text-left border-collapse table-fixed min-w-[1270px]">
+          <colgroup>
+            <col className="w-[110px]" />
+            <col className="w-[260px]" />
+            <col className="w-[160px]" />
+            <col className="w-[150px]" />
+            <col className="w-[130px]" />
+            <col className="w-[125px]" />
+            <col className="w-[185px]" />
+            <col className="w-[150px]" />
+          </colgroup>
           <thead>
-            <tr className="border-b border-zinc-850 text-[10px] font-mono tracking-widest uppercase text-zinc-400 bg-zinc-950/70 select-none">
-              <th className="p-4 font-bold">Order ID</th>
+            <tr className="border-b border-zinc-850 text-[10px] font-mono tracking-widest uppercase text-zinc-400 bg-zinc-950/70 select-none h-11 align-middle">
+              <th className="p-4 font-bold align-middle">Order ID</th>
               <th 
                 onClick={() => toggleSort('customer_name')}
-                className="p-4 font-bold cursor-pointer hover:bg-zinc-800/40 hover:text-white transition-colors"
+                className="p-4 font-bold cursor-pointer hover:bg-zinc-800/40 hover:text-white transition-colors align-middle"
                 title="Click to Sort by Customer Name"
               >
                 Customer Name {renderSortIndicator('customer_name')}
               </th>
-              <th className="p-4 font-bold">Event Date</th>
-              <th className="p-4 font-bold">Event Time</th>
-              <th className="p-4 font-bold">Reporting Time</th>
-              <th className="p-4 font-bold">Assigned Team</th>
-              <th className="p-4 font-bold">Current Stage</th>
-              <th className="p-4 font-bold text-right text-zinc-400">Actions</th>
+              <th className="p-4 font-bold align-middle">Event Date</th>
+              <th className="p-4 font-bold align-middle">Event Time</th>
+              <th className="p-4 font-bold align-middle">Reporting Time</th>
+              <th className="p-4 font-bold align-middle">Assigned Team</th>
+              <th className="p-4 font-bold align-middle">Current Stage</th>
+              <th className="p-4 font-bold text-right text-zinc-400 align-middle">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-850/60 text-xs">
@@ -1549,72 +1600,62 @@ export const OperationsLeads: React.FC = () => {
                 const isLocked = currentStage === 'Raw Footage Received';
 
                 return (
-                  <tr key={ord.order_id} className={`hover:bg-zinc-900/20 transition-all ${isLocked ? 'opacity-85' : ''}`}>
-                    <td className="p-4">
+                  <tr key={ord.order_id} className={`hover:bg-zinc-900/20 transition-all border-b border-zinc-850/40 h-[96px] align-middle ${isLocked ? 'opacity-85' : ''}`}>
+                    <td className="p-4 align-middle">
                       <span className="font-mono text-indigo-400 font-bold bg-slate-900/80 px-2 py-0.5 border border-slate-800 rounded">
                         {ord.order_id}
                       </span>
                     </td>
-                    <td className="p-4 font-bold text-zinc-100">
-                      <div>{ord.customer_name}</div>
-                      {lead?.events && lead.events.length > 0 ? (
-                        <div className="space-y-1.5 inner-cell-scroll mt-1">
-                          {lead.events.map((ev: any, evIdx: number) => (
-                            <div key={ev.id || evIdx} className="text-[10px] text-zinc-400 font-sans font-normal truncate" title={ev.event_name || ev.event_type || 'Other'}>
-                              {ev.event_name || ev.event_type || 'Other'}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-[10px] text-zinc-400 font-sans font-normal mt-0.5">{ord.event_type}</div>
-                      )}
-                      {op?.equipment_kit && (
-                        <div className="flex flex-wrap gap-1 mt-1.5">
-                          {op.equipment_kit.split(',').map((kit: string, idx: number) => (
-                            <span key={idx} className="bg-amber-400/10 text-amber-400 px-1.5 py-0.5 rounded text-[9.5px] font-mono border border-amber-400/10 " title="Assigned Gear">
-                              ⚙️ {kit.trim()}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                    <td className="p-4 font-bold text-zinc-100 align-middle">
+                      <div className="truncate text-xs font-sans max-w-[240px] block" title={ord.customer_name}>
+                        {ord.customer_name}
+                      </div>
+                      <div className="mt-1">
+                        <EventDropdownCell 
+                          type="name" 
+                          items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || ev.event_type || 'Other') : [ord.event_type || 'Other']} 
+                        />
+                      </div>
+                      {op?.equipment_kit && (() => {
+                        const kits = op.equipment_kit.split(',').map((kit: string) => kit.trim()).filter(Boolean);
+                        if (kits.length === 0) return null;
+                        return (
+                          <div className="flex flex-wrap gap-1 mt-1.5 max-h-[20px] overflow-hidden">
+                            {kits.slice(0, 2).map((kit: string, idx: number) => (
+                              <span key={idx} className="bg-amber-400/10 text-amber-400 px-1.5 py-0.5 rounded text-[9px] font-mono border border-amber-400/10 truncate max-w-[80px] inline-block align-middle" title={kit}>
+                                ⚙️ {kit}
+                              </span>
+                            ))}
+                            {kits.length > 2 && (
+                              <span className="text-[9px] font-mono text-amber-400/60 self-center">
+                                +{kits.length - 2}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
-                    <td className="p-4 font-mono text-zinc-300">
-                      {lead?.events && lead.events.length > 0 ? (
-                        <div className="space-y-1.5 inner-cell-scroll">
-                          {lead.events.map((ev: any, evIdx: number) => (
-                            <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
-                              <span className="text-zinc-300">{ev.event_date || '—'}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-zinc-600 italic">—</span>
-                      )}
+                    <td className="p-4 font-mono text-zinc-300 align-middle">
+                      <EventDropdownCell 
+                        type="date" 
+                        items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_date || '—') : []} 
+                      />
                       {isCompletedEvent(ord) && (
                         <div className="text-[10px] text-emerald-400 mt-0.5 font-sans font-medium">
                           Done: {getCompletionDate(ord)}
                         </div>
                       )}
                     </td>
-                    <td className="p-4 font-mono text-zinc-300">
-                      {lead?.events && lead.events.length > 0 ? (
-                        <div className="space-y-1.5 inner-cell-scroll">
-                          {lead.events.map((ev: any, evIdx: number) => (
-                            <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
-                              <span className="text-zinc-300">
-                                {ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—'}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-zinc-600 italic">—</span>
-                      )}
+                    <td className="p-4 font-mono text-zinc-300 align-middle">
+                      <EventDropdownCell 
+                        type="time" 
+                        items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—') : []} 
+                      />
                     </td>
-                    <td className="p-4 font-mono text-zinc-300">
+                    <td className="p-4 font-mono text-zinc-300 align-middle">
                       {op?.reporting_time || <span className="text-zinc-600 italic">—</span>}
                     </td>
-                    <td className="p-4 text-xs font-mono text-zinc-300">
+                    <td className="p-4 text-xs font-mono text-zinc-300 align-middle">
                       {(() => {
                         const assignedStaffNames = getAssignedStaffNamesForOrder(ord);
                         return assignedStaffNames.length > 0 ? (
@@ -1630,71 +1671,11 @@ export const OperationsLeads: React.FC = () => {
                         );
                       })()}
                     </td>
-                    <td className="p-4">
+                    <td className="p-4 align-middle">
                       <StatusText status={currentStage} />
                     </td>
-                    <td className="p-4 text-right">
+                    <td className="p-4 text-right align-middle">
                       <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                        {canEdit && !isLocked && (currentStage !== 'Order Confirmed' && currentStage !== 'New Order Received') && (
-                          <select
-                            value=""
-                            disabled={isSaving}
-                            onChange={async (e) => {
-                              const newStatus = e.target.value;
-                              if (!newStatus) return;
-                              if (newStatus === 'Event Completed') {
-                                try {
-                                  setIsSaving(true);
-                                  await markEventCompleted(ord.order_id, '');
-                                  alert("Status Updated Successfully");
-                                } catch (error) {
-                                  alert(`Failed to update status: ${error}`);
-                                } finally {
-                                  setIsSaving(false);
-                                }
-                              } else if (newStatus === 'Raw Footage Received') {
-                                setReceivingFootageOrderId(ord.order_id);
-                                const existingRf = rawFootage?.find(f => f.order_id === ord.order_id);
-                                const op = getOpDetails(ord.order_id);
-                                setFootageForm({
-                                  footage_link: op?.Raw_Footage_Drive_Link || op?.raw_footage_drive_link || ((existingRf && (existingRf.raw_received || existingRf.status === 'Received')) ? (existingRf.server_path || '') : ''),
-                                  storage_type: 'Google Drive',
-                                  upload_notes: ''
-                                });
-                                // Initialize footageHandoverStates for each assigned equipment item
-                                const kits = op?.equipment_kit ? op.equipment_kit.split(',').map((sName: string) => sName.trim()).filter(Boolean) : [];
-                                const initialHandovers: any = {};
-                                kits.forEach((k: string) => {
-                                  initialHandovers[k] = {
-                                    return_status: 'Returned',
-                                    returned_by: currentUserName,
-                                    return_date: new Date().toISOString().split('T')[0],
-                                    notes: ''
-                                  };
-                                });
-                                setFootageHandoverStates(initialHandovers);
-                              } else {
-                                try {
-                                  setIsSaving(true);
-                                  await updateOrderStage(ord.order_id, newStatus as any);
-                                  alert("Status Updated Successfully");
-                                } catch (error: any) {
-                                  alert(`Failed to update status: ${error.message}`);
-                                } finally {
-                                  setIsSaving(false);
-                                }
-                              }
-                            }}
-                            className="px-2 py-1 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/20 rounded-full text-[10px] font-mono font-bold cursor-pointer transition-all uppercase"
-                          >
-                            <option value="">▼ UPDATE STATUS</option>
-                            <option value="Event Scheduled">Event Scheduled</option>
-                            <option value="Event Completed">Event Completed</option>
-                            <option value="Raw Footage Received">Raw Footage Received</option>
-                            <option value="Event Cancelled">Event Cancelled</option>
-                          </select>
-                        )}
-
                         {(() => {
                           const actionItems: { label: string; onClick: () => void }[] = [];
 
@@ -1734,13 +1715,12 @@ export const OperationsLeads: React.FC = () => {
                             });
                           }
 
-                          // 4. View Roster (Staff Assigned / Event Scheduled)
-                          if (canEdit && !isLocked && (currentStage === 'Staff Assigned' || currentStage === 'Event Scheduled')) {
+                          // 4. Update Footage Link Action (Visible ONLY when currentStage is "Event Scheduled")
+                          if (canEdit && currentStage === 'Event Scheduled') {
                             actionItems.push({
-                              label: 'View Roster',
+                              label: 'Update Footage Link',
                               onClick: () => {
-                                startAssigning(ord);
-                                setActiveMenuOrderId(null);
+                                handleOpenReceiveRawFootageModal(ord);
                               }
                             });
                           }
@@ -1756,7 +1736,10 @@ export const OperationsLeads: React.FC = () => {
                                 setFootageForm({
                                   footage_link: op?.Raw_Footage_Drive_Link || op?.raw_footage_drive_link || ((existingRf && (existingRf.raw_received || existingRf.status === 'Received')) ? (existingRf.server_path || '') : ''),
                                   storage_type: 'Google Drive',
-                                  upload_notes: ''
+                                  upload_notes: '',
+                                  media_number: '',
+                                  received_date: new Date().toISOString().split('T')[0],
+                                  received_time: new Date().toTimeString().slice(0, 5)
                                 });
 
                                 const kits = op?.equipment_kit ? op.equipment_kit.split(',').map((sName: string) => sName.trim()).filter(Boolean) : [];
@@ -2414,7 +2397,6 @@ export const OperationsLeads: React.FC = () => {
         </div>
       )}
 
-      {/* Raw Footage Received Modal */}
       {receivingFootageOrderId && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div id="raw_footage_modal" className="bg-zinc-900 border border-zinc-805 rounded-2xl w-full max-w-lg shadow-2xl relative p-5 max-h-[90vh] overflow-y-auto space-y-4 scrollbar-thin">
@@ -2456,18 +2438,29 @@ export const OperationsLeads: React.FC = () => {
                   }
                 }
 
+                const formattedNotes = `Hard Disk Received: ${hardDiskReceived ? 'YES' : 'NO'}\nMemory Card Received: ${memoryCardReceived ? 'YES' : 'NO'}\nMedia Number: ${footageForm.media_number || 'N/A'}\nReceived Date: ${footageForm.received_date || '—'}\nReceived Time: ${footageForm.received_time || '—'}\nNotes: ${footageForm.upload_notes}`;
+
                 await confirmRawFootageReceived(
                   receivingFootageOrderId,
                   footageForm.footage_link,
                   'Google Drive',
-                  footageForm.upload_notes,
+                  formattedNotes,
                   undefined,
                   undefined,
                   undefined
                 );
                 
                 setReceivingFootageOrderId(null);
-                setFootageForm({ footage_link: '', storage_type: 'Google Drive', upload_notes: '' });
+                setFootageForm({ 
+                  footage_link: '', 
+                  storage_type: 'Google Drive', 
+                  upload_notes: '',
+                  media_number: '',
+                  received_date: '',
+                  received_time: ''
+                });
+                setHardDiskReceived(false);
+                setMemoryCardReceived(false);
                 alert("Raw Footage Handover Complete");
               } catch (err: any) {
                 console.error("Failed to receive raw footage:", err);
@@ -2482,6 +2475,7 @@ export const OperationsLeads: React.FC = () => {
                 </label>
                 <input
                   type="url"
+                  required
                   value={footageForm.footage_link}
                   onChange={(e) => setFootageForm({ ...footageForm, footage_link: e.target.value })}
                   placeholder="e.g. https://drive.google.com/drive/folders/..."
@@ -2489,7 +2483,71 @@ export const OperationsLeads: React.FC = () => {
                 />
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
+                    Hard Disk / Memory Card Number
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={footageForm.media_number}
+                    onChange={(e) => setFootageForm({ ...footageForm, media_number: e.target.value })}
+                    placeholder="e.g. HD-04 / SD-12"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono placeholder:text-zinc-600"
+                  />
+                </div>
+                
+                <div className="flex items-center gap-4 pt-5">
+                  <label className="flex items-center gap-2 text-xs font-mono text-zinc-350 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={hardDiskReceived}
+                      onChange={(e) => setHardDiskReceived(e.target.checked)}
+                      className="rounded bg-zinc-950 border-zinc-805 text-purple-500 focus:ring-0 focus:ring-offset-0 w-4 h-4 cursor-pointer"
+                    />
+                    <span>Hard Disk Received</span>
+                  </label>
+                  
+                  <label className="flex items-center gap-2 text-xs font-mono text-zinc-350 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={memoryCardReceived}
+                      onChange={(e) => setMemoryCardReceived(e.target.checked)}
+                      className="rounded bg-zinc-950 border-zinc-805 text-purple-500 focus:ring-0 focus:ring-offset-0 w-4 h-4 cursor-pointer"
+                    />
+                    <span>Memory Card Received</span>
+                  </label>
+                </div>
+              </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
+                    Received Date
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={footageForm.received_date}
+                    onChange={(e) => setFootageForm({ ...footageForm, received_date: e.target.value })}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
+                    Received Time
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={footageForm.received_time}
+                    onChange={(e) => setFootageForm({ ...footageForm, received_time: e.target.value })}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono"
+                  />
+                </div>
+              </div>
 
               <div>
                 <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
@@ -2557,8 +2615,6 @@ export const OperationsLeads: React.FC = () => {
                 </div>
               )}
 
-
-
               <div className="flex justify-end gap-2 pt-2 border-t border-zinc-850">
                 <button
                   type="button"
@@ -2573,6 +2629,84 @@ export const OperationsLeads: React.FC = () => {
                   className="px-4 py-2 bg-purple-650 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold text-xs rounded-xl cursor-pointer flex justify-center items-center gap-1.5 w-full sm:w-auto"
                 >
                   {isSaving ? 'Saving...' : 'Save & Move to Production'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Update Footage Link Modal */}
+      {updatingFootageOrderId && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl relative p-5 space-y-4">
+            <h3 className="text-sm font-bold text-indigo-400 font-mono uppercase flex items-center gap-1.5 border-b border-zinc-800 pb-2">
+              <span>🔗</span> Update Raw Footage Link
+            </h3>
+            <div className="text-[11px] text-zinc-400 leading-relaxed">
+              Updating the drive/cloud link for order <span className="font-mono text-indigo-400 font-bold">{updatingFootageOrderId}</span>. This will synchronize live across all pipelines.
+            </div>
+
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              if (isSaving) return;
+
+              try {
+                setIsSaving(true);
+                const { error } = await supabaseClient
+                  .from('operations')
+                  .update({
+                    Raw_Footage_Drive_Link: updatingFootageLink,
+                    raw_footage_drive_link: updatingFootageLink
+                  })
+                  .eq('order_id', updatingFootageOrderId);
+
+                if (error) {
+                  alert("Failed to update link: " + error.message);
+                } else {
+                  refreshData();
+                  setUpdatingFootageOrderId(null);
+                  setUpdatingFootageLink('');
+                  alert("Raw Footage Drive Link updated successfully.");
+                }
+              } catch (err: any) {
+                console.error("Failed to update footage link:", err);
+                alert("Failed to update link. Error: " + (err.message || "Please try again."));
+              } finally {
+                setIsSaving(false);
+              }
+            }} className="space-y-4 text-left">
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
+                  Raw Footage Drive Link
+                </label>
+                <input
+                  type="url"
+                  required
+                  value={updatingFootageLink}
+                  onChange={(e) => setUpdatingFootageLink(e.target.value)}
+                  placeholder="e.g. https://drive.google.com/drive/folders/..."
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUpdatingFootageOrderId(null);
+                    setUpdatingFootageLink('');
+                  }}
+                  className="px-4 py-2 bg-zinc-800 text-zinc-300 text-xs rounded-xl cursor-pointer hover:bg-zinc-700 transition w-full sm:w-auto"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-750 disabled:opacity-50 text-white font-semibold text-xs rounded-xl cursor-pointer flex justify-center items-center gap-1.5 w-full sm:w-auto"
+                >
+                  {isSaving ? 'Updating...' : 'Update Link'}
                 </button>
               </div>
             </form>
@@ -2988,6 +3122,203 @@ export const OperationsLeads: React.FC = () => {
                   className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 active:scale-98 text-zinc-350 text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
                 >
                   Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Project/Lead Details Modal */}
+      {projectDossierId && (() => {
+        const ord = orders.find(o => o.order_id === projectDossierId);
+        if (!ord) return null;
+        const lead = leads.find(l => l.lead_id === ord.lead_id);
+        const staffDetails = getAssignedStaffDetailsForOrder(ord);
+
+        return (
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-4xl shadow-2xl p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[90vh] overflow-hidden">
+              <button 
+                onClick={() => setProjectDossierId(null)}
+                className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
+                type="button"
+              >
+                ✕
+              </button>
+
+              {/* Header */}
+              <div className="flex items-center gap-2.5 mb-5 border-b border-zinc-800 pb-3 flex-shrink-0">
+                <span className="text-xl">📋</span>
+                <div className="text-left">
+                  <h3 className="text-base font-bold text-white font-sans">
+                    Lead & Project Information Dossier
+                  </h3>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    Order <span className="font-mono text-indigo-400 font-bold">{ord.order_id}</span> • Customer: <span className="text-zinc-200 font-bold">{ord.customer_name}</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Content body */}
+              <div className="overflow-y-auto space-y-6 flex-1 pr-1 text-left scrollbar-thin">
+                {/* 1. Customer Information Section */}
+                <div className="bg-zinc-950/40 border border-zinc-850/80 rounded-2xl p-4 space-y-3 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-3 text-[9px] text-zinc-600 uppercase font-mono tracking-wider select-none">
+                    Customer Info
+                  </div>
+                  <h4 className="text-xs font-mono font-bold uppercase text-amber-500 tracking-wider">
+                    👤 Customer Information
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                    <div>
+                      <span className="text-[10px] text-zinc-500 block uppercase font-mono">Customer Name</span>
+                      <span className="font-bold text-white block mt-0.5">{ord.customer_name}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-zinc-500 block uppercase font-mono">Mobile Number</span>
+                      <span className="font-mono text-zinc-200 font-medium block mt-0.5">{ord.mobile || lead?.mobile || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-zinc-500 block uppercase font-mono">Alt / WhatsApp</span>
+                      <span className="font-mono text-zinc-200 font-medium block mt-0.5">{lead?.whatsapp_number || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-zinc-500 block uppercase font-mono">Email Address</span>
+                      <span className="text-zinc-200 block mt-0.5">{lead?.email || 'N/A'}</span>
+                    </div>
+                    <div className="col-span-1 sm:col-span-2 md:col-span-4">
+                      <span className="text-[10px] text-zinc-500 block uppercase font-mono">Event Address / Location</span>
+                      <span className="text-zinc-200 block mt-0.5 leading-relaxed">{lead?.event_location || ord.event_location || lead?.address || 'N/A'}</span>
+                    </div>
+                    {lead?.google_maps_link && (
+                      <div className="col-span-1 sm:col-span-2 md:col-span-4">
+                        <span className="text-[10px] text-zinc-500 block uppercase font-mono">Google Maps Link</span>
+                        <a 
+                          href={lead.google_maps_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:text-blue-300 font-mono text-[11px] underline break-all block mt-0.5"
+                        >
+                          {lead.google_maps_link}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. Events & Assigned Staff Sections */}
+                <div className="space-y-4">
+                  <h4 className="text-xs font-mono font-bold uppercase text-purple-400 tracking-wider">
+                    🎬 Event & Rostering Details
+                  </h4>
+
+                  {(() => {
+                    const eventsList = lead?.events && lead.events.length > 0 
+                      ? lead.events 
+                      : [{
+                          event_name: ord.event_type || 'Main Event',
+                          event_date: ord.event_date || '—',
+                          event_start_time: ord.event_time || '—',
+                          event_location: ord.event_location || '—',
+                          assigned_staff_names: ''
+                        }];
+
+                    return eventsList.map((ev: any, evIdx: number) => {
+                      const evName = ev.event_name || ev.event_type || 'Main Event';
+                      // Filter assigned staff for this specific event name
+                      const evStaff = staffDetails.filter(sd => sd.event_name === evName);
+
+                      return (
+                        <div key={evIdx} className="bg-zinc-955 border border-zinc-850 rounded-2xl p-4 space-y-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-800/80 pb-3 gap-2">
+                            <div>
+                              <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider block">Event #{evIdx + 1}</span>
+                              <h5 className="text-sm font-bold text-zinc-100 uppercase">{evName}</h5>
+                            </div>
+                            <div className="flex flex-wrap gap-2 text-[11px] font-mono text-zinc-400 bg-zinc-950/60 px-3 py-1.5 rounded-xl border border-zinc-850">
+                              <span>📅 Date: <strong className="text-zinc-200">{ev.event_date || '—'}</strong></span>
+                              <span className="text-zinc-700">•</span>
+                              <span>⏰ Time: <strong className="text-zinc-200">{ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—'}</strong></span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                            {/* Venue info */}
+                            <div className="md:col-span-4 space-y-1 bg-zinc-900/20 border border-zinc-900/60 p-3 rounded-xl">
+                              <span className="text-[9.5px] text-zinc-500 uppercase font-mono tracking-wider block">Event Venue</span>
+                              <span className="text-xs text-zinc-200 font-sans block leading-relaxed">{ev.event_venue || ev.event_location || lead?.event_location || '—'}</span>
+                            </div>
+
+                            {/* Staff assigned to this event */}
+                            <div className="md:col-span-8 space-y-2">
+                              <span className="text-[9.5px] text-zinc-500 uppercase font-mono tracking-wider block font-bold">Assigned Crew for this Event</span>
+                              
+                              <div className="space-y-2">
+                                {evStaff.length === 0 ? (
+                                  <div className="text-xs text-zinc-500 italic py-2 bg-zinc-900/10 border border-zinc-850/40 rounded-xl text-center">
+                                    No staff rostered yet for this event.
+                                  </div>
+                                ) : (
+                                  evStaff.map((member, mIdx) => (
+                                    <div key={mIdx} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-zinc-900/40 rounded-xl border border-zinc-800/40 hover:border-zinc-700/60 transition-all gap-2">
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="text-xs font-bold text-white">{member.staff_name}</span>
+                                          <span className="text-[10px] font-mono bg-zinc-800 text-zinc-300 px-1.5 py-0.5 rounded border border-zinc-750">
+                                            {member.staff_role}
+                                          </span>
+                                          <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full ${
+                                            member.staff_type === 'In-House' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
+                                          }`}>
+                                            {member.staff_type}
+                                          </span>
+                                        </div>
+                                        
+                                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-400 font-mono">
+                                          {member.mobile && (
+                                            <span className="flex items-center gap-1">
+                                              📱 {member.mobile}
+                                            </span>
+                                          )}
+                                          {member.reporting_time && (
+                                            <span className="flex items-center gap-1">
+                                              ⏰ Report: {member.reporting_time}
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {member.assigned_equipment && member.assigned_equipment.length > 0 && (
+                                          <div className="flex flex-wrap gap-1 mt-1.5">
+                                            {member.assigned_equipment.map((equip, eqIdx) => (
+                                              <span key={eqIdx} className="bg-amber-400/10 text-amber-400 px-1.5 py-0.5 rounded text-[9.5px] font-mono border border-amber-400/10" title="Assigned Gear">
+                                                ⚙️ {equip}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="pt-4 border-t border-zinc-800 mt-4 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setProjectDossierId(null)}
+                  className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 active:scale-98 text-zinc-300 text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
+                >
+                  Close Dossier
                 </button>
               </div>
             </div>
