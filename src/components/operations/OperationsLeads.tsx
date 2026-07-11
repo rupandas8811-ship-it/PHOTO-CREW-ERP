@@ -1406,7 +1406,7 @@ export const OperationsLeads: React.FC = () => {
                     </td>
                     <td className="p-4 font-mono text-zinc-300">
                       {lead?.events && lead.events.length > 0 ? (
-                        <div className="space-y-3">
+                        <div className="space-y-1.5 inner-cell-scroll">
                           {lead.events.map((ev: any, evIdx: number) => (
                             <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
                               <span className="text-zinc-300">{ev.event_date || '—'}</span>
@@ -1424,7 +1424,7 @@ export const OperationsLeads: React.FC = () => {
                     </td>
                     <td className="p-4 font-mono text-zinc-300">
                       {lead?.events && lead.events.length > 0 ? (
-                        <div className="space-y-3">
+                        <div className="space-y-1.5 inner-cell-scroll">
                           {lead.events.map((ev: any, evIdx: number) => (
                             <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
                               <span className="text-zinc-300">

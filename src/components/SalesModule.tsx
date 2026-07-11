@@ -8646,9 +8646,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </td>
                           <td className="p-3.5 text-zinc-300 font-sans">
                             {lead.events && lead.events.length > 0 ? (
-                              <div className="space-y-3">
+                              <div className="space-y-1.5 inner-cell-scroll">
                                 {lead.events.map((ev, evIdx) => (
-                                  <div key={ev.id || evIdx} className="text-xs">
+                                  <div key={ev.id || evIdx} className="text-xs truncate" title={ev.event_name || ev.event_type || 'Other'}>
                                     {ev.event_name || ev.event_type || 'Other'}
                                   </div>
                                 ))}
@@ -8659,7 +8659,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </td>
                           <td className="p-3.5 font-mono text-zinc-350">
                             {lead.events && lead.events.length > 0 ? (
-                              <div className="space-y-3">
+                              <div className="space-y-1.5 inner-cell-scroll">
                                 {lead.events.map((ev, evIdx) => (
                                   <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
                                     <span className="text-zinc-300">{ev.event_date || '—'}</span>
@@ -8672,7 +8672,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </td>
                           <td className="p-3.5 font-mono text-zinc-350">
                             {lead.events && lead.events.length > 0 ? (
-                              <div className="space-y-3">
+                              <div className="space-y-1.5 inner-cell-scroll">
                                 {lead.events.map((ev, evIdx) => (
                                   <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
                                     <span className="text-zinc-300">

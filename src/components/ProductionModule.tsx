@@ -2246,7 +2246,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           {/* Event Date */}
                           <td className="p-4 text-left font-sans text-zinc-350">
                             {lead?.events && lead.events.length > 0 ? (
-                              <div className="space-y-3">
+                              <div className="space-y-1.5 inner-cell-scroll">
                                 {lead.events.map((ev: any, evIdx: number) => (
                                   <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
                                     <span className="text-zinc-300">{ev.event_date || '—'}</span>
@@ -2260,7 +2260,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           {/* Event Time */}
                           <td className="p-4 text-left font-sans text-zinc-350">
                             {lead?.events && lead.events.length > 0 ? (
-                              <div className="space-y-3">
+                              <div className="space-y-1.5 inner-cell-scroll">
                                 {lead.events.map((ev: any, evIdx: number) => (
                                   <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
                                     <span className="text-zinc-300">
