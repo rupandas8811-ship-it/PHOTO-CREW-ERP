@@ -181,6 +181,7 @@ export const OperationsLeads: React.FC = () => {
     staff: { staff_role: string, staff_id: string, staff_name: string }[];
   }>>({});
   const [collapsedAssignEvents, setCollapsedAssignEvents] = useState<Record<string, boolean>>({});
+  const [assignValidationError, setAssignValidationError] = useState<string | null>(null);
 
   // Find order and lead for assigning modal
   const activeOrderInstance = useMemo(() => {
@@ -747,6 +748,7 @@ export const OperationsLeads: React.FC = () => {
   }, [filteredOrders, sortBy, sortOrder, staffAssignments]);
 
   const startAssigning = (order: Order) => {
+    setAssignValidationError(null);
     const op = getOpDetails(order.order_id);
     const rf = rawFootage ? rawFootage.find(f => f.order_id === order.order_id) : null;
     
@@ -757,25 +759,57 @@ export const OperationsLeads: React.FC = () => {
     setActiveAssignments([]);
 
     const targetLead = leads?.find(l => l.lead_id === order.lead_id);
+    
+    // Calculate expected roles for loading
+    const targetLeadQuotations = quotations?.filter(q => q.lead_id === targetLead?.lead_id) || [];
+    targetLeadQuotations.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const targetLatestQuote = targetLeadQuotations[0];
+    let targetEditableInclusions: Record<string, string[]> = {};
+    if (targetLatestQuote) {
+       if (targetLatestQuote.editableInclusions) {
+          targetEditableInclusions = targetLatestQuote.editableInclusions;
+       } else if (targetLatestQuote.terms_conditions && targetLatestQuote.terms_conditions.includes('METADATA:')) {
+          try {
+             const meta = JSON.parse(targetLatestQuote.terms_conditions.split('METADATA:')[1]);
+             if (meta.editableInclusions) targetEditableInclusions = meta.editableInclusions;
+          } catch (e) {}
+       }
+    }
+
     const initialAllocations: Record<string, any> = {};
     if (targetLead?.events && targetLead.events.length > 0) {
       targetLead.events.forEach((ev, index) => {
         const evId = ev.id || `EV-N/A-${index}`;
         const staffList: any[] = [];
+        
+        const pkgId = targetLead.package_id || targetLead.selected_package_id || targetLatestQuote?.package_id || '';
+        const eventKey = `${pkgId}_${ev.id}`;
+        const nameKey = `${pkgId}_${ev.event_name || ev.event_type || 'Unnamed Event'}`;
+        let eventRoles = targetEditableInclusions[eventKey] || targetEditableInclusions[nameKey] || targetEditableInclusions[pkgId];
+        if (!eventRoles || eventRoles.length === 0) {
+          const matchingKey = Object.keys(targetEditableInclusions).find(k => k.includes(ev.id));
+          if (matchingKey) eventRoles = targetEditableInclusions[matchingKey];
+        }
+        if (!eventRoles || eventRoles.length === 0) {
+          if (Object.keys(targetEditableInclusions).length === 1) { eventRoles = Object.values(targetEditableInclusions)[0]; }
+        }
+        const includedRoles = eventRoles?.length > 0 ? eventRoles : [];
+
         if (ev.assigned_staff_names) {
-          const names = ev.assigned_staff_names.split(',').map(n => n.trim()).filter(Boolean);
-          names.forEach(name => {
+          const names = ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean);
+          names.forEach((name: string, i: number) => {
             const st = staff?.find(s => s.name === name);
+            const assignedRole = includedRoles[i] || (st ? st.role : 'Staff');
             if (st) {
                staffList.push({
-                 staff_role: st.role,
+                 staff_role: assignedRole,
                  staff_id: st.staff_id,
                  staff_name: st.name,
                  mobile: st.mobile
                });
             } else {
                staffList.push({
-                 staff_role: 'Staff',
+                 staff_role: assignedRole,
                  staff_id: 'MOCK-' + Math.random().toString(36).substr(2, 4),
                  staff_name: name,
                  mobile: ''
@@ -888,6 +922,64 @@ export const OperationsLeads: React.FC = () => {
           return;
         }
       }
+    }
+
+    setAssignValidationError(null);
+    if (parentLeadInstance?.events) {
+       const targetLeadQuotations = quotations?.filter(q => q.lead_id === parentLeadInstance.lead_id) || [];
+       targetLeadQuotations.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+       const targetLatestQuote = targetLeadQuotations[0];
+       let targetEditableInclusions: Record<string, string[]> = {};
+       if (targetLatestQuote) {
+          if (targetLatestQuote.editableInclusions) {
+             targetEditableInclusions = targetLatestQuote.editableInclusions;
+          } else if (targetLatestQuote.terms_conditions && targetLatestQuote.terms_conditions.includes('METADATA:')) {
+             try {
+                const meta = JSON.parse(targetLatestQuote.terms_conditions.split('METADATA:')[1]);
+                if (meta.editableInclusions) targetEditableInclusions = meta.editableInclusions;
+             } catch (e) {}
+          }
+       }
+
+       for (const ev of parentLeadInstance.events) {
+          const evId = ev.id || '';
+          if (!evId) continue;
+          
+          const pkgId = parentLeadInstance.package_id || parentLeadInstance.selected_package_id || targetLatestQuote?.package_id || '';
+          const eventKey = `${pkgId}_${ev.id}`;
+          const nameKey = `${pkgId}_${ev.event_name || ev.event_type || 'Unnamed Event'}`;
+          let eventRoles = targetEditableInclusions[eventKey] || targetEditableInclusions[nameKey] || targetEditableInclusions[pkgId];
+          if (!eventRoles || eventRoles.length === 0) {
+            const matchingKey = Object.keys(targetEditableInclusions).find(k => k.includes(ev.id));
+            if (matchingKey) eventRoles = targetEditableInclusions[matchingKey];
+          }
+          if (!eventRoles || eventRoles.length === 0) {
+            if (Object.keys(targetEditableInclusions).length === 1) { eventRoles = Object.values(targetEditableInclusions)[0]; }
+          }
+          const includedRoles = eventRoles?.length > 0 ? eventRoles : [];
+          
+          if (includedRoles.length > 0) {
+            const allocStaff = eventAllocations[evId]?.staff || [];
+            if (allocStaff.length < includedRoles.length) {
+                setAssignValidationError(`Please complete all Staff Assignments before saving.\nStaff Type and Staff are required for every Team Member.`);
+                
+                // Open the collapsed event and focus
+                setCollapsedAssignEvents(prev => ({ ...prev, [evId]: false }));
+                
+                // Scroll to error
+                setTimeout(() => {
+                  const el = document.getElementById(`assign-event-${evId}`);
+                  if (el) {
+                     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                     el.classList.add('ring-2', 'ring-red-500', 'ring-offset-2', 'ring-offset-zinc-950');
+                     setTimeout(() => el.classList.remove('ring-2', 'ring-red-500', 'ring-offset-2', 'ring-offset-zinc-950'), 3000);
+                  }
+                }, 100);
+                
+                return; // Stop saving
+            }
+          }
+       }
     }
 
     try {
@@ -1831,7 +1923,7 @@ export const OperationsLeads: React.FC = () => {
                     const eventNameDisplay = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');
 
                     return (
-                      <div key={evId} className="bg-zinc-950/60 border border-zinc-850 rounded-2xl relative overflow-hidden transition-all duration-300">
+                      <div key={evId} id={`assign-event-${evId}`} className="bg-zinc-950/60 border border-zinc-850 rounded-2xl relative overflow-hidden transition-all duration-300">
                         {/* Collapsible Header */}
                         <div 
                           className="p-4 flex items-center justify-between cursor-pointer hover:bg-zinc-900/40 transition-colors"
@@ -2351,7 +2443,15 @@ export const OperationsLeads: React.FC = () => {
                 
               </div>
               
-              <div className="sticky bottom-0 z-50 p-4 border-t border-zinc-800 flex flex-col sm:flex-row justify-end gap-3 bg-zinc-950/90 backdrop-blur-md">
+              {assignValidationError && (
+                 <div className="p-4 mx-6 my-4 bg-red-500/10 border border-red-500/50 rounded-xl flex items-start gap-3 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
+                    <span className="text-red-400 font-bold text-lg leading-none mt-0.5">❌</span>
+                    <div className="text-[13px] text-red-200 font-sans whitespace-pre-wrap flex-1 leading-relaxed">
+                       {assignValidationError}
+                    </div>
+                 </div>
+              )}
+                            <div className="sticky bottom-0 z-50 p-4 border-t border-zinc-800 flex flex-col sm:flex-row justify-end gap-3 bg-zinc-950/90 backdrop-blur-md">
                 <button
                   type="button"
                   onClick={() => setAssigningOrderId(null)}
