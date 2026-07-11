@@ -1972,7 +1972,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       <tr className="border-b border-zinc-900 bg-zinc-900/40 text-[9px] font-mono uppercase tracking-wider text-zinc-400">
                         <th className="p-3 font-bold">Order ID</th>
                         <th className="p-3 font-bold">Customer Name</th>
-                        <th className="p-3 font-bold">Event Type</th>
+                        <th className="p-3 font-bold">Event Name</th>
                         <th className="p-3 font-bold">Event Date</th>
                         <th className="p-3 font-bold text-center">Assigned Team</th>
                         <th className="p-3 font-bold">Raw Footage Drive Link</th>
@@ -1992,12 +1992,18 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         const editorsList = getAssignedEditorsList(prod);
 
                         const prodStatus = getProductionStatus(prod);
+                        const lead = leadsData?.find(l => l.lead_id === order.lead_id);
 
                         return (
                           <tr key={prod.production_id} className="hover:bg-zinc-900/40 transition-all font-mono">
                             <td className="p-3 text-violet-400 font-bold">{order.order_id}</td>
                             <td className="p-3 font-sans font-bold text-white">{order.customer_name}</td>
-                            <td className="p-3 text-zinc-300 font-sans">{order.event_type === 'Other' ? (order.custom_event_name || order.custom_event_type || 'Other') : order.event_type}</td>
+                            <td className="p-3 text-zinc-300 font-sans">
+                              <EventDropdownCell 
+                                type="name" 
+                                items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || ev.event_type || 'Other') : [order.event_type || 'Other']} 
+                              />
+                            </td>
                             <td className="p-3 text-zinc-400">{order.event_date || 'N/A'}</td>
                             <td className="p-3 font-sans text-center">
                               {editorsList.length > 0 ? (
@@ -2103,7 +2109,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   <tr className="border-b border-zinc-900 bg-zinc-950/70 px-4 py-3 font-mono text-[9px] uppercase tracking-wider text-zinc-500">
                     <th className="p-4 font-black">Order ID</th>
                     <th className="p-4 font-black">Customer Name</th>
-                    <th className="p-4 font-black">Event Type</th>
+                    <th className="p-4 font-black">Event Name</th>
                     <th className="p-4 font-black">Event Date</th>
                     <th className="p-4 font-black">Event Time</th>
                     <th className="p-4 font-black">Raw Footage Link</th>

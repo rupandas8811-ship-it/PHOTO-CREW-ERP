@@ -1500,12 +1500,13 @@ export const OperationsLeads: React.FC = () => {
         <table className="w-full text-left border-collapse table-fixed min-w-[1270px]">
           <colgroup>
             <col className="w-[110px]" />
-            <col className="w-[260px]" />
-            <col className="w-[160px]" />
+            <col className="w-[200px]" />
+            <col className="w-[180px]" />
             <col className="w-[150px]" />
             <col className="w-[130px]" />
             <col className="w-[125px]" />
-            <col className="w-[185px]" />
+            <col className="w-[125px]" />
+            <col className="w-[160px]" />
             <col className="w-[150px]" />
           </colgroup>
           <thead>
@@ -1518,6 +1519,7 @@ export const OperationsLeads: React.FC = () => {
               >
                 Customer Name {renderSortIndicator('customer_name')}
               </th>
+              <th className="p-4 font-bold align-middle">Event Name</th>
               <th className="p-4 font-bold align-middle">Event Date</th>
               <th className="p-4 font-bold align-middle">Event Time</th>
               <th className="p-4 font-bold align-middle">Reporting Time</th>
@@ -1533,7 +1535,7 @@ export const OperationsLeads: React.FC = () => {
               if (mainBoardList.length === 0) {
                 return (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-zinc-500 italic">
+                    <td colSpan={9} className="p-8 text-center text-zinc-500 italic">
                       No matching operations leads found.
                     </td>
                   </tr>
@@ -1607,15 +1609,15 @@ export const OperationsLeads: React.FC = () => {
                       </span>
                     </td>
                     <td className="p-4 font-bold text-zinc-100 align-middle">
-                      <div className="truncate text-xs font-sans max-w-[240px] block" title={ord.customer_name}>
+                      <div className="truncate text-xs font-sans max-w-[180px] block" title={ord.customer_name}>
                         {ord.customer_name}
                       </div>
-                      <div className="mt-1">
-                        <EventDropdownCell 
-                          type="name" 
-                          items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || ev.event_type || 'Other') : [ord.event_type || 'Other']} 
-                        />
-                      </div>
+                    </td>
+                    <td className="p-4 align-middle">
+                      <EventDropdownCell 
+                        type="name" 
+                        items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || ev.event_type || 'Other') : [ord.event_type || 'Other']} 
+                      />
                       {op?.equipment_kit && (() => {
                         const kits = op.equipment_kit.split(',').map((kit: string) => kit.trim()).filter(Boolean);
                         if (kits.length === 0) return null;
