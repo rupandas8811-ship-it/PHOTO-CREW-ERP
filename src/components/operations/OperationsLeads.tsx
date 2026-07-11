@@ -1893,45 +1893,30 @@ export const OperationsLeads: React.FC = () => {
                       </div>
                       {/* 3. Team Members Included & Staff Assignment */}
                       <div className="space-y-4 pt-2">
-                        {(() => {
-                           const totalRequiredCount = includedRoles.reduce((sum, roleStr) => {
-                             const match = roleStr.match(/^(\d+)\s+(.+)$/);
-                             return sum + (match ? parseInt(match[1], 10) : 1);
-                           }, 0);
-                           return (
-                              <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-800">
-                                 <h4 className="text-[11px] font-mono font-bold uppercase text-sky-400 tracking-wider">
-                                   Team Members Included
-                                 </h4>
-                                 <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900 px-2 py-1 rounded-md border border-zinc-800 shadow-inner">
-                                    {allocStaff.length} / {totalRequiredCount} Assigned
-                                 </span>
-                              </div>
-                           );
-                        })()}
+                        <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-800">
+                           <h4 className="text-[11px] font-mono font-bold uppercase text-sky-400 tracking-wider">
+                             Team Members Included
+                           </h4>
+                           <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900 px-2 py-1 rounded-md border border-zinc-800 shadow-inner">
+                              {allocStaff.length} / {includedRoles.length} Assigned
+                           </span>
+                        </div>
                         
                         <div className="grid grid-cols-1 gap-3">
                           {includedRoles.map((roleStr, roleIdx) => {
-                             const match = roleStr.match(/^(\d+)\s+(.+)$/);
-                             const reqCount = match ? parseInt(match[1], 10) : 1;
-                             const roleName = match ? match[2].trim() : roleStr;
                              const assignedToRole = allocStaff.filter((s: any) => s.staff_role === roleStr);
+                             const assignedStaff = assignedToRole[0];
+                             const selectKey = `${evId}_${roleIdx}`;
+                             const stFull = assignedStaff ? staff?.find(s => s.staff_name === assignedStaff.staff_name) : null;
+                             const defaultStaffType = stFull?.staff_type || 'In-House';
+                             const currentStaffType = staffTypeByEvent[selectKey] || defaultStaffType;
                              
-                             return Array.from({ length: reqCount }).map((_, slotIndex) => {
-                                const selectKey = `${evId}_${roleIdx}_${slotIndex}`;
-                                const assignedStaff = assignedToRole[slotIndex];
-                                const slotTitle = reqCount > 1 ? `${roleName} #${slotIndex + 1}` : roleName;
-                                const stFull = assignedStaff ? staff?.find(s => s.staff_name === assignedStaff.staff_name) : null;
-                                const defaultStaffType = stFull?.staff_type || 'In-House';
-                                const currentStaffType = staffTypeByEvent[selectKey] || defaultStaffType;
-                                
-                                return (
-                                  <div key={selectKey} className="bg-zinc-900/40 border border-zinc-800/80 hover:border-zinc-700/80 transition-colors rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                    {/* Role Name */}
-                                    <div className="flex flex-col gap-0.5 min-w-[150px]">
-                                      <span className="text-xs font-bold text-white tracking-wide">{slotTitle}</span>
-                                      <span className="text-[10px] text-zinc-500 font-mono">{reqCount > 1 ? 'Multiple Required' : '1 Required'}</span>
-                                    </div>
+                             return (
+                               <div key={selectKey} className="bg-zinc-900/40 border border-zinc-800/80 hover:border-zinc-700/80 transition-colors rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                 {/* Role Name */}
+                                 <div className="flex flex-col gap-0.5 min-w-[150px]">
+                                   <span className="text-xs font-bold text-white tracking-wide">{roleStr}</span>
+                                 </div>
                                     
                                     {/* Assignment UI */}
                                     <div className="flex-1 w-full sm:max-w-[28rem]">
@@ -2016,8 +2001,7 @@ export const OperationsLeads: React.FC = () => {
                                     </div>
                                   </div>
                                 );
-                             });
-                          })}                        </div>
+                                                       })}                        </div>
 
                         {/* Assigned Equipment Section */}
                         {(() => {
