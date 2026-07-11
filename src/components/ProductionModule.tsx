@@ -6231,27 +6231,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         </div>
                       )}
 
-                      {/* Header banner showing complete list of Deliverables first for rapid reading */}
-                      <div className="p-3 bg-purple-950/10 border border-purple-900/20 rounded-xl space-y-1.5">
-                        <span className="text-[9px] text-[#a78bfa] uppercase font-black tracking-widest font-mono block">
-                          Project Deliverables List Overview
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {customDeliverables.map((del, idx) => (
-                            <span 
-                              key={idx} 
-                              className="text-[10px] bg-zinc-900/60 border border-zinc-800 text-zinc-300 px-2 py-0.5 rounded-md font-mono"
-                              title={del}
-                            >
-                              {idx + 1}. {del}
-                            </span>
-                          ))}
-                          {customDeliverables.length === 0 && (
-                            <span className="text-[10px] text-zinc-500 italic font-mono">No deliverables loaded</span>
-                          )}
-                        </div>
-                      </div>
-
                       {/* Single Common Target Delivery Date at the top */}
                       <div id="wf-target-delivery-date-container" className={`p-3 bg-zinc-900/10 border rounded-xl transition-all flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${
                         validationAttempted && !wfTargetDeliveryDate
