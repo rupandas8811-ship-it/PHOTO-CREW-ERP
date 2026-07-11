@@ -117,7 +117,9 @@ interface RoleContextType {
     amountReceived: number, 
     paymentDate: string, 
     proofUrl?: string,
-    transactionId?: string
+    transactionId?: string,
+    paymentMode?: string,
+    paymentNotes?: string
   ) => Promise<void>;
   resetAllData: () => Promise<void>;
   refreshData: () => void;
@@ -4381,7 +4383,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     amountReceived: number, 
     paymentDate: string, 
     proofUrl?: string,
-    transactionId?: string
+    transactionId?: string,
+    paymentMode?: string,
+    paymentNotes?: string
   ) => {
     let isFullyPaid = false;
     const targetPayment = augmentedPayments.find((p) => p.order_id === orderId);
@@ -4433,6 +4437,42 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return [...prev, updatedPayment];
     });
+
+    // Record payment in localStorage history
+    const historyKey = `payment_history_${orderId}`;
+    const existingHistoryStr = localStorage.getItem(historyKey);
+    let historyList = [];
+    if (existingHistoryStr) {
+      try {
+        historyList = JSON.parse(existingHistoryStr);
+      } catch (e) {
+        console.error("Failed to parse payment history", e);
+      }
+    } else {
+      // If no history exists, and there is advance received, prepopulate with the advance payment!
+      if (targetPayment.advance_received > 0) {
+        historyList.push({
+          date: targetPayment.payment_date || new Date().toISOString(),
+          amount: targetPayment.advance_received,
+          transactionId: 'ADVANCE-INITIAL',
+          paymentMode: 'Bank Transfer',
+          updatedBy: 'System',
+          notes: 'Initial advance payment'
+        });
+      }
+    }
+
+    // Push the new transaction details
+    historyList.push({
+      date: new Date().toISOString(), // Use current date/time automatically as requested
+      amount: actualAmountReceived,
+      transactionId: transactionId || 'TXN-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
+      paymentMode: paymentMode || 'UPI',
+      updatedBy: currentUserName || 'System',
+      notes: paymentNotes || 'Recorded via update payment'
+    });
+
+    localStorage.setItem(historyKey, JSON.stringify(historyList));
 
     // If fully paid, move order status to next transition or check if delivered first.
     // If fully paid AND previous stage was delivered, we can transition stage to Closed!

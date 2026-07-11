@@ -43,6 +43,24 @@ function getIndividualDeliverables(description: string): string[] {
     .filter(line => line.length > 0);
 }
 
+function parseExactDeliverables(description: string): string[] {
+  if (!description) return [];
+  try {
+    const parsed = JSON.parse(description);
+    if (Array.isArray(parsed)) {
+      if (typeof parsed[0] === 'string') {
+        return parsed.map((s: any) => String(s).trim()).filter(Boolean);
+      } else if (parsed[0] && Array.isArray(parsed[0].deliverables)) {
+        return parsed[0].deliverables.map((s: any) => String(s).trim()).filter(Boolean);
+      }
+    }
+  } catch (e) {}
+  return description
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+}
+
 function formatWhatsAppNumber(phone: string) {
   let cleaned = (phone || '').replace(/[^0-9]/g, '');
   if (cleaned.length === 10) {
@@ -285,6 +303,25 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
       return cleaned;
     }
     return cleaned;
+  };
+
+  // Robustly resolve Order and Lead for any given Production item
+  const resolveOrderAndLead = (prodItem: any) => {
+    if (!prodItem) return { order: undefined, lead: undefined };
+    
+    // 1. Try to find via raw footage matching tracking_id or order_id
+    const rf = rawFootage.find(f => f.tracking_id === prodItem.tracking_id || f.order_id === prodItem.tracking_id);
+    
+    // 2. Find order by order_id or lead_id matching tracking_id
+    let order = orders.find(o => o.order_id === prodItem.tracking_id || o.lead_id === prodItem.tracking_id);
+    if (!order && rf) {
+      order = orders.find(o => o.order_id === rf.order_id);
+    }
+    
+    // 3. Find lead by lead_id matching tracking_id or order's lead_id
+    const lead = leadsData?.find(l => l.lead_id === prodItem.tracking_id || l.lead_id === order?.lead_id);
+    
+    return { order, lead };
   };
 
   const getPersonalizedMessage = (staff: any, deliverables: any[]) => {
@@ -919,8 +956,7 @@ ${coordinatorName}`;
   // Base list filtered by applied date range, customer name, and order ID (Supabase leads table data source)
   const filteredLeadsList = useMemo(() => {
     return leads.filter(prod => {
-      const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
-      const order = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === prod.production_id.replace('PRD-', ''));
+      const { order } = resolveOrderAndLead(prod);
       if (!order) return false;
 
       // Event date matching (format is YYYY-MM-DD)
@@ -951,8 +987,7 @@ ${coordinatorName}`;
   // Report download utilities
   const downloadCSVReport = () => {
     const data = filteredLeadsList.map(prod => {
-      const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
-      const order = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === prod.production_id.replace('PRD-', ''));
+      const { order } = resolveOrderAndLead(prod);
       return {
         'ORDER_ID': order?.order_id || '',
         'CUSTOMER_NAME': order?.customer_name || '',
@@ -989,8 +1024,7 @@ ${coordinatorName}`;
   const downloadExcelReport = () => {
     try {
       const data = filteredLeadsList.map(prod => {
-        const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
-        const order = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === prod.production_id.replace('PRD-', ''));
+        const { order } = resolveOrderAndLead(prod);
         return {
           'ORDER ID': order?.order_id || '',
           'CUSTOMER NAME': order?.customer_name || '',
@@ -1082,8 +1116,7 @@ ${coordinatorName}`;
         doc.setTextColor(31, 41, 55);
       }
       
-      const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
-      const order = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === prod.production_id.replace('PRD-', ''));
+      const { order } = resolveOrderAndLead(prod);
       
       const ordId = order?.order_id || 'N/A';
       const custName = order?.customer_name || 'N/A';
@@ -1114,8 +1147,7 @@ ${coordinatorName}`;
     if (!printWindow) return;
     
     const rowsHtml = filteredLeadsList.map(prod => {
-      const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
-      const order = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === prod.production_id.replace('PRD-', ''));
+      const { order } = resolveOrderAndLead(prod);
       return `
         <tr>
           <td style="padding: 8px; border-bottom: 1px solid #ddd; font-family: monospace;">${order?.order_id || ''}</td>
@@ -1263,6 +1295,8 @@ ${coordinatorName}`;
   const [deliverablesTargetDates, setDeliverablesTargetDates] = useState<Record<string, string>>({});
   const [selectedWfStaffByDeliverable, setSelectedWfStaffByDeliverable] = useState<Record<string, string[]>>({});
   const [wfStaffTypeByDeliverable, setWfStaffTypeByDeliverable] = useState<Record<string, 'In-House' | 'Freelancer'>>({});
+  const [deliverableStaffRows, setDeliverableStaffRows] = useState<Record<string, Array<{ id: string; staffType: 'In-House' | 'Freelancer'; staffId: string }>>>({});
+  const [validationAttempted, setValidationAttempted] = useState(false);
   const [whatsappShareModalOpen, setWhatsappShareModalOpen] = useState(false);
   const [whatsappShareData, setWhatsappShareData] = useState<any | null>(null);
   const [previewStaffMessage, setPreviewStaffMessage] = useState<{ staffName: string; message: string } | null>(null);
@@ -1358,42 +1392,23 @@ ${coordinatorName}`;
         // Find deliverables from confirmed quotation
         let parsedDeliverables: string[] = [];
         if (activeWorkflowProd) {
-          const rf = rawFootage.find(f => f.tracking_id === activeWorkflowProd.tracking_id || f.order_id === activeWorkflowProd.tracking_id);
-          const order = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === activeWorkflowProd.production_id.replace('PRD-', ''));
-          const lead = leadsData?.find(l => l.lead_id === activeWorkflowProd.tracking_id || l.lead_id === order?.lead_id);
+          const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
           
-          let targetEditableInclusions: Record<string, string[]> = {};
-          if (lead) {
+          let deliverablesText = order?.deliverables_description || lead?.deliverables_description || '';
+          
+          if (!deliverablesText && lead) {
             const targetLeadQuotations = quotations?.filter((q: any) => q.lead_id === lead.lead_id) || [];
             targetLeadQuotations.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
             const targetLatestQuote = targetLeadQuotations[0];
-            
             if (targetLatestQuote) {
-               if (targetLatestQuote.editableInclusions) {
-                  targetEditableInclusions = targetLatestQuote.editableInclusions;
-               } else if (targetLatestQuote.terms_conditions && targetLatestQuote.terms_conditions.includes('METADATA:')) {
-                  try {
-                     const meta = JSON.parse(targetLatestQuote.terms_conditions.split('METADATA:')[1]);
-                     if (meta.editableInclusions) targetEditableInclusions = meta.editableInclusions;
-                  } catch (e) {}
-               }
+              deliverablesText = targetLatestQuote.deliverables_description || '';
             }
           }
           
-          let teamMembersFlattened: string[] = [];
-          Object.values(targetEditableInclusions).forEach(roles => {
-             teamMembersFlattened = [...teamMembersFlattened, ...roles];
-          });
-          
-          if (teamMembersFlattened.length > 0) {
-             parsedDeliverables = Array.from(new Set(teamMembersFlattened));
-          } else {
-             const deliverablesText = order?.deliverables_description || lead?.deliverables_description || '';
-             parsedDeliverables = getIndividualDeliverables(deliverablesText);
-          }
+          parsedDeliverables = parseExactDeliverables(deliverablesText);
         }
-        const assignedDeliverables = Array.from(new Set(assignedForThis.map(a => a.speciality)));
-        const allDeliverables = Array.from(new Set([...parsedDeliverables, ...assignedDeliverables]));
+        const assignedDeliverables = Array.from(new Set(assignedForThis.map(a => a.speciality))) as string[];
+        const allDeliverables: string[] = Array.from(new Set([...parsedDeliverables, ...assignedDeliverables]));
         
         setCustomDeliverables(allDeliverables);
 
@@ -1401,6 +1416,7 @@ ${coordinatorName}`;
         const initialStaffMap: Record<string, string[]> = {};
         const initialDatesMap: Record<string, string> = {};
         const initialStaffTypeMap: Record<string, 'In-House' | 'Freelancer'> = {};
+        const initialRowsMap: Record<string, Array<{ id: string; staffType: 'In-House' | 'Freelancer'; staffId: string }>> = {};
         
         assignedForThis.forEach(a => {
           const deliverable = a.speciality;
@@ -1419,6 +1435,30 @@ ${coordinatorName}`;
             }
           }
         });
+
+        allDeliverables.forEach(deliverable => {
+          const existingForDeliverable = assignedForThis.filter(a => a.speciality === deliverable);
+          if (existingForDeliverable.length > 0) {
+            initialRowsMap[deliverable] = existingForDeliverable.map(a => {
+              const staffMem = productionStaff.find(s => s.staff_id === a.staff_id);
+              const type = staffMem?.staff_type || (staffMem as any)?.Staff_Type || 'In-House';
+              return {
+                id: a.assignment_id || `row-${Math.random()}`,
+                staffType: type as 'In-House' | 'Freelancer',
+                staffId: a.staff_id
+              };
+            });
+          } else {
+            initialRowsMap[deliverable] = [{
+              id: `row-${Math.random()}`,
+              staffType: 'In-House',
+              staffId: ''
+            }];
+          }
+        });
+        
+        setDeliverableStaffRows(initialRowsMap);
+        setValidationAttempted(false);
         
         setSelectedWfStaffByDeliverable(initialStaffMap);
         setDeliverablesTargetDates(initialDatesMap);
@@ -1944,8 +1984,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           {/* Newly Arrived - Raw Footage Received Queue */}
           {(() => {
             const rawFootageLeads = filteredLeadsList.filter(prod => {
-              const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
-              const order = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === prod.production_id.replace('PRD-', ''));
+              const { order } = resolveOrderAndLead(prod);
               if (!order) return false;
               return prod.editing_status === 'Raw Footage Received';
             });
@@ -1982,10 +2021,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     </thead>
                     <tbody className="divide-y divide-zinc-900">
                       {rawFootageLeads.map(prod => {
-                        const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
-                        const order = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === prod.production_id.replace('PRD-', ''));
+                        const { order } = resolveOrderAndLead(prod);
                         if (!order) return null;
 
+                        const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
                         const op = operations?.find(o => o.order_id === order.order_id);
                         const matchedSa = staffAssignments ? staffAssignments.filter(sa => sa.order_id === order.order_id) : [];
 
@@ -2146,8 +2185,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     ];
 
                     const filteredLeads = filteredLeadsList.filter(prod => {
-                      const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
-                      const order = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === prod.production_id.replace('PRD-', ''));
+                      const { order } = resolveOrderAndLead(prod);
                       if (!order) return false;
                       
                       // Only show in active Production table once editor assignment has been completed
@@ -2191,10 +2229,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     }
 
                     return filteredLeads.map((prod) => {
-                      const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
-                      const order = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === prod.production_id.replace('PRD-', ''));
+                      const { order } = resolveOrderAndLead(prod);
                       if (!order) return null;
 
+                      const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
                       const priority = getProductionPriority(prod);
                       const status = prod.editing_status || 'Pending';
                       const lead = leadsData?.find(l => l.lead_id === order.lead_id);
@@ -5938,9 +5976,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       </div>
                       
                       {(() => {
-                        const rf = rawFootage.find(f => f.tracking_id === activeWorkflowProd.tracking_id || f.order_id === activeWorkflowProd.tracking_id);
-                        const order = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === activeWorkflowProd.production_id.replace('PRD-', ''));
-                        const lead = leadsData?.find(l => l.lead_id === activeWorkflowProd.tracking_id || l.lead_id === order?.lead_id);
+                        const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
                         
                         const leadId = activeWorkflowProd.tracking_id || '—';
                         const customerName = order?.customer_name || lead?.customer_name || '—';
@@ -6011,15 +6047,47 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         </div>
                       )}
 
+                      {/* Single Common Target Delivery Date */}
+                      <div id="wf-target-delivery-date-container" className={`space-y-1.5 p-3.5 bg-zinc-900/10 border rounded-xl transition-all ${
+                        validationAttempted && !wfTargetDeliveryDate
+                          ? 'border-rose-500 bg-rose-950/5'
+                          : 'border-zinc-900'
+                      }`}>
+                        <label className="text-[10px] text-[#a78bfa] uppercase font-black tracking-widest font-mono flex items-center gap-1">
+                          Target Delivery Date <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          id="wf-target-delivery-date"
+                          value={wfTargetDeliveryDate}
+                          onChange={(e) => {
+                            setWfTargetDeliveryDate(e.target.value);
+                          }}
+                          className={`w-full bg-zinc-950 border text-xs text-zinc-300 rounded-xl px-3 py-2 font-mono focus:outline-none min-h-[38px] ${
+                            validationAttempted && !wfTargetDeliveryDate
+                              ? 'border-rose-500 ring-1 ring-rose-500/30'
+                              : 'border-zinc-900 hover:border-zinc-800 focus:border-purple-500'
+                          }`}
+                        />
+                      </div>
+
                       <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
-                        {customDeliverables.map((deliverable) => {
-                          const selectedStaffIds = selectedWfStaffByDeliverable[deliverable] || [];
-                          const targetDate = deliverablesTargetDates[deliverable] || wfTargetDeliveryDate || '';
+                        {customDeliverables.map((deliverable, index) => {
+                          const rows = deliverableStaffRows[deliverable] || [];
+                          const isEmpty = rows.filter(r => r.staffId).length === 0;
 
                           return (
-                            <div key={deliverable} className="bg-zinc-900/20 border border-zinc-900 rounded-xl p-3.5 space-y-3">
+                            <div 
+                              key={deliverable} 
+                              id={`deliverable-block-${index}`}
+                              className={`bg-zinc-900/20 border rounded-xl p-3.5 space-y-3 transition-all ${
+                                validationAttempted && isEmpty
+                                  ? 'border-rose-500 bg-rose-950/5'
+                                  : 'border-zinc-900'
+                              }`}
+                            >
                               {/* Deliverable Header */}
-                              <div className="flex items-start justify-between gap-4">
+                              <div className="flex items-start justify-between gap-4 border-b border-zinc-900/60 pb-2">
                                 <div>
                                   <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">Deliverable</span>
                                   <span className="text-xs font-bold text-zinc-100 font-sans block mt-0.5">{deliverable}</span>
@@ -6028,17 +6096,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   type="button"
                                   onClick={() => {
                                     setCustomDeliverables(prev => prev.filter(d => d !== deliverable));
-                                    setSelectedWfStaffByDeliverable(prev => {
-                                      const copy = { ...prev };
-                                      delete copy[deliverable];
-                                      return copy;
-                                    });
-                                    setDeliverablesTargetDates(prev => {
-                                      const copy = { ...prev };
-                                      delete copy[deliverable];
-                                      return copy;
-                                    });
-                                    setWfStaffTypeByDeliverable(prev => {
+                                    setDeliverableStaffRows(prev => {
                                       const copy = { ...prev };
                                       delete copy[deliverable];
                                       return copy;
@@ -6051,132 +6109,129 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 </button>
                               </div>
 
-                              {/* Target Date and Staff Assignment */}
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-                                {/* Target Finish Date for this deliverable */}
-                                <div className="space-y-1">
-                                  <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
-                                    Target Delivery Date
-                                  </label>
-                                  <input
-                                    type="date"
-                                    value={targetDate}
-                                    onChange={(e) => {
-                                      setDeliverablesTargetDates(prev => ({
-                                        ...prev,
-                                        [deliverable]: e.target.value
-                                      }));
-                                    }}
-                                    className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-xs text-zinc-300 rounded-xl px-3 py-2 font-mono focus:outline-none focus:border-purple-500 min-h-[38px]"
-                                  />
-                                </div>
+                              {/* Staff Assignment Rows */}
+                              <div className="space-y-2.5">
+                                {rows.map((row, rIndex) => {
+                                  const filteredStaff = productionStaff.filter(s => {
+                                    if (s.status !== 'Active') return false;
+                                    const type = s.staff_type || (s as any).Staff_Type || 'In-House';
+                                    return type.toLowerCase() === row.staffType.toLowerCase();
+                                  });
 
-                                {/* Staff Type Filter */}
-                                <div className="space-y-1">
-                                  <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
-                                    Staff Type
-                                  </label>
-                                  <select
-                                    value={wfStaffTypeByDeliverable[deliverable] || 'In-House'}
-                                    onChange={(e) => {
-                                      setWfStaffTypeByDeliverable(prev => ({
-                                        ...prev,
-                                        [deliverable]: e.target.value as 'In-House' | 'Freelancer'
-                                      }));
-                                    }}
-                                    className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-850 text-xs text-zinc-300 rounded-xl px-3 py-2 font-sans focus:outline-none focus:border-purple-500 cursor-pointer min-h-[38px]"
-                                  >
-                                    <option value="In-House">In-House</option>
-                                    <option value="Freelancer">Freelancer</option>
-                                  </select>
-                                </div>
-
-                                {/* Multi-select staff assignment */}
-                                <div className="space-y-1">
-                                  <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
-                                    Assigned Staff
-                                  </label>
-                                  
-                                  {/* Custom dropdown trigger */}
-                                  <div className="relative">
-                                    <button
-                                      type="button"
-                                      onClick={() => setOpenDropdownDeliverable(openDropdownDeliverable === deliverable ? null : deliverable)}
-                                      className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-850 text-xs text-zinc-400 rounded-xl px-3 py-2 text-left flex items-center justify-between cursor-pointer min-h-[38px]"
-                                    >
-                                      <span className="text-[11px]">Select Team Member...</span>
-                                      <span className="text-zinc-600 text-[9px]">{openDropdownDeliverable === deliverable ? '▲' : '▼'}</span>
-                                    </button>
-
-                                    {openDropdownDeliverable === deliverable && (
-                                      <div className="absolute z-50 mt-1 w-full bg-zinc-950 border border-zinc-900 rounded-xl shadow-2xl p-2 max-h-48 overflow-y-auto space-y-1">
-                                        <input
-                                          type="text"
-                                          placeholder="Search staff..."
-                                          value={editorSearchQuery}
-                                          onChange={(e) => setEditorSearchQuery(e.target.value)}
-                                          onClick={(e) => e.stopPropagation()}
-                                          className="w-full bg-zinc-900 border border-zinc-855 text-xs rounded-lg px-2.5 py-1.5 text-white mb-1.5 focus:outline-none focus:border-purple-500 font-sans"
-                                        />
-                                        {productionStaff
-                                          .filter(s => s.status === 'Active')
-                                          .filter(s => (s.staff_type || (s as any).Staff_Type || 'In-House') === (wfStaffTypeByDeliverable[deliverable] || 'In-House'))
-                                          .filter(s => s.name.toLowerCase().includes(editorSearchQuery.toLowerCase()))
-                                          .map(s => {
-                                            const isChecked = selectedStaffIds.includes(s.staff_id);
-                                            return (
-                                              <label key={s.staff_id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-900 rounded-lg cursor-pointer text-xs text-zinc-300 font-sans select-none">
-                                                <input
-                                                  type="checkbox"
-                                                  checked={isChecked}
-                                                  onChange={() => {
-                                                    const nextList = isChecked
-                                                      ? selectedStaffIds.filter(id => id !== s.staff_id)
-                                                      : [...selectedStaffIds, s.staff_id];
-                                                    setSelectedWfStaffByDeliverable(prev => ({
-                                                      ...prev,
-                                                      [deliverable]: nextList
-                                                    }));
-                                                  }}
-                                                  className="rounded border-zinc-800 bg-zinc-900 text-purple-600 focus:ring-0 h-3.5 w-3.5"
-                                                />
-                                                <span>{s.name} ({s.role})</span>
-                                              </label>
-                                            );
-                                          })}
+                                  return (
+                                    <div key={row.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end bg-zinc-950/40 p-2 rounded-lg border border-zinc-950">
+                                      {/* Row Label */}
+                                      <div className="md:col-span-2 text-[9px] text-zinc-500 font-mono self-center">
+                                        Staff {rIndex + 1}
                                       </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
 
-                              {/* Pills row (if any staff selected) */}
-                              <div className="pt-2">
-                                <div className="flex flex-wrap gap-1">
-                                  {selectedStaffIds.map(sId => {
-                                    const s = productionStaff.find(st => st.staff_id === sId);
-                                    if (!s) return null;
-                                    return (
-                                      <span key={sId} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-950/40 border border-purple-800/30 text-purple-300 rounded-full text-[10px] font-medium">
-                                        {s.name}
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setSelectedWfStaffByDeliverable(prev => ({
-                                              ...prev,
-                                              [deliverable]: (prev[deliverable] || []).filter(id => id !== sId)
-                                            }));
+                                      {/* Staff Type */}
+                                      <div className="md:col-span-4 space-y-1">
+                                        <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
+                                          Staff Type
+                                        </label>
+                                        <select
+                                          value={row.staffType}
+                                          onChange={(e) => {
+                                            const newType = e.target.value as 'In-House' | 'Freelancer';
+                                            setDeliverableStaffRows(prev => {
+                                              const updatedRows = [...(prev[deliverable] || [])];
+                                              updatedRows[rIndex] = {
+                                                ...updatedRows[rIndex],
+                                                staffType: newType,
+                                                staffId: ''
+                                              };
+                                              return {
+                                                ...prev,
+                                                [deliverable]: updatedRows
+                                              };
+                                            });
                                           }}
-                                          className="text-purple-400 hover:text-white transition-colors ml-0.5 font-bold cursor-pointer"
+                                          className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-xs text-zinc-300 rounded-xl px-2 py-1.5 font-sans focus:outline-none focus:border-purple-500 cursor-pointer min-h-[34px]"
                                         >
-                                          ✕
-                                        </button>
-                                      </span>
-                                    );
-                                  })}
-                                  {selectedStaffIds.length === 0 && (
-                                    <span className="text-zinc-600 text-[10px] italic py-0.5">No staff assigned</span>
-                                  )}
+                                          <option value="In-House">In-House</option>
+                                          <option value="Freelancer">Freelancer</option>
+                                        </select>
+                                      </div>
+
+                                      {/* Select Staff */}
+                                      <div className="md:col-span-5 space-y-1">
+                                        <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
+                                          Select Staff
+                                        </label>
+                                        <select
+                                          value={row.staffId}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setDeliverableStaffRows(prev => {
+                                              const updatedRows = [...(prev[deliverable] || [])];
+                                              updatedRows[rIndex] = {
+                                                ...updatedRows[rIndex],
+                                                staffId: val
+                                              };
+                                              return {
+                                                ...prev,
+                                                [deliverable]: updatedRows
+                                              };
+                                            });
+                                          }}
+                                          className={`w-full bg-zinc-950 border text-xs text-zinc-300 rounded-xl px-2 py-1.5 font-sans focus:outline-none cursor-pointer min-h-[34px] ${
+                                            validationAttempted && !row.staffId && isEmpty
+                                              ? 'border-rose-500 focus:border-rose-500'
+                                              : 'border-zinc-900 hover:border-zinc-800 focus:border-purple-500'
+                                          }`}
+                                        >
+                                          <option value="">Select Staff</option>
+                                          {filteredStaff.map(s => (
+                                            <option key={s.staff_id} value={s.staff_id}>
+                                              {s.name} ({s.role || 'Production Staff'})
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </div>
+
+                                      {/* Actions (Remove Row) */}
+                                      <div className="md:col-span-1 flex justify-end pb-1">
+                                        {rows.length > 1 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setDeliverableStaffRows(prev => {
+                                                const updatedRows = (prev[deliverable] || []).filter(r => r.id !== row.id);
+                                                return {
+                                                  ...prev,
+                                                  [deliverable]: updatedRows
+                                                };
+                                              });
+                                            }}
+                                            className="text-zinc-600 hover:text-rose-400 transition-colors p-1.5 cursor-pointer text-xs"
+                                            title="Remove Staff Assignment"
+                                          >
+                                            ✕
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+
+                                {/* Add Staff Button for this deliverable */}
+                                <div className="pt-1.5 flex justify-start">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setDeliverableStaffRows(prev => ({
+                                        ...prev,
+                                        [deliverable]: [
+                                          ...(prev[deliverable] || []),
+                                          { id: `row-${Math.random()}`, staffType: 'In-House', staffId: '' }
+                                        ]
+                                      }));
+                                    }}
+                                    className="px-3 py-1 bg-zinc-950 hover:bg-zinc-900 border border-zinc-900 hover:border-zinc-800 text-purple-400 hover:text-purple-300 text-[10px] font-mono rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                                  >
+                                    <span>+ Add Staff</span>
+                                  </button>
                                 </div>
                               </div>
                             </div>
@@ -6212,10 +6267,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 return;
                               }
                               setCustomDeliverables(prev => [...prev, newDeliverableInput.trim()]);
+                              setDeliverableStaffRows(prev => ({
+                                ...prev,
+                                [newDeliverableInput.trim()]: [{ id: `row-${Math.random()}`, staffType: 'In-House', staffId: '' }]
+                              }));
                               setNewDeliverableInput('');
                               setWfError('');
                             }}
-                            className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-zinc-300 hover:text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
+                            className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-855 text-zinc-300 hover:text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
                           >
                             + Add
                           </button>
@@ -6242,11 +6301,39 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           onClick={async () => {
                             setWfError('');
                             setWfSuccess('');
+                            setValidationAttempted(true);
 
-                            // Validate at least one assignment is made
-                            const hasAssignments = Object.values(selectedWfStaffByDeliverable).some((arr: any) => arr && arr.length > 0);
-                            if (!hasAssignments) {
-                              setWfError('Please assign at least one staff member to a deliverable.');
+                            // Validate Target Delivery Date
+                            if (!wfTargetDeliveryDate) {
+                              setWfError('Please select the Target Delivery Date and assign Production staff to all Deliverables before saving.');
+                              setTimeout(() => {
+                                const el = document.getElementById('wf-target-delivery-date-container');
+                                if (el) {
+                                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  const input = el.querySelector('input');
+                                  if (input) input.focus();
+                                }
+                              }, 50);
+                              return;
+                            }
+
+                            // Validate: Every Deliverable has at least one assigned Production staff
+                            const emptyDeliverables = customDeliverables.filter(d => {
+                              const rows = deliverableStaffRows[d] || [];
+                              return rows.filter(r => r.staffId).length === 0;
+                            });
+
+                            if (emptyDeliverables.length > 0) {
+                              setWfError('Please select the Target Delivery Date and assign Production staff to all Deliverables before saving.');
+                              setTimeout(() => {
+                                const firstEmptyIndex = customDeliverables.indexOf(emptyDeliverables[0]);
+                                const el = document.getElementById(`deliverable-block-${firstEmptyIndex}`);
+                                if (el) {
+                                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  const sel = el.querySelector('select');
+                                  if (sel) sel.focus();
+                                }
+                              }, 50);
                               return;
                             }
 
@@ -6266,11 +6353,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               const activeStaffList = productionStaff.filter(s => s.status === 'Active');
 
                               for (const d of customDeliverables) {
-                                const staffIds = selectedWfStaffByDeliverable[d] || [];
-                                const tDate = deliverablesTargetDates[d] || '';
+                                const rows = deliverableStaffRows[d] || [];
                                 
-                                for (const sId of staffIds) {
-                                  const staffMem = activeStaffList.find(s => s.staff_id === sId);
+                                for (const row of rows) {
+                                  if (!row.staffId) continue;
+                                  
+                                  const staffMem = activeStaffList.find(s => s.staff_id === row.staffId);
                                   if (staffMem) {
                                     const id = `EDR-${Math.floor(100000 + Math.random() * 900000)}`;
                                     newAssignments.push({
@@ -6280,7 +6368,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       staff_name: staffMem.name,
                                       speciality: d, // Deliverable Name
                                       assigned_date: new Date().toISOString().split('T')[0],
-                                      target_finish_date: tDate,
+                                      target_finish_date: wfTargetDeliveryDate, // Target Delivery Date is lead-wide
                                       status: 'Assigned',
                                       created_at: new Date().toISOString()
                                     });
@@ -6296,7 +6384,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 if (insertError) throw insertError;
                               }
 
-                              // 3. Update production table with primary assigned editors details
+                              // 3. Update production table with primary assigned editors details and target delivery date
                               const uniqueStaffNames = Array.from(new Set(newAssignments.map(a => a.staff_name)));
                               const primaryEditor = uniqueStaffNames[0] || 'Unassigned';
                               const assignedStaffJoined = uniqueStaffNames.join(', ');
@@ -6313,7 +6401,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 editing_status: 'Editor Assigned',
                                 production_status: 'Editor Assigned',
                                 production_role: rolesJoined,
-                                assigned_role: rolesJoined
+                                assigned_role: rolesJoined,
+                                target_delivery_date: wfTargetDeliveryDate
                               } as any);
 
                               // Refresh page data
@@ -6345,9 +6434,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               });
 
                               // Setup raw details for WhatsApp share
-                              const rf = rawFootage.find(f => f.tracking_id === activeWorkflowProd.tracking_id || f.order_id === activeWorkflowProd.tracking_id);
-                              const orderObj = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === activeWorkflowProd.production_id.replace('PRD-', ''));
-                              const leadObj = leadsData?.find(l => l.lead_id === activeWorkflowProd.tracking_id || l.lead_id === orderObj?.lead_id);
+                              const { order: orderObj, lead: leadObj } = resolveOrderAndLead(activeWorkflowProd);
                               const opObj = operations?.find(o => o.order_id === orderObj?.order_id || o.order_id === activeWorkflowProd.tracking_id);
 
                               setWhatsappShareData({

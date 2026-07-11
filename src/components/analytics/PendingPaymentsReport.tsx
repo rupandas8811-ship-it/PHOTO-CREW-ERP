@@ -34,6 +34,10 @@ export const PendingPaymentsReport: React.FC = () => {
   const [paymentModalRecord, setPaymentModalRecord] = useState<any>(null);
   const [paymentAmount, setPaymentAmount] = useState<number | ''>( '');
   const [paymentNotes, setPaymentNotes] = useState('');
+  const [transactionIdInput, setTransactionIdInput] = useState('');
+  const [paymentMode, setPaymentMode] = useState('UPI');
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [viewDetailsRecord, setViewDetailsRecord] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [updateSuccessMsg, setUpdateSuccessMsg] = useState('');
   
@@ -168,12 +172,8 @@ export const PendingPaymentsReport: React.FC = () => {
       const explicitExclusions = ['New Lead', 'Contacted', 'Follow-up', 'Follow Up', 'Quotation Sent', 'Negotiation', 'Lost', 'Cancelled', 'Lost Lead'];
       if (explicitExclusions.includes(rec.currentProjectStatus)) return false;
 
-      // REQUIREMENT: Only show if balance_due > 0 OR payment_status = 'Pending'
-      // Automatically remove if balance_due = 0 AND payment_status = 'Fully Paid'
-      const hasBalance = rec.remainingAmount > 0;
-      const isPending = rec.paymentStatus === 'Pending' || rec.paymentStatus === 'Partial';
-      
-      return hasBalance || isPending;
+      // REQUIREMENT: Keep all confirmed/post-sales leads visible so users can always view the payment history.
+      return true;
     });
   }, [leads, orders, payments]);
 
@@ -253,6 +253,7 @@ export const PendingPaymentsReport: React.FC = () => {
       if (paymentStatusFilter !== 'All') {
         if (paymentStatusFilter === 'Pending' && rec.paymentStatus !== 'Pending') return false;
         if (paymentStatusFilter === 'Partial' && rec.paymentStatus !== 'Partial') return false;
+        if (paymentStatusFilter === 'Fully Paid' && rec.paymentStatus !== 'Fully Paid') return false;
       }
 
       // Card Click Filter (interactive filter feedback)
@@ -709,9 +710,10 @@ export const PendingPaymentsReport: React.FC = () => {
               onChange={(e) => setPaymentStatusFilter(e.target.value)}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-bold"
             >
-              <option value="All">All Oustanding</option>
-              <option value="Pending">Pending Only</option>
-              <option value="Partial">Partial Only</option>
+              <option value="All">All Statuses</option>
+              <option value="Pending">Pending Payment Only</option>
+              <option value="Partial">Partially Paid Only</option>
+              <option value="Fully Paid">Fully Paid Only</option>
             </select>
           </div>
 
@@ -772,13 +774,19 @@ export const PendingPaymentsReport: React.FC = () => {
                     </div>
                     <div className="text-right">
                       <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-widest block">Payment Status</span>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
-                        rec.paymentStatus === 'Partial' 
-                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' 
-                          : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                      }`}>
-                        {rec.paymentStatus}
-                      </span>
+                      {rec.remainingAmount <= 0 ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          🟢 Fully Paid
+                        </span>
+                      ) : rec.totalPaidAmount > 0 ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                          🟡 Partially Paid
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                          🟠 Pending Payment
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -825,19 +833,30 @@ export const PendingPaymentsReport: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="border-t border-zinc-900/60 pt-3">
+                  <div className="border-t border-zinc-900/60 pt-3 flex gap-2">
                     <button 
                       onClick={() => {
                         setPaymentModalRecord(rec);
                         setPaymentAmount('');
+                        setTransactionIdInput('');
+                        setPaymentMode('UPI');
                         setPaymentNotes('');
                         setModalSuccessMsg('');
                         setModalErrorMsg('');
                         setShowPaymentModal(true);
                       }}
-                      className="w-full py-2 bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/20 text-emerald-400 rounded-xl transition font-black text-[10px] uppercase tracking-wider font-mono cursor-pointer"
+                      className="flex-1 py-2 bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/20 text-emerald-400 rounded-xl transition font-black text-[10px] uppercase tracking-wider font-mono cursor-pointer text-center"
                     >
-                      Update Payment
+                      Update
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setViewDetailsRecord(rec);
+                        setShowDetailsModal(true);
+                      }}
+                      className="flex-1 py-2 bg-blue-500/10 hover:bg-blue-500/25 border border-blue-500/20 text-blue-400 rounded-xl transition font-black text-[10px] uppercase tracking-wider font-mono cursor-pointer text-center"
+                    >
+                      Details
                     </button>
                   </div>
                 </div>
@@ -946,13 +965,17 @@ export const PendingPaymentsReport: React.FC = () => {
 
                     {/* Payment Status Label */}
                     <td className="px-4 py-4 text-xs text-center">
-                      {rec.paymentStatus === 'Partial' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-405 border border-amber-500/20">
-                          Partial
+                      {rec.remainingAmount <= 0 ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          🟢 Fully Paid
+                        </span>
+                      ) : rec.totalPaidAmount > 0 ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                          🟡 Partially Paid
                         </span>
                       ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-500/10 text-rose-405 border border-rose-500/20">
-                          Pending
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                          🟠 Pending Payment
                         </span>
                       )}
                     </td>
@@ -966,19 +989,32 @@ export const PendingPaymentsReport: React.FC = () => {
                     
                     {/* Actions */}
                     <td className="px-4 py-4 text-xs text-right">
-                      <button 
-                        onClick={() => {
-                          setPaymentModalRecord(rec);
-                          setPaymentAmount('');
-                          setPaymentNotes('');
-                          setModalSuccessMsg('');
-                          setModalErrorMsg('');
-                          setShowPaymentModal(true);
-                        }}
-                        className="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/20 text-emerald-400 rounded transition font-bold text-[10px] uppercase tracking-wider cursor-pointer"
-                      >
-                        Update
-                      </button>
+                      <div className="flex justify-end gap-2">
+                        <button 
+                          onClick={() => {
+                            setPaymentModalRecord(rec);
+                            setPaymentAmount('');
+                            setTransactionIdInput('');
+                            setPaymentMode('UPI');
+                            setPaymentNotes('');
+                            setModalSuccessMsg('');
+                            setModalErrorMsg('');
+                            setShowPaymentModal(true);
+                          }}
+                          className="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/20 text-emerald-400 rounded transition font-bold text-[10px] uppercase tracking-wider cursor-pointer"
+                        >
+                          Update
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setViewDetailsRecord(rec);
+                            setShowDetailsModal(true);
+                          }}
+                          className="px-2.5 py-1.5 bg-blue-500/10 hover:bg-blue-500/25 border border-blue-500/20 text-blue-400 rounded transition font-bold text-[10px] uppercase tracking-wider cursor-pointer"
+                        >
+                          Details
+                        </button>
+                      </div>
                     </td>
 
                   </tr>
@@ -1032,7 +1068,7 @@ export const PendingPaymentsReport: React.FC = () => {
               </div>
             )}
 
-            <div className="p-5 space-y-4">
+            <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
               <div className="space-y-2">
                 <div className="p-3 bg-zinc-900 rounded-lg flex justify-between items-center border border-zinc-850">
                   <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Final Quotation Amount</span>
@@ -1075,10 +1111,35 @@ export const PendingPaymentsReport: React.FC = () => {
                     <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Transaction ID</label>
                     <input
                       type="text"
+                      value={transactionIdInput}
+                      onChange={(e) => setTransactionIdInput(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                      placeholder="e.g. TXN1002345"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Payment Mode</label>
+                    <select
+                      value={paymentMode}
+                      onChange={(e) => setPaymentMode(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-bold"
+                    >
+                      <option value="UPI">UPI / Google Pay / PhonePe</option>
+                      <option value="Bank Transfer">Bank NEFT/IMPS/RTGS</option>
+                      <option value="Cash">Cash payment</option>
+                      <option value="Card">Credit/Debit Card</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Payment Notes</label>
+                    <input
+                      type="text"
                       value={paymentNotes}
                       onChange={(e) => setPaymentNotes(e.target.value)}
                       className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                      placeholder="Enter Transaction ID"
+                      placeholder="e.g. Part payment for reception event"
                     />
                   </div>
                 </>
@@ -1116,7 +1177,15 @@ export const PendingPaymentsReport: React.FC = () => {
 
                   try {
                     setIsSaving(true);
-                    await recordPayment(paymentModalRecord.orderId, amt, new Date().toISOString().split('T')[0], undefined, paymentNotes);
+                    await recordPayment(
+                      paymentModalRecord.orderId, 
+                      amt, 
+                      new Date().toISOString().split('T')[0], 
+                      undefined, 
+                      transactionIdInput,
+                      paymentMode,
+                      paymentNotes
+                    );
                     
                     // Show success message inside popup
                     setModalSuccessMsg('✅ Payment updated successfully.');
@@ -1124,6 +1193,8 @@ export const PendingPaymentsReport: React.FC = () => {
                     
                     // Reset input fields
                     setPaymentAmount('');
+                    setTransactionIdInput('');
+                    setPaymentMode('UPI');
                     setPaymentNotes('');
                     
                     // Auto hide the success message after 2.5 seconds
@@ -1147,6 +1218,197 @@ export const PendingPaymentsReport: React.FC = () => {
           </motion.div>
         </div>
       )}
+
+      {showDetailsModal && viewDetailsRecord && (() => {
+        const historyKey = `payment_history_${viewDetailsRecord.orderId}`;
+        const existingHistoryStr = localStorage.getItem(historyKey);
+        let historyList: any[] = [];
+        if (existingHistoryStr) {
+          try {
+            historyList = JSON.parse(existingHistoryStr);
+          } catch (e) {
+            console.error("Failed to parse local storage payment history", e);
+          }
+        } else {
+          // Fallback prepopulated history if none exists but total paid is greater than zero
+          const targetPayment = payments.find((p) => p.order_id === viewDetailsRecord.orderId);
+          const adv = targetPayment ? targetPayment.advance_received : (viewDetailsRecord.order ? viewDetailsRecord.order.advance_received : 0);
+          const finalRecv = targetPayment ? targetPayment.final_payment_received : 0;
+          
+          if (adv > 0) {
+            historyList.push({
+              date: targetPayment?.payment_date || new Date().toISOString(),
+              amount: adv,
+              transactionId: 'ADVANCE-INITIAL',
+              paymentMode: 'Bank Transfer',
+              updatedBy: 'System',
+              notes: 'Initial advance payment'
+            });
+          }
+          if (finalRecv > 0) {
+            historyList.push({
+              date: targetPayment?.payment_date || new Date().toISOString(),
+              amount: finalRecv,
+              transactionId: targetPayment?.transaction_id || 'FINAL-INITIAL',
+              paymentMode: 'Bank Transfer',
+              updatedBy: 'System',
+              notes: 'Recorded final payment'
+            });
+          }
+        }
+
+        // Compute live values from the record
+        const order = orders.find(o => o.order_id === viewDetailsRecord.orderId);
+        const paymentObj = order ? payments.find(p => p.order_id === order.order_id) : null;
+        
+        const finalQuotation = order ? order.quotation_amount : viewDetailsRecord.finalPackageAmount;
+        const totalPaid = paymentObj ? ((paymentObj.advance_received || 0) + (paymentObj.final_payment_received || 0)) : viewDetailsRecord.totalPaidAmount;
+        const remaining = paymentObj ? paymentObj.balance_due : (order ? order.balance_amount : (finalQuotation - totalPaid));
+        
+        let statusText = 'Pending Payment';
+        let statusColor = 'text-rose-400 bg-rose-500/10 border-rose-500/20';
+        if (remaining <= 0) {
+          statusText = 'Fully Paid';
+          statusColor = 'text-emerald-450 bg-emerald-500/10 border-emerald-500/20';
+        } else if (totalPaid > 0) {
+          statusText = 'Partially Paid';
+          statusColor = 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+        }
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden"
+            >
+              <div className="flex justify-between items-center p-4 border-b border-zinc-850">
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-blue-500" />
+                    Payment Details & History
+                  </h3>
+                  <p className="text-[10px] text-zinc-400 mt-1 uppercase font-mono tracking-widest">
+                    Order: {viewDetailsRecord.orderId} • {viewDetailsRecord.customerName}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setShowDetailsModal(false);
+                    setViewDetailsRecord(null);
+                  }}
+                  className="p-1 px-2 hover:bg-zinc-900 rounded text-zinc-400 uppercase font-mono text-[10px]"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="p-5 space-y-6 max-h-[60vh] overflow-y-auto">
+                {/* Summary section */}
+                <div>
+                  <h4 className="text-[10px] text-zinc-550 font-bold uppercase tracking-wider mb-2.5 font-mono">Payment Summary</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3 bg-zinc-900 rounded-xl border border-zinc-850">
+                      <span className="block text-[9px] text-zinc-400 uppercase font-mono">Quotation</span>
+                      <span className="text-sm font-black text-white font-mono mt-0.5 block">
+                        {formatPercentageOrINR(finalQuotation)}
+                      </span>
+                    </div>
+                    <div className="p-3 bg-zinc-900 rounded-xl border border-zinc-850">
+                      <span className="block text-[9px] text-zinc-400 uppercase font-mono">Total Paid</span>
+                      <span className="text-sm font-black text-emerald-400 font-mono mt-0.5 block">
+                        {formatPercentageOrINR(totalPaid)}
+                      </span>
+                    </div>
+                    <div className="p-3 bg-zinc-900 rounded-xl border border-zinc-850">
+                      <span className="block text-[9px] text-zinc-400 uppercase font-mono">Remaining</span>
+                      <span className={`text-sm font-black font-mono mt-0.5 block ${remaining <= 0 ? 'text-emerald-400' : 'text-rose-450'}`}>
+                        {formatPercentageOrINR(remaining)}
+                      </span>
+                    </div>
+                    <div className={`p-3 rounded-xl border flex flex-col justify-center ${statusColor}`}>
+                      <span className="block text-[9px] uppercase font-mono opacity-80">Status</span>
+                      <span className="text-xs font-bold mt-0.5 block uppercase tracking-wider">
+                        {statusText}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* History table */}
+                <div>
+                  <h4 className="text-[10px] text-zinc-550 font-bold uppercase tracking-wider mb-2.5 font-mono">Payment History Table</h4>
+                  <div className="overflow-hidden rounded-xl border border-zinc-850 bg-zinc-900/30">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-zinc-900/55 border-b border-zinc-850 text-zinc-400 font-mono text-[9px] uppercase tracking-wider">
+                            <th className="p-3 pl-4">Date & Time</th>
+                            <th className="p-3 text-right">Amount</th>
+                            <th className="p-3">Transaction ID</th>
+                            <th className="p-3">Method</th>
+                            <th className="p-3">Updated By</th>
+                            <th className="p-3 pr-4">Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-900/50">
+                          {historyList.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="text-center py-6 text-zinc-500 font-mono text-[10px]">
+                                No payment history records found.
+                              </td>
+                            </tr>
+                          ) : (
+                            historyList.map((h, index) => {
+                              // Date presentation
+                              let displayDate = h.date;
+                              try {
+                                displayDate = new Date(h.date).toLocaleString('en-IN', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: true
+                                });
+                              } catch(e) {}
+                              
+                              return (
+                                <tr key={index} className="hover:bg-zinc-900/20 text-zinc-300">
+                                  <td className="p-3 pl-4 font-mono text-[10px]">{displayDate}</td>
+                                  <td className="p-3 text-right font-mono font-bold text-emerald-400">
+                                    {formatPercentageOrINR(h.amount)}
+                                  </td>
+                                  <td className="p-3 font-mono text-[10px]">{h.transactionId || h.txnId || 'N/A'}</td>
+                                  <td className="p-3 font-medium text-[10px]">{h.paymentMode || 'N/A'}</td>
+                                  <td className="p-3 text-zinc-400 text-[10px]">{h.updatedBy || 'N/A'}</td>
+                                  <td className="p-3 pr-4 text-zinc-400 text-[10px] max-w-[150px] truncate" title={h.notes}>{h.notes || '-'}</td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 border-t border-zinc-850 bg-zinc-900/50 flex justify-end">
+                <button
+                  onClick={() => {
+                    setShowDetailsModal(false);
+                    setViewDetailsRecord(null);
+                  }}
+                  className="px-5 py-2 rounded-xl text-xs font-bold text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-750 transition cursor-pointer"
+                >
+                  Close History
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        );
+      })()}
 
     </div>
   );

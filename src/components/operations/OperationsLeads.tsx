@@ -546,8 +546,38 @@ export const OperationsLeads: React.FC = () => {
       return '';
     };
 
+    // Extracting all additional details requested
+    const vehicleDetails = (ord as any).vehicle_details || lead?.vehicle_details || (lead as any)?.Vehicle_Details || 'N/A';
+    const hotelDetails = (ord as any).hotel_details || lead?.hotel_details || (lead as any)?.Hotel_Details || 'N/A';
+    const contactPersonName = (ord as any).contact_person_name || lead?.contact_person_name || (lead as any)?.Contact_Person_Name || 'N/A';
+    const contactPersonMobile = (ord as any).contact_person_mobile || lead?.contact_person_mobile || (lead as any)?.Contact_Person_Mobile || 'N/A';
+    const additionalShooters = (ord as any).remarks || lead?.remarks || (lead as any)?.remarks || 'N/A';
+    
+    const selectedPackages = ord.package_name || lead?.Select_Package_Option || 'N/A';
+    const deliverables = ord.deliverables_description || lead?.deliverables_description || 'N/A';
+    const projectLink = typeof window !== 'undefined' ? `${window.location.origin}/?order=${ord.order_id}` : `https://photocrew-erp.com/?order=${ord.order_id}`;
+
+    // Collect all assigned staff for this order and their roles
+    let assigneesText = '';
+    let finalAssignList: any[] = [];
+    if (finalAssignments) {
+      finalAssignList = finalAssignments;
+    } else {
+      finalAssignList = staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id) : [];
+    }
+    
+    if (finalAssignList.length === 0) {
+      assigneesText = '• None';
+    } else {
+      const uniqueAssignees = Array.from(new Map(finalAssignList.map(a => [a.staff_name + '|' + a.staff_role, a])).values());
+      assigneesText = uniqueAssignees.map(a => {
+        const mobile = getStaffMobileByName(a.staff_name);
+        return `• ${a.staff_role}: ${a.staff_name}${mobile ? ` (${mobile})` : ''}`;
+      }).join('\n');
+    }
+
     let text = `Hello ${staffName},\n\nYou have been assigned to the following project.\n\n`;
-    text += `Customer Details\n\n`;
+    text += `Customer Details\n`;
     text += `- Customer Name: ${clientName}\n`;
     text += `- Customer Mobile Number: ${clientContact}\n`;
     text += `- Customer WhatsApp Number: ${clientWhatsapp}\n\n`;
@@ -572,24 +602,7 @@ export const OperationsLeads: React.FC = () => {
       const venue = lead?.event_location || ord.event_location || 'N/A';
       const googleMapsLink = lead?.google_maps_link || 'N/A';
 
-      // Collect all assigned staff for this order
-      let assignedStaffList: string[] = [];
-      if (modalEventAllocations) {
-        Object.values(modalEventAllocations).forEach((alloc: any) => {
-          if (alloc.staff) {
-            alloc.staff.forEach((st: any) => {
-              if (st.staff_name) assignedStaffList.push(st.staff_name);
-            });
-          }
-        });
-      } else if (finalAssignments) {
-        assignedStaffList = finalAssignments.map(a => a.staff_name);
-      } else {
-        assignedStaffList = getAssignedStaffNamesForOrder(ord);
-      }
-      assignedStaffList = Array.from(new Set(assignedStaffList));
-
-      text += `Event Details\n\n`;
+      text += `Event Details\n`;
       text += `- Event Name: ${eventName}\n`;
       text += `- Event Date: ${eventDate}\n`;
       text += `- Event Start Time: ${eventTime}\n`;
@@ -600,20 +613,25 @@ export const OperationsLeads: React.FC = () => {
       text += `- Staff Pax: ${staffPax}\n\n`;
       text += `------------------------------------\n\n`;
 
-      text += `Location Details\n\n`;
+      text += `Location Details\n`;
       text += `- Venue Name / Event Address: ${venue}\n`;
       text += `- Google Maps Location Link: ${googleMapsLink}\n\n`;
       text += `------------------------------------\n\n`;
 
-      text += `Assigned Team\n\n`;
-      if (assignedStaffList.length === 0) {
-        text += `None\n`;
-      } else {
-        assignedStaffList.forEach(name => {
-          const mobile = getStaffMobileByName(name);
-          text += `• ${name}${mobile ? ` - ${mobile}` : ''}\n`;
-        });
+      text += `Deliverables & Extra Details\n`;
+      text += `- Selected Packages & Deliverables: ${selectedPackages}\n`;
+      if (deliverables && deliverables !== 'N/A') {
+        text += `- Deliverables Description: ${deliverables}\n`;
       }
+      text += `- Additional Shooters / Remarks / Requirement: ${additionalShooters}\n`;
+      text += `- Vehicle Details: ${vehicleDetails}\n`;
+      text += `- Hotel Details: ${hotelDetails}\n`;
+      text += `- Contact Person Name & Mobile: ${contactPersonName} - ${contactPersonMobile}\n`;
+      text += `- ERP Project Link: ${projectLink}\n\n`;
+      text += `------------------------------------\n\n`;
+
+      text += `Assigned Team (Roles & Mobiles)\n`;
+      text += `${assigneesText}\n`;
     } else {
       // Multiple events case: generate event-wise details
       // Filter events to only the ones assigned to the current staff member (if specified)
@@ -631,6 +649,22 @@ export const OperationsLeads: React.FC = () => {
       // Show their assigned events by default, but if none, show all events.
       const targetEvents = assignedEvents.length > 0 ? assignedEvents : eventsList;
 
+      text += `Deliverables & Extra Details\n`;
+      text += `- Selected Packages & Deliverables: ${selectedPackages}\n`;
+      if (deliverables && deliverables !== 'N/A') {
+        text += `- Deliverables Description: ${deliverables}\n`;
+      }
+      text += `- Additional Shooters / Remarks / Requirement: ${additionalShooters}\n`;
+      text += `- Vehicle Details: ${vehicleDetails}\n`;
+      text += `- Hotel Details: ${hotelDetails}\n`;
+      text += `- Contact Person Name & Mobile: ${contactPersonName} - ${contactPersonMobile}\n`;
+      text += `- ERP Project Link: ${projectLink}\n\n`;
+      text += `------------------------------------\n\n`;
+
+      text += `Assigned Team (Roles & Mobiles)\n`;
+      text += `${assigneesText}\n\n`;
+      text += `------------------------------------\n\n`;
+
       targetEvents.forEach((ev: any, idx: number) => {
         const evId = ev.id || '';
         const eventName = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');
@@ -645,18 +679,18 @@ export const OperationsLeads: React.FC = () => {
         const googleMapsLink = ev.google_maps_link || lead?.google_maps_link || 'N/A';
 
         // Get assigned team for this specific event
-        let assignedStaffList: string[] = [];
+        let eventStaffList: string[] = [];
         if (modalEventAllocations && evId) {
           const alloc = modalEventAllocations[evId];
           if (alloc?.staff) {
-            assignedStaffList = alloc.staff.map((st: any) => st.staff_name);
+            eventStaffList = alloc.staff.map((st: any) => st.staff_name);
           }
         } else {
-          assignedStaffList = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim()) : [];
+          eventStaffList = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim()) : [];
         }
-        assignedStaffList = Array.from(new Set(assignedStaffList.filter(Boolean)));
+        eventStaffList = Array.from(new Set(eventStaffList.filter(Boolean)));
 
-        text += `Event Details (Event ${idx + 1}: ${eventName})\n\n`;
+        text += `Event Details (Event ${idx + 1}: ${eventName})\n`;
         text += `- Event Name: ${eventName}\n`;
         text += `- Event Date: ${eventDate}\n`;
         text += `- Event Start Time: ${eventTime}\n`;
@@ -667,16 +701,16 @@ export const OperationsLeads: React.FC = () => {
         text += `- Staff Pax: ${staffPax}\n\n`;
         text += `------------------------------------\n\n`;
 
-        text += `Location Details\n\n`;
+        text += `Location Details\n`;
         text += `- Venue Name / Event Address: ${venue}\n`;
         text += `- Google Maps Location Link: ${googleMapsLink}\n\n`;
         text += `------------------------------------\n\n`;
 
-        text += `Assigned Team\n\n`;
-        if (assignedStaffList.length === 0) {
-          text += `None\n`;
+        text += `Assigned Event Team\n`;
+        if (eventStaffList.length === 0) {
+          text += `• None\n`;
         } else {
-          assignedStaffList.forEach(name => {
+          eventStaffList.forEach(name => {
             const mobile = getStaffMobileByName(name);
             text += `• ${name}${mobile ? ` - ${mobile}` : ''}\n`;
           });
