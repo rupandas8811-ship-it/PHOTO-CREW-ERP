@@ -761,19 +761,13 @@ export const OperationsLeads: React.FC = () => {
     const targetLead = leads?.find(l => l.lead_id === order.lead_id);
     
     // Calculate expected roles for loading
-    const targetLeadQuotations = quotations?.filter(q => q.lead_id === targetLead?.lead_id) || [];
-    targetLeadQuotations.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    const targetLatestQuote = targetLeadQuotations[0];
-    let targetEditableInclusions: Record<string, string[]> = {};
-    if (targetLatestQuote) {
-       if (targetLatestQuote.editableInclusions) {
-          targetEditableInclusions = targetLatestQuote.editableInclusions;
-       } else if (targetLatestQuote.terms_conditions && targetLatestQuote.terms_conditions.includes('METADATA:')) {
-          try {
-             const meta = JSON.parse(targetLatestQuote.terms_conditions.split('METADATA:')[1]);
-             if (meta.editableInclusions) targetEditableInclusions = meta.editableInclusions;
-          } catch (e) {}
-       }
+    let teamMembersConfig: { event_name: string; team_members: string[] }[] = [];
+    try {
+      if (targetLead?.Team_Members) {
+        teamMembersConfig = typeof targetLead.Team_Members === 'string' ? JSON.parse(targetLead.Team_Members) : targetLead.Team_Members;
+      }
+    } catch (e) {
+      console.error("Failed to parse Team_Members:", e);
     }
 
     const initialAllocations: Record<string, any> = {};
@@ -782,16 +776,13 @@ export const OperationsLeads: React.FC = () => {
         const evId = ev.id || `EV-N/A-${index}`;
         const staffList: any[] = [];
         
-        const pkgId = targetLead.package_id || targetLead.selected_package_id || targetLatestQuote?.package_id || '';
-        const eventKey = `${pkgId}_${ev.id}`;
-        const nameKey = `${pkgId}_${ev.event_name || ev.event_type || 'Unnamed Event'}`;
-        let eventRoles = targetEditableInclusions[eventKey] || targetEditableInclusions[nameKey] || targetEditableInclusions[pkgId];
+        const evName = ev.event_name || ev.event_type || 'Unnamed Event';
+        const matchedEventConfig = teamMembersConfig.find((tm: any) => tm.event_name === evName);
+        let eventRoles = matchedEventConfig ? matchedEventConfig.team_members : [];
         if (!eventRoles || eventRoles.length === 0) {
-          const matchingKey = Object.keys(targetEditableInclusions).find(k => k.includes(ev.id));
-          if (matchingKey) eventRoles = targetEditableInclusions[matchingKey];
-        }
-        if (!eventRoles || eventRoles.length === 0) {
-          if (Object.keys(targetEditableInclusions).length === 1) { eventRoles = Object.values(targetEditableInclusions)[0]; }
+          if (teamMembersConfig.length === 1) {
+            eventRoles = teamMembersConfig[0].team_members;
+          }
         }
         const includedRoles = eventRoles?.length > 0 ? eventRoles : [];
 
@@ -926,35 +917,26 @@ export const OperationsLeads: React.FC = () => {
 
     setAssignValidationError(null);
     if (parentLeadInstance?.events) {
-       const targetLeadQuotations = quotations?.filter(q => q.lead_id === parentLeadInstance.lead_id) || [];
-       targetLeadQuotations.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-       const targetLatestQuote = targetLeadQuotations[0];
-       let targetEditableInclusions: Record<string, string[]> = {};
-       if (targetLatestQuote) {
-          if (targetLatestQuote.editableInclusions) {
-             targetEditableInclusions = targetLatestQuote.editableInclusions;
-          } else if (targetLatestQuote.terms_conditions && targetLatestQuote.terms_conditions.includes('METADATA:')) {
-             try {
-                const meta = JSON.parse(targetLatestQuote.terms_conditions.split('METADATA:')[1]);
-                if (meta.editableInclusions) targetEditableInclusions = meta.editableInclusions;
-             } catch (e) {}
-          }
+       let teamMembersConfig: { event_name: string; team_members: string[] }[] = [];
+       try {
+         if (parentLeadInstance?.Team_Members) {
+           teamMembersConfig = typeof parentLeadInstance.Team_Members === 'string' ? JSON.parse(parentLeadInstance.Team_Members) : parentLeadInstance.Team_Members;
+         }
+       } catch (e) {
+         console.error("Failed to parse Team_Members:", e);
        }
 
        for (const ev of parentLeadInstance.events) {
           const evId = ev.id || '';
           if (!evId) continue;
           
-          const pkgId = parentLeadInstance.package_id || parentLeadInstance.selected_package_id || targetLatestQuote?.package_id || '';
-          const eventKey = `${pkgId}_${ev.id}`;
-          const nameKey = `${pkgId}_${ev.event_name || ev.event_type || 'Unnamed Event'}`;
-          let eventRoles = targetEditableInclusions[eventKey] || targetEditableInclusions[nameKey] || targetEditableInclusions[pkgId];
+          const evName = ev.event_name || ev.event_type || 'Unnamed Event';
+          const matchedEventConfig = teamMembersConfig.find((tm: any) => tm.event_name === evName);
+          let eventRoles = matchedEventConfig ? matchedEventConfig.team_members : [];
           if (!eventRoles || eventRoles.length === 0) {
-            const matchingKey = Object.keys(targetEditableInclusions).find(k => k.includes(ev.id));
-            if (matchingKey) eventRoles = targetEditableInclusions[matchingKey];
-          }
-          if (!eventRoles || eventRoles.length === 0) {
-            if (Object.keys(targetEditableInclusions).length === 1) { eventRoles = Object.values(targetEditableInclusions)[0]; }
+            if (teamMembersConfig.length === 1) {
+              eventRoles = teamMembersConfig[0].team_members;
+            }
           }
           const includedRoles = eventRoles?.length > 0 ? eventRoles : [];
           
@@ -1882,19 +1864,13 @@ export const OperationsLeads: React.FC = () => {
 
                 {/* Multiple Events Iteration */}
                 {(() => {
-                  const targetLeadQuotations = quotations?.filter(q => q.lead_id === parentLeadInstance?.lead_id) || [];
-                  targetLeadQuotations.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-                  const targetLatestQuote = targetLeadQuotations[0];
-                  let targetEditableInclusions: Record<string, string[]> = {};
-                  if (targetLatestQuote) {
-                     if (targetLatestQuote.editableInclusions) {
-                        targetEditableInclusions = targetLatestQuote.editableInclusions;
-                     } else if (targetLatestQuote.terms_conditions && targetLatestQuote.terms_conditions.includes('METADATA:')) {
-                        try {
-                           const meta = JSON.parse(targetLatestQuote.terms_conditions.split('METADATA:')[1]);
-                           if (meta.editableInclusions) targetEditableInclusions = meta.editableInclusions;
-                        } catch (e) {}
-                     }
+                  let teamMembersConfig: { event_name: string; team_members: string[] }[] = [];
+                  try {
+                    if (parentLeadInstance?.Team_Members) {
+                      teamMembersConfig = typeof parentLeadInstance.Team_Members === 'string' ? JSON.parse(parentLeadInstance.Team_Members) : parentLeadInstance.Team_Members;
+                    }
+                  } catch (e) {
+                    console.error("Failed to parse Team_Members:", e);
                   }
 
                   return parentLeadInstance?.events && parentLeadInstance.events.map((ev, index) => {
@@ -1902,21 +1878,23 @@ export const OperationsLeads: React.FC = () => {
                     const allocation = eventAllocations[evId] || { staff: [] };
                     const allocStaff = allocation.staff || [];
                     
-                    const pkgId = parentLeadInstance?.package_id || parentLeadInstance?.selected_package_id || targetLatestQuote?.package_id || '';
-                    const eventKey = `${pkgId}_${ev.id}`;
-                    const nameKey = `${pkgId}_${ev.event_name || ev.event_type || 'Unnamed Event'}`;
-
-                    let eventRoles = targetEditableInclusions[eventKey] || targetEditableInclusions[nameKey] || targetEditableInclusions[pkgId];
-
+                    const evName = ev.event_name || ev.event_type || 'Unnamed Event';
+                    const matchedEventConfig = teamMembersConfig.find((tm: any) => tm.event_name === evName);
+                    let eventRoles = matchedEventConfig ? matchedEventConfig.team_members : [];
                     if (!eventRoles || eventRoles.length === 0) {
-                      const matchingKey = Object.keys(targetEditableInclusions).find(k => k.includes(ev.id));
-                      if (matchingKey) eventRoles = targetEditableInclusions[matchingKey];
+                      if (teamMembersConfig.length === 1) {
+                        eventRoles = teamMembersConfig[0].team_members;
+                      }
                     }
-
-                    if (!eventRoles || eventRoles.length === 0) {
-                      if (Object.keys(targetEditableInclusions).length === 1) { eventRoles = Object.values(targetEditableInclusions)[0]; }
+                    
+                    let loadError = null;
+                    if (!parentLeadInstance?.Team_Members) {
+                       loadError = "Database query failed: Team_Members field is empty or missing in the lead record.";
+                    } else if (teamMembersConfig.length === 0) {
+                       loadError = "Event mapping failed: Could not parse Team Members data.";
+                    } else if (!eventRoles || eventRoles.length === 0) {
+                       loadError = `Invalid Event ID: No Team Members found matching event "${evName}".`;
                     }
-
                     const includedRoles = eventRoles?.length > 0 ? eventRoles : [];
 
                     const isCollapsed = collapsedAssignEvents[evId] === undefined ? index !== 0 : collapsedAssignEvents[evId];
@@ -2010,7 +1988,14 @@ export const OperationsLeads: React.FC = () => {
                         <div className="grid grid-cols-1 gap-3">
                           {includedRoles.length === 0 && (
                             <div className="text-center py-6 text-zinc-500 text-xs italic font-mono bg-zinc-900/10 border border-dashed border-zinc-900 rounded-xl">
-                              No Team Members Included found for this event.
+                              {loadError ? (
+                                <div className="text-red-400 space-y-1">
+                                  <div>❌ Failed to load Team Members Included.</div>
+                                  <div className="text-[10px]">Reason: {loadError}</div>
+                                </div>
+                              ) : (
+                                "No Team Members Included found for this event."
+                              )}
                             </div>
                           )}
                           {includedRoles.map((roleStr, roleIdx) => {
