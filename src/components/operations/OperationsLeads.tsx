@@ -517,125 +517,178 @@ export const OperationsLeads: React.FC = () => {
     }
     
     return staffDetailsList;
-  };
-
-  // Helper to generate personalized WhatsApp message for a staff member
+  };  // Helper to generate personalized WhatsApp message for a staff member
   const generateWhatsAppMessageForStaff = (ord: Order, staffName: string, modalEventAllocations?: any, modalLead?: any, finalAssignments?: any[]) => {
     const lead = modalLead || leads.find(l => l.lead_id === ord.lead_id);
     
-    const clientName = ord.customer_name;
+    const clientName = ord.customer_name || 'N/A';
     const clientContact = ord.mobile || (lead ? lead.mobile : 'N/A');
     const clientWhatsapp = lead?.whatsapp_number || 'N/A';
 
-    let text = `Hello ${staffName},\n\nYou have been assigned to the following event.\n\n`;
-    text += `Customer Name:\n${clientName}\n\n`;
-    text += `Customer Mobile:\n${clientContact}\n\n`;
-    text += `Customer WhatsApp:\n${clientWhatsapp}\n\n`;
-
-    let assignedEvents: any[] = [];
-    if (modalEventAllocations && lead?.events) {
-       Object.keys(modalEventAllocations).forEach(evId => {
-         const alloc = modalEventAllocations[evId];
-         if (alloc.staff && alloc.staff.some((s: any) => s.staff_name === staffName)) {
-            const matchedEv = lead.events.find((e: any) => e.id === evId);
-            if (matchedEv) {
-               const roles = alloc.staff.filter((s: any) => s.staff_name === staffName).map((s: any) => s.staff_role);
-               assignedEvents.push({ ...matchedEv, alloc, roles });
-            }
-         }
-       });
-    } else if (lead?.events) {
-       assignedEvents = lead.events.filter((ev: any) => {
-         const names = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
-         return names.includes(staffName.toLowerCase());
-       }).map((ev: any) => {
-         let fallbackRoles = ['Crew'];
-         const history = leadStaffAssignmentHistory?.filter((h: any) => h.order_id === ord.order_id);
-         if (history && history.length > 0) {
-            const myRoles = history.find((h: any) => h.assigned_staff === staffName);
-            if (myRoles && myRoles.assigned_roles) {
-               fallbackRoles = myRoles.assigned_roles.split(',').map((r: string) => r.trim());
-            }
-         }
-         return { ...ev, roles: fallbackRoles }; 
-       });
-    }
-
-    if (assignedEvents.length === 0) {
-       const shootType = ord.shoot_type || (lead ? lead.shoot_type : 'N/A');
-       const eventName = ord.event_type || 'N/A';
-       const eventDate = ord.event_date || 'N/A';
-       const reportingTime = lead?.reporting_time || 'N/A';
-       const eventTime = ord.event_time || 'N/A';
-       const location = lead?.event_location || ord.event_location || 'N/A';
-       const mapsLink = (lead as any)?.google_maps_link || 'N/A';
-       const guestPax = (lead as any)?.guest_pax || 'N/A';
-       const staffPax = (lead as any)?.staff_pax || 'N/A';
-       
-       let assignedRoles = ['Crew'];
-       if (finalAssignments) {
-          assignedRoles = Array.from(new Set(finalAssignments.filter(a => a.staff_name === staffName).map(a => a.staff_role)));
-       } else {
-          const history = leadStaffAssignmentHistory?.filter((h: any) => h.order_id === ord.order_id);
-          if (history && history.length > 0) {
-             const myRoles = history.find((h: any) => h.assigned_staff === staffName);
-             if (myRoles && myRoles.assigned_roles) {
-                assignedRoles = myRoles.assigned_roles.split(',').map((r: string) => r.trim());
-             }
+    // Helper to find a staff member's mobile number by name
+    const getStaffMobileByName = (sName: string): string => {
+      if (modalEventAllocations) {
+        for (const evId of Object.keys(modalEventAllocations)) {
+          const alloc = modalEventAllocations[evId];
+          if (alloc.staff) {
+            const found = alloc.staff.find((st: any) => st.staff_name === sName);
+            if (found && found.mobile) return found.mobile;
           }
-       }
+        }
+      }
+      if (finalAssignments) {
+        const found = finalAssignments.find((a: any) => a.staff_name === sName);
+        if (found && found.mobile) return found.mobile;
+      }
+      const globalSt = staff?.find(s => s.name === sName);
+      if (globalSt && globalSt.mobile) return globalSt.mobile;
 
-       text += `Event:\n${eventName}\n\n`;
-       text += `Event Date:\n${eventDate}\n\n`;
-       text += `Reporting Date:\n${lead?.Reporting_date || eventDate || 'N/A'}\n\n`;
-       text += `Reporting Time:\n${reportingTime}\n\n`;
-       text += `Event Start Time:\n${eventTime}\n\n`;
-       text += `Venue:\n${location}\n\n`;
-       text += `Location:\n${mapsLink}\n\n`;
-       text += `Shoot Type:\n${shootType}\n\n`;
-       text += `Guest Pax:\n${guestPax}\n\n`;
-       text += `Staff Pax:\n${staffPax}\n\n`;
-       text += `Assigned Responsibilities:\n\n`;
-       assignedRoles.forEach(r => {
-         text += `• ${r}\n`;
-       });
-       text += `\nPlease report on time.\n\nThank you.`;
-       return text;
+      return '';
+    };
+
+    let text = `Hello ${staffName},\n\nYou have been assigned to the following project.\n\n`;
+    text += `Customer Details\n\n`;
+    text += `- Customer Name: ${clientName}\n`;
+    text += `- Customer Mobile Number: ${clientContact}\n`;
+    text += `- Customer WhatsApp Number: ${clientWhatsapp}\n\n`;
+    text += `------------------------------------\n\n`;
+
+    // Determine if multiple events exist
+    let eventsList: any[] = [];
+    if (lead?.events && lead.events.length > 0) {
+      eventsList = lead.events;
     }
 
-    assignedEvents.forEach((ev, idx) => {
-       const eventName = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');
-       const eventDate = ev.event_date || 'N/A';
-       const reportingDate = ev.reporting_date || (ev.alloc?.reporting_date) || ev.event_date || 'N/A';
-       const reportingTime = ev.reporting_time || (ev.alloc?.reporting_time) || 'N/A';
-       const eventStartTime = ev.event_start_time || 'N/A';
-       const location = ev.event_location || lead?.event_location || 'N/A';
-       const mapsLink = ev.google_maps_link || 'N/A';
-       const shootType = ev.event_shoot_type || 'N/A';
-       const guestPax = ev.guest_pax || 'N/A';
-       const staffPax = ev.staff_pax || 'N/A';
-       
-       let assignedRoles = ev.roles || ['Crew'];
-       assignedRoles = Array.from(new Set(assignedRoles));
+    if (eventsList.length === 0) {
+      // Single/fallback event case
+      const eventName = ord.event_type || 'N/A';
+      const eventDate = ord.event_date || 'N/A';
+      const eventTime = ord.event_time ? convertTo12Hour(ord.event_time) : 'N/A';
+      const reportingDate = lead?.Reporting_date || ord.event_date || 'N/A';
+      const reportingTime = ord.reporting_time ? convertTo12Hour(ord.reporting_time) : 'N/A';
+      const shootType = ord.shoot_type || (lead ? lead.shoot_type : 'N/A');
+      const guestPax = lead?.guest_pax || 'N/A';
+      const staffPax = lead?.staff_pax || 'N/A';
+      const venue = lead?.event_location || ord.event_location || 'N/A';
+      const googleMapsLink = lead?.google_maps_link || 'N/A';
 
-       text += `Event${assignedEvents.length > 1 ? ` ${idx + 1}` : ''}:\n${eventName}\n\n`;
-       text += `Event Date:\n${eventDate}\n\n`;
-       text += `Reporting Date:\n${reportingDate}\n\n`;
-       text += `Reporting Time:\n${reportingTime}\n\n`;
-       text += `Event Start Time:\n${eventStartTime}\n\n`;
-       text += `Venue:\n${location}\n\n`;
-       text += `Location:\n${mapsLink}\n\n`;
-       text += `Shoot Type:\n${shootType}\n\n`;
-       text += `Guest Pax:\n${guestPax}\n\n`;
-       text += `Staff Pax:\n${staffPax}\n\n`;
-       text += `Assigned Responsibilities:\n\n`;
-       assignedRoles.forEach((r) => {
-         text += `• ${r}\n`;
-       });
-       text += `\n`;
-    });
-    
-    text += `Please report on time.\n\nThank you.`;
+      // Collect all assigned staff for this order
+      let assignedStaffList: string[] = [];
+      if (modalEventAllocations) {
+        Object.values(modalEventAllocations).forEach((alloc: any) => {
+          if (alloc.staff) {
+            alloc.staff.forEach((st: any) => {
+              if (st.staff_name) assignedStaffList.push(st.staff_name);
+            });
+          }
+        });
+      } else if (finalAssignments) {
+        assignedStaffList = finalAssignments.map(a => a.staff_name);
+      } else {
+        assignedStaffList = getAssignedStaffNamesForOrder(ord);
+      }
+      assignedStaffList = Array.from(new Set(assignedStaffList));
+
+      text += `Event Details\n\n`;
+      text += `- Event Name: ${eventName}\n`;
+      text += `- Event Date: ${eventDate}\n`;
+      text += `- Event Start Time: ${eventTime}\n`;
+      text += `- Reporting Date: ${reportingDate}\n`;
+      text += `- Reporting Time: ${reportingTime}\n`;
+      text += `- Shoot Type: ${shootType}\n`;
+      text += `- Guest Pax: ${guestPax}\n`;
+      text += `- Staff Pax: ${staffPax}\n\n`;
+      text += `------------------------------------\n\n`;
+
+      text += `Location Details\n\n`;
+      text += `- Venue Name / Event Address: ${venue}\n`;
+      text += `- Google Maps Location Link: ${googleMapsLink}\n\n`;
+      text += `------------------------------------\n\n`;
+
+      text += `Assigned Team\n\n`;
+      if (assignedStaffList.length === 0) {
+        text += `None\n`;
+      } else {
+        assignedStaffList.forEach(name => {
+          const mobile = getStaffMobileByName(name);
+          text += `• ${name}${mobile ? ` - ${mobile}` : ''}\n`;
+        });
+      }
+    } else {
+      // Multiple events case: generate event-wise details
+      // Filter events to only the ones assigned to the current staff member (if specified)
+      const assignedEvents = eventsList.filter((ev: any) => {
+        const evId = ev.id || '';
+        if (modalEventAllocations && evId) {
+          const alloc = modalEventAllocations[evId];
+          return alloc?.staff && alloc.staff.some((st: any) => st.staff_name.toLowerCase() === staffName.toLowerCase());
+        } else {
+          const names = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
+          return names.includes(staffName.toLowerCase());
+        }
+      });
+
+      // Show their assigned events by default, but if none, show all events.
+      const targetEvents = assignedEvents.length > 0 ? assignedEvents : eventsList;
+
+      targetEvents.forEach((ev: any, idx: number) => {
+        const evId = ev.id || '';
+        const eventName = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');
+        const eventDate = ev.event_date || 'N/A';
+        const eventTime = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A';
+        const reportingDate = ev.reporting_date || (modalEventAllocations && evId && modalEventAllocations[evId]?.reporting_date) || ev.event_date || 'N/A';
+        const reportingTime = ev.reporting_time ? convertTo12Hour(ev.reporting_time) : (modalEventAllocations && evId && modalEventAllocations[evId]?.reporting_time) ? convertTo12Hour(modalEventAllocations[evId].reporting_time) : 'N/A';
+        const shootType = ev.event_shoot_type || ev.shoot_type || 'N/A';
+        const guestPax = ev.guest_pax || 'N/A';
+        const staffPax = ev.staff_pax || 'N/A';
+        const venue = ev.event_location || lead?.event_location || 'N/A';
+        const googleMapsLink = ev.google_maps_link || lead?.google_maps_link || 'N/A';
+
+        // Get assigned team for this specific event
+        let assignedStaffList: string[] = [];
+        if (modalEventAllocations && evId) {
+          const alloc = modalEventAllocations[evId];
+          if (alloc?.staff) {
+            assignedStaffList = alloc.staff.map((st: any) => st.staff_name);
+          }
+        } else {
+          assignedStaffList = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim()) : [];
+        }
+        assignedStaffList = Array.from(new Set(assignedStaffList.filter(Boolean)));
+
+        text += `Event Details (Event ${idx + 1}: ${eventName})\n\n`;
+        text += `- Event Name: ${eventName}\n`;
+        text += `- Event Date: ${eventDate}\n`;
+        text += `- Event Start Time: ${eventTime}\n`;
+        text += `- Reporting Date: ${reportingDate}\n`;
+        text += `- Reporting Time: ${reportingTime}\n`;
+        text += `- Shoot Type: ${shootType}\n`;
+        text += `- Guest Pax: ${guestPax}\n`;
+        text += `- Staff Pax: ${staffPax}\n\n`;
+        text += `------------------------------------\n\n`;
+
+        text += `Location Details\n\n`;
+        text += `- Venue Name / Event Address: ${venue}\n`;
+        text += `- Google Maps Location Link: ${googleMapsLink}\n\n`;
+        text += `------------------------------------\n\n`;
+
+        text += `Assigned Team\n\n`;
+        if (assignedStaffList.length === 0) {
+          text += `None\n`;
+        } else {
+          assignedStaffList.forEach(name => {
+            const mobile = getStaffMobileByName(name);
+            text += `• ${name}${mobile ? ` - ${mobile}` : ''}\n`;
+          });
+        }
+
+        if (idx < targetEvents.length - 1) {
+          text += `\n====================================\n\n`;
+        }
+      });
+    }
+
+    text += `\nPlease report on time.\n\nThank you.`;
     return text;
   };
 
@@ -2812,7 +2865,7 @@ export const OperationsLeads: React.FC = () => {
               <span className="text-xl">📱</span>
               <div className="text-left">
                 <h3 className="text-base font-bold text-white">
-                  Personalized WhatsApp Share
+                  Share Assignment Details
                 </h3>
                 <p className="text-[11px] text-zinc-400">
                   Review and share work assignments for Order <span className="font-mono text-indigo-400 font-bold">{whatsappShareModalData.orderId}</span>
@@ -2821,18 +2874,12 @@ export const OperationsLeads: React.FC = () => {
             </div>
 
             <div className="overflow-y-auto space-y-5 flex-1 pr-1 text-left">
-              {whatsappShareModalData.staffNames.filter(name => {
-                const st = staff?.find(s => s.name === name);
-                return st?.department === 'Operations';
-              }).length === 0 ? (
+              {whatsappShareModalData.staffNames.length === 0 ? (
                 <div className="text-center py-8 text-zinc-500 italic text-xs font-mono">
                   No staff assigned yet.
                 </div>
               ) : (
-                whatsappShareModalData.staffNames.filter(name => {
-                  const st = staff?.find(s => s.name === name);
-                  return st?.department === 'Operations';
-                }).map((name, idx) => {
+                whatsappShareModalData.staffNames.map((name, idx) => {
                   const stObj = staff?.find(s => s.name === name);
                   const isSelected = !!selectedStaffForShare[name];
                   const msgText = editedMessages[name] || '';
@@ -2882,7 +2929,10 @@ export const OperationsLeads: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => {
-                              const cleanPhone = stObj?.mobile ? stObj.mobile.replace(/\D/g, '') : '';
+                              let cleanPhone = stObj?.mobile ? stObj.mobile.replace(/\D/g, '') : '';
+                              if (cleanPhone.length === 10) {
+                                cleanPhone = '91' + cleanPhone;
+                              }
                               const shareUrl = cleanPhone 
                                 ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msgText)}`
                                 : `https://wa.me/?text=${encodeURIComponent(msgText)}`;
