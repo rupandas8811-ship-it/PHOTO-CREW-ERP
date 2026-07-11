@@ -308,6 +308,9 @@ export const OperationsLeads: React.FC = () => {
     orderId: string;
     order: Order;
     staffNames: string[];
+    eventAllocations?: any;
+    lead?: any;
+    finalAssignments?: any[];
   } | null>(null);
 
   const [viewingStaffOrderId, setViewingStaffOrderId] = useState<string | null>(null);
@@ -469,96 +472,122 @@ export const OperationsLeads: React.FC = () => {
   };
 
   // Helper to generate personalized WhatsApp message for a staff member
-  const generateWhatsAppMessageForStaff = (ord: Order, staffName: string) => {
-    const lead = leads.find(l => l.lead_id === ord.lead_id);
-    const coordinatorStaff = staff?.find(s => s.name === currentUserName);
-    const coordinatorContact = coordinatorStaff ? `${coordinatorStaff.name} (${coordinatorStaff.mobile || 'N/A'})` : `${currentUserName || 'Operations Team'}`;
+  const generateWhatsAppMessageForStaff = (ord: Order, staffName: string, modalEventAllocations?: any, modalLead?: any, finalAssignments?: any[]) => {
+    const lead = modalLead || leads.find(l => l.lead_id === ord.lead_id);
     
     const clientName = ord.customer_name;
     const clientContact = ord.mobile || (lead ? lead.mobile : 'N/A');
+    const clientWhatsapp = lead?.whatsapp_number || 'N/A';
 
-    // Find all events for this lead where this staff member is assigned
-    const assignedEvents = lead?.events?.filter(ev => {
-      const names = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
-      return names.includes(staffName.toLowerCase());
-    }) || [];
+    let text = `Hello ${staffName},\n\nYou have been assigned to the following event.\n\n`;
+    text += `Customer Name:\n${clientName}\n\n`;
+    text += `Customer Mobile:\n${clientContact}\n\n`;
+    text += `Customer WhatsApp:\n${clientWhatsapp}\n\n`;
 
-    let text = `*STAFF WORK ASSIGNMENT*\n`;
-    text += `Hello *${staffName}*, here are your shoot details:\n\n`;
-    text += `*Client Name*: ${clientName}\n`;
-    text += `*Client Contact Number*: ${clientContact}\n`;
-    text += `*Coordinator / Operations Contact*: ${coordinatorContact}\n\n`;
+    let assignedEvents: any[] = [];
+    if (modalEventAllocations && lead?.events) {
+       Object.keys(modalEventAllocations).forEach(evId => {
+         const alloc = modalEventAllocations[evId];
+         if (alloc.staff && alloc.staff.some((s: any) => s.staff_name === staffName)) {
+            const matchedEv = lead.events.find((e: any) => e.id === evId);
+            if (matchedEv) {
+               const roles = alloc.staff.filter((s: any) => s.staff_name === staffName).map((s: any) => s.staff_role);
+               assignedEvents.push({ ...matchedEv, alloc, roles });
+            }
+         }
+       });
+    } else if (lead?.events) {
+       assignedEvents = lead.events.filter((ev: any) => {
+         const names = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
+         return names.includes(staffName.toLowerCase());
+       }).map((ev: any) => {
+         let fallbackRoles = ['Crew'];
+         const history = leadStaffAssignmentHistory?.filter((h: any) => h.order_id === ord.order_id);
+         if (history && history.length > 0) {
+            const myRoles = history.find((h: any) => h.assigned_staff === staffName);
+            if (myRoles && myRoles.assigned_roles) {
+               fallbackRoles = myRoles.assigned_roles.split(',').map((r: string) => r.trim());
+            }
+         }
+         return { ...ev, roles: fallbackRoles }; 
+       });
+    }
 
     if (assignedEvents.length === 0) {
-      // Fallback if events are empty or staff is assigned generally to the order
-      const shootType = ord.shoot_type || (lead ? lead.shoot_type : 'N/A');
-      const eventName = ord.event_type;
-      const eventDate = ord.event_date;
-      const eventTime = ord.event_time;
-      const location = lead?.event_location || ord.event_location || 'N/A';
-      const mapsLink = (lead as any)?.google_maps_link || 'N/A';
-      const staffObj = staff?.find(s => s.name === staffName);
-      const assignedRole = staffObj ? staffObj.role : 'Crew';
-      
-      text += `*EVENT DETAILS*\n`;
-      text += `• *Event Name*: ${eventName}\n`;
-      text += `• *Shoot Type*: ${shootType}\n`;
-      text += `• *Event Date*: ${eventDate}\n`;
-      text += `• *Event Time*: ${eventTime}\n`;
-      text += `• *Reporting Date*: ${lead?.Reporting_date || eventDate || 'N/A'}\n`;
-      text += `• *Reporting Time*: ${lead?.reporting_time || 'N/A'}\n`;
-      text += `• *Reporting Location*: ${location}\n`;
-      if (mapsLink && mapsLink !== 'N/A') {
-        text += `• *Google Maps Link*: ${mapsLink}\n`;
-      }
-      text += `• *Assigned Role*: ${assignedRole}\n`;
-      
-      // Assigned Equipment
-      const op = operations?.find(o => o.order_id === ord.order_id);
-      const assignedEquipment = op?.equipment_kit || 'None';
-      text += `• *Assigned Equipment*: ${assignedEquipment}\n`;
-    } else {
-      assignedEvents.forEach((ev, idx) => {
-        const eventName = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');
-        const shootType = ev.event_shoot_type || 'N/A';
-        const eventDate = ev.event_date || 'N/A';
-        const eventTime = (ev.event_start_time || ev.event_end_time) ? `${ev.event_start_time || ''} - ${ev.event_end_time || ''}` : 'N/A';
-        const reportingDate = ev.reporting_date || ev.event_date || 'N/A';
-        const reportingTime = ev.reporting_time || 'N/A';
-        const location = ev.event_location || lead?.event_location || 'N/A';
-        const mapsLink = ev.google_maps_link || 'N/A';
-        const staffObj = staff?.find(s => s.name === staffName);
-        const assignedRole = staffObj ? staffObj.role : 'Crew';
-        
-        // Parse event equipment
-        let assignedEquipment = 'None';
-        const mobilesRaw = ev.assigned_staff_mobiles || '';
-        if (mobilesRaw.includes(' || EQUIPMENT: ')) {
-          const parts = mobilesRaw.split(' || EQUIPMENT: ');
-          assignedEquipment = parts[1] || 'None';
-        }
+       const shootType = ord.shoot_type || (lead ? lead.shoot_type : 'N/A');
+       const eventName = ord.event_type || 'N/A';
+       const eventDate = ord.event_date || 'N/A';
+       const reportingTime = lead?.reporting_time || 'N/A';
+       const eventTime = ord.event_time || 'N/A';
+       const location = lead?.event_location || ord.event_location || 'N/A';
+       const mapsLink = (lead as any)?.google_maps_link || 'N/A';
+       const guestPax = (lead as any)?.guest_pax || 'N/A';
+       const staffPax = (lead as any)?.staff_pax || 'N/A';
+       
+       let assignedRoles = ['Crew'];
+       if (finalAssignments) {
+          assignedRoles = Array.from(new Set(finalAssignments.filter(a => a.staff_name === staffName).map(a => a.staff_role)));
+       } else {
+          const history = leadStaffAssignmentHistory?.filter((h: any) => h.order_id === ord.order_id);
+          if (history && history.length > 0) {
+             const myRoles = history.find((h: any) => h.assigned_staff === staffName);
+             if (myRoles && myRoles.assigned_roles) {
+                assignedRoles = myRoles.assigned_roles.split(',').map((r: string) => r.trim());
+             }
+          }
+       }
 
-        text += `*EVENT ${idx + 1}: ${eventName}*\n`;
-        text += `• *Shoot Type*: ${shootType}\n`;
-        text += `• *Event Date*: ${eventDate}\n`;
-        text += `• *Event Time*: ${eventTime}\n`;
-        text += `• *Reporting Date*: ${reportingDate}\n`;
-        text += `• *Reporting Time*: ${reportingTime}\n`;
-        text += `• *Reporting Location*: ${location}\n`;
-        if (mapsLink && mapsLink !== 'N/A') {
-          text += `• *Google Maps Link*: ${mapsLink}\n`;
-        }
-        text += `• *Assigned Role*: ${assignedRole}\n`;
-        text += `• *Assigned Equipment*: ${assignedEquipment}\n\n`;
-      });
+       text += `Event:\n${eventName}\n\n`;
+       text += `Event Date:\n${eventDate}\n\n`;
+       text += `Reporting Date:\n${lead?.Reporting_date || eventDate || 'N/A'}\n\n`;
+       text += `Reporting Time:\n${reportingTime}\n\n`;
+       text += `Event Start Time:\n${eventTime}\n\n`;
+       text += `Venue:\n${location}\n\n`;
+       text += `Location:\n${mapsLink}\n\n`;
+       text += `Shoot Type:\n${shootType}\n\n`;
+       text += `Guest Pax:\n${guestPax}\n\n`;
+       text += `Staff Pax:\n${staffPax}\n\n`;
+       text += `Assigned Responsibilities:\n\n`;
+       assignedRoles.forEach(r => {
+         text += `• ${r}\n`;
+       });
+       text += `\nPlease report on time.\n\nThank you.`;
+       return text;
     }
 
-    // Get Team Name / Package Name
-    const leadPkg = leadPackages?.find(lp => lp.lead_id === ord.lead_id);
-    if (leadPkg?.package_name) {
-      text += `*Team Name / Package*: ${leadPkg.package_name}\n`;
-    }
+    assignedEvents.forEach((ev, idx) => {
+       const eventName = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');
+       const eventDate = ev.event_date || 'N/A';
+       const reportingDate = ev.reporting_date || (ev.alloc?.reporting_date) || ev.event_date || 'N/A';
+       const reportingTime = ev.reporting_time || (ev.alloc?.reporting_time) || 'N/A';
+       const eventStartTime = ev.event_start_time || 'N/A';
+       const location = ev.event_location || lead?.event_location || 'N/A';
+       const mapsLink = ev.google_maps_link || 'N/A';
+       const shootType = ev.event_shoot_type || 'N/A';
+       const guestPax = ev.guest_pax || 'N/A';
+       const staffPax = ev.staff_pax || 'N/A';
+       
+       let assignedRoles = ev.roles || ['Crew'];
+       assignedRoles = Array.from(new Set(assignedRoles));
 
+       text += `Event${assignedEvents.length > 1 ? ` ${idx + 1}` : ''}:\n${eventName}\n\n`;
+       text += `Event Date:\n${eventDate}\n\n`;
+       text += `Reporting Date:\n${reportingDate}\n\n`;
+       text += `Reporting Time:\n${reportingTime}\n\n`;
+       text += `Event Start Time:\n${eventStartTime}\n\n`;
+       text += `Venue:\n${location}\n\n`;
+       text += `Location:\n${mapsLink}\n\n`;
+       text += `Shoot Type:\n${shootType}\n\n`;
+       text += `Guest Pax:\n${guestPax}\n\n`;
+       text += `Staff Pax:\n${staffPax}\n\n`;
+       text += `Assigned Responsibilities:\n\n`;
+       assignedRoles.forEach((r) => {
+         text += `• ${r}\n`;
+       });
+       text += `\n`;
+    });
+    
+    text += `Please report on time.\n\nThank you.`;
     return text;
   };
 
@@ -942,8 +971,16 @@ export const OperationsLeads: React.FC = () => {
           
           if (includedRoles.length > 0) {
             const allocStaff = eventAllocations[evId]?.staff || [];
-            if (allocStaff.length < includedRoles.length) {
-                setAssignValidationError(`Please complete all Staff Assignments before saving.\nStaff Type and Staff are required for every Team Member.`);
+            let isMissingStaff = false;
+            for (const roleStr of Array.from(new Set<string>(includedRoles as string[]))) {
+              if (!allocStaff.some((s: any) => s.staff_role === roleStr)) {
+                 isMissingStaff = true;
+                 break;
+              }
+            }
+
+            if (isMissingStaff) {
+                setAssignValidationError(`Please complete all Staff Assignments before saving.\nAt least one Staff is required for every Team Member Included.`);
                 
                 // Open the collapsed event and focus
                 setCollapsedAssignEvents(prev => ({ ...prev, [evId]: false }));
@@ -1090,16 +1127,18 @@ export const OperationsLeads: React.FC = () => {
       } as any);
 
       if (matchedOrder) {
-        setSuccessModalData({
+        setWhatsappShareModalData({
           orderId: assigningOrderId,
-          customerName: matchedOrder.customer_name,
           order: { ...matchedOrder, current_stage: targetStage },
-          assignments: [...finalAssignments]
+          staffNames: Array.from(new Set(finalAssignments.map(a => a.staff_name))),
+          eventAllocations: eventAllocations,
+          lead: parentLeadInstance,
+          finalAssignments: finalAssignments
         });
       }
 
       setAssigningOrderId(null);
-      alert("✅ Staff assigned successfully.");
+      
     } catch (e: any) {
       console.error("Failed to save assignment:", e);
       if (e.message && (
@@ -1827,7 +1866,7 @@ export const OperationsLeads: React.FC = () => {
                     <div>
                       <span className="text-[10px] text-zinc-505 block uppercase font-mono">Alt / WhatsApp</span>
                       <span className="font-mono text-zinc-200 font-medium flex items-center gap-1">
-                        {parentLeadInstance?.alternate_mobile || 'N/A'}
+                        {parentLeadInstance?.whatsapp_number || 'N/A'}
                       </span>
                     </div>
                     <div>
@@ -1966,7 +2005,15 @@ export const OperationsLeads: React.FC = () => {
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Reporting Time</span>
                             <span className="text-zinc-200 text-[11px] font-mono block">{allocation.reporting_time || ev.reporting_time || 'N/A'}</span>
                           </div>
-                          <div className="col-span-1 sm:col-span-2 lg:col-span-2">
+                          <div>
+                            <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Guest Pax</span>
+                            <span className="text-zinc-200 text-[11px] font-mono block">{ev.guest_pax || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Staff Pax</span>
+                            <span className="text-zinc-200 text-[11px] font-mono block">{ev.staff_pax || 'N/A'}</span>
+                          </div>
+                          <div className="col-span-1 sm:col-span-2 lg:col-span-4">
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Venue / Location</span>
                             <span className="text-zinc-200 text-[11px] font-sans block leading-tight">
                               {ev.event_location || parentLeadInstance?.event_location || 'N/A'}
@@ -2014,85 +2061,87 @@ export const OperationsLeads: React.FC = () => {
                                  </div>
                                     
                                     {/* Assignment UI */}
-                                    <div className="flex-1 w-full sm:max-w-[28rem]">
-                                      {assignedStaff ? (
-                                         <div className="flex items-center justify-between bg-zinc-800/50 p-2 pl-3 rounded-lg border border-zinc-700/50">
-                                            <div className="flex items-center gap-2">
-                                              <span className="text-xs font-semibold text-emerald-400">{assignedStaff.staff_name}</span>
-                                              {stFull?.staff_type && <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-950/50 text-zinc-400 font-mono uppercase border border-zinc-800">{stFull.staff_type}</span>}
-                                            </div>
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                setEventAllocations((prev: any) => {
-                                                  const existingAlloc = prev[evId] || { staff: [] };
-                                                  return {
-                                                    ...prev,
-                                                    [evId]: {
-                                                      ...existingAlloc,
-                                                      staff: existingAlloc.staff.filter((s: any) => !(s.staff_name === assignedStaff.staff_name && s.staff_role === roleStr))
-                                                    }
-                                                  };
-                                                });
-                                              }}
-                                              className="text-zinc-500 hover:text-red-400 p-1 bg-zinc-900/50 rounded-md hover:bg-zinc-900 transition-colors cursor-pointer"
-                                              title="Remove assignment"
-                                            >
-                                              <X className="w-3.5 h-3.5" />
-                                            </button>
-                                         </div>
-                                      ) : (
-                                         <div className="flex items-center gap-2">
-                                            <select
-                                              value={currentStaffType}
-                                              onChange={(e) => {
-                                                setStaffTypeByEvent(prev => ({ ...prev, [selectKey]: e.target.value as 'In-House' | 'Freelancer' }));
-                                                setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: '' }));
-                                              }}
-                                              className="bg-zinc-950 border border-zinc-800 rounded-lg py-2 px-2 text-[11px] text-zinc-400 w-[100px] outline-none focus:border-zinc-700 cursor-pointer"
-                                            >
-                                              <option value="In-House">In-House</option>
-                                              <option value="Freelancer">Freelance</option>
-                                            </select>
+                                    <div className="flex-1 w-full sm:max-w-[28rem] space-y-2">
+                                      {assignedToRole.map((assignedStaff: any, idx: number) => {
+                                         const stFull = staff?.find(s => s.name === assignedStaff.staff_name);
+                                         return (
+                                           <div key={idx} className="flex items-center justify-between bg-zinc-800/50 p-2 pl-3 rounded-lg border border-zinc-700/50">
+                                              <div className="flex items-center gap-2">
+                                                <span className="text-xs font-semibold text-emerald-400">{assignedStaff.staff_name}</span>
+                                                {stFull?.staff_type && <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-950/50 text-zinc-400 font-mono uppercase border border-zinc-800">{stFull.staff_type}</span>}
+                                              </div>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setEventAllocations((prev: any) => {
+                                                    const existingAlloc = prev[evId] || { staff: [] };
+                                                    return {
+                                                      ...prev,
+                                                      [evId]: {
+                                                        ...existingAlloc,
+                                                        staff: existingAlloc.staff.filter((s: any) => !(s.staff_name === assignedStaff.staff_name && s.staff_role === roleStr))
+                                                      }
+                                                    };
+                                                  });
+                                                }}
+                                                className="text-zinc-500 hover:text-red-400 p-1 bg-zinc-900/50 rounded-md hover:bg-zinc-900 transition-colors cursor-pointer"
+                                                title="Remove assignment"
+                                              >
+                                                <X className="w-3.5 h-3.5" />
+                                              </button>
+                                           </div>
+                                         );
+                                      })}
+                                      
+                                      <div className="flex items-center gap-2">
+                                        <select
+                                          value={currentStaffType}
+                                          onChange={(e) => {
+                                            setStaffTypeByEvent(prev => ({ ...prev, [selectKey]: e.target.value as 'In-House' | 'Freelancer' }));
+                                            setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: '' }));
+                                          }}
+                                          className="bg-zinc-950 border border-zinc-800 rounded-lg py-2 px-2 text-[11px] text-zinc-400 w-[100px] outline-none focus:border-zinc-700 cursor-pointer"
+                                        >
+                                          <option value="In-House">In-House</option>
+                                          <option value="Freelancer">Freelance</option>
+                                        </select>
+                                        
+                                        <select
+                                          value={selectedStaffByEvent[selectKey] || ''}
+                                          onChange={(e) => {
+                                            const selectedName = e.target.value;
                                             
-                                            <select
-                                              value={selectedStaffByEvent[selectKey] || ''}
-                                              onChange={(e) => {
-                                                const selectedName = e.target.value;
-                                                setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: selectedName }));
-                                                
-                                                if (selectedName) {
-                                                   const memberInfo = staff?.find(st => st.name === selectedName);
-                                                   const staffId = memberInfo?.staff_id || 'MOCK-' + Math.random().toString(36).substr(2, 4);
-                                                   
-                                                   setEventAllocations((prev: any) => {
-                                                     const existingAlloc = prev[evId] || { staff: [] };
-                                                     if (existingAlloc.staff.some((s: any) => s.staff_name === selectedName)) {
-                                                        return prev;
-                                                     }
-                                                     return {
-                                                       ...prev,
-                                                       [evId]: {
-                                                         ...existingAlloc,
-                                                         staff: [...(existingAlloc.staff || []), { staff_role: roleStr, staff_id: staffId, staff_name: selectedName, mobile: memberInfo?.mobile || '' }]
-                                                       }
-                                                     };
-                                                   });
-                                                   setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: '' }));
-                                                }
-                                              }}
-                                              className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg py-2 px-3 text-[11px] font-bold text-zinc-100 outline-none focus:border-sky-500/50 cursor-pointer"
-                                            >
-                                              <option value="">▼ Select Staff</option>
-                                              {staff && staff
-                                                 .filter(s => s.status === 'Active' && (s.staff_type || 'In-House') === currentStaffType)
-                                                 .filter(s => !allocStaff.some((ast: any) => ast.staff_name === s.name))
-                                                 .map(st => (
-                                                   <option key={st.staff_id} value={st.name}>{st.name} - {st.role}</option>
-                                              ))}
-                                            </select>
-                                         </div>
-                                      )}
+                                            if (selectedName) {
+                                               const memberInfo = staff?.find(st => st.name === selectedName);
+                                               const staffId = memberInfo?.staff_id || 'MOCK-' + Math.random().toString(36).substr(2, 4);
+                                               
+                                               setEventAllocations((prev: any) => {
+                                                 const existingAlloc = prev[evId] || { staff: [] };
+                                                 if (existingAlloc.staff.some((s: any) => s.staff_name === selectedName)) {
+                                                    return prev;
+                                                 }
+                                                 return {
+                                                   ...prev,
+                                                   [evId]: {
+                                                     ...existingAlloc,
+                                                     staff: [...(existingAlloc.staff || []), { staff_role: roleStr, staff_id: staffId, staff_name: selectedName, mobile: memberInfo?.mobile || '' }]
+                                                   }
+                                                 };
+                                               });
+                                               setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: '' }));
+                                            }
+                                          }}
+                                          className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg py-2 px-3 text-[11px] font-bold text-zinc-100 outline-none focus:border-sky-500/50 cursor-pointer"
+                                        >
+                                          <option value="">▼ {assignedToRole.length > 0 ? '+ Add Another Staff' : 'Select Staff'}</option>
+                                          {staff && staff
+                                             .filter(s => s.status === 'Active' && s.department === 'Operations' && (s.staff_type || 'In-House') === currentStaffType)
+                                             .filter(s => !allocStaff.some((ast: any) => ast.staff_name === s.name))
+                                             .map(st => (
+                                               <option key={st.staff_id} value={st.name}>{st.name} - {st.role}</option>
+                                          ))}
+                                        </select>
+                                      </div>
                                     </div>
                                   </div>
                                 );
@@ -2728,12 +2777,18 @@ export const OperationsLeads: React.FC = () => {
             </div>
 
             <div className="overflow-y-auto space-y-5 flex-1 pr-1 text-left">
-              {whatsappShareModalData.staffNames.length === 0 ? (
+              {whatsappShareModalData.staffNames.filter(name => {
+                const st = staff?.find(s => s.name === name);
+                return st?.department === 'Operations';
+              }).length === 0 ? (
                 <div className="text-center py-8 text-zinc-500 italic text-xs font-mono">
                   No staff assigned yet.
                 </div>
               ) : (
-                whatsappShareModalData.staffNames.map((name, idx) => {
+                whatsappShareModalData.staffNames.filter(name => {
+                  const st = staff?.find(s => s.name === name);
+                  return st?.department === 'Operations';
+                }).map((name, idx) => {
                   const stObj = staff?.find(s => s.name === name);
                   const isSelected = !!selectedStaffForShare[name];
                   const msgText = editedMessages[name] || '';
@@ -2791,7 +2846,7 @@ export const OperationsLeads: React.FC = () => {
                             }}
                             className="px-3.5 py-1.5 bg-[#25D366] hover:bg-[#20ba5a] active:scale-95 text-black font-extrabold text-[11px] rounded-xl flex items-center gap-1.5 shadow-md shadow-[#25D366]/10 hover:shadow-[#25D366]/25 transition-all cursor-pointer"
                           >
-                            <span className="text-xs">💬</span> Share
+                            <span className="text-xs">📲</span> Share on WhatsApp
                           </button>
                         )}
                       </div>
