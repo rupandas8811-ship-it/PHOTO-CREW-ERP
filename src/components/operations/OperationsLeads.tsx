@@ -1393,7 +1393,17 @@ export const OperationsLeads: React.FC = () => {
                     </td>
                     <td className="p-4 font-bold text-zinc-100">
                       <div>{ord.customer_name}</div>
-                      <div className="text-[10px] text-zinc-400 font-sans font-normal mt-0.5">{ord.event_type}</div>
+                      {lead?.events && lead.events.length > 0 ? (
+                        <div className="space-y-1.5 inner-cell-scroll mt-1">
+                          {lead.events.map((ev: any, evIdx: number) => (
+                            <div key={ev.id || evIdx} className="text-[10px] text-zinc-400 font-sans font-normal truncate" title={ev.event_name || ev.event_type || 'Other'}>
+                              {ev.event_name || ev.event_type || 'Other'}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-zinc-400 font-sans font-normal mt-0.5">{ord.event_type}</div>
+                      )}
                       {op?.equipment_kit && (
                         <div className="flex flex-wrap gap-1 mt-1.5">
                           {op.equipment_kit.split(',').map((kit: string, idx: number) => (

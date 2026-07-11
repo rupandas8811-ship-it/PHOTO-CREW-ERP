@@ -2240,7 +2240,17 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                           {/* Event Type */}
                           <td className="p-4 text-left font-sans text-zinc-300">
-                            {order.event_type}
+                            {lead?.events && lead.events.length > 0 ? (
+                              <div className="space-y-1.5 inner-cell-scroll">
+                                {lead.events.map((ev: any, evIdx: number) => (
+                                  <div key={ev.id || evIdx} className="text-xs truncate" title={ev.event_name || ev.event_type || 'Other'}>
+                                    {ev.event_name || ev.event_type || 'Other'}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              order.event_type
+                            )}
                           </td>
 
                           {/* Event Date */}
