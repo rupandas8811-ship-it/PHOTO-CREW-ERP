@@ -1822,10 +1822,10 @@ export const OperationsLeads: React.FC = () => {
                     }
 
                     if (!eventRoles || eventRoles.length === 0) {
-                      eventRoles = Object.values(targetEditableInclusions)[0];
+                      if (Object.keys(targetEditableInclusions).length === 1) { eventRoles = Object.values(targetEditableInclusions)[0]; }
                     }
 
-                    const includedRoles = eventRoles?.length > 0 ? eventRoles : ['Photographer', 'Videographer'];
+                    const includedRoles = eventRoles?.length > 0 ? eventRoles : [];
 
                     const isCollapsed = collapsedAssignEvents[evId] === undefined ? index !== 0 : collapsedAssignEvents[evId];
                     const eventNameDisplay = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');
@@ -1916,6 +1916,11 @@ export const OperationsLeads: React.FC = () => {
                         </div>
                         
                         <div className="grid grid-cols-1 gap-3">
+                          {includedRoles.length === 0 && (
+                            <div className="text-center py-6 text-zinc-500 text-xs italic font-mono bg-zinc-900/10 border border-dashed border-zinc-900 rounded-xl">
+                              No Team Members Included found for this event.
+                            </div>
+                          )}
                           {includedRoles.map((roleStr, roleIdx) => {
                              const assignedToRole = allocStaff.filter((s: any) => s.staff_role === roleStr);
                              const assignedStaff = assignedToRole[0];
