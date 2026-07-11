@@ -1810,9 +1810,22 @@ export const OperationsLeads: React.FC = () => {
                     const allocation = eventAllocations[evId] || { staff: [] };
                     const allocStaff = allocation.staff || [];
                     
-                    const matchingKey = Object.keys(targetEditableInclusions).find(k => k.includes(evId)) || index.toString();
-                    const eventRoles = targetEditableInclusions[matchingKey] || targetEditableInclusions[evId] || targetEditableInclusions[index.toString()] || [];
-                    const includedRoles = eventRoles.length > 0 ? eventRoles : ['Photographer', 'Videographer'];
+                    const pkgId = parentLeadInstance?.package_id || parentLeadInstance?.selected_package_id || targetLatestQuote?.package_id || '';
+                    const eventKey = `${pkgId}_${ev.id}`;
+                    const nameKey = `${pkgId}_${ev.event_name || ev.event_type || 'Unnamed Event'}`;
+
+                    let eventRoles = targetEditableInclusions[eventKey] || targetEditableInclusions[nameKey] || targetEditableInclusions[pkgId];
+
+                    if (!eventRoles || eventRoles.length === 0) {
+                      const matchingKey = Object.keys(targetEditableInclusions).find(k => k.includes(ev.id));
+                      if (matchingKey) eventRoles = targetEditableInclusions[matchingKey];
+                    }
+
+                    if (!eventRoles || eventRoles.length === 0) {
+                      eventRoles = Object.values(targetEditableInclusions)[0];
+                    }
+
+                    const includedRoles = eventRoles?.length > 0 ? eventRoles : ['Photographer', 'Videographer'];
 
                     const isCollapsed = collapsedAssignEvents[evId] === undefined ? index !== 0 : collapsedAssignEvents[evId];
                     const eventNameDisplay = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');

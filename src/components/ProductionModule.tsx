@@ -254,6 +254,7 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     updateEditorAssignmentStatus,
     deleteEditorAssignment,
     leads: leadsData,
+    quotations,
     getLeadCurrentStatus,
     logs,
     addStaff,
@@ -1354,15 +1355,42 @@ ${coordinatorName}`;
         setWfTargetDeliveryDate(activeWorkflowProd?.target_delivery_date || activeWorkflowProd?.expected_delivery_date || '');
         
         // Find deliverables from confirmed quotation
-        let deliverablesText = '';
+        let parsedDeliverables: string[] = [];
         if (activeWorkflowProd) {
           const rf = rawFootage.find(f => f.tracking_id === activeWorkflowProd.tracking_id || f.order_id === activeWorkflowProd.tracking_id);
           const order = rf ? orders.find(o => o.order_id === rf.order_id) : orders.find(o => o.lead_id === activeWorkflowProd.production_id.replace('PRD-', ''));
           const lead = leadsData?.find(l => l.lead_id === activeWorkflowProd.tracking_id || l.lead_id === order?.lead_id);
-          deliverablesText = order?.deliverables_description || lead?.deliverables_description || '';
+          
+          let targetEditableInclusions: Record<string, string[]> = {};
+          if (lead) {
+            const targetLeadQuotations = quotations?.filter((q: any) => q.lead_id === lead.lead_id) || [];
+            targetLeadQuotations.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            const targetLatestQuote = targetLeadQuotations[0];
+            
+            if (targetLatestQuote) {
+               if (targetLatestQuote.editableInclusions) {
+                  targetEditableInclusions = targetLatestQuote.editableInclusions;
+               } else if (targetLatestQuote.terms_conditions && targetLatestQuote.terms_conditions.includes('METADATA:')) {
+                  try {
+                     const meta = JSON.parse(targetLatestQuote.terms_conditions.split('METADATA:')[1]);
+                     if (meta.editableInclusions) targetEditableInclusions = meta.editableInclusions;
+                  } catch (e) {}
+               }
+            }
+          }
+          
+          let teamMembersFlattened: string[] = [];
+          Object.values(targetEditableInclusions).forEach(roles => {
+             teamMembersFlattened = [...teamMembersFlattened, ...roles];
+          });
+          
+          if (teamMembersFlattened.length > 0) {
+             parsedDeliverables = Array.from(new Set(teamMembersFlattened));
+          } else {
+             const deliverablesText = order?.deliverables_description || lead?.deliverables_description || '';
+             parsedDeliverables = getIndividualDeliverables(deliverablesText);
+          }
         }
-        
-        const parsedDeliverables = getIndividualDeliverables(deliverablesText);
         const assignedDeliverables = Array.from(new Set(assignedForThis.map(a => a.speciality)));
         const allDeliverables = Array.from(new Set([...parsedDeliverables, ...assignedDeliverables]));
         
