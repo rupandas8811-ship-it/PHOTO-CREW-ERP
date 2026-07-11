@@ -169,6 +169,7 @@ export const OperationsLeads: React.FC = () => {
 
   const canEdit = (currentRole === 'Operations Team' || currentRole === 'Business Owner');
   const [projectDossierId, setProjectDossierId] = useState<string | null>(null);
+  const [busyRosterStaff, setBusyRosterStaff] = useState<string | null>(null);
   
   // Inline edit state for assignment
   const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
@@ -322,7 +323,13 @@ export const OperationsLeads: React.FC = () => {
       const initialMsgs: Record<string, string> = {};
       const initialSelected: Record<string, boolean> = {};
       whatsappShareModalData.staffNames.forEach(name => {
-        initialMsgs[name] = generateWhatsAppMessageForStaff(whatsappShareModalData.order, name);
+        initialMsgs[name] = generateWhatsAppMessageForStaff(
+          whatsappShareModalData.order,
+          name,
+          whatsappShareModalData.eventAllocations,
+          whatsappShareModalData.lead,
+          whatsappShareModalData.finalAssignments
+        );
         initialSelected[name] = true;
       });
       setEditedMessages(initialMsgs);
@@ -1009,7 +1016,7 @@ export const OperationsLeads: React.FC = () => {
       Object.values(eventAllocations).forEach((alloc: any) => {
         if (alloc.staff && alloc.staff.length > 0) {
           alloc.staff.forEach((st: any) => {
-            if (!allAssignedStaff.find(a => a.staff_name === st.staff_name)) {
+            if (!allAssignedStaff.find(a => a.staff_name === st.staff_name && a.staff_role === st.staff_role)) {
                allAssignedStaff.push({
                  staff_role: st.staff_role,
                  staff_id: st.staff_id,
@@ -1232,6 +1239,51 @@ export const OperationsLeads: React.FC = () => {
     return completedStages.includes(o.current_stage) || op?.event_status === 'Completed';
   };
 
+  const getStaffRoster = (staffName: string) => {
+    const roster: { orderId: string; eventName: string; reportingDate: string; reportingTime: string }[] = [];
+    if (!staffName) return roster;
+
+    leads?.forEach(lead => {
+      if (lead.status === 'Lost Lead') return;
+      const order = orders.find(o => o.lead_id === lead.lead_id || o.order_id === lead.lead_id);
+      if (order && isCompletedEvent(order)) return;
+
+      if (lead.events && lead.events.length > 0) {
+        lead.events.forEach(ev => {
+          const assignedNames = ev.assigned_staff_names
+            ? ev.assigned_staff_names.split(',').map((s: string) => s.trim())
+            : [];
+          if (assignedNames.includes(staffName)) {
+            const op = operations.find(x => x.order_id === (order?.order_id || lead.lead_id));
+            roster.push({
+              orderId: order?.order_id || lead.lead_id,
+              eventName: ev.event_name || ev.event_type || 'Shoot Event',
+              reportingDate: ev.reporting_date || lead.Reporting_date || ev.event_date || '',
+              reportingTime: ev.reporting_time || order?.reporting_time || op?.reporting_time || ''
+            });
+          }
+        });
+      } else {
+        let assignmentsHistory = leadStaffAssignmentHistory ? leadStaffAssignmentHistory.filter(h => h.lead_id === lead.lead_id) : [];
+        if (assignmentsHistory.length === 0 && order) {
+          assignmentsHistory = leadStaffAssignmentHistory ? leadStaffAssignmentHistory.filter(h => h.order_id === order.order_id) : [];
+        }
+        const isAssigned = assignmentsHistory.some(h => h.assigned_staff?.trim() === staffName);
+        if (isAssigned) {
+          const op = operations.find(x => x.order_id === (order?.order_id || lead.lead_id));
+          roster.push({
+            orderId: order?.order_id || lead.lead_id,
+            eventName: lead.event_type || 'Main Event',
+            reportingDate: lead.Reporting_date || lead.event_date || '',
+            reportingTime: order?.reporting_time || op?.reporting_time || ''
+          });
+        }
+      }
+    });
+
+    return roster;
+  };
+
   const stats = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
 
@@ -1294,13 +1346,12 @@ export const OperationsLeads: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* 1. Results Summary Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
         {[
           { label: "New Orders Received", val: stats.newOrders, theme: 'purple' as CameraLensTheme, filterValue: 'New Orders', trendText: 'Fresh', chartPoints: [10, 18, 14, 25, 20, 31, 35] },
           { label: "Today's Events", val: stats.todaysEvents, theme: 'cyan' as CameraLensTheme, filterValue: "Today's Events", trendText: 'Live', chartPoints: [5, 9, 7, 14, 11, 16, 15] },
           { label: "Scheduled Events", val: stats.scheduled, theme: 'green' as CameraLensTheme, filterValue: 'Scheduled Events', trendText: 'Rostered', chartPoints: [8, 15, 12, 20, 16, 25, 24] },
           { label: "Pending Assignments", val: stats.pendingAssignments, theme: 'red' as CameraLensTheme, filterValue: 'Pending Assignments', trendText: 'Action Req', chartPoints: [2, 4, 1, 5, 3, 6, 2] },
-          { label: "Completed", val: stats.completed, theme: 'purple' as CameraLensTheme, filterValue: 'Completed', trendText: 'Closed Out', chartPoints: [11, 14, 12, 18, 15, 20, 17] },
         ].map((card, idx) => (
           <CameraLensStatsCard
             key={idx}
@@ -1866,7 +1917,7 @@ export const OperationsLeads: React.FC = () => {
                     <div>
                       <span className="text-[10px] text-zinc-505 block uppercase font-mono">Alt / WhatsApp</span>
                       <span className="font-mono text-zinc-200 font-medium flex items-center gap-1">
-                        {parentLeadInstance?.whatsapp_number || 'N/A'}
+                        {activeOrderInstance?.whatsapp_number || parentLeadInstance?.whatsapp_number || 'N/A'}
                       </span>
                     </div>
                     <div>
@@ -2068,6 +2119,11 @@ export const OperationsLeads: React.FC = () => {
                                            <div key={idx} className="flex items-center justify-between bg-zinc-800/50 p-2 pl-3 rounded-lg border border-zinc-700/50">
                                               <div className="flex items-center gap-2">
                                                 <span className="text-xs font-semibold text-emerald-400">{assignedStaff.staff_name}</span>
+                                                {isStaffBusyOnDate(assignedStaff.staff_name, ev.event_date || '', activeOrderInstance?.order_id || '') ? (
+                                                  <button type="button" onClick={() => setBusyRosterStaff(assignedStaff.staff_name)} className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-mono uppercase border border-red-500/20 cursor-pointer hover:bg-red-500/20 transition-colors">🔴 Busy</button>
+                                                ) : (
+                                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono uppercase border border-emerald-500/20">🟢 Available</span>
+                                                )}
                                                 {stFull?.staff_type && <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-950/50 text-zinc-400 font-mono uppercase border border-zinc-800">{stFull.staff_type}</span>}
                                               </div>
                                               <button
@@ -2117,7 +2173,7 @@ export const OperationsLeads: React.FC = () => {
                                                
                                                setEventAllocations((prev: any) => {
                                                  const existingAlloc = prev[evId] || { staff: [] };
-                                                 if (existingAlloc.staff.some((s: any) => s.staff_name === selectedName)) {
+                                                 if (existingAlloc.staff.some((s: any) => s.staff_name === selectedName && s.staff_role === roleStr)) {
                                                     return prev;
                                                  }
                                                  return {
@@ -2136,9 +2192,10 @@ export const OperationsLeads: React.FC = () => {
                                           <option value="">▼ {assignedToRole.length > 0 ? '+ Add Another Staff' : 'Select Staff'}</option>
                                           {staff && staff
                                              .filter(s => s.status === 'Active' && s.department === 'Operations' && (s.staff_type || 'In-House') === currentStaffType)
-                                             .filter(s => !allocStaff.some((ast: any) => ast.staff_name === s.name))
                                              .map(st => (
-                                               <option key={st.staff_id} value={st.name}>{st.name} - {st.role}</option>
+                                               <option key={st.staff_id} value={st.name}>
+                                                 {st.name} {isStaffBusyOnDate(st.name, ev.event_date || '', activeOrderInstance?.order_id || '') ? '🔴 Busy' : '🟢 Available'} - {st.role}
+                                               </option>
                                           ))}
                                         </select>
                                       </div>
@@ -2315,159 +2372,10 @@ export const OperationsLeads: React.FC = () => {
                             </div>
                           );
                         })()}
+</div>
 
-                        {/* Staff Schedule Card */}
-                        {(() => {
-                           const staffNamesToCheck: string[] = [];
-                           
-                           // Check all dropdowns for this event
-                           Object.keys(selectedStaffByEvent).forEach(key => {
-                             if (key.startsWith(`${evId}_`) && selectedStaffByEvent[key]) {
-                               staffNamesToCheck.push(selectedStaffByEvent[key]);
-                             }
-                           });
 
-                           allocStaff.forEach((s: any) => {
-                             if (s.staff_name && !staffNamesToCheck.includes(s.staff_name)) {
-                               staffNamesToCheck.push(s.staff_name);
-                             }
-                           });
-
-                           if (staffNamesToCheck.length === 0) return null;
-
-                           return (
-                             <div className="space-y-4">
-                               {staffNamesToCheck.map(staffName => {
-                                 const memberInfo = staff?.find(st => st.name === staffName);
-                                 if (!memberInfo) return null;
-
-                                 // Find all active and upcoming events assigned to this staff member
-                                 const staffEvents: any[] = [];
-                                 leads?.forEach(otherLead => {
-                                   otherLead.events?.forEach(otherEv => {
-                                     // Skip current event we are scheduling
-                                     if (otherEv.id === evId) return;
-
-                                     const assignedNames = otherEv.assigned_staff_names
-                                       ? otherEv.assigned_staff_names.split(',').map((s: string) => s.trim())
-                                       : [];
-                                     if (assignedNames.includes(staffName)) {
-                                       const otherOrder = orders.find(o => o.lead_id === otherLead.lead_id || o.order_id === otherLead.lead_id);
-                                       const isCompleted = otherOrder ? isCompletedEvent(otherOrder) : false;
-
-                                       if (!isCompleted && otherLead.status !== 'Lost Lead') {
-                                         staffEvents.push({
-                                           lead: otherLead,
-                                           event: otherEv,
-                                           order: otherOrder,
-                                           dateValue: otherEv.event_date || otherLead.Reporting_date || ''
-                                         });
-                                       }
-                                     }
-                                   });
-                                 });
-
-                                 // Sort chronologically by date
-                                 staffEvents.sort((a, b) => {
-                                   const dateA = new Date(a.dateValue).getTime();
-                                   const dateB = new Date(b.dateValue).getTime();
-                                   if (isNaN(dateA)) return 1;
-                                   if (isNaN(dateB)) return -1;
-                                   return dateA - dateB;
-                                 });
-
-                                 // Compare current scheduling event's time coordinates with existing assignments
-                                 const currentEvDate = allocation.reporting_date || ev.event_date;
-                                 const currentEvRepTime = allocation.reporting_time || ev.reporting_time;
-                                 const currentEvStartTime = allocation.event_start_time || ev.event_start_time;
-                                 const currentEvEndTime = allocation.event_end_time || ev.event_end_time;
-
-                                 const evStart = parseDateTime(currentEvDate, currentEvRepTime || currentEvStartTime || '08:00');
-                                 const evEnd = parseDateTime(currentEvDate, currentEvEndTime || currentEvStartTime || '17:00');
-
-                                 const conflictingEvents: any[] = [];
-                                 staffEvents.forEach(se => {
-                                   const seRepDate = se.lead.Reporting_date || se.event.event_date;
-                                   const seRepTime = se.event.reporting_time || se.lead.reporting_time || se.event.event_start_time || '08:00';
-                                   const seEndTime = se.event.event_end_time || se.event.event_start_time || '17:00';
-
-                                   const otherStart = parseDateTime(seRepDate, seRepTime);
-                                   const otherEnd = parseDateTime(se.event.event_date || seRepDate, seEndTime);
-
-                                   let isOverlap = false;
-                                   if (evStart && evEnd && otherStart && otherEnd) {
-                                     isOverlap = evStart < otherEnd && otherStart < evEnd;
-                                   } else {
-                                     if (currentEvDate && se.event.event_date && currentEvDate === se.event.event_date) {
-                                       isOverlap = true;
-                                     }
-                                   }
-
-                                   if (isOverlap) {
-                                     conflictingEvents.push(se);
-                                   }
-                                 });
-
-                                 const hasConflict = conflictingEvents.length > 0;
-
-                                 return (
-                                   <div key={staffName} className="mt-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl space-y-4 text-left shadow-md">
-                                     {/* Header */}
-                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800 pb-3">
-                                       <div>
-                                         <span className="text-[10px] text-zinc-500 uppercase font-mono block">👤 Staff Name</span>
-                                         <span className="text-sm font-bold text-white font-sans">{staffName}</span>
-                                         <span className="text-[10px] text-zinc-400 font-mono block mt-0.5">{memberInfo.role}</span>
-                                       </div>
-                                       <div className="flex flex-col items-start sm:items-end">
-                                         <span className="text-[10px] text-zinc-500 uppercase font-mono block">Status</span>
-                                         {hasConflict ? (
-                                           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20">
-                                             🔴 Busy
-                                           </span>
-                                         ) : (
-                                           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                             🟢 Available
-                                           </span>
-                                         )}
-                                       </div>
-                                     </div>
-                                   </div>
-                                 );
-                               })}
-                             </div>
-                           );
-                        })()}
                         
-                      </div>
-                      
-                      {/* 4. WhatsApp Sharing */}
-                      {allocStaff.length > 0 && (
-                        <div className="pt-3 mt-4 border-t border-zinc-800">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (activeOrderInstance) {
-                                const assignedStaffNames = getAssignedStaffNamesForOrder(activeOrderInstance);
-                                if (assignedStaffNames.length === 1) {
-                                  const msgText = generateWhatsAppMessageForStaff(activeOrderInstance, assignedStaffNames[0]);
-                                  const url = `https://wa.me/?text=${encodeURIComponent(msgText)}`;
-                                  window.open(url, '_blank');
-                                } else {
-                                  setWhatsappShareModalData({
-                                    orderId: activeOrderInstance.order_id,
-                                    order: activeOrderInstance,
-                                    staffNames: assignedStaffNames
-                                  });
-                                }
-                              }
-                            }}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/30 text-[#25D366] text-[10px] font-mono font-bold rounded cursor-pointer transition-all uppercase"
-                          >
-                            <span>📱</span> Share via WhatsApp
-                          </button>
-                        </div>
-                      )}
                            </div>
                         )}
                     </div>
@@ -2883,6 +2791,79 @@ export const OperationsLeads: React.FC = () => {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Busy Staff Details Popup */}
+      {busyRosterStaff && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[60] flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl shadow-2xl relative p-6 animate-in zoom-in duration-200">
+            <button 
+              onClick={() => setBusyRosterStaff(null)}
+              className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
+              type="button"
+            >
+              ✕
+            </button>
+            <div className="text-left space-y-4">
+              <div className="flex items-center gap-2.5 border-b border-zinc-800 pb-3">
+                <span className="text-xl">📅</span>
+                <div>
+                  <h3 className="text-sm font-bold text-white font-sans">
+                    Staff Current Assignments
+                  </h3>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    Active roster details for <span className="text-indigo-400 font-bold">{busyRosterStaff}</span>
+                  </p>
+                </div>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-zinc-300 border-collapse">
+                  <thead>
+                    <tr className="border-b border-zinc-800 text-[10px] uppercase font-mono text-zinc-500">
+                      <th className="py-2 px-3">Order ID</th>
+                      <th className="py-2 px-3">Event Name</th>
+                      <th className="py-2 px-3">Reporting Date</th>
+                      <th className="py-2 px-3">Reporting Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const roster = getStaffRoster(busyRosterStaff);
+                      if (roster.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={4} className="py-4 text-center text-zinc-500 italic">
+                              No active assignments found.
+                            </td>
+                          </tr>
+                        );
+                      }
+                      return roster.map((item, idx) => (
+                        <tr key={idx} className="border-b border-zinc-800/50 hover:bg-zinc-850/30 transition-colors">
+                          <td className="py-3 px-3 font-mono text-indigo-400 font-semibold">{item.orderId}</td>
+                          <td className="py-3 px-3 font-medium text-white uppercase">{item.eventName}</td>
+                          <td className="py-3 px-3 font-mono">{item.reportingDate || '—'}</td>
+                          <td className="py-3 px-3 font-mono">{item.reportingTime || '—'}</td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+              
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setBusyRosterStaff(null)}
+                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
