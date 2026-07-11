@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRole } from './RoleContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabaseClient } from '../supabaseClient';
@@ -241,6 +241,165 @@ export const CameraLensGraphic: React.FC<{
           </div>
         </div>
       </div>
+    </div>
+  );
+};
+
+interface StaffSelectDropdownProps {
+  deliverable: string;
+  rowId: string;
+  staffType: 'In-House' | 'Freelancer';
+  selectedStaffId: string;
+  onSelect: (staffId: string) => void;
+  productionStaff: any[];
+  editorAssignments: any[];
+  onOpenRoster: (staffName: string) => void;
+  allRowsForDeliverable: Array<{ id: string; staffType: string; staffId: string }>;
+}
+
+const StaffSelectDropdown = ({
+  deliverable,
+  rowId,
+  staffType,
+  selectedStaffId,
+  onSelect,
+  productionStaff,
+  editorAssignments,
+  onOpenRoster,
+  allRowsForDeliverable
+}: StaffSelectDropdownProps) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const filteredStaff = useMemo(() => {
+    return productionStaff.filter(s => {
+      if (s.status !== 'Active') return false;
+      const type = s.staff_type || (s as any).Staff_Type || 'In-House';
+      return type.toLowerCase() === staffType.toLowerCase();
+    });
+  }, [productionStaff, staffType]);
+
+  const currentStaff = useMemo(() => {
+    return filteredStaff.find(s => s.staff_id === selectedStaffId);
+  }, [filteredStaff, selectedStaffId]);
+
+  const currentStaffIsBusy = useMemo(() => {
+    if (!currentStaff) return false;
+    return editorAssignments.some(a => a.staff_id === currentStaff.staff_id && a.status !== 'Completed');
+  }, [currentStaff, editorAssignments]);
+
+  return (
+    <div ref={dropdownRef} className="relative w-full text-left">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-xs text-zinc-300 rounded-xl px-2.5 py-1.5 font-sans focus:outline-none focus:border-purple-500 cursor-pointer min-h-[34px] flex items-center justify-between gap-1.5"
+      >
+        <span className="truncate">
+          {currentStaff ? (
+            <span className="flex items-center gap-1.5">
+              <span className="text-xs shrink-0">{currentStaffIsBusy ? '🔴' : '🟢'}</span>
+              <span className="truncate">{currentStaff.name}</span>
+            </span>
+          ) : (
+            <span className="text-zinc-500">Select Staff</span>
+          )}
+        </span>
+        <span className="text-[10px] text-zinc-500 shrink-0 select-none">▼</span>
+      </button>
+
+      {currentStaff && currentStaffIsBusy && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenRoster(currentStaff.name);
+          }}
+          className="absolute right-7 top-1/2 -translate-y-1/2 text-[9px] bg-rose-950/40 text-rose-400 hover:bg-rose-900/40 border border-rose-900/30 px-1.5 py-0.5 rounded font-mono transition-colors"
+          title="View Roster"
+        >
+          Roster
+        </button>
+      )}
+
+      {isOpen && (
+        <div className="absolute left-0 right-0 mt-1 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl z-[100] max-h-60 overflow-y-auto divide-y divide-zinc-900">
+          <div
+            onClick={() => {
+              onSelect('');
+              setIsOpen(false);
+            }}
+            className="px-3 py-2 text-xs text-zinc-505 hover:bg-zinc-900 cursor-pointer transition-colors font-mono"
+          >
+            Clear Selection
+          </div>
+          {filteredStaff.map(s => {
+            const isBusy = editorAssignments.some(a => a.staff_id === s.staff_id && a.status !== 'Completed');
+            const isAlreadyAssigned = allRowsForDeliverable.some(r => r.staffId === s.staff_id && r.id !== rowId);
+
+            return (
+              <div
+                key={s.staff_id}
+                onClick={() => {
+                  if (isAlreadyAssigned) return;
+                  onSelect(s.staff_id);
+                  setIsOpen(false);
+                }}
+                className={`px-3 py-2 text-xs flex items-center justify-between gap-2 transition-colors ${
+                  isAlreadyAssigned 
+                    ? 'opacity-50 cursor-not-allowed bg-zinc-950 text-zinc-650' 
+                    : 'hover:bg-zinc-900 cursor-pointer text-zinc-350 hover:text-white'
+                }`}
+              >
+                <span className="flex items-center gap-1.5 truncate">
+                  <span className="text-xs shrink-0">{isBusy ? '🔴' : '🟢'}</span>
+                  <span className="font-medium truncate">{s.name}</span>
+                  <span className="text-[10px] text-zinc-550 font-mono truncate">({s.role || 'Staff'})</span>
+                  {isAlreadyAssigned && <span className="text-[9px] text-zinc-600 font-mono italic">(Already assigned)</span>}
+                </span>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                    isBusy ? 'bg-rose-950/30 text-rose-400 border border-rose-900/30' : 'bg-emerald-950/30 text-emerald-400 border border-emerald-900/30'
+                  }`}>
+                    {isBusy ? 'Busy' : 'Available'}
+                  </span>
+                  
+                  {isBusy && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenRoster(s.name);
+                      }}
+                      className="text-[9px] font-mono text-[#a78bfa] hover:text-[#c084fc] hover:underline px-1 py-0.5"
+                    >
+                      Roster
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {filteredStaff.length === 0 && (
+            <div className="px-3 py-3 text-xs text-zinc-500 italic font-mono text-center">
+              No active {staffType} staff.
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -1305,6 +1464,31 @@ ${coordinatorName}`;
   const [newDeliverableInput, setNewDeliverableInput] = useState('');
   const [openDropdownDeliverable, setOpenDropdownDeliverable] = useState<string | null>(null);
   const [assignedEditorsModalProd, setAssignedEditorsModalProd] = useState<Production | null>(null);
+  const [rosterStaffName, setRosterStaffName] = useState<string | null>(null);
+
+  const staffActiveAssignments = useMemo(() => {
+    if (!rosterStaffName) return [];
+    return (editorAssignments || [])
+      .filter(a => a.staff_name && a.staff_name.toLowerCase() === rosterStaffName.toLowerCase() && a.status !== 'Completed')
+      .map(assign => {
+        const correlatedProj = (production || []).find(p => p.production_id === assign.production_id);
+        const trackingId = correlatedProj?.tracking_id;
+        const linkedOrder = (orders || []).find(o => o.order_id === trackingId || o.lead_id === trackingId);
+        const orderId = linkedOrder?.order_id || 'N/A';
+        
+        return {
+          staffName: assign.staff_name,
+          orderId: orderId,
+          assignedDate: assign.assigned_date || '—',
+          targetDeliveryDate: assign.target_finish_date || '—',
+        };
+      })
+      .sort((a, b) => {
+        if (a.assignedDate === '—') return 1;
+        if (b.assignedDate === '—') return -1;
+        return new Date(a.assignedDate).getTime() - new Date(b.assignedDate).getTime();
+      });
+  }, [rosterStaffName, editorAssignments, production, orders]);
 
   // Simplified Add Staff Form states
   const [newStaffName, setNewStaffName] = useState('');
@@ -6030,7 +6214,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                      {/* 2. ASSIGN PRODUCTION STAFF (DELIVERABLE-WISE) */}
                      <div className="space-y-4">
-                      <div className="border-b border-zinc-900 pb-2">
+                      <div className="border-b border-zinc-900 pb-2 flex items-center justify-between">
                         <h4 className="text-[10px] text-[#a78bfa] uppercase font-black tracking-widest font-mono">
                           2. Assign Production Staff (Deliverable-Wise)
                         </h4>
@@ -6047,15 +6231,39 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         </div>
                       )}
 
-                      {/* Single Common Target Delivery Date */}
-                      <div id="wf-target-delivery-date-container" className={`space-y-1.5 p-3.5 bg-zinc-900/10 border rounded-xl transition-all ${
+                      {/* Header banner showing complete list of Deliverables first for rapid reading */}
+                      <div className="p-3 bg-purple-950/10 border border-purple-900/20 rounded-xl space-y-1.5">
+                        <span className="text-[9px] text-[#a78bfa] uppercase font-black tracking-widest font-mono block">
+                          Project Deliverables List Overview
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {customDeliverables.map((del, idx) => (
+                            <span 
+                              key={idx} 
+                              className="text-[10px] bg-zinc-900/60 border border-zinc-800 text-zinc-300 px-2 py-0.5 rounded-md font-mono"
+                              title={del}
+                            >
+                              {idx + 1}. {del}
+                            </span>
+                          ))}
+                          {customDeliverables.length === 0 && (
+                            <span className="text-[10px] text-zinc-500 italic font-mono">No deliverables loaded</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Single Common Target Delivery Date at the top */}
+                      <div id="wf-target-delivery-date-container" className={`p-3 bg-zinc-900/10 border rounded-xl transition-all flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${
                         validationAttempted && !wfTargetDeliveryDate
                           ? 'border-rose-500 bg-rose-950/5'
                           : 'border-zinc-900'
                       }`}>
-                        <label className="text-[10px] text-[#a78bfa] uppercase font-black tracking-widest font-mono flex items-center gap-1">
-                          Target Delivery Date <span className="text-rose-500">*</span>
-                        </label>
+                        <div className="space-y-0.5">
+                          <label className="text-[10px] text-[#a78bfa] uppercase font-black tracking-widest font-mono flex items-center gap-1">
+                            Target Delivery Date <span className="text-rose-500">*</span>
+                          </label>
+                          <p className="text-[10px] text-zinc-500 font-mono">Applies to all assignments on this lead</p>
+                        </div>
                         <input
                           type="date"
                           id="wf-target-delivery-date"
@@ -6063,7 +6271,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           onChange={(e) => {
                             setWfTargetDeliveryDate(e.target.value);
                           }}
-                          className={`w-full bg-zinc-950 border text-xs text-zinc-300 rounded-xl px-3 py-2 font-mono focus:outline-none min-h-[38px] ${
+                          className={`bg-zinc-950 border text-xs text-zinc-300 rounded-xl px-3 py-1.5 font-mono focus:outline-none min-h-[34px] sm:w-48 ${
                             validationAttempted && !wfTargetDeliveryDate
                               ? 'border-rose-500 ring-1 ring-rose-500/30'
                               : 'border-zinc-900 hover:border-zinc-800 focus:border-purple-500'
@@ -6071,175 +6279,180 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         />
                       </div>
 
-                      <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
-                        {customDeliverables.map((deliverable, index) => {
-                          const rows = deliverableStaffRows[deliverable] || [];
-                          const isEmpty = rows.filter(r => r.staffId).length === 0;
+                      {/* Compact Deliverable Assignment Table */}
+                      <div className="border border-zinc-900 rounded-xl overflow-hidden bg-zinc-950">
+                        <div className="overflow-x-auto w-full">
+                          <table className="w-full text-left border-collapse min-w-[700px]">
+                            <thead>
+                              <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[9px] text-zinc-500 uppercase tracking-wider">
+                                <th className="px-3.5 py-2 font-bold w-[35%]">Deliverable</th>
+                                <th className="px-3.5 py-2 font-bold w-[65%]">Assignments (Staff Type & Assigned Staff)</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-900">
+                              {customDeliverables.map((deliverable, dIndex) => {
+                                const rows = deliverableStaffRows[deliverable] || [];
+                                const isEmpty = rows.filter(r => r.staffId).length === 0;
 
-                          return (
-                            <div 
-                              key={deliverable} 
-                              id={`deliverable-block-${index}`}
-                              className={`bg-zinc-900/20 border rounded-xl p-3.5 space-y-3 transition-all ${
-                                validationAttempted && isEmpty
-                                  ? 'border-rose-500 bg-rose-950/5'
-                                  : 'border-zinc-900'
-                              }`}
-                            >
-                              {/* Deliverable Header */}
-                              <div className="flex items-start justify-between gap-4 border-b border-zinc-900/60 pb-2">
-                                <div>
-                                  <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">Deliverable</span>
-                                  <span className="text-xs font-bold text-zinc-100 font-sans block mt-0.5">{deliverable}</span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setCustomDeliverables(prev => prev.filter(d => d !== deliverable));
-                                    setDeliverableStaffRows(prev => {
-                                      const copy = { ...prev };
-                                      delete copy[deliverable];
-                                      return copy;
-                                    });
-                                  }}
-                                  className="text-zinc-600 hover:text-rose-400 transition-colors p-1 cursor-pointer"
-                                  title="Remove Deliverable"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-
-                              {/* Staff Assignment Rows */}
-                              <div className="space-y-2.5">
-                                {rows.map((row, rIndex) => {
-                                  const filteredStaff = productionStaff.filter(s => {
-                                    if (s.status !== 'Active') return false;
-                                    const type = s.staff_type || (s as any).Staff_Type || 'In-House';
-                                    return type.toLowerCase() === row.staffType.toLowerCase();
-                                  });
-
-                                  return (
-                                    <div key={row.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end bg-zinc-950/40 p-2 rounded-lg border border-zinc-950">
-                                      {/* Row Label */}
-                                      <div className="md:col-span-2 text-[9px] text-zinc-500 font-mono self-center">
-                                        Staff {rIndex + 1}
-                                      </div>
-
-                                      {/* Staff Type */}
-                                      <div className="md:col-span-4 space-y-1">
-                                        <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
-                                          Staff Type
-                                        </label>
-                                        <select
-                                          value={row.staffType}
-                                          onChange={(e) => {
-                                            const newType = e.target.value as 'In-House' | 'Freelancer';
+                                return (
+                                  <tr 
+                                    key={deliverable}
+                                    id={`deliverable-block-${dIndex}`}
+                                    className={`transition-colors align-top ${
+                                      validationAttempted && isEmpty
+                                        ? 'bg-rose-950/5 hover:bg-rose-950/10'
+                                        : 'hover:bg-zinc-900/10'
+                                    }`}
+                                  >
+                                    {/* Deliverable Name with compact single line + delete-deliverable button */}
+                                    <td className="px-3.5 py-2.5 font-sans border-r border-zinc-900/50">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div 
+                                          className="text-xs font-bold text-zinc-200 truncate pr-2 select-none"
+                                          title={deliverable}
+                                        >
+                                          ✔ {deliverable}
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setCustomDeliverables(prev => prev.filter(d => d !== deliverable));
                                             setDeliverableStaffRows(prev => {
-                                              const updatedRows = [...(prev[deliverable] || [])];
-                                              updatedRows[rIndex] = {
-                                                ...updatedRows[rIndex],
-                                                staffType: newType,
-                                                staffId: ''
-                                              };
-                                              return {
-                                                ...prev,
-                                                [deliverable]: updatedRows
-                                              };
+                                              const copy = { ...prev };
+                                              delete copy[deliverable];
+                                              return copy;
                                             });
                                           }}
-                                          className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-xs text-zinc-300 rounded-xl px-2 py-1.5 font-sans focus:outline-none focus:border-purple-500 cursor-pointer min-h-[34px]"
+                                          className="text-zinc-600 hover:text-rose-400 transition-colors p-1 cursor-pointer text-[10px] shrink-0"
+                                          title="Remove Deliverable"
                                         >
-                                          <option value="In-House">In-House</option>
-                                          <option value="Freelancer">Freelancer</option>
-                                        </select>
+                                          ✕
+                                        </button>
                                       </div>
+                                    </td>
 
-                                      {/* Select Staff */}
-                                      <div className="md:col-span-5 space-y-1">
-                                        <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
-                                          Select Staff
-                                        </label>
-                                        <select
-                                          value={row.staffId}
-                                          onChange={(e) => {
-                                            const val = e.target.value;
-                                            setDeliverableStaffRows(prev => {
-                                              const updatedRows = [...(prev[deliverable] || [])];
-                                              updatedRows[rIndex] = {
-                                                ...updatedRows[rIndex],
-                                                staffId: val
-                                              };
-                                              return {
-                                                ...prev,
-                                                [deliverable]: updatedRows
-                                              };
-                                            });
-                                          }}
-                                          className={`w-full bg-zinc-950 border text-xs text-zinc-300 rounded-xl px-2 py-1.5 font-sans focus:outline-none cursor-pointer min-h-[34px] ${
-                                            validationAttempted && !row.staffId && isEmpty
-                                              ? 'border-rose-500 focus:border-rose-500'
-                                              : 'border-zinc-900 hover:border-zinc-800 focus:border-purple-500'
-                                          }`}
-                                        >
-                                          <option value="">Select Staff</option>
-                                          {filteredStaff.map(s => (
-                                            <option key={s.staff_id} value={s.staff_id}>
-                                              {s.name} ({s.role || 'Production Staff'})
-                                            </option>
-                                          ))}
-                                        </select>
-                                      </div>
+                                    {/* Compact Staff Row Assignment Sub-table */}
+                                    <td className="px-3.5 py-1.5">
+                                      <div className="space-y-1.5">
+                                        {rows.map((row, rIndex) => {
+                                          return (
+                                            <div 
+                                              key={row.id} 
+                                              className="flex items-center gap-2"
+                                            >
+                                              {/* Staff Type Select Dropdown */}
+                                              <div className="w-28 shrink-0">
+                                                <select
+                                                  value={row.staffType}
+                                                  onChange={(e) => {
+                                                    const newType = e.target.value as 'In-House' | 'Freelancer';
+                                                    setDeliverableStaffRows(prev => {
+                                                      const updatedRows = [...(prev[deliverable] || [])];
+                                                      updatedRows[rIndex] = {
+                                                        ...updatedRows[rIndex],
+                                                        staffType: newType,
+                                                        staffId: ''
+                                                      };
+                                                      return {
+                                                        ...prev,
+                                                        [deliverable]: updatedRows
+                                                      };
+                                                    });
+                                                  }}
+                                                  className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-[11px] text-zinc-400 hover:text-zinc-300 rounded-lg px-2 py-1 font-sans focus:outline-none focus:border-purple-500 cursor-pointer h-7"
+                                                >
+                                                  <option value="In-House">In-House</option>
+                                                  <option value="Freelancer">Freelancer</option>
+                                                </select>
+                                              </div>
 
-                                      {/* Actions (Remove Row) */}
-                                      <div className="md:col-span-1 flex justify-end pb-1">
-                                        {rows.length > 1 && (
+                                              {/* Custom Staff Dropdown */}
+                                              <div className="flex-1 min-w-[200px]">
+                                                <StaffSelectDropdown
+                                                  deliverable={deliverable}
+                                                  rowId={row.id}
+                                                  staffType={row.staffType}
+                                                  selectedStaffId={row.staffId}
+                                                  onSelect={(val) => {
+                                                    setDeliverableStaffRows(prev => {
+                                                      const updatedRows = [...(prev[deliverable] || [])];
+                                                      updatedRows[rIndex] = {
+                                                        ...updatedRows[rIndex],
+                                                        staffId: val
+                                                      };
+                                                      return {
+                                                        ...prev,
+                                                        [deliverable]: updatedRows
+                                                      };
+                                                    });
+                                                  }}
+                                                  productionStaff={productionStaff}
+                                                  editorAssignments={editorAssignments}
+                                                  onOpenRoster={(name) => setRosterStaffName(name)}
+                                                  allRowsForDeliverable={rows}
+                                                />
+                                              </div>
+
+                                              {/* Row Actions */}
+                                              <div className="w-6 shrink-0 flex justify-center">
+                                                {rows.length > 1 && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setDeliverableStaffRows(prev => {
+                                                        const updatedRows = (prev[deliverable] || []).filter(r => r.id !== row.id);
+                                                        return {
+                                                          ...prev,
+                                                          [deliverable]: updatedRows
+                                                        };
+                                                      });
+                                                    }}
+                                                    className="text-zinc-600 hover:text-rose-400 transition-colors p-1 cursor-pointer text-xs"
+                                                    title="Remove Staff Assignment"
+                                                  >
+                                                    ✕
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+
+                                        {/* Add Staff Button inside the Deliverable Assignment cell */}
+                                        <div className="pt-0.5 flex items-center justify-between">
+                                          {validationAttempted && isEmpty && (
+                                            <span className="text-[10px] text-rose-500 font-mono italic">
+                                              ⚠️ Required: Assign at least one staff
+                                            </span>
+                                          )}
+                                          <div className="flex-1" />
                                           <button
                                             type="button"
                                             onClick={() => {
-                                              setDeliverableStaffRows(prev => {
-                                                const updatedRows = (prev[deliverable] || []).filter(r => r.id !== row.id);
-                                                return {
-                                                  ...prev,
-                                                  [deliverable]: updatedRows
-                                                };
-                                              });
+                                              setDeliverableStaffRows(prev => ({
+                                                ...prev,
+                                                [deliverable]: [
+                                                  ...(prev[deliverable] || []),
+                                                  { id: `row-${Math.random()}`, staffType: 'In-House', staffId: '' }
+                                                ]
+                                              }));
                                             }}
-                                            className="text-zinc-600 hover:text-rose-400 transition-colors p-1.5 cursor-pointer text-xs"
-                                            title="Remove Staff Assignment"
+                                            className="px-2.5 py-0.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-855 text-purple-400 hover:text-purple-300 text-[10px] font-mono rounded transition-all cursor-pointer flex items-center gap-1 mt-0.5"
                                           >
-                                            ✕
+                                            <span>+ Add Staff</span>
                                           </button>
-                                        )}
+                                        </div>
                                       </div>
-                                    </div>
-                                  );
-                                })}
-
-                                {/* Add Staff Button for this deliverable */}
-                                <div className="pt-1.5 flex justify-start">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setDeliverableStaffRows(prev => ({
-                                        ...prev,
-                                        [deliverable]: [
-                                          ...(prev[deliverable] || []),
-                                          { id: `row-${Math.random()}`, staffType: 'In-House', staffId: '' }
-                                        ]
-                                      }));
-                                    }}
-                                    className="px-3 py-1 bg-zinc-950 hover:bg-zinc-900 border border-zinc-900 hover:border-zinc-800 text-purple-400 hover:text-purple-300 text-[10px] font-mono rounded-lg transition-all cursor-pointer flex items-center gap-1"
-                                  >
-                                    <span>+ Add Staff</span>
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
 
                         {customDeliverables.length === 0 && (
-                          <div className="text-center py-6 text-zinc-500 text-xs italic font-mono bg-zinc-900/10 border border-dashed border-zinc-900 rounded-xl">
+                          <div className="text-center py-6 text-zinc-500 text-xs italic font-mono bg-zinc-900/10 border-t border-zinc-900">
                             No deliverables found. Use the input below to add them.
                           </div>
                         )}
@@ -6280,6 +6493,66 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           </button>
                         </div>
                       </div>
+
+                      {/* Read-only Production Staff Roster Popup */}
+                      {rosterStaffName && (
+                        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm animate-fade-in">
+                          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-2xl p-6 shadow-2xl flex flex-col space-y-4">
+                            <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+                              <h3 className="text-xs font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                                <span>📅</span> Production Staff Roster — <span className="text-[#a78bfa]">{rosterStaffName}</span>
+                              </h3>
+                              <button
+                                onClick={() => setRosterStaffName(null)}
+                                className="text-zinc-500 hover:text-white transition-colors text-lg"
+                              >
+                                ✕
+                              </button>
+                            </div>
+
+                            <div className="overflow-x-auto w-full rounded-xl border border-zinc-900 bg-zinc-950 max-h-[300px]">
+                              <table className="w-full text-left border-collapse min-w-[500px]">
+                                <thead>
+                                  <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
+                                    <th className="px-4 py-3 font-bold">Staff Name</th>
+                                    <th className="px-4 py-3 font-bold">Order ID</th>
+                                    <th className="px-4 py-3 font-bold">Assigned Date</th>
+                                    <th className="px-4 py-3 font-bold">Target Delivery Date</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-zinc-900 font-sans text-xs text-zinc-300">
+                                  {staffActiveAssignments.length === 0 ? (
+                                    <tr>
+                                      <td colSpan={4} className="px-4 py-8 text-center text-zinc-500 font-mono text-xs">
+                                        No active assignments found for this staff member.
+                                      </td>
+                                    </tr>
+                                  ) : (
+                                    staffActiveAssignments.map((row, idx) => (
+                                      <tr key={idx} className="hover:bg-zinc-900/30 transition-colors">
+                                        <td className="px-4 py-3 font-medium text-white">{row.staffName}</td>
+                                        <td className="px-4 py-3 font-mono text-xs">{row.orderId}</td>
+                                        <td className="px-4 py-3 text-zinc-400">{row.assignedDate}</td>
+                                        <td className="px-4 py-3 text-zinc-400">{row.targetDeliveryDate}</td>
+                                      </tr>
+                                    ))
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+
+                            <div className="flex justify-end pt-2">
+                              <button
+                                type="button"
+                                onClick={() => setRosterStaffName(null)}
+                                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-855 text-zinc-300 hover:text-white text-xs font-mono font-bold rounded-xl transition-colors cursor-pointer"
+                              >
+                                Close
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Save & Assign Action Buttons */}
                       <div className="pt-2 flex items-center gap-3">
