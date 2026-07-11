@@ -1044,7 +1044,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         profile_photo: merged.profile_photo || '',
         notes: JSON.stringify(extra),
         created_at: merged.created_at || new Date().toISOString(),
-        Skill: Array.isArray(merged.Skill) ? merged.Skill.join(', ') : (merged.Skill || ''),
+        Skill: Array.isArray(merged.Skill) ? merged.Skill : (typeof merged.Skill === 'string' ? merged.Skill.split(',').map(s => s.trim()).filter(Boolean) : []),
         Staff_Type: merged.Staff_Type || merged.staff_type || 'In-House'
       } as any;
 
@@ -1908,7 +1908,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
               ...item,
               ...extra,
               staff_id: mapFromDbStaffId(item.staff_id),
-              notes: (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) ? (extra.notes || '') : item.notes, Skill: item.Skill || extra.Skill || '', Staff_Type: item.Staff_Type || extra.Staff_Type || 'In-House'
+              notes: (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) ? (extra.notes || '') : item.notes, Skill: Array.isArray(item.Skill) ? item.Skill : (typeof item.Skill === 'string' ? item.Skill.split(',').map(s=>s.trim()).filter(Boolean) : (Array.isArray(extra.Skill) ? extra.Skill : [])), Staff_Type: item.Staff_Type || extra.Staff_Type || 'In-House'
             };
          }));
       }

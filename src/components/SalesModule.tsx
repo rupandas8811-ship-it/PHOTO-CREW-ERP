@@ -3463,15 +3463,26 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const phoneStr = typeof rawPhone === 'string' ? rawPhone : String(rawPhone);
       
       const safeCustomerName = String(leadObj.customer_name || 'Client');
-      const safeEventType = String(leadObj.event_type || 'Event');
-      const safeEventDate = String(leadObj.event_date || 'N/A');
       const safeEventLocation = String(leadObj.event_location || leadObj.location || 'N/A');
+
+      let eventDetailsStr = '';
+      if (leadObj.events && leadObj.events.length > 0) {
+        eventDetailsStr = leadObj.events.map((ev) => {
+          const eName = ev.event_name || ev.event_type || 'Event';
+          const eDate = ev.event_date || 'N/A';
+          const eTime = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '';
+          return `🎉 ${eName}\n📅 Date: ${eDate}${eTime ? ` | Time: ${eTime}` : ''}`;
+        }).join('\n\n') + '\n';
+      } else {
+        const safeEventType = String(leadObj.event_type || 'Event');
+        const safeEventDate = String(leadObj.event_date || 'N/A');
+        eventDetailsStr = `🎉 Event: ${safeEventType}\n📅 Event Date: ${safeEventDate}\n`;
+      }
 
       const message = `Hello *${safeCustomerName}*,\n\n` +
         `Thank you for choosing *PhotoCrew Pictures*.\n\n` +
         `Please find your quotation details below:\n\n` +
-        `🎉 Event: ${safeEventType}\n` +
-        `📅 Event Date: ${safeEventDate}\n` +
+        eventDetailsStr +
         `📍 Event Address: ${safeEventLocation}\n` +
         `💰 Final Amount: ₹${finalAmt.toLocaleString('en-IN')}\n\n` +
         `Thank you.\nPhotoCrew Pictures`;
@@ -3745,9 +3756,28 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   }, [selectedLead?.lead_id, supabaseClient]);
 
   // Handle lead select
-  const handleSelectLead = (lead: Lead) => {
+  const handleSelectLead = async (lead: Lead) => {
     setSelectedLead(lead);
     setCrmEvents(lead.events || []);
+
+    // Always fetch fresh events to ensure no cached EV- IDs are used
+    if (supabaseClient && lead.lead_id && lead.lead_id !== 'DRAFT-LEAD') {
+      try {
+        const { data: freshEvents, error } = await supabaseClient
+          .from('lead_events')
+          .select('*')
+          .eq('lead_id', lead.lead_id)
+          .order('created_at', { ascending: true });
+        
+        if (!error && freshEvents && freshEvents.length > 0) {
+          setCrmEvents(freshEvents as LeadEvent[]);
+          setSelectedLead(prev => prev ? { ...prev, events: freshEvents as LeadEvent[] } : prev);
+        }
+      } catch (err) {
+        console.warn("Failed to load fresh events on selection", err);
+      }
+    }
+
     setGeneratedPDFBlobUrl('');
     setActiveQuoteNum('');
     setQuoteDiscount(0);
@@ -4079,11 +4109,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           showToastMsg("❌ Please complete all required fields before saving.", "error");
           return false;
         }
-        if (!wizardLeadData.confirmed_event_time) {
-          showValidationError("input_confirmed_event_time", "Please provide Confirmed Event Time.");
-          showToastMsg("❌ Please complete all required fields before saving.", "error");
-          return false;
-        }
+
         if (wizardLeadData.final_amount === undefined || wizardLeadData.final_amount === null || isNaN(wizardLeadData.final_amount) || wizardLeadData.final_amount <= 0) {
           showValidationError("input_final_amount", "Please provide Final Amount.");
           showToastMsg("❌ Please complete all required fields before saving.", "error");
@@ -4394,8 +4420,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         });
 
         if (wizardLeadData.status === 'Order Confirmed') {
-          if (!wizardLeadData.confirmed_event_date || !wizardLeadData.confirmed_event_time) {
-             showToastMsg("Please provide Confirmed Event Date and Time.", "error");
+          if (!wizardLeadData.confirmed_event_date) {
+             showToastMsg("Please provide Confirmed Event Date.", "error");
              setIsSaving(false); return;
           }
           if (!wizardLeadData.final_amount || isNaN(wizardLeadData.final_amount)) {
@@ -4617,6 +4643,29 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         events: finalEventsList
       });
 
+      // Reload latest Event Details from the database to ensure we have the real IDs
+      let reloadedEvents = finalEventsList;
+      if (supabaseClient) {
+        const { data: dbEvents, error: dbErr } = await supabaseClient
+          .from('lead_events')
+          .select('*')
+          .eq('lead_id', currentLeadId)
+          .order('created_at', { ascending: true });
+          
+        if (dbErr) {
+          throw new Error(`Failed to verify saved events: ${dbErr.message || dbErr.details || 'Unknown database error'}`);
+        }
+        
+        if (dbEvents && dbEvents.length > 0) {
+          reloadedEvents = dbEvents as LeadEvent[];
+          if (isCreateFlow) {
+            setCreateEvents(reloadedEvents);
+          } else {
+            setCrmEvents(reloadedEvents);
+          }
+        }
+      }
+
       const notesWithTag = appendCompletedStep(step2FollowUpNotes || 'Saved event details', 2);
 
       // Determine target status: If the current status is New Lead or empty, update to Follow Up. Otherwise preserve advanced status.
@@ -4659,20 +4708,23 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             current_status: targetStatus,
             remarks: updatedRemarks,
             follow_up_notes: step2FollowUpNotes,
-            next_follow_up_date: step2FollowUpDate
+            next_follow_up_date: step2FollowUpDate,
+            events: reloadedEvents
           };
         });
 
         setCrmWizardStep(3);
       }
 
-      showToastMsg("✅ Follow-up updated successfully.", "success");
+      showToastMsg("✅ Event Details Saved Successfully", "success");
       setShowStep2Popup(false);
     } catch (err: any) {
       console.error("Step 2 Follow-up save failed:", err);
+      const errorMsg = err?.details || err?.message || String(err);
+      showToastMsg(`Save Failed: ${errorMsg}`, "error");
       showErrorHelper(
         "Step 2 Save & Next Failed",
-        err.message || String(err),
+        errorMsg,
         "handleSaveStep2FollowUp",
         currentLeadId,
         "Check event details and try again.",
@@ -5937,10 +5989,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       showToastMsg("Please select Confirmed Event Date.", "error");
       return;
     }
-    if (!confirmedEventTime) {
-      showToastMsg("Please select Confirmed Event Time.", "error");
-      return;
-    }
+
     if (finalPackageAmount === undefined || finalPackageAmount === 0 || isNaN(finalPackageAmount)) {
       showToastMsg("Please enter Final Amount.", "error");
       return;
@@ -6019,10 +6068,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         showToastMsg("Please select Confirmed Event Date.", "error");
         return;
       }
-      if (!followUpForm.event_time) {
-        showToastMsg("Please select Confirmed Event Time.", "error");
-        return;
-      }
+
       if (followUpForm.quotation_amount === undefined || followUpForm.quotation_amount === 0 || isNaN(followUpForm.quotation_amount)) {
         showToastMsg("Please enter Final Amount.", "error");
         return;
@@ -6202,10 +6248,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       showToastMsg("Please select Confirmed Event Date.", "error");
       return;
     }
-    if (!confirmForm.event_time) {
-      showToastMsg("Please select Confirmed Event Time.", "error");
-      return;
-    }
+
     if (confirmForm.quotation_amount === undefined || confirmForm.quotation_amount === 0 || isNaN(confirmForm.quotation_amount)) {
       showToastMsg("Please enter Final Amount.", "error");
       return;
@@ -6231,7 +6274,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       );
 
       setShowConfirmModal(false);
-      showToastMsg("Order Confirmed Successfully.", "success");
+      showToastMsg("Booking Confirmation saved successfully.", "success");
+      setWizardLeadData(prev => ({
+        ...prev,
+        advance_received: Number(confirmForm.advance_received)
+      }));
       
       const repDate = selectedLead.Reporting_date || confirmForm.event_date || '';
       const repTime = selectedLead.reporting_time || confirmForm.event_time || '';
@@ -6533,8 +6580,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 </strong>
               </div>
               <div>
-                <span className="text-slate-500 block">Date Scheduled</span>
-                <strong className="text-slate-200 font-medium">{selectedLead.event_date} @ {formatTime12Hour(selectedLead.event_time)}</strong>
+                <span className="text-slate-500 block">Events Scheduled</span>
+                <div className="flex flex-col gap-1 mt-1">
+                  {selectedLead.events && selectedLead.events.length > 0 ? (
+                    selectedLead.events.map((ev, i) => (
+                      <div key={i} className="text-xs">
+                        <span className="text-amber-500 font-semibold">{ev.event_name || ev.event_type || 'Event'}</span>
+                        <br/>
+                        <strong className="text-slate-200 font-medium font-mono text-[10px]">{ev.event_date} {ev.event_start_time ? `@ ${formatTime12Hour(ev.event_start_time)}` : ''}</strong>
+                      </div>
+                    ))
+                  ) : (
+                    <strong className="text-slate-200 font-medium">{selectedLead.event_date || 'N/A'} {selectedLead.event_time ? `@ ${formatTime12Hour(selectedLead.event_time)}` : ''}</strong>
+                  )}
+                </div>
               </div>
               <div>
                 <span className="text-slate-500 block">Current Budget</span>
@@ -6652,29 +6711,49 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   {followUpForm.status === 'Order Confirmed' ? (
                     <div className="space-y-4 pt-2 border-t border-slate-800">
                       <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Configure Confirmed Order Settings</h4>
+                      
+                      {/* Read-only multiple events display */}
+                      {selectedLead?.events && selectedLead.events.length > 0 && (
+                        <div className="space-y-2 mb-4">
+                          <label className="block text-xs font-medium text-slate-400 mb-2">Confirmed Event Dates</label>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {selectedLead.events.map(ev => (
+                              <div key={ev.id} className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-800 flex flex-col">
+                                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-1">🎬 {ev.event_name || ev.event_type || 'Event'}</span>
+                                <div className="flex items-center gap-3">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] text-slate-500 font-mono">Date:</span>
+                                    <span className="text-[11px] text-slate-300 font-mono font-semibold">{ev.event_date || 'N/A'}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] text-slate-500 font-mono">Time:</span>
+                                    <span className="text-[11px] text-slate-300 font-mono font-semibold">{ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A'}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1">
-                            Event Date * (Required)
-                          </label>
+                        {/* Hidden inputs to preserve existing API requirements silently */}
+                        <div className="hidden">
+                          <label className="block text-xs font-medium text-slate-400 mb-1">Event Date * (Required)</label>
                           <input
                             type="date"
-                            required
-                            value={followUpForm.event_date}
+                            value={followUpForm.event_date || (selectedLead?.events?.[0]?.event_date) || ''}
                             onChange={(e) => setFollowUpForm({ ...followUpForm, event_date: e.target.value })}
-                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100"
                           />
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1">
-                            Event Time * (Required)
-                          </label>
+                        <div className="hidden">
+                          <label className="block text-xs font-medium text-slate-400 mb-1">Event Time * (Required)</label>
                           <input
                             type="time"
-                            required
-                            value={followUpForm.event_time}
+                            value={followUpForm.event_time || (selectedLead?.events?.[0]?.event_start_time) || ''}
                             onChange={(e) => setFollowUpForm({ ...followUpForm, event_time: e.target.value })}
-                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100"
                           />
                         </div>
                         <div>
@@ -7164,14 +7243,36 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             <div key={ld.lead_id} className="relative pl-6 before:absolute before:left-2 before:top-2 before:bottom-0 before:w-0.5 before:bg-slate-800">
                               <span className="absolute left-[3px] top-[5px] w-1.5 h-1.5 rounded-full bg-indigo-505 ring-4 ring-slate-850" />
                               <div className="bg-slate-900 p-3 rounded-lg border border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs w-full">
-                                <div>
+                                <div className="flex-1 space-y-3">
                                   <div className="flex items-center gap-2">
                                     <span className="font-mono text-[10px] text-amber-400 font-bold">{ld.lead_id}</span>
-                                    <span className="text-slate-500">Scheduled:</span>
-                                    <span className="font-semibold text-slate-300 font-mono">{ld.event_date}</span>
+                                    <span className="text-[11px] text-slate-400">
+                                      Source: {ld.lead_source === 'Other' && ld.Specify_Custom_Lead_Source_Name ? `Other: ${ld.Specify_Custom_Lead_Source_Name}` : ld.lead_source}
+                                    </span>
                                   </div>
-                                  <div className="text-[11px] text-slate-400 mt-1">
-                                    Shoot: <strong className="text-slate-100">{ld.event_type}</strong> | Source: {ld.lead_source === 'Other' && ld.Specify_Custom_Lead_Source_Name ? `Other: ${ld.Specify_Custom_Lead_Source_Name}` : ld.lead_source}
+                                  
+                                  {/* Render each event separately */}
+                                  <div className="space-y-2 mt-2">
+                                    {ld.events && ld.events.length > 0 ? ld.events.map((ev, evIdx) => (
+                                      <div key={ev.id || evIdx} className="bg-slate-950/40 p-2 rounded border border-slate-800/50">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <span className="text-[10px] text-slate-500 font-mono">📅 {ev.event_name || ev.event_type || 'Event'}</span>
+                                        </div>
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 font-mono text-[11px]">
+                                          <span className="text-slate-300">Date: {ev.event_date || 'N/A'}</span>
+                                          <span className="text-slate-300">Time: {ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A'}</span>
+                                        </div>
+                                      </div>
+                                    )) : (
+                                      <div className="bg-slate-950/40 p-2 rounded border border-slate-800/50">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <span className="text-[10px] text-slate-500 font-mono">📅 {ld.event_type || 'Event'}</span>
+                                        </div>
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 font-mono text-[11px]">
+                                          <span className="text-slate-300">Date: {ld.event_date || 'N/A'}</span>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
 
@@ -7200,14 +7301,40 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         <div className="space-y-3">
                           {cust.orders.map((ord) => (
                             <div key={ord.order_id} className="bg-slate-900 p-3 rounded-lg border border-slate-800 text-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                              <div>
+                              <div className="flex-1 space-y-3">
                                 <div className="flex items-center gap-2">
                                   <span className="font-mono text-[10px] text-indigo-400 font-bold">{ord.order_id}</span>
-                                  <span className="text-slate-500">Event Date:</span>
-                                  <span className="font-semibold text-slate-300 font-mono">{ord.event_date}</span>
+                                  <span className="text-[11px] text-slate-400">
+                                    Package: <strong className="text-slate-200">{ord.package_name}</strong> | Location: {ord.event_location}
+                                  </span>
                                 </div>
-                                <div className="text-[11px] text-slate-400 mt-1">
-                                  Package: <strong className="text-slate-200">{ord.package_name}</strong> | Location: {ord.event_location}
+
+                                {/* Render each event separately */}
+                                <div className="space-y-2 mt-2">
+                                  {(() => {
+                                    const ordLead = leads.find(l => l.lead_id === ord.lead_id);
+                                    if (ordLead && ordLead.events && ordLead.events.length > 0) {
+                                      return ordLead.events.map((ev, evIdx) => (
+                                        <div key={ev.id || evIdx} className="bg-slate-950/40 p-2 rounded border border-slate-800/50">
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-[10px] text-slate-500 font-mono">📅 {ev.event_name || ev.event_type || 'Event'}</span>
+                                          </div>
+                                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 font-mono text-[11px]">
+                                            <span className="text-slate-300">Date: {ev.event_date || 'N/A'}</span>
+                                            <span className="text-slate-300">Time: {ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A'}</span>
+                                          </div>
+                                        </div>
+                                      ));
+                                    } else {
+                                      return (
+                                        <div className="bg-slate-950/40 p-2 rounded border border-slate-800/50">
+                                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 font-mono text-[11px]">
+                                            <span className="text-slate-300">Date: {ord.event_date || 'N/A'}</span>
+                                          </div>
+                                        </div>
+                                      );
+                                    }
+                                  })()}
                                 </div>
                               </div>
 
@@ -8483,6 +8610,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     <th className="p-3.5">Mobile Number</th>
                     <th className="p-3.5">Event Type</th>
                     <th className="p-3.5">Event Date</th>
+                    <th className="p-3.5">Event Time</th>
                     <th className="p-3.5">Current Stage</th>
                     <th className="p-3.5">Current Status</th>
                     <th className="p-3.5">Payment Status</th>
@@ -8499,7 +8627,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       const linkedOrder = orders.find((o) => o.lead_id === lead.lead_id);
                       const paymentRecord = linkedOrder ? payments.find((p) => p.order_id === linkedOrder.order_id) : null;
                       const paymentLabel = paymentRecord ? paymentRecord.payment_status : 'N/A';
-
                       return (
                         <tr 
                           key={lead.lead_id} 
@@ -8518,10 +8645,45 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             {formatIndianPhoneNumber(lead.mobile)}
                           </td>
                           <td className="p-3.5 text-zinc-300 font-sans">
-                            {lead.event_type === 'Other' ? (lead.custom_event_name || lead.custom_event_type || 'Other') : lead.event_type}
+                            {lead.events && lead.events.length > 0 ? (
+                              <div className="space-y-3">
+                                {lead.events.map((ev, evIdx) => (
+                                  <div key={ev.id || evIdx} className="text-xs">
+                                    {ev.event_name || ev.event_type || 'Other'}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              lead.event_type === 'Other' ? (lead.custom_event_name || lead.custom_event_type || 'Other') : lead.event_type
+                            )}
                           </td>
                           <td className="p-3.5 font-mono text-zinc-350">
-                            {lead.event_date}
+                            {lead.events && lead.events.length > 0 ? (
+                              <div className="space-y-3">
+                                {lead.events.map((ev, evIdx) => (
+                                  <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
+                                    <span className="text-zinc-300">{ev.event_date || '—'}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-zinc-600 italic">—</span>
+                            )}
+                          </td>
+                          <td className="p-3.5 font-mono text-zinc-350">
+                            {lead.events && lead.events.length > 0 ? (
+                              <div className="space-y-3">
+                                {lead.events.map((ev, evIdx) => (
+                                  <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
+                                    <span className="text-zinc-300">
+                                      {ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-zinc-600 italic">—</span>
+                            )}
                           </td>
                           <td className="p-3.5">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
@@ -8746,32 +8908,25 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1 px-2.5 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 />
               </div>
-
               {/* Event Date & Time Block */}
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block font-medium text-slate-400 mb-1">
-                    Event Date * (Required)
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={confirmForm.event_date}
-                    onChange={(e) => setConfirmForm({ ...confirmForm, event_date: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1 px-2.5 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
-                  />
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-2">Confirmed Event Dates</label>
+                <div className="bg-slate-900 border border-slate-800 rounded-lg p-2 space-y-2">
+                  {selectedLead?.events && selectedLead.events.length > 0 ? (
+                    selectedLead.events.map((ev, i) => (
+                      <div key={i} className="flex flex-col gap-0.5 border-b border-slate-800/50 pb-2 last:border-0 last:pb-0">
+                        <span className="text-[11px] font-semibold text-amber-500">{ev.event_name || ev.event_type || 'Event'}</span>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-slate-400 font-mono">📅 {ev.event_date || 'TBD'}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">⏰ {ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'TBD'}</span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-[10px] text-slate-500 text-center py-1">No events scheduled.</div>
+                  )}
                 </div>
-                <div>
-                  <label className="block font-medium text-slate-400 mb-1">
-                    Event Time
-                  </label>
-                  <input
-                    type="time"
-                    value={confirmForm.event_time}
-                    onChange={(e) => setConfirmForm({ ...confirmForm, event_time: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
-                  />
-                </div>
+                <input type="hidden" value={confirmForm.event_date || ''} />
               </div>
 
               {/* Package cost and advance */}
@@ -9817,31 +9972,46 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               <p className="text-[10px] text-zinc-400 mt-0.5">Confirming this order locks the CRM profile and creates a real-time production entry. Only payment configurations remain editable.</p>
                             </div>
 
+                            {/* Display each event separately */}
+                            {crmEvents && crmEvents.length > 0 && (
+                              <div className="space-y-2 mb-4">
+                                <label className="block text-[10px] text-zinc-400 mb-2 uppercase font-mono font-bold border-b border-zinc-800 pb-1">Confirmed Event Dates</label>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  {crmEvents.map(ev => (
+                                    <div key={ev.id} className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-800 flex items-center justify-between">
+                                      <div className="flex flex-col">
+                                        <span className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-0.5">🎬 {ev.event_name || ev.event_type || 'Event'}</span>
+                                        <div className="flex items-center gap-3 mt-1">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-[10px] text-slate-500 font-mono">Date:</span>
+                                            <span className="text-[11px] text-slate-300 font-mono font-semibold">{ev.event_date || 'N/A'}</span>
+                                          </div>
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-[10px] text-slate-500 font-mono">Time:</span>
+                                            <span className="text-[11px] text-slate-300 font-mono font-semibold">{ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A'}</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-left">
-                              <div>
+                              {/* Hidden input to preserve business logic without confusing the UI */}
+                              <div className="hidden">
                                 <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Confirmed Event Date *</label>
                                 <input
                                   id="input_confirmed_event_date"
                                   type="date"
-                                  value={wizardLeadData.confirmed_event_date || ''}
+                                  value={wizardLeadData.confirmed_event_date || (crmEvents && crmEvents.length > 0 ? crmEvents[0].event_date : '') || ''}
                                   disabled={isLeadLocked}
                                   onChange={(e) => setWizardLeadData({ ...wizardLeadData, confirmed_event_date: e.target.value })}
                                   className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
-                                  required
                                 />
                               </div>
-                              <div>
-                                <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Confirmed Event Time *</label>
-                                <input
-                                  id="input_confirmed_event_time"
-                                  type="time"
-                                  value={wizardLeadData.confirmed_event_time || ''}
-                                  disabled={isLeadLocked}
-                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, confirmed_event_time: e.target.value })}
-                                  className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
-                                  required
-                                />
-                              </div>
+
                               <div>
                                 <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Contract Final Amount (₹) *</label>
                                 <input

@@ -13,7 +13,7 @@ import * as XLSX from 'xlsx';
 import { Production, EditingStatus, Staff } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { ProjectDetailModal } from './ProjectDetailModal';
-import { formatINR, triggerAutoScrollAndFocus } from '../utils';
+import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour } from '../utils';
 import { AppLogo } from './AppLogo';
 import { StatusText } from './ui/StatusText';
 import { ProductionCalendar } from './ProductionCalendar';
@@ -2076,6 +2076,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     <th className="p-4 font-black">Customer Name</th>
                     <th className="p-4 font-black">Event Type</th>
                     <th className="p-4 font-black">Event Date</th>
+                    <th className="p-4 font-black">Event Time</th>
                     <th className="p-4 font-black">Raw Footage Link</th>
                     <th className="p-4 font-black text-center">Assigned Team</th>
                     <th className="p-4 font-black">Current Status</th>
@@ -2244,7 +2245,33 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                           {/* Event Date */}
                           <td className="p-4 text-left font-sans text-zinc-350">
-                            {order.event_date || 'N/A'}
+                            {lead?.events && lead.events.length > 0 ? (
+                              <div className="space-y-3">
+                                {lead.events.map((ev: any, evIdx: number) => (
+                                  <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
+                                    <span className="text-zinc-300">{ev.event_date || '—'}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-zinc-600 italic">—</span>
+                            )}
+                          </td>
+                          {/* Event Time */}
+                          <td className="p-4 text-left font-sans text-zinc-350">
+                            {lead?.events && lead.events.length > 0 ? (
+                              <div className="space-y-3">
+                                {lead.events.map((ev: any, evIdx: number) => (
+                                  <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
+                                    <span className="text-zinc-300">
+                                      {ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-zinc-600 italic">—</span>
+                            )}
                           </td>
 
                            {/* Raw Footage Link */}
@@ -3864,7 +3891,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           }
 
           // Comma-separated skills
-          const skillsString = newStaffSkills.join(', ');
+          const skillsArray = newStaffSkills;
 
           try {
             if (editingStaffId) {
@@ -3873,7 +3900,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 name,
                 mobile,
                 whatsapp_number: whatsapp,
-                Skill: skillsString,
+                Skill: skillsArray as any,
                 Staff_Type: newStaffType as any
               });
               setAddStaffSuccess('✅ Staff details updated successfully.');
@@ -3890,7 +3917,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 await updateStaff(existingStaff.staff_id, {
                   mobile,
                   whatsapp_number: whatsapp,
-                  Skill: skillsString,
+                  Skill: skillsArray as any,
                   Staff_Type: newStaffType as any
                 });
                 setAddStaffSuccess('✅ Staff details updated successfully.');
@@ -3900,7 +3927,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   name,
                   mobile,
                   whatsapp_number: whatsapp,
-                  Skill: skillsString,
+                  Skill: skillsArray as any,
                   Staff_Type: newStaffType as any,
                   email: `${name.toLowerCase().replace(/\s+/g, '')}@photocrew.com`,
                   role: 'Editor',
@@ -3938,7 +3965,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             setNewStaffSkills(updatedSkills);
             if (editingStaffId) {
               try {
-                await updateStaff(editingStaffId, { Skill: updatedSkills.join(', ') });
+                await updateStaff(editingStaffId, { Skill: updatedSkills as any });
               } catch (e) {
                 console.error('Failed real-time skill save', e);
               }
@@ -4109,7 +4136,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   setNewStaffSkills(updatedSkills);
                                   if (editingStaffId) {
                                     try {
-                                      await updateStaff(editingStaffId, { Skill: updatedSkills.join(', ') });
+                                      await updateStaff(editingStaffId, { Skill: updatedSkills as any });
                                     } catch (e) {
                                       console.error('Failed real-time skill save', e);
                                     }

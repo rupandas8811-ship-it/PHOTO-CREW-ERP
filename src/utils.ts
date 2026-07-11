@@ -423,3 +423,13 @@ export function parseTeamMembers(teamMembersStr: string | undefined | null): str
 }
 
 
+
+export const convertTo12Hour = (timeStr: string | undefined | null): string => {
+  if (!timeStr) return '';
+  const [hour, min] = timeStr.split(':');
+  if (!hour || !min) return timeStr;
+  const h = parseInt(hour, 10);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12.toString().padStart(2, '0')}:${min} ${ampm}`;
+};

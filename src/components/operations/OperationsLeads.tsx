@@ -8,7 +8,7 @@ import { Order, CurrentStage, Staff, Equipment } from '../../types';
 import { StatusText } from '../ui/StatusText';
 import { ProjectDetailModal } from '../ProjectDetailModal';
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
-import { convertTimeToDbFormat, triggerAutoScrollAndFocus } from '../../utils';
+import { convertTimeToDbFormat, triggerAutoScrollAndFocus, convertTo12Hour } from '../../utils';
 import { supabaseClient } from '../../supabaseClient';
 
 export const OperationsLeads: React.FC = () => {
@@ -180,6 +180,7 @@ export const OperationsLeads: React.FC = () => {
     event_end_time: string;
     staff: { staff_role: string, staff_id: string, staff_name: string }[];
   }>>({});
+  const [collapsedAssignEvents, setCollapsedAssignEvents] = useState<Record<string, boolean>>({});
 
   // Find order and lead for assigning modal
   const activeOrderInstance = useMemo(() => {
@@ -1404,7 +1405,17 @@ export const OperationsLeads: React.FC = () => {
                       )}
                     </td>
                     <td className="p-4 font-mono text-zinc-300">
-                      <div>{ord.event_date || <span className="text-zinc-600 italic">—</span>}</div>
+                      {lead?.events && lead.events.length > 0 ? (
+                        <div className="space-y-3">
+                          {lead.events.map((ev: any, evIdx: number) => (
+                            <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
+                              <span className="text-zinc-300">{ev.event_date || '—'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-zinc-600 italic">—</span>
+                      )}
                       {isCompletedEvent(ord) && (
                         <div className="text-[10px] text-emerald-400 mt-0.5 font-sans font-medium">
                           Done: {getCompletionDate(ord)}
@@ -1412,7 +1423,19 @@ export const OperationsLeads: React.FC = () => {
                       )}
                     </td>
                     <td className="p-4 font-mono text-zinc-300">
-                      {ord.event_time || <span className="text-zinc-600 italic">—</span>}
+                      {lead?.events && lead.events.length > 0 ? (
+                        <div className="space-y-3">
+                          {lead.events.map((ev: any, evIdx: number) => (
+                            <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
+                              <span className="text-zinc-300">
+                                {ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-zinc-600 italic">—</span>
+                      )}
                     </td>
                     <td className="p-4 font-mono text-zinc-300">
                       {op?.reporting_time || <span className="text-zinc-600 italic">—</span>}
@@ -1781,17 +1804,42 @@ export const OperationsLeads: React.FC = () => {
                     const eventRoles = targetEditableInclusions[matchingKey] || targetEditableInclusions[evId] || targetEditableInclusions[index.toString()] || [];
                     const includedRoles = eventRoles.length > 0 ? eventRoles : ['Photographer', 'Videographer'];
 
+                    const isCollapsed = collapsedAssignEvents[evId] === undefined ? index !== 0 : collapsedAssignEvents[evId];
+                    const eventNameDisplay = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');
+
                     return (
-                      <div key={evId} className="bg-zinc-950/60 border border-zinc-850 p-5 rounded-2xl space-y-6 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-3 text-[10px] text-zinc-655 select-none uppercase">
-                          🎥 EVENT {index + 1}
+                      <div key={evId} className="bg-zinc-950/60 border border-zinc-850 rounded-2xl relative overflow-hidden transition-all duration-300">
+                        {/* Collapsible Header */}
+                        <div 
+                          className="p-4 flex items-center justify-between cursor-pointer hover:bg-zinc-900/40 transition-colors"
+                          onClick={() => setCollapsedAssignEvents(prev => ({ ...prev, [evId]: !isCollapsed }))}
+                        >
+                           <div className="flex items-center gap-3">
+                              <span className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-500 select-none uppercase font-bold font-mono">
+                                🎥 EVENT {index + 1}
+                              </span>
+                              <h4 className="text-sm font-sans font-bold text-white uppercase tracking-wide">
+                                {eventNameDisplay}
+                              </h4>
+                           </div>
+                           <div className="flex items-center gap-4">
+                              {allocStaff.length > 0 && (
+                                <span className="text-[10px] font-mono px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-md">
+                                  {allocStaff.length} Staff Assigned
+                                </span>
+                              )}
+                              <span className={`text-zinc-500 transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`}>▼</span>
+                           </div>
                         </div>
-                        
-                        {/* 2. Event & Package Coordinates */}
-                      <div className="space-y-3">
-                        <h4 className="text-[11px] font-mono font-bold uppercase text-amber-500 tracking-wider">
-                          Event Details
-                        </h4>
+
+                        {/* Collapsible Content */}
+                        {!isCollapsed && (
+                           <div className="p-5 pt-4 border-t border-zinc-800/50 space-y-6">
+                              {/* 2. Event & Package Coordinates */}
+                              <div className="space-y-3">
+                                 <h4 className="text-[11px] font-mono font-bold uppercase text-amber-500 tracking-wider">
+                                   Event Details
+                                 </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 text-xs bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/80">
                           <div>
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Event Name</span>
@@ -1833,122 +1881,133 @@ export const OperationsLeads: React.FC = () => {
                           </div>
                         </div>
                       </div>
-
-                      {/* 3. Team Members Included (Editable) & Staff Assignment */}
+                      {/* 3. Team Members Included & Staff Assignment */}
                       <div className="space-y-4 pt-2">
-                        <h4 className="text-[11px] font-mono font-bold uppercase text-sky-400 tracking-wider">
-                          Team Members Included (Editable)
-                        </h4>
-                        
-                        <div className="space-y-4">
-                          {includedRoles.map((roleStr, roleIdx) => {
-                            const assignedToRole = allocStaff.filter((s: any) => s.staff_role === roleStr);
-                            const selectKey = `${evId}_${roleIdx}`;
-
-                            const firstAssignedStaff = assignedToRole[0];
-                            const firstAssignedStaffFull = firstAssignedStaff ? staff?.find(s => s.staff_name === firstAssignedStaff.staff_name) : null;
-                            const defaultStaffType = firstAssignedStaffFull?.staff_type || 'In-House';
-                            const currentStaffType = staffTypeByEvent[selectKey] || defaultStaffType;
-
-                            return (
-                              <div key={roleIdx} className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 space-y-3">
-                                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-                                  <span className="text-xs font-bold text-white uppercase">{roleStr}</span>
-                                </div>
-                                
-                                {/* List currently assigned staff for this role */}
-                                {assignedToRole.length > 0 && (
-                                  <div className="space-y-2">
-                                    {assignedToRole.map((st: any, stIdx: number) => {
-                                      const stFull = staff?.find(s => s.staff_name === st.staff_name);
-                                      return (
-                                        <div key={stIdx} className="flex items-center justify-between bg-zinc-950 p-2 rounded border border-zinc-850">
-                                          <div className="flex items-center gap-2">
-                                            <span className="text-xs font-medium text-zinc-200">{st.staff_name}</span>
-                                            {stFull?.staff_type && <span className="text-[9px] px-1.5 py-0.5 rounded border border-zinc-800 bg-zinc-900 text-zinc-400 font-mono uppercase">{stFull.staff_type}</span>}
-                                            {st.mobile && <span className="text-[10px] text-zinc-500 font-mono">{st.mobile}</span>}
-                                          </div>
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setEventAllocations((prev: any) => {
-                                                const existingAlloc = prev[evId] || { staff: [] };
-                                                return {
-                                                  ...prev,
-                                                  [evId]: {
-                                                    ...existingAlloc,
-                                                    staff: existingAlloc.staff.filter((s: any) => !(s.staff_name === st.staff_name && s.staff_role === roleStr))
-                                                  }
-                                                };
-                                              });
-                                            }}
-                                            className="text-red-400 hover:text-red-300 p-1"
-                                          >
-                                            <X className="w-3.5 h-3.5" />
-                                          </button>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-
-                                {/* Add Staff to this role */}
-                                <div className="flex flex-col sm:flex-row gap-2 items-end">
-                                   <div className="w-1/3">
-                                     <select
-                                       value={currentStaffType}
-                                       onChange={(e) => {
-                                         setStaffTypeByEvent(prev => ({ ...prev, [selectKey]: e.target.value as 'In-House' | 'Freelancer' }));
-                                         setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: '' }));
-                                       }}
-                                       className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-100"
-                                     >
-                                       <option value="In-House">In-House</option>
-                                       <option value="Freelancer">Freelancer</option>
-                                     </select>
-                                   </div>
-                                   <div className="flex-1">
-                                     <select
-                                       value={selectedStaffByEvent[selectKey] || ''}
-                                       onChange={(e) => setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: e.target.value }))}
-                                       className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-100"
-                                     >
-                                       <option value="">-- Assign Staff --</option>
-                                       {staff && staff.filter(s => s.status === 'Active' && (s.staff_type || 'In-House') === currentStaffType).map(st => (
-                                         <option key={st.staff_id} value={st.name}>{st.name} - {st.role}</option>
-                                       ))}
-                                     </select>
-                                   </div>
-                                   <button
-                                     type="button"
-                                     onClick={() => {
-                                       const selectedStaff = selectedStaffByEvent[selectKey];
-                                       if (!selectedStaff) return;
-                                       const memberInfo = staff?.find(st => st.name === selectedStaff);
-                                       const staffId = memberInfo?.staff_id || 'MOCK-' + Math.random().toString(36).substr(2, 4);
-                                         
-                                       setEventAllocations((prev: any) => {
-                                         const existingAlloc = prev[evId] || { staff: [] };
-                                         if (existingAlloc.staff.some((s: any) => s.staff_name === selectedStaff && s.staff_role === roleStr)) return prev;
-                                         return {
-                                           ...prev,
-                                           [evId]: {
-                                             ...existingAlloc,
-                                             staff: [...(existingAlloc.staff || []), { staff_role: roleStr, staff_id: staffId, staff_name: selectedStaff, mobile: memberInfo?.mobile || '' }]
-                                           }
-                                         };
-                                       });
-                                       setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: '' }));
-                                     }}
-                                     className="px-3 py-2 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 text-xs font-mono font-bold rounded-lg border border-sky-500/30 transition-all uppercase w-full sm:w-auto"
-                                   >
-                                     + Add
-                                   </button>
-                                </div>
+                        {(() => {
+                           const totalRequiredCount = includedRoles.reduce((sum, roleStr) => {
+                             const match = roleStr.match(/^(\d+)\s+(.+)$/);
+                             return sum + (match ? parseInt(match[1], 10) : 1);
+                           }, 0);
+                           return (
+                              <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-800">
+                                 <h4 className="text-[11px] font-mono font-bold uppercase text-sky-400 tracking-wider">
+                                   Team Members Included
+                                 </h4>
+                                 <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900 px-2 py-1 rounded-md border border-zinc-800 shadow-inner">
+                                    {allocStaff.length} / {totalRequiredCount} Assigned
+                                 </span>
                               </div>
-                            );
-                          })}
-                        </div>
+                           );
+                        })()}
+                        
+                        <div className="grid grid-cols-1 gap-3">
+                          {includedRoles.map((roleStr, roleIdx) => {
+                             const match = roleStr.match(/^(\d+)\s+(.+)$/);
+                             const reqCount = match ? parseInt(match[1], 10) : 1;
+                             const roleName = match ? match[2].trim() : roleStr;
+                             const assignedToRole = allocStaff.filter((s: any) => s.staff_role === roleStr);
+                             
+                             return Array.from({ length: reqCount }).map((_, slotIndex) => {
+                                const selectKey = `${evId}_${roleIdx}_${slotIndex}`;
+                                const assignedStaff = assignedToRole[slotIndex];
+                                const slotTitle = reqCount > 1 ? `${roleName} #${slotIndex + 1}` : roleName;
+                                const stFull = assignedStaff ? staff?.find(s => s.staff_name === assignedStaff.staff_name) : null;
+                                const defaultStaffType = stFull?.staff_type || 'In-House';
+                                const currentStaffType = staffTypeByEvent[selectKey] || defaultStaffType;
+                                
+                                return (
+                                  <div key={selectKey} className="bg-zinc-900/40 border border-zinc-800/80 hover:border-zinc-700/80 transition-colors rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    {/* Role Name */}
+                                    <div className="flex flex-col gap-0.5 min-w-[150px]">
+                                      <span className="text-xs font-bold text-white tracking-wide">{slotTitle}</span>
+                                      <span className="text-[10px] text-zinc-500 font-mono">{reqCount > 1 ? 'Multiple Required' : '1 Required'}</span>
+                                    </div>
+                                    
+                                    {/* Assignment UI */}
+                                    <div className="flex-1 w-full sm:max-w-[28rem]">
+                                      {assignedStaff ? (
+                                         <div className="flex items-center justify-between bg-zinc-800/50 p-2 pl-3 rounded-lg border border-zinc-700/50">
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-xs font-semibold text-emerald-400">{assignedStaff.staff_name}</span>
+                                              {stFull?.staff_type && <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-950/50 text-zinc-400 font-mono uppercase border border-zinc-800">{stFull.staff_type}</span>}
+                                            </div>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setEventAllocations((prev: any) => {
+                                                  const existingAlloc = prev[evId] || { staff: [] };
+                                                  return {
+                                                    ...prev,
+                                                    [evId]: {
+                                                      ...existingAlloc,
+                                                      staff: existingAlloc.staff.filter((s: any) => !(s.staff_name === assignedStaff.staff_name && s.staff_role === roleStr))
+                                                    }
+                                                  };
+                                                });
+                                              }}
+                                              className="text-zinc-500 hover:text-red-400 p-1 bg-zinc-900/50 rounded-md hover:bg-zinc-900 transition-colors cursor-pointer"
+                                              title="Remove assignment"
+                                            >
+                                              <X className="w-3.5 h-3.5" />
+                                            </button>
+                                         </div>
+                                      ) : (
+                                         <div className="flex items-center gap-2">
+                                            <select
+                                              value={currentStaffType}
+                                              onChange={(e) => {
+                                                setStaffTypeByEvent(prev => ({ ...prev, [selectKey]: e.target.value as 'In-House' | 'Freelancer' }));
+                                                setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: '' }));
+                                              }}
+                                              className="bg-zinc-950 border border-zinc-800 rounded-lg py-2 px-2 text-[11px] text-zinc-400 w-[100px] outline-none focus:border-zinc-700 cursor-pointer"
+                                            >
+                                              <option value="In-House">In-House</option>
+                                              <option value="Freelancer">Freelance</option>
+                                            </select>
+                                            
+                                            <select
+                                              value={selectedStaffByEvent[selectKey] || ''}
+                                              onChange={(e) => {
+                                                const selectedName = e.target.value;
+                                                setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: selectedName }));
+                                                
+                                                if (selectedName) {
+                                                   const memberInfo = staff?.find(st => st.name === selectedName);
+                                                   const staffId = memberInfo?.staff_id || 'MOCK-' + Math.random().toString(36).substr(2, 4);
+                                                   
+                                                   setEventAllocations((prev: any) => {
+                                                     const existingAlloc = prev[evId] || { staff: [] };
+                                                     if (existingAlloc.staff.some((s: any) => s.staff_name === selectedName)) {
+                                                        return prev;
+                                                     }
+                                                     return {
+                                                       ...prev,
+                                                       [evId]: {
+                                                         ...existingAlloc,
+                                                         staff: [...(existingAlloc.staff || []), { staff_role: roleStr, staff_id: staffId, staff_name: selectedName, mobile: memberInfo?.mobile || '' }]
+                                                       }
+                                                     };
+                                                   });
+                                                   setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: '' }));
+                                                }
+                                              }}
+                                              className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg py-2 px-3 text-[11px] font-bold text-zinc-100 outline-none focus:border-sky-500/50 cursor-pointer"
+                                            >
+                                              <option value="">▼ Select Staff</option>
+                                              {staff && staff
+                                                 .filter(s => s.status === 'Active' && (s.staff_type || 'In-House') === currentStaffType)
+                                                 .filter(s => !allocStaff.some((ast: any) => ast.staff_name === s.name))
+                                                 .map(st => (
+                                                   <option key={st.staff_id} value={st.name}>{st.name} - {st.role}</option>
+                                              ))}
+                                            </select>
+                                         </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                             });
+                          })}                        </div>
 
                         {/* Assigned Equipment Section */}
                         {(() => {
@@ -2241,34 +2300,7 @@ export const OperationsLeads: React.FC = () => {
                              </div>
                            );
                         })()}
-                        <div className="flex flex-wrap gap-2 mt-3">
-                          {allocStaff.length > 0 ? allocStaff.map((st, i) => (
-                            <div key={i} className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-750 px-2 py-1 rounded-md">
-                              <div className="text-[10px] text-zinc-400 font-mono">{st.staff_role}</div>
-                              <div className="text-xs font-bold text-white font-sans">{st.staff_name}</div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEventAllocations(prev => {
-                                    const existingAlloc = prev[evId];
-                                    return {
-                                      ...prev,
-                                      [evId]: {
-                                        ...existingAlloc,
-                                        staff: existingAlloc.staff.filter((_, idx) => idx !== i)
-                                      }
-                                    };
-                                  });
-                                }}
-                                className="text-red-400 hover:text-red-300 ml-1 font-bold text-[10px]"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          )) : (
-                            <span className="text-[10px] italic text-zinc-500 font-mono">No staff assigned to this event yet.</span>
-                          )}
-                        </div>
+                        
                       </div>
                       
                       {/* 4. WhatsApp Sharing */}
@@ -2298,6 +2330,8 @@ export const OperationsLeads: React.FC = () => {
                           </button>
                         </div>
                       )}
+                           </div>
+                        )}
                     </div>
                   );
                 })
@@ -2305,18 +2339,18 @@ export const OperationsLeads: React.FC = () => {
                 
               </div>
               
-              <div className="p-4 border-t border-zinc-800 flex flex-col sm:flex-row justify-end gap-3 bg-zinc-950/40">
+              <div className="sticky bottom-0 z-50 p-4 border-t border-zinc-800 flex flex-col sm:flex-row justify-end gap-3 bg-zinc-950/90 backdrop-blur-md">
                 <button
                   type="button"
                   onClick={() => setAssigningOrderId(null)}
-                  className="px-4 py-2 text-xs font-mono font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer w-full sm:w-auto"
+                  className="px-4 py-3 sm:py-2 text-xs font-mono font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer w-full sm:w-auto bg-zinc-900 sm:bg-transparent rounded-xl sm:rounded-none border border-zinc-800 sm:border-none"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-black text-xs font-mono font-bold uppercase rounded-lg transition-colors cursor-pointer disabled:opacity-50 w-full sm:w-auto"
+                  className="px-6 py-3 sm:py-2 bg-amber-500 hover:bg-amber-600 text-black text-xs font-mono font-bold uppercase rounded-xl sm:rounded-lg transition-colors cursor-pointer disabled:opacity-50 w-full sm:w-auto shadow-[0_0_20px_rgba(245,158,11,0.2)]"
                 >
                   {isSaving ? 'Saving Assignments...' : 'Save All Assignments'}
                 </button>
