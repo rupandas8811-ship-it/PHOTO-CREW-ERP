@@ -473,7 +473,7 @@ export const OperationsAnalytics: React.FC = () => {
         <div className="border-b border-zinc-900 pb-2.5 flex items-center justify-between">
           <span className="text-xs font-mono font-black text-zinc-400 uppercase tracking-widest flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-            <span>OPERATIONS PIPELINE TELEMETRY (11 METRICS CARD RING)</span>
+            <span>OPERATIONS PIPELINE TELEMETRY (10 METRICS CARD RING)</span>
           </span>
           <span className="text-[10px] font-mono text-zinc-500 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-900">
             Filtered matching records: {filteredOrders.length}
@@ -484,7 +484,6 @@ export const OperationsAnalytics: React.FC = () => {
           {[
             { id: 'total_events', label: 'Total Events', val: totalEvents.length, desc: 'Overall registry scope', color: 'text-indigo-400', focal: '50mm' },
             { id: 'events_scheduled', label: 'Events Scheduled', val: eventsScheduled.length, desc: 'Assignments confirmed', color: 'text-violet-400', focal: '85mm' },
-            { id: 'events_completed', label: 'Events Completed', val: eventsCompleted.length, desc: 'Completed physical gigs', color: 'text-emerald-400', focal: '35mm' },
             { id: 'upcoming_events', label: 'Upcoming Events', val: upcomingEvents.length, desc: 'Scheduled future dates', color: 'text-blue-400', focal: '70-200mm' },
             { id: 'ongoing_events', label: 'Ongoing Events', val: ongoingEvents.length, desc: 'Active shoots today', color: 'text-rose-400', focal: '24mm' },
             { id: 'overdue_events', label: 'Overdue Events', val: overdueEvents.length, desc: 'Action required!', color: 'text-amber-500', focal: '16mm' },

@@ -1249,7 +1249,9 @@ export const PendingPaymentsReport: React.FC = () => {
                                   <td className="p-3 text-right font-mono font-bold text-emerald-400">
                                     {formatPercentageOrINR(h.amount)}
                                   </td>
-                                  <td className="p-3 font-mono text-[10px]">{h.transactionId || h.txnId || 'N/A'}</td>
+                                  <td className="p-3 font-mono text-[10px]">
+                                    {(!h.transactionId || h.transactionId.trim() === '' || h.transactionId === 'null' || h.transactionId === 'NULL') ? 'N/A' : h.transactionId}
+                                  </td>
                                   <td className="p-3 font-medium text-[10px]">{h.paymentMode || 'N/A'}</td>
                                   <td className="p-3 text-zinc-400 text-[10px]">{h.updatedBy || 'N/A'}</td>
                                   <td className="p-3 pr-4 text-zinc-400 text-[10px] max-w-[150px] truncate" title={h.notes}>{h.notes || '-'}</td>

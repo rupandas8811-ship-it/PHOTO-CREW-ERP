@@ -2170,8 +2170,34 @@ export const OperationsLeads: React.FC = () => {
                                                     <select
                                                       value={currentStaffType}
                                                       onChange={(e) => {
-                                                        setStaffTypeByEvent(prev => ({ ...prev, [selectKey]: e.target.value as 'In-House' | 'Freelancer' }));
+                                                        const newType = e.target.value as 'In-House' | 'Freelancer';
+                                                        setStaffTypeByEvent(prev => ({ ...prev, [selectKey]: newType }));
                                                         setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: '' }));
+                                                        
+                                                        // Clear any previously assigned staff for this event-role that do not match the newly selected Staff Type
+                                                        const normType = (type: string | undefined): string => {
+                                                          const clean = (type || 'In-House').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+                                                          return (clean === 'inhouse' || clean === 'in-house' || clean === 'in house') ? 'in-house' : 'freelancer';
+                                                        };
+                                                        
+                                                        setEventAllocations((prev: any) => {
+                                                          const existingAlloc = prev[evId] || { staff: [] };
+                                                          const updatedStaff = (existingAlloc.staff || []).filter((s: any) => {
+                                                            if (s.staff_role !== roleStr) return true;
+                                                            
+                                                            const stInfo = staff?.find(st => st.name === s.staff_name);
+                                                            const stType = stInfo?.staff_type || stInfo?.Staff_Type;
+                                                            return normType(stType) === normType(newType);
+                                                          });
+                                                          
+                                                          return {
+                                                            ...prev,
+                                                            [evId]: {
+                                                              ...existingAlloc,
+                                                              staff: updatedStaff
+                                                            }
+                                                          };
+                                                        });
                                                       }}
                                                       className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-[11px] text-zinc-400 hover:text-zinc-300 rounded-lg px-2 py-1 font-sans focus:outline-none focus:border-purple-500 cursor-pointer h-7"
                                                     >
@@ -2206,15 +2232,36 @@ export const OperationsLeads: React.FC = () => {
                                                       }}
                                                       className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-[11px] text-zinc-200 rounded-lg px-2 py-1 font-sans focus:outline-none focus:border-purple-500 cursor-pointer h-7"
                                                     >
-                                                      <option value="">▼ {assignedToRole.length > 0 ? '+ Add Another Staff' : 'Select Staff'}</option>
-                                                      {staff && staff
-                                                         .filter(s => s.status === 'Active' && s.department === 'Operations' && (s.staff_type || 'In-House') === currentStaffType)
-                                                         .filter(s => !assignedToRole.some((ast: any) => ast.staff_name === s.name))
-                                                         .map(st => (
-                                                           <option key={st.staff_id} value={st.name}>
-                                                             {st.name} {isStaffBusyOnDate(st.name, ev.event_date || '', activeOrderInstance?.order_id || '') ? '🔴 Busy' : '🟢 Available'} - {st.role}
-                                                           </option>
-                                                      ))}
+                                                      {(() => {
+                                                        const normType = (type: string | undefined): string => {
+                                                          const clean = (type || 'In-House').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+                                                          return (clean === 'inhouse' || clean === 'in-house' || clean === 'in house') ? 'in-house' : 'freelancer';
+                                                        };
+                                                        
+                                                        const filteredStaff = (staff || []).filter(s => {
+                                                          if (s.status !== 'Active') return false;
+                                                          if (s.department !== 'Operations') return false;
+                                                          const sType = s.staff_type || s.Staff_Type;
+                                                          return normType(sType) === normType(currentStaffType);
+                                                        });
+                                                        
+                                                        const availableStaff = filteredStaff.filter(s => !assignedToRole.some((ast: any) => ast.staff_name === s.name));
+                                                        
+                                                        if (availableStaff.length === 0) {
+                                                          return <option value="" disabled>No staff available.</option>;
+                                                        }
+                                                        
+                                                        return (
+                                                          <>
+                                                            <option value="">▼ {assignedToRole.length > 0 ? '+ Add Another Staff' : 'Select Staff'}</option>
+                                                            {availableStaff.map(st => (
+                                                              <option key={st.staff_id} value={st.name}>
+                                                                {st.name} {isStaffBusyOnDate(st.name, ev.event_date || '', activeOrderInstance?.order_id || '') ? '🔴 Busy' : '🟢 Available'} - {st.role}
+                                                              </option>
+                                                            ))}
+                                                          </>
+                                                        );
+                                                      })()}
                                                     </select>
                                                  </div>
                                                  <div className="w-6 shrink-0 flex justify-center"></div>

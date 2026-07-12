@@ -3846,6 +3846,29 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     return () => { isMounted = false; };
   }, [selectedLead?.lead_id, supabaseClient]);
 
+  // Sync wizardLeadData.advance_received and wizardLeadData.final_amount with latest payment and order confirmation data
+  React.useEffect(() => {
+    if (!selectedLead?.lead_id) return;
+    const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
+    const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
+    
+    if (linkedOrder || linkedPayment) {
+      setWizardLeadData(prev => {
+        const latestAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : prev.advance_received);
+        const latestFinalAmount = linkedOrder ? (linkedOrder.quotation_amount || 0) : prev.final_amount;
+        
+        if (prev.advance_received !== latestAdvance || prev.final_amount !== latestFinalAmount) {
+          return {
+            ...prev,
+            advance_received: latestAdvance,
+            final_amount: latestFinalAmount
+          };
+        }
+        return prev;
+      });
+    }
+  }, [selectedLead?.lead_id, orders, payments]);
+
   // Handle lead select
   const handleSelectLead = async (lead: Lead) => {
     setSelectedLead(lead);

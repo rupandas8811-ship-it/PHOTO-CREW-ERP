@@ -50,12 +50,25 @@ const serializeEquipmentNotes = (metadata: EquipmentMetadata): string => {
 };
 
 export const EquipmentManagement: React.FC = () => {
-  const { currentRole, currentUserName, equipment, staff, addEquipment, updateEquipment, deleteEquipment, refreshData } = useRole();
+  const { 
+    currentRole, 
+    currentUserName, 
+    equipment, 
+    staff, 
+    addEquipment, 
+    updateEquipment, 
+    deleteEquipment, 
+    refreshData,
+    leadEquipmentHistory,
+    orders,
+    leads
+  } = useRole();
   const canEdit = currentRole === 'Operations Team' || currentRole === 'Business Owner';
 
   // Core management states
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedEq, setSelectedEq] = useState<Equipment | null>(null);
+  const [busyEquipment, setBusyEquipment] = useState<Equipment | null>(null);
   
   // Search, filter, and sort states
   const [searchQuery, setSearchQuery] = useState('');
@@ -313,6 +326,50 @@ export const EquipmentManagement: React.FC = () => {
 
     return result;
   }, [equipment, searchQuery, filters, sortBy]);
+
+  const assignedEventsForBusyEquipment = useMemo(() => {
+    if (!busyEquipment) return [];
+    
+    // Find all history records for this equipment that are NOT returned
+    const activeHistories = (leadEquipmentHistory || []).filter(h => 
+      h.equipment_name === busyEquipment.equipment_name && 
+      !h.returned_at && 
+      h.equipment_status !== 'Returned'
+    );
+
+    const results: Array<{
+      equipment_name: string;
+      event_name: string;
+      event_date: string;
+      event_time: string;
+    }> = [];
+
+    activeHistories.forEach(h => {
+      // 1. Try to find matched order
+      let matchedOrder = (orders || []).find(o => o.order_id === h.order_id || o.lead_id === h.lead_id);
+      if (matchedOrder) {
+        results.push({
+          equipment_name: busyEquipment.equipment_name,
+          event_name: matchedOrder.custom_event_name || matchedOrder.event_type || 'Custom Event',
+          event_date: matchedOrder.event_date || 'N/A',
+          event_time: matchedOrder.event_time || 'N/A'
+        });
+      } else {
+        // 2. Try to find matched lead
+        let matchedLead = (leads || []).find(l => l.lead_id === h.lead_id || l.lead_id === h.order_id);
+        if (matchedLead) {
+          results.push({
+            equipment_name: busyEquipment.equipment_name,
+            event_name: matchedLead.custom_event_name || matchedLead.event_type || 'Custom Event',
+            event_date: matchedLead.event_date || 'N/A',
+            event_time: matchedLead.event_time || 'N/A'
+          });
+        }
+      }
+    });
+
+    return results;
+  }, [busyEquipment, leadEquipmentHistory, orders, leads]);
 
   // Reset pagination to page 1 on search or filter updates
   useEffect(() => {
@@ -607,11 +664,9 @@ export const EquipmentManagement: React.FC = () => {
             <table className="w-full text-left border-collapse min-w-[750px]">
               <thead>
                 <tr className="border-b border-zinc-850 text-[10px] font-mono uppercase text-zinc-400 bg-zinc-950/40">
-                  <th className="p-3.5">ID / Category</th>
                   <th className="p-3.5">Equipment Details</th>
                   <th className="p-3.5">Condition & Staff</th>
                   <th className="p-3.5">Status</th>
-                  <th className="p-3.5 font-mono">Qty (Avail / Assg)</th>
                   <th className="p-3.5 text-right">Actions</th>
                 </tr>
               </thead>
@@ -624,12 +679,6 @@ export const EquipmentManagement: React.FC = () => {
                         onClick={() => setSelectedEq(eq)}
                         className="hover:bg-zinc-950/30 transition-all cursor-pointer group"
                       >
-                        <td className="p-3.5 space-y-1">
-                          <span className="font-mono text-zinc-400 bg-zinc-950 px-1.5 py-0.5 rounded text-[10px] border border-zinc-850 group-hover:border-amber-500/30 transition-colors">
-                            {eq.equipment_id}
-                          </span>
-                          <div className="text-[10px] text-zinc-400 uppercase font-mono">{eq.equipment_type}</div>
-                        </td>
                         <td className="p-3.5">
                           <div className="font-bold text-zinc-100 group-hover:text-amber-400 transition-colors">{eq.equipment_name}</div>
                           <div className="text-[10px] text-zinc-400 font-mono mt-0.5">Model: <span className="text-zinc-300">{eq.brand} {eq.model}</span></div>
@@ -656,27 +705,26 @@ export const EquipmentManagement: React.FC = () => {
                             <div className="text-[9px] text-zinc-600 font-mono italic">Unassigned</div>
                           )}
                         </td>
-                        <td className="p-3.5">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
-                            eq.status === 'Available' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                            eq.status === 'Assigned' || eq.status === 'In Use' ? 'bg-sky-500/10 text-sky-400 border-sky-500/20' :
-                            eq.status === 'Under Maintenance' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
-                            'bg-rose-500/10 text-rose-450 border-rose-500/20'
-                          }`}>
-                            {eq.status}
-                          </span>
-                        </td>
-                        <td className="p-3.5 font-mono">
-                          <div className="text-zinc-200 font-bold">{eq.quantity} Total</div>
-                          <div className="text-[10px] flex gap-1.5 mt-0.5">
-                            <span className={eq.available_quantity === 0 ? 'text-rose-400' : 'text-emerald-400'}>
-                              {eq.available_quantity} Avail
+                        <td className="p-3.5" onClick={(e) => e.stopPropagation()}>
+                          {eq.status.toLowerCase() === 'busy' || eq.status.toLowerCase() === 'assigned' || eq.status.toLowerCase() === 'in use' ? (
+                            <button
+                              type="button"
+                              onClick={() => setBusyEquipment(eq)}
+                              className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border bg-sky-500/10 text-sky-400 border-sky-500/20 hover:bg-sky-500/20 hover:text-sky-300 transition-all flex items-center gap-1 cursor-pointer"
+                              title="Click to view event assignment details"
+                            >
+                              <span className="w-1.5 h-1.5 bg-sky-400 rounded-full animate-pulse" />
+                              {eq.status}
+                            </button>
+                          ) : (
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
+                              eq.status === 'Available' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                              eq.status === 'Under Maintenance' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
+                              'bg-rose-500/10 text-rose-450 border-rose-500/10'
+                            }`}>
+                              {eq.status}
                             </span>
-                            <span className="text-zinc-600">|</span>
-                            <span className={eq.assigned_quantity > 0 ? 'text-sky-400' : 'text-zinc-500'}>
-                              {eq.assigned_quantity} Assg
-                            </span>
-                          </div>
+                          )}
                         </td>
                         <td className="p-3.5 text-right">
                           <div className="flex items-center justify-end gap-1">
@@ -715,7 +763,7 @@ export const EquipmentManagement: React.FC = () => {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={6} className="p-10 text-center text-zinc-500 italic font-mono">
+                    <td colSpan={4} className="p-10 text-center text-zinc-500 italic font-mono">
                       No equipment matching your search or filters.
                     </td>
                   </tr>
@@ -960,6 +1008,71 @@ export const EquipmentManagement: React.FC = () => {
           </div>
         );
       })()}
+
+      {/* Equipment Assignment Details Popup */}
+      {busyEquipment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            
+            {/* Header block */}
+            <div className="p-6 border-b border-zinc-850 bg-zinc-950/80 flex items-center justify-between">
+              <div>
+                <h4 className="text-lg font-bold text-white">Equipment Assignment Details</h4>
+                <p className="text-xs text-zinc-400 mt-1 font-mono">Active tracking log for {busyEquipment.equipment_name}</p>
+              </div>
+              <button 
+                onClick={() => setBusyEquipment(null)} 
+                className="p-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-all cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body content */}
+            <div className="p-6 max-h-[60vh] overflow-y-auto space-y-4">
+              {assignedEventsForBusyEquipment.length > 0 ? (
+                <div className="overflow-x-auto border border-zinc-850 rounded-2xl bg-zinc-950/20">
+                  <table className="w-full text-left border-collapse min-w-[500px]">
+                    <thead>
+                      <tr className="border-b border-zinc-850 text-[10px] font-mono uppercase text-zinc-400 bg-zinc-950/50">
+                        <th className="p-3.5">Equipment Name</th>
+                        <th className="p-3.5">Event Name</th>
+                        <th className="p-3.5">Event Date</th>
+                        <th className="p-3.5">Event Time</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-850/45 text-xs text-zinc-300">
+                      {assignedEventsForBusyEquipment.map((ev, idx) => (
+                        <tr key={idx} className="hover:bg-zinc-950/35 transition-all">
+                          <td className="p-3.5 font-bold text-zinc-100">{ev.equipment_name}</td>
+                          <td className="p-3.5 text-amber-400 font-medium">{ev.event_name}</td>
+                          <td className="p-3.5 font-mono text-zinc-300">{ev.event_date}</td>
+                          <td className="p-3.5 font-mono text-zinc-400">{ev.event_time}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-10 text-center border border-zinc-850 rounded-2xl bg-zinc-950/25">
+                  <p className="text-zinc-500 italic font-mono text-xs">No active event assignment found.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer block */}
+            <div className="p-4 border-t border-zinc-850 bg-zinc-950/40 flex justify-end">
+              <button
+                onClick={() => setBusyEquipment(null)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-350 hover:text-white font-mono text-xs font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );

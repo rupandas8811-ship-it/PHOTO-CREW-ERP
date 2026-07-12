@@ -109,11 +109,9 @@ export const PaymentsModule: React.FC = () => {
                     >
                       <td className="p-3 pl-4 font-mono font-bold text-[11px] text-zinc-455">
                         <div>{p.payment_id}</div>
-                        {p.transaction_id && (
-                          <div className="text-[9px] text-zinc-500 font-normal mt-0.5">
-                            Txn: {p.transaction_id}
-                          </div>
-                        )}
+                        <div className="text-[9px] text-zinc-500 font-normal mt-0.5">
+                          Txn: {(!p.transaction_id || p.transaction_id.trim() === '' || p.transaction_id === 'null' || p.transaction_id === 'NULL') ? 'N/A' : p.transaction_id}
+                        </div>
                       </td>
                       <td className="p-3 font-mono font-bold text-rose-400">
                         {p.order_id}
