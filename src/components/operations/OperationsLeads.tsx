@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import { Order, CurrentStage, Staff, Equipment } from '../../types';
 import { StatusText } from '../ui/StatusText';
-import { EventDropdownCell } from '../EventDropdownCell';
 import { ProjectDetailModal } from '../ProjectDetailModal';
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
 import { convertTimeToDbFormat, triggerAutoScrollAndFocus, convertTo12Hour } from '../../utils';
@@ -170,7 +169,6 @@ export const OperationsLeads: React.FC = () => {
 
   const canEdit = (currentRole === 'Operations Team' || currentRole === 'Business Owner');
   const [projectDossierId, setProjectDossierId] = useState<string | null>(null);
-  const [busyRosterStaff, setBusyRosterStaff] = useState<string | null>(null);
   
   // Inline edit state for assignment
   const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
@@ -184,6 +182,8 @@ export const OperationsLeads: React.FC = () => {
   }>>({});
   const [collapsedAssignEvents, setCollapsedAssignEvents] = useState<Record<string, boolean>>({});
   const [assignValidationError, setAssignValidationError] = useState<string | null>(null);
+  const [validationAttempted, setValidationAttempted] = useState(false);
+  const [busyRosterStaff, setBusyRosterStaff] = useState<string | null>(null);
 
   // Find order and lead for assigning modal
   const activeOrderInstance = useMemo(() => {
@@ -270,15 +270,10 @@ export const OperationsLeads: React.FC = () => {
 
   // Raw Footage Modal State
   const [receivingFootageOrderId, setReceivingFootageOrderId] = useState<string | null>(null);
-  const [updatingFootageOrderId, setUpdatingFootageOrderId] = useState<string | null>(null);
-  const [updatingFootageLink, setUpdatingFootageLink] = useState('');
   const [footageForm, setFootageForm] = useState({
     footage_link: '',
     storage_type: 'Google Drive',
-    upload_notes: '',
-    media_number: '',
-    received_date: '',
-    received_time: ''
+    upload_notes: ''
   });
   const [hardDiskReceived, setHardDiskReceived] = useState(false);
   const [memoryCardReceived, setMemoryCardReceived] = useState(false);
@@ -329,13 +324,7 @@ export const OperationsLeads: React.FC = () => {
       const initialMsgs: Record<string, string> = {};
       const initialSelected: Record<string, boolean> = {};
       whatsappShareModalData.staffNames.forEach(name => {
-        initialMsgs[name] = generateWhatsAppMessageForStaff(
-          whatsappShareModalData.order,
-          name,
-          whatsappShareModalData.eventAllocations,
-          whatsappShareModalData.lead,
-          whatsappShareModalData.finalAssignments
-        );
+        initialMsgs[name] = generateWhatsAppMessageForStaff(whatsappShareModalData.order, name);
         initialSelected[name] = true;
       });
       setEditedMessages(initialMsgs);
@@ -352,41 +341,6 @@ export const OperationsLeads: React.FC = () => {
     const orderAssigns = staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id) : [];
     const fromAssigns = orderAssigns.map(sa => sa.staff_name).filter(n => n && n.toLowerCase() !== 'unassigned' && n.toLowerCase() !== 'none');
     return Array.from(new Set(fromAssigns));
-  };
-
-  const handleOpenReceiveRawFootageModal = (ord: Order) => {
-    setReceivingFootageOrderId(ord.order_id);
-    const existingRf = rawFootage?.find(f => f.order_id === ord.order_id);
-    const op = getOpDetails(ord.order_id);
-    setFootageForm({
-      footage_link: op?.Raw_Footage_Drive_Link || op?.raw_footage_drive_link || ((existingRf && (existingRf.raw_received || existingRf.status === 'Received')) ? (existingRf.server_path || '') : ''),
-      storage_type: 'Google Drive',
-      upload_notes: '',
-      media_number: '',
-      received_date: new Date().toISOString().split('T')[0],
-      received_time: new Date().toTimeString().slice(0, 5)
-    });
-
-    const kits = op?.equipment_kit ? op.equipment_kit.split(',').map((sName: string) => sName.trim()).filter(Boolean) : [];
-    const initialHandovers: Record<string, {
-      return_status: 'Returned' | 'Not Returned' | 'Damaged' | 'Missing';
-      returned_by: string;
-      return_date: string;
-      notes: string;
-    }> = {};
-    kits.forEach((k: string) => {
-      initialHandovers[k] = {
-        return_status: 'Returned',
-        returned_by: currentUserName || 'Operations Team',
-        return_date: new Date().toISOString().split('T')[0],
-        notes: ''
-      };
-    });
-    setFootageHandoverStates(initialHandovers);
-    
-    setHardDiskReceived(false);
-    setMemoryCardReceived(false);
-    setActiveMenuOrderId(null);
   };
 
   interface AssignedStaffDetails {
@@ -517,212 +471,125 @@ export const OperationsLeads: React.FC = () => {
     }
     
     return staffDetailsList;
-  };  // Helper to generate personalized WhatsApp message for a staff member
+  };
+
+  // Helper to generate personalized WhatsApp message for a staff member
   const generateWhatsAppMessageForStaff = (ord: Order, staffName: string, modalEventAllocations?: any, modalLead?: any, finalAssignments?: any[]) => {
     const lead = modalLead || leads.find(l => l.lead_id === ord.lead_id);
     
-    const clientName = ord.customer_name || 'N/A';
+    const clientName = ord.customer_name;
     const clientContact = ord.mobile || (lead ? lead.mobile : 'N/A');
     const clientWhatsapp = lead?.whatsapp_number || 'N/A';
 
-    // Helper to find a staff member's mobile number by name
-    const getStaffMobileByName = (sName: string): string => {
-      if (modalEventAllocations) {
-        for (const evId of Object.keys(modalEventAllocations)) {
-          const alloc = modalEventAllocations[evId];
-          if (alloc.staff) {
-            const found = alloc.staff.find((st: any) => st.staff_name === sName);
-            if (found && found.mobile) return found.mobile;
+    let text = `Hello ${staffName},\n\nYou have been assigned to the following event.\n\n`;
+    text += `Customer Name:\n${clientName}\n\n`;
+    text += `Customer Mobile:\n${clientContact}\n\n`;
+    text += `Customer WhatsApp:\n${clientWhatsapp}\n\n`;
+
+    let assignedEvents: any[] = [];
+    if (modalEventAllocations && lead?.events) {
+       Object.keys(modalEventAllocations).forEach(evId => {
+         const alloc = modalEventAllocations[evId];
+         if (alloc.staff && alloc.staff.some((s: any) => s.staff_name === staffName)) {
+            const matchedEv = lead.events.find((e: any) => e.id === evId);
+            if (matchedEv) {
+               const roles = alloc.staff.filter((s: any) => s.staff_name === staffName).map((s: any) => s.staff_role);
+               assignedEvents.push({ ...matchedEv, alloc, roles });
+            }
+         }
+       });
+    } else if (lead?.events) {
+       assignedEvents = lead.events.filter((ev: any) => {
+         const names = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
+         return names.includes(staffName.toLowerCase());
+       }).map((ev: any) => {
+         let fallbackRoles = ['Crew'];
+         const history = leadStaffAssignmentHistory?.filter((h: any) => h.order_id === ord.order_id);
+         if (history && history.length > 0) {
+            const myRoles = history.find((h: any) => h.assigned_staff === staffName);
+            if (myRoles && myRoles.assigned_roles) {
+               fallbackRoles = myRoles.assigned_roles.split(',').map((r: string) => r.trim());
+            }
+         }
+         return { ...ev, roles: fallbackRoles }; 
+       });
+    }
+
+    if (assignedEvents.length === 0) {
+       const shootType = ord.shoot_type || (lead ? lead.shoot_type : 'N/A');
+       const eventName = ord.event_type || 'N/A';
+       const eventDate = ord.event_date || 'N/A';
+       const reportingTime = lead?.reporting_time || 'N/A';
+       const eventTime = ord.event_time || 'N/A';
+       const location = lead?.event_location || ord.event_location || 'N/A';
+       const mapsLink = (lead as any)?.google_maps_link || 'N/A';
+       const guestPax = (lead as any)?.guest_pax || 'N/A';
+       const staffPax = (lead as any)?.staff_pax || 'N/A';
+       
+       let assignedRoles = ['Crew'];
+       if (finalAssignments) {
+          assignedRoles = Array.from(new Set(finalAssignments.filter(a => a.staff_name === staffName).map(a => a.staff_role)));
+       } else {
+          const history = leadStaffAssignmentHistory?.filter((h: any) => h.order_id === ord.order_id);
+          if (history && history.length > 0) {
+             const myRoles = history.find((h: any) => h.assigned_staff === staffName);
+             if (myRoles && myRoles.assigned_roles) {
+                assignedRoles = myRoles.assigned_roles.split(',').map((r: string) => r.trim());
+             }
           }
-        }
-      }
-      if (finalAssignments) {
-        const found = finalAssignments.find((a: any) => a.staff_name === sName);
-        if (found && found.mobile) return found.mobile;
-      }
-      const globalSt = staff?.find(s => s.name === sName);
-      if (globalSt && globalSt.mobile) return globalSt.mobile;
+       }
 
-      return '';
-    };
+       text += `Event:\n${eventName}\n\n`;
+       text += `Event Date:\n${eventDate}\n\n`;
+       text += `Reporting Date:\n${lead?.Reporting_date || eventDate || 'N/A'}\n\n`;
+       text += `Reporting Time:\n${reportingTime}\n\n`;
+       text += `Event Start Time:\n${eventTime}\n\n`;
+       text += `Venue:\n${location}\n\n`;
+       text += `Location:\n${mapsLink}\n\n`;
+       text += `Shoot Type:\n${shootType}\n\n`;
+       text += `Guest Pax:\n${guestPax}\n\n`;
+       text += `Staff Pax:\n${staffPax}\n\n`;
+       text += `Assigned Responsibilities:\n\n`;
+       assignedRoles.forEach(r => {
+         text += `• ${r}\n`;
+       });
+       text += `\nPlease report on time.\n\nThank you.`;
+       return text;
+    }
 
-    // Extracting all additional details requested
-    const vehicleDetails = (ord as any).vehicle_details || lead?.vehicle_details || (lead as any)?.Vehicle_Details || 'N/A';
-    const hotelDetails = (ord as any).hotel_details || lead?.hotel_details || (lead as any)?.Hotel_Details || 'N/A';
-    const contactPersonName = (ord as any).contact_person_name || lead?.contact_person_name || (lead as any)?.Contact_Person_Name || 'N/A';
-    const contactPersonMobile = (ord as any).contact_person_mobile || lead?.contact_person_mobile || (lead as any)?.Contact_Person_Mobile || 'N/A';
-    const additionalShooters = (ord as any).remarks || lead?.remarks || (lead as any)?.remarks || 'N/A';
+    assignedEvents.forEach((ev, idx) => {
+       const eventName = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');
+       const eventDate = ev.event_date || 'N/A';
+       const reportingDate = ev.reporting_date || (ev.alloc?.reporting_date) || ev.event_date || 'N/A';
+       const reportingTime = ev.reporting_time || (ev.alloc?.reporting_time) || 'N/A';
+       const eventStartTime = ev.event_start_time || 'N/A';
+       const location = ev.event_location || lead?.event_location || 'N/A';
+       const mapsLink = ev.google_maps_link || 'N/A';
+       const shootType = ev.event_shoot_type || 'N/A';
+       const guestPax = ev.guest_pax || 'N/A';
+       const staffPax = ev.staff_pax || 'N/A';
+       
+       let assignedRoles = ev.roles || ['Crew'];
+       assignedRoles = Array.from(new Set(assignedRoles));
+
+       text += `Event${assignedEvents.length > 1 ? ` ${idx + 1}` : ''}:\n${eventName}\n\n`;
+       text += `Event Date:\n${eventDate}\n\n`;
+       text += `Reporting Date:\n${reportingDate}\n\n`;
+       text += `Reporting Time:\n${reportingTime}\n\n`;
+       text += `Event Start Time:\n${eventStartTime}\n\n`;
+       text += `Venue:\n${location}\n\n`;
+       text += `Location:\n${mapsLink}\n\n`;
+       text += `Shoot Type:\n${shootType}\n\n`;
+       text += `Guest Pax:\n${guestPax}\n\n`;
+       text += `Staff Pax:\n${staffPax}\n\n`;
+       text += `Assigned Responsibilities:\n\n`;
+       assignedRoles.forEach((r) => {
+         text += `• ${r}\n`;
+       });
+       text += `\n`;
+    });
     
-    const selectedPackages = ord.package_name || lead?.Select_Package_Option || 'N/A';
-    const deliverables = ord.deliverables_description || lead?.deliverables_description || 'N/A';
-    const projectLink = typeof window !== 'undefined' ? `${window.location.origin}/?order=${ord.order_id}` : `https://photocrew-erp.com/?order=${ord.order_id}`;
-
-    // Collect all assigned staff for this order and their roles
-    let assigneesText = '';
-    let finalAssignList: any[] = [];
-    if (finalAssignments) {
-      finalAssignList = finalAssignments;
-    } else {
-      finalAssignList = staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id) : [];
-    }
-    
-    if (finalAssignList.length === 0) {
-      assigneesText = '• None';
-    } else {
-      const uniqueAssignees = Array.from(new Map(finalAssignList.map(a => [a.staff_name + '|' + a.staff_role, a])).values());
-      assigneesText = uniqueAssignees.map(a => {
-        const mobile = getStaffMobileByName(a.staff_name);
-        return `• ${a.staff_role}: ${a.staff_name}${mobile ? ` (${mobile})` : ''}`;
-      }).join('\n');
-    }
-
-    let text = `Hello ${staffName},\n\nYou have been assigned to the following project.\n\n`;
-    text += `Customer Details\n`;
-    text += `- Customer Name: ${clientName}\n`;
-    text += `- Customer Mobile Number: ${clientContact}\n`;
-    text += `- Customer WhatsApp Number: ${clientWhatsapp}\n\n`;
-    text += `------------------------------------\n\n`;
-
-    // Determine if multiple events exist
-    let eventsList: any[] = [];
-    if (lead?.events && lead.events.length > 0) {
-      eventsList = lead.events;
-    }
-
-    if (eventsList.length === 0) {
-      // Single/fallback event case
-      const eventName = ord.event_type || 'N/A';
-      const eventDate = ord.event_date || 'N/A';
-      const eventTime = ord.event_time ? convertTo12Hour(ord.event_time) : 'N/A';
-      const reportingDate = lead?.Reporting_date || ord.event_date || 'N/A';
-      const reportingTime = ord.reporting_time ? convertTo12Hour(ord.reporting_time) : 'N/A';
-      const shootType = ord.shoot_type || (lead ? lead.shoot_type : 'N/A');
-      const guestPax = lead?.guest_pax || 'N/A';
-      const staffPax = lead?.staff_pax || 'N/A';
-      const venue = lead?.event_location || ord.event_location || 'N/A';
-      const googleMapsLink = lead?.google_maps_link || 'N/A';
-
-      text += `Event Details\n`;
-      text += `- Event Name: ${eventName}\n`;
-      text += `- Event Date: ${eventDate}\n`;
-      text += `- Event Start Time: ${eventTime}\n`;
-      text += `- Reporting Date: ${reportingDate}\n`;
-      text += `- Reporting Time: ${reportingTime}\n`;
-      text += `- Shoot Type: ${shootType}\n`;
-      text += `- Guest Pax: ${guestPax}\n`;
-      text += `- Staff Pax: ${staffPax}\n\n`;
-      text += `------------------------------------\n\n`;
-
-      text += `Location Details\n`;
-      text += `- Venue Name / Event Address: ${venue}\n`;
-      text += `- Google Maps Location Link: ${googleMapsLink}\n\n`;
-      text += `------------------------------------\n\n`;
-
-      text += `Deliverables & Extra Details\n`;
-      text += `- Selected Packages & Deliverables: ${selectedPackages}\n`;
-      if (deliverables && deliverables !== 'N/A') {
-        text += `- Deliverables Description: ${deliverables}\n`;
-      }
-      text += `- Additional Shooters / Remarks / Requirement: ${additionalShooters}\n`;
-      text += `- Vehicle Details: ${vehicleDetails}\n`;
-      text += `- Hotel Details: ${hotelDetails}\n`;
-      text += `- Contact Person Name & Mobile: ${contactPersonName} - ${contactPersonMobile}\n`;
-      text += `- ERP Project Link: ${projectLink}\n\n`;
-      text += `------------------------------------\n\n`;
-
-      text += `Assigned Team (Roles & Mobiles)\n`;
-      text += `${assigneesText}\n`;
-    } else {
-      // Multiple events case: generate event-wise details
-      // Filter events to only the ones assigned to the current staff member (if specified)
-      const assignedEvents = eventsList.filter((ev: any) => {
-        const evId = ev.id || '';
-        if (modalEventAllocations && evId) {
-          const alloc = modalEventAllocations[evId];
-          return alloc?.staff && alloc.staff.some((st: any) => st.staff_name.toLowerCase() === staffName.toLowerCase());
-        } else {
-          const names = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
-          return names.includes(staffName.toLowerCase());
-        }
-      });
-
-      // Show their assigned events by default, but if none, show all events.
-      const targetEvents = assignedEvents.length > 0 ? assignedEvents : eventsList;
-
-      text += `Deliverables & Extra Details\n`;
-      text += `- Selected Packages & Deliverables: ${selectedPackages}\n`;
-      if (deliverables && deliverables !== 'N/A') {
-        text += `- Deliverables Description: ${deliverables}\n`;
-      }
-      text += `- Additional Shooters / Remarks / Requirement: ${additionalShooters}\n`;
-      text += `- Vehicle Details: ${vehicleDetails}\n`;
-      text += `- Hotel Details: ${hotelDetails}\n`;
-      text += `- Contact Person Name & Mobile: ${contactPersonName} - ${contactPersonMobile}\n`;
-      text += `- ERP Project Link: ${projectLink}\n\n`;
-      text += `------------------------------------\n\n`;
-
-      text += `Assigned Team (Roles & Mobiles)\n`;
-      text += `${assigneesText}\n\n`;
-      text += `------------------------------------\n\n`;
-
-      targetEvents.forEach((ev: any, idx: number) => {
-        const evId = ev.id || '';
-        const eventName = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');
-        const eventDate = ev.event_date || 'N/A';
-        const eventTime = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A';
-        const reportingDate = ev.reporting_date || (modalEventAllocations && evId && modalEventAllocations[evId]?.reporting_date) || ev.event_date || 'N/A';
-        const reportingTime = ev.reporting_time ? convertTo12Hour(ev.reporting_time) : (modalEventAllocations && evId && modalEventAllocations[evId]?.reporting_time) ? convertTo12Hour(modalEventAllocations[evId].reporting_time) : 'N/A';
-        const shootType = ev.event_shoot_type || ev.shoot_type || 'N/A';
-        const guestPax = ev.guest_pax || 'N/A';
-        const staffPax = ev.staff_pax || 'N/A';
-        const venue = ev.event_location || lead?.event_location || 'N/A';
-        const googleMapsLink = ev.google_maps_link || lead?.google_maps_link || 'N/A';
-
-        // Get assigned team for this specific event
-        let eventStaffList: string[] = [];
-        if (modalEventAllocations && evId) {
-          const alloc = modalEventAllocations[evId];
-          if (alloc?.staff) {
-            eventStaffList = alloc.staff.map((st: any) => st.staff_name);
-          }
-        } else {
-          eventStaffList = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim()) : [];
-        }
-        eventStaffList = Array.from(new Set(eventStaffList.filter(Boolean)));
-
-        text += `Event Details (Event ${idx + 1}: ${eventName})\n`;
-        text += `- Event Name: ${eventName}\n`;
-        text += `- Event Date: ${eventDate}\n`;
-        text += `- Event Start Time: ${eventTime}\n`;
-        text += `- Reporting Date: ${reportingDate}\n`;
-        text += `- Reporting Time: ${reportingTime}\n`;
-        text += `- Shoot Type: ${shootType}\n`;
-        text += `- Guest Pax: ${guestPax}\n`;
-        text += `- Staff Pax: ${staffPax}\n\n`;
-        text += `------------------------------------\n\n`;
-
-        text += `Location Details\n`;
-        text += `- Venue Name / Event Address: ${venue}\n`;
-        text += `- Google Maps Location Link: ${googleMapsLink}\n\n`;
-        text += `------------------------------------\n\n`;
-
-        text += `Assigned Event Team\n`;
-        if (eventStaffList.length === 0) {
-          text += `• None\n`;
-        } else {
-          eventStaffList.forEach(name => {
-            const mobile = getStaffMobileByName(name);
-            text += `• ${name}${mobile ? ` - ${mobile}` : ''}\n`;
-          });
-        }
-
-        if (idx < targetEvents.length - 1) {
-          text += `\n====================================\n\n`;
-        }
-      });
-    }
-
-    text += `\nPlease report on time.\n\nThank you.`;
+    text += `Please report on time.\n\nThank you.`;
     return text;
   };
 
@@ -1080,6 +947,7 @@ export const OperationsLeads: React.FC = () => {
     }
 
     setAssignValidationError(null);
+    setValidationAttempted(false);
     if (parentLeadInstance?.events) {
        let teamMembersConfig: { event_name: string; team_members: string[] }[] = [];
        try {
@@ -1115,6 +983,7 @@ export const OperationsLeads: React.FC = () => {
             }
 
             if (isMissingStaff) {
+                setValidationAttempted(true);
                 setAssignValidationError(`Please complete all Staff Assignments before saving.\nAt least one Staff is required for every Team Member Included.`);
                 
                 // Open the collapsed event and focus
@@ -1144,7 +1013,7 @@ export const OperationsLeads: React.FC = () => {
       Object.values(eventAllocations).forEach((alloc: any) => {
         if (alloc.staff && alloc.staff.length > 0) {
           alloc.staff.forEach((st: any) => {
-            if (!allAssignedStaff.find(a => a.staff_name === st.staff_name && a.staff_role === st.staff_role)) {
+            if (!allAssignedStaff.find(a => a.staff_name === st.staff_name)) {
                allAssignedStaff.push({
                  staff_role: st.staff_role,
                  staff_id: st.staff_id,
@@ -1367,51 +1236,6 @@ export const OperationsLeads: React.FC = () => {
     return completedStages.includes(o.current_stage) || op?.event_status === 'Completed';
   };
 
-  const getStaffRoster = (staffName: string) => {
-    const roster: { orderId: string; eventName: string; reportingDate: string; reportingTime: string }[] = [];
-    if (!staffName) return roster;
-
-    leads?.forEach(lead => {
-      if (lead.status === 'Lost Lead') return;
-      const order = orders.find(o => o.lead_id === lead.lead_id || o.order_id === lead.lead_id);
-      if (order && isCompletedEvent(order)) return;
-
-      if (lead.events && lead.events.length > 0) {
-        lead.events.forEach(ev => {
-          const assignedNames = ev.assigned_staff_names
-            ? ev.assigned_staff_names.split(',').map((s: string) => s.trim())
-            : [];
-          if (assignedNames.includes(staffName)) {
-            const op = operations.find(x => x.order_id === (order?.order_id || lead.lead_id));
-            roster.push({
-              orderId: order?.order_id || lead.lead_id,
-              eventName: ev.event_name || ev.event_type || 'Shoot Event',
-              reportingDate: ev.reporting_date || lead.Reporting_date || ev.event_date || '',
-              reportingTime: ev.reporting_time || order?.reporting_time || op?.reporting_time || ''
-            });
-          }
-        });
-      } else {
-        let assignmentsHistory = leadStaffAssignmentHistory ? leadStaffAssignmentHistory.filter(h => h.lead_id === lead.lead_id) : [];
-        if (assignmentsHistory.length === 0 && order) {
-          assignmentsHistory = leadStaffAssignmentHistory ? leadStaffAssignmentHistory.filter(h => h.order_id === order.order_id) : [];
-        }
-        const isAssigned = assignmentsHistory.some(h => h.assigned_staff?.trim() === staffName);
-        if (isAssigned) {
-          const op = operations.find(x => x.order_id === (order?.order_id || lead.lead_id));
-          roster.push({
-            orderId: order?.order_id || lead.lead_id,
-            eventName: lead.event_type || 'Main Event',
-            reportingDate: lead.Reporting_date || lead.event_date || '',
-            reportingTime: order?.reporting_time || op?.reporting_time || ''
-          });
-        }
-      }
-    });
-
-    return roster;
-  };
-
   const stats = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
 
@@ -1474,12 +1298,13 @@ export const OperationsLeads: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* 1. Results Summary Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
         {[
           { label: "New Orders Received", val: stats.newOrders, theme: 'purple' as CameraLensTheme, filterValue: 'New Orders', trendText: 'Fresh', chartPoints: [10, 18, 14, 25, 20, 31, 35] },
           { label: "Today's Events", val: stats.todaysEvents, theme: 'cyan' as CameraLensTheme, filterValue: "Today's Events", trendText: 'Live', chartPoints: [5, 9, 7, 14, 11, 16, 15] },
           { label: "Scheduled Events", val: stats.scheduled, theme: 'green' as CameraLensTheme, filterValue: 'Scheduled Events', trendText: 'Rostered', chartPoints: [8, 15, 12, 20, 16, 25, 24] },
           { label: "Pending Assignments", val: stats.pendingAssignments, theme: 'red' as CameraLensTheme, filterValue: 'Pending Assignments', trendText: 'Action Req', chartPoints: [2, 4, 1, 5, 3, 6, 2] },
+          { label: "Completed", val: stats.completed, theme: 'purple' as CameraLensTheme, filterValue: 'Completed', trendText: 'Closed Out', chartPoints: [11, 14, 12, 18, 15, 20, 17] },
         ].map((card, idx) => (
           <CameraLensStatsCard
             key={idx}
@@ -1584,35 +1409,23 @@ export const OperationsLeads: React.FC = () => {
         )}
             {/* Main Board Table */}
       <div className="bg-zinc-900/40 border border-zinc-850 rounded-2xl overflow-x-auto shadow-xl">
-        <table className="w-full text-left border-collapse table-fixed min-w-[1270px]">
-          <colgroup>
-            <col className="w-[110px]" />
-            <col className="w-[200px]" />
-            <col className="w-[180px]" />
-            <col className="w-[150px]" />
-            <col className="w-[130px]" />
-            <col className="w-[125px]" />
-            <col className="w-[125px]" />
-            <col className="w-[160px]" />
-            <col className="w-[150px]" />
-          </colgroup>
+        <table className="w-full text-left border-collapse min-w-[1240px]">
           <thead>
-            <tr className="border-b border-zinc-850 text-[10px] font-mono tracking-widest uppercase text-zinc-400 bg-zinc-950/70 select-none h-11 align-middle">
-              <th className="p-4 font-bold align-middle">Order ID</th>
+            <tr className="border-b border-zinc-850 text-[10px] font-mono tracking-widest uppercase text-zinc-400 bg-zinc-950/70 select-none">
+              <th className="p-4 font-bold">Order ID</th>
               <th 
                 onClick={() => toggleSort('customer_name')}
-                className="p-4 font-bold cursor-pointer hover:bg-zinc-800/40 hover:text-white transition-colors align-middle"
+                className="p-4 font-bold cursor-pointer hover:bg-zinc-800/40 hover:text-white transition-colors"
                 title="Click to Sort by Customer Name"
               >
                 Customer Name {renderSortIndicator('customer_name')}
               </th>
-              <th className="p-4 font-bold align-middle">Event Name</th>
-              <th className="p-4 font-bold align-middle">Event Date</th>
-              <th className="p-4 font-bold align-middle">Event Time</th>
-              <th className="p-4 font-bold align-middle">Reporting Time</th>
-              <th className="p-4 font-bold align-middle">Assigned Team</th>
-              <th className="p-4 font-bold align-middle">Current Stage</th>
-              <th className="p-4 font-bold text-right text-zinc-400 align-middle">Actions</th>
+              <th className="p-4 font-bold">Event Date</th>
+              <th className="p-4 font-bold">Event Time</th>
+              <th className="p-4 font-bold">Reporting Time</th>
+              <th className="p-4 font-bold">Assigned Team</th>
+              <th className="p-4 font-bold">Current Stage</th>
+              <th className="p-4 font-bold text-right text-zinc-400">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-850/60 text-xs">
@@ -1622,7 +1435,7 @@ export const OperationsLeads: React.FC = () => {
               if (mainBoardList.length === 0) {
                 return (
                   <tr>
-                    <td colSpan={9} className="p-8 text-center text-zinc-500 italic">
+                    <td colSpan={8} className="p-8 text-center text-zinc-500 italic">
                       No matching operations leads found.
                     </td>
                   </tr>
@@ -1689,62 +1502,72 @@ export const OperationsLeads: React.FC = () => {
                 const isLocked = currentStage === 'Raw Footage Received';
 
                 return (
-                  <tr key={ord.order_id} className={`hover:bg-zinc-900/20 transition-all border-b border-zinc-850/40 h-[96px] align-middle ${isLocked ? 'opacity-85' : ''}`}>
-                    <td className="p-4 align-middle">
+                  <tr key={ord.order_id} className={`hover:bg-zinc-900/20 transition-all ${isLocked ? 'opacity-85' : ''}`}>
+                    <td className="p-4">
                       <span className="font-mono text-indigo-400 font-bold bg-slate-900/80 px-2 py-0.5 border border-slate-800 rounded">
                         {ord.order_id}
                       </span>
                     </td>
-                    <td className="p-4 font-bold text-zinc-100 align-middle">
-                      <div className="truncate text-xs font-sans max-w-[180px] block" title={ord.customer_name}>
-                        {ord.customer_name}
-                      </div>
+                    <td className="p-4 font-bold text-zinc-100">
+                      <div>{ord.customer_name}</div>
+                      {lead?.events && lead.events.length > 0 ? (
+                        <div className="space-y-1.5 inner-cell-scroll mt-1">
+                          {lead.events.map((ev: any, evIdx: number) => (
+                            <div key={ev.id || evIdx} className="text-[10px] text-zinc-400 font-sans font-normal truncate" title={ev.event_name || ev.event_type || 'Other'}>
+                              {ev.event_name || ev.event_type || 'Other'}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-zinc-400 font-sans font-normal mt-0.5">{ord.event_type}</div>
+                      )}
+                      {op?.equipment_kit && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {op.equipment_kit.split(',').map((kit: string, idx: number) => (
+                            <span key={idx} className="bg-amber-400/10 text-amber-400 px-1.5 py-0.5 rounded text-[9.5px] font-mono border border-amber-400/10 " title="Assigned Gear">
+                              ⚙️ {kit.trim()}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </td>
-                    <td className="p-4 align-middle">
-                      <EventDropdownCell 
-                        type="name" 
-                        items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || ev.event_type || 'Other') : [ord.event_type || 'Other']} 
-                      />
-                      {op?.equipment_kit && (() => {
-                        const kits = op.equipment_kit.split(',').map((kit: string) => kit.trim()).filter(Boolean);
-                        if (kits.length === 0) return null;
-                        return (
-                          <div className="flex flex-wrap gap-1 mt-1.5 max-h-[20px] overflow-hidden">
-                            {kits.slice(0, 2).map((kit: string, idx: number) => (
-                              <span key={idx} className="bg-amber-400/10 text-amber-400 px-1.5 py-0.5 rounded text-[9px] font-mono border border-amber-400/10 truncate max-w-[80px] inline-block align-middle" title={kit}>
-                                ⚙️ {kit}
-                              </span>
-                            ))}
-                            {kits.length > 2 && (
-                              <span className="text-[9px] font-mono text-amber-400/60 self-center">
-                                +{kits.length - 2}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })()}
-                    </td>
-                    <td className="p-4 font-mono text-zinc-300 align-middle">
-                      <EventDropdownCell 
-                        type="date" 
-                        items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_date || '—') : []} 
-                      />
+                    <td className="p-4 font-mono text-zinc-300">
+                      {lead?.events && lead.events.length > 0 ? (
+                        <div className="space-y-1.5 inner-cell-scroll">
+                          {lead.events.map((ev: any, evIdx: number) => (
+                            <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
+                              <span className="text-zinc-300">{ev.event_date || '—'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-zinc-600 italic">—</span>
+                      )}
                       {isCompletedEvent(ord) && (
                         <div className="text-[10px] text-emerald-400 mt-0.5 font-sans font-medium">
                           Done: {getCompletionDate(ord)}
                         </div>
                       )}
                     </td>
-                    <td className="p-4 font-mono text-zinc-300 align-middle">
-                      <EventDropdownCell 
-                        type="time" 
-                        items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—') : []} 
-                      />
+                    <td className="p-4 font-mono text-zinc-300">
+                      {lead?.events && lead.events.length > 0 ? (
+                        <div className="space-y-1.5 inner-cell-scroll">
+                          {lead.events.map((ev: any, evIdx: number) => (
+                            <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
+                              <span className="text-zinc-300">
+                                {ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-zinc-600 italic">—</span>
+                      )}
                     </td>
-                    <td className="p-4 font-mono text-zinc-300 align-middle">
+                    <td className="p-4 font-mono text-zinc-300">
                       {op?.reporting_time || <span className="text-zinc-600 italic">—</span>}
                     </td>
-                    <td className="p-4 text-xs font-mono text-zinc-300 align-middle">
+                    <td className="p-4 text-xs font-mono text-zinc-300">
                       {(() => {
                         const assignedStaffNames = getAssignedStaffNamesForOrder(ord);
                         return assignedStaffNames.length > 0 ? (
@@ -1760,11 +1583,71 @@ export const OperationsLeads: React.FC = () => {
                         );
                       })()}
                     </td>
-                    <td className="p-4 align-middle">
+                    <td className="p-4">
                       <StatusText status={currentStage} />
                     </td>
-                    <td className="p-4 text-right align-middle">
+                    <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                        {canEdit && !isLocked && (currentStage !== 'Order Confirmed' && currentStage !== 'New Order Received') && (
+                          <select
+                            value=""
+                            disabled={isSaving}
+                            onChange={async (e) => {
+                              const newStatus = e.target.value;
+                              if (!newStatus) return;
+                              if (newStatus === 'Event Completed') {
+                                try {
+                                  setIsSaving(true);
+                                  await markEventCompleted(ord.order_id, '');
+                                  alert("Status Updated Successfully");
+                                } catch (error) {
+                                  alert(`Failed to update status: ${error}`);
+                                } finally {
+                                  setIsSaving(false);
+                                }
+                              } else if (newStatus === 'Raw Footage Received') {
+                                setReceivingFootageOrderId(ord.order_id);
+                                const existingRf = rawFootage?.find(f => f.order_id === ord.order_id);
+                                const op = getOpDetails(ord.order_id);
+                                setFootageForm({
+                                  footage_link: op?.Raw_Footage_Drive_Link || op?.raw_footage_drive_link || ((existingRf && (existingRf.raw_received || existingRf.status === 'Received')) ? (existingRf.server_path || '') : ''),
+                                  storage_type: 'Google Drive',
+                                  upload_notes: ''
+                                });
+                                // Initialize footageHandoverStates for each assigned equipment item
+                                const kits = op?.equipment_kit ? op.equipment_kit.split(',').map((sName: string) => sName.trim()).filter(Boolean) : [];
+                                const initialHandovers: any = {};
+                                kits.forEach((k: string) => {
+                                  initialHandovers[k] = {
+                                    return_status: 'Returned',
+                                    returned_by: currentUserName,
+                                    return_date: new Date().toISOString().split('T')[0],
+                                    notes: ''
+                                  };
+                                });
+                                setFootageHandoverStates(initialHandovers);
+                              } else {
+                                try {
+                                  setIsSaving(true);
+                                  await updateOrderStage(ord.order_id, newStatus as any);
+                                  alert("Status Updated Successfully");
+                                } catch (error: any) {
+                                  alert(`Failed to update status: ${error.message}`);
+                                } finally {
+                                  setIsSaving(false);
+                                }
+                              }
+                            }}
+                            className="px-2 py-1 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/20 rounded-full text-[10px] font-mono font-bold cursor-pointer transition-all uppercase"
+                          >
+                            <option value="">▼ UPDATE STATUS</option>
+                            <option value="Event Scheduled">Event Scheduled</option>
+                            <option value="Event Completed">Event Completed</option>
+                            <option value="Raw Footage Received">Raw Footage Received</option>
+                            <option value="Event Cancelled">Event Cancelled</option>
+                          </select>
+                        )}
+
                         {(() => {
                           const actionItems: { label: string; onClick: () => void }[] = [];
 
@@ -1804,12 +1687,13 @@ export const OperationsLeads: React.FC = () => {
                             });
                           }
 
-                          // 4. Update Footage Link Action (Visible ONLY when currentStage is "Event Scheduled")
-                          if (canEdit && currentStage === 'Event Scheduled') {
+                          // 4. View Roster (Staff Assigned / Event Scheduled)
+                          if (canEdit && !isLocked && (currentStage === 'Staff Assigned' || currentStage === 'Event Scheduled')) {
                             actionItems.push({
-                              label: 'Update Footage Link',
+                              label: 'View Roster',
                               onClick: () => {
-                                handleOpenReceiveRawFootageModal(ord);
+                                startAssigning(ord);
+                                setActiveMenuOrderId(null);
                               }
                             });
                           }
@@ -1825,10 +1709,7 @@ export const OperationsLeads: React.FC = () => {
                                 setFootageForm({
                                   footage_link: op?.Raw_Footage_Drive_Link || op?.raw_footage_drive_link || ((existingRf && (existingRf.raw_received || existingRf.status === 'Received')) ? (existingRf.server_path || '') : ''),
                                   storage_type: 'Google Drive',
-                                  upload_notes: '',
-                                  media_number: '',
-                                  received_date: new Date().toISOString().split('T')[0],
-                                  received_time: new Date().toTimeString().slice(0, 5)
+                                  upload_notes: ''
                                 });
 
                                 const kits = op?.equipment_kit ? op.equipment_kit.split(',').map((sName: string) => sName.trim()).filter(Boolean) : [];
@@ -1989,7 +1870,7 @@ export const OperationsLeads: React.FC = () => {
                     <div>
                       <span className="text-[10px] text-zinc-505 block uppercase font-mono">Alt / WhatsApp</span>
                       <span className="font-mono text-zinc-200 font-medium flex items-center gap-1">
-                        {activeOrderInstance?.whatsapp_number || parentLeadInstance?.whatsapp_number || 'N/A'}
+                        {parentLeadInstance?.whatsapp_number || 'N/A'}
                       </span>
                     </div>
                     <div>
@@ -2146,7 +2027,7 @@ export const OperationsLeads: React.FC = () => {
                       </div>
                       {/* 3. Team Members Included & Staff Assignment */}
                       <div className="space-y-4 pt-2">
-                        <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-800">
+                           <div className="flex items-center justify-between mb-2 pb-2 border-b border-zinc-800">
                            <h4 className="text-[11px] font-mono font-bold uppercase text-sky-400 tracking-wider">
                              Team Members Included
                            </h4>
@@ -2155,126 +2036,181 @@ export const OperationsLeads: React.FC = () => {
                            </span>
                         </div>
                         
-                        <div className="grid grid-cols-1 gap-3">
-                          {includedRoles.length === 0 && (
-                            <div className="text-center py-6 text-zinc-500 text-xs italic font-mono bg-zinc-900/10 border border-dashed border-zinc-900 rounded-xl">
-                              {loadError ? (
-                                <div className="text-red-400 space-y-1">
-                                  <div>❌ Failed to load Team Members Included.</div>
-                                  <div className="text-[10px]">Reason: {loadError}</div>
-                                </div>
-                              ) : (
-                                "No Team Members Included found for this event."
-                              )}
-                            </div>
-                          )}
-                          {includedRoles.map((roleStr, roleIdx) => {
-                             const assignedToRole = allocStaff.filter((s: any) => s.staff_role === roleStr);
-                             const assignedStaff = assignedToRole[0];
-                             const selectKey = `${evId}_${roleIdx}`;
-                             const stFull = assignedStaff ? staff?.find(s => s.staff_name === assignedStaff.staff_name) : null;
-                             const defaultStaffType = stFull?.staff_type || 'In-House';
-                             const currentStaffType = staffTypeByEvent[selectKey] || defaultStaffType;
-                             
-                             return (
-                               <div key={selectKey} className="bg-zinc-900/40 border border-zinc-800/80 hover:border-zinc-700/80 transition-colors rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                 {/* Role Name */}
-                                 <div className="flex flex-col gap-0.5 min-w-[150px]">
-                                   <span className="text-xs font-bold text-white tracking-wide">{roleStr}</span>
-                                 </div>
-                                    
-                                    {/* Assignment UI */}
-                                    <div className="flex-1 w-full sm:max-w-[28rem] space-y-2">
-                                      {assignedToRole.map((assignedStaff: any, idx: number) => {
-                                         const stFull = staff?.find(s => s.name === assignedStaff.staff_name);
-                                         return (
-                                           <div key={idx} className="flex items-center justify-between bg-zinc-800/50 p-2 pl-3 rounded-lg border border-zinc-700/50">
-                                              <div className="flex items-center gap-2">
-                                                <span className="text-xs font-semibold text-emerald-400">{assignedStaff.staff_name}</span>
-                                                {isStaffBusyOnDate(assignedStaff.staff_name, ev.event_date || '', activeOrderInstance?.order_id || '') ? (
-                                                  <button type="button" onClick={() => setBusyRosterStaff(assignedStaff.staff_name)} className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-mono uppercase border border-red-500/20 cursor-pointer hover:bg-red-500/20 transition-colors">🔴 Busy</button>
-                                                ) : (
-                                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono uppercase border border-emerald-500/20">🟢 Available</span>
-                                                )}
-                                                {stFull?.staff_type && <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-950/50 text-zinc-400 font-mono uppercase border border-zinc-800">{stFull.staff_type}</span>}
+                        <div className="border border-zinc-900 rounded-xl overflow-hidden bg-zinc-950">
+                          <div className="overflow-x-auto w-full">
+                            <table className="w-full text-left border-collapse min-w-[650px]">
+                              <thead>
+                                <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[9px] text-zinc-500 uppercase tracking-wider">
+                                  <th className="px-3.5 py-2 font-bold w-[35%]">Team Member</th>
+                                  <th className="px-3.5 py-2 font-bold w-[65%]">Assignments (Staff Type & Assigned Staff)</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-zinc-900">
+                                {includedRoles.length === 0 && (
+                                  <tr>
+                                    <td colSpan={2} className="text-center py-6 text-zinc-500 text-xs italic font-mono bg-zinc-900/10">
+                                      {loadError ? (
+                                        <div className="text-red-400 space-y-1">
+                                          <div>❌ Failed to load Team Members Included.</div>
+                                          <div className="text-[10px]">Reason: {loadError}</div>
+                                        </div>
+                                      ) : (
+                                        "No Team Members Included found for this event."
+                                      )}
+                                    </td>
+                                  </tr>
+                                )}
+                                {includedRoles.map((roleStr, roleIdx) => {
+                                  const assignedToRole = allocStaff.filter((s: any) => s.staff_role === roleStr);
+                                  const isEmpty = assignedToRole.length === 0;
+
+                                  return (
+                                    <tr 
+                                      key={`${evId}_${roleIdx}`}
+                                      id={`role-row-${evId}-${roleIdx}`}
+                                      className={`transition-colors align-top ${
+                                        validationAttempted && isEmpty
+                                          ? 'bg-rose-950/5 hover:bg-rose-950/10'
+                                          : 'hover:bg-zinc-900/10'
+                                      }`}
+                                    >
+                                      {/* Left Column: Team Member Name */}
+                                      <td className="px-3.5 py-2.5 font-sans border-r border-zinc-900/50">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <div 
+                                            className="text-xs font-bold text-zinc-200 truncate pr-2 select-none"
+                                            title={roleStr as string}
+                                          >
+                                            ✔ {roleStr as string}
+                                          </div>
+                                        </div>
+                                      </td>
+
+                                      {/* Right Column: Compact Staff Dropdowns */}
+                                      <td className="px-3.5 py-1.5">
+                                        <div className="space-y-1.5">
+                                          {/* Render Assigned Staff Rows */}
+                                          {assignedToRole.map((assignedStaff: any, idx: number) => {
+                                            const stFull = staff?.find(s => s.name === assignedStaff.staff_name);
+                                            return (
+                                              <div key={`assigned_${idx}`} className="flex items-center gap-2">
+                                                <div className="w-28 shrink-0 flex items-center px-2 py-1 bg-zinc-900/50 border border-zinc-800 rounded-lg h-7">
+                                                  <span className="text-[11px] text-zinc-400 font-sans truncate">{stFull?.staff_type || 'In-House'}</span>
+                                                </div>
+                                                <div className="flex-1 min-w-[200px] flex items-center justify-between bg-zinc-900/50 border border-zinc-800 rounded-lg px-2 py-1 h-7">
+                                                  <span className="text-[11px] font-bold text-emerald-400 truncate">{assignedStaff.staff_name}</span>
+                                                  {isStaffBusyOnDate(assignedStaff.staff_name, ev.event_date || '', activeOrderInstance?.order_id || '') ? (
+                                                    <button type="button" onClick={() => setBusyRosterStaff(assignedStaff.staff_name)} className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-mono uppercase border border-red-500/20 cursor-pointer hover:bg-red-500/20 transition-colors shrink-0">🔴 Busy</button>
+                                                  ) : (
+                                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono uppercase border border-emerald-500/20 shrink-0">🟢 Available</span>
+                                                  )}
+                                                </div>
+                                                <div className="w-6 shrink-0 flex justify-center">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setEventAllocations((prev: any) => {
+                                                        const existingAlloc = prev[evId] || { staff: [] };
+                                                        return {
+                                                          ...prev,
+                                                          [evId]: {
+                                                            ...existingAlloc,
+                                                            staff: existingAlloc.staff.filter((s: any) => !(s.staff_name === assignedStaff.staff_name && s.staff_role === roleStr))
+                                                          }
+                                                        };
+                                                      });
+                                                    }}
+                                                    className="text-zinc-600 hover:text-rose-400 transition-colors p-1 cursor-pointer text-xs"
+                                                    title="Remove assignment"
+                                                  >
+                                                    ✕
+                                                  </button>
+                                                </div>
                                               </div>
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  setEventAllocations((prev: any) => {
-                                                    const existingAlloc = prev[evId] || { staff: [] };
-                                                    return {
-                                                      ...prev,
-                                                      [evId]: {
-                                                        ...existingAlloc,
-                                                        staff: existingAlloc.staff.filter((s: any) => !(s.staff_name === assignedStaff.staff_name && s.staff_role === roleStr))
-                                                      }
-                                                    };
-                                                  });
-                                                }}
-                                                className="text-zinc-500 hover:text-red-400 p-1 bg-zinc-900/50 rounded-md hover:bg-zinc-900 transition-colors cursor-pointer"
-                                                title="Remove assignment"
-                                              >
-                                                <X className="w-3.5 h-3.5" />
-                                              </button>
-                                           </div>
-                                         );
-                                      })}
-                                      
-                                      <div className="flex items-center gap-2">
-                                        <select
-                                          value={currentStaffType}
-                                          onChange={(e) => {
-                                            setStaffTypeByEvent(prev => ({ ...prev, [selectKey]: e.target.value as 'In-House' | 'Freelancer' }));
-                                            setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: '' }));
-                                          }}
-                                          className="bg-zinc-950 border border-zinc-800 rounded-lg py-2 px-2 text-[11px] text-zinc-400 w-[100px] outline-none focus:border-zinc-700 cursor-pointer"
-                                        >
-                                          <option value="In-House">In-House</option>
-                                          <option value="Freelancer">Freelance</option>
-                                        </select>
-                                        
-                                        <select
-                                          value={selectedStaffByEvent[selectKey] || ''}
-                                          onChange={(e) => {
-                                            const selectedName = e.target.value;
-                                            
-                                            if (selectedName) {
-                                               const memberInfo = staff?.find(st => st.name === selectedName);
-                                               const staffId = memberInfo?.staff_id || 'MOCK-' + Math.random().toString(36).substr(2, 4);
-                                               
-                                               setEventAllocations((prev: any) => {
-                                                 const existingAlloc = prev[evId] || { staff: [] };
-                                                 if (existingAlloc.staff.some((s: any) => s.staff_name === selectedName && s.staff_role === roleStr)) {
-                                                    return prev;
-                                                 }
-                                                 return {
-                                                   ...prev,
-                                                   [evId]: {
-                                                     ...existingAlloc,
-                                                     staff: [...(existingAlloc.staff || []), { staff_role: roleStr, staff_id: staffId, staff_name: selectedName, mobile: memberInfo?.mobile || '' }]
-                                                   }
-                                                 };
-                                               });
-                                               setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: '' }));
-                                            }
-                                          }}
-                                          className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg py-2 px-3 text-[11px] font-bold text-zinc-100 outline-none focus:border-sky-500/50 cursor-pointer"
-                                        >
-                                          <option value="">▼ {assignedToRole.length > 0 ? '+ Add Another Staff' : 'Select Staff'}</option>
-                                          {staff && staff
-                                             .filter(s => s.status === 'Active' && s.department === 'Operations' && (s.staff_type || 'In-House') === currentStaffType)
-                                             .map(st => (
-                                               <option key={st.staff_id} value={st.name}>
-                                                 {st.name} {isStaffBusyOnDate(st.name, ev.event_date || '', activeOrderInstance?.order_id || '') ? '🔴 Busy' : '🟢 Available'} - {st.role}
-                                               </option>
-                                          ))}
-                                        </select>
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                                                       })}                        </div>
+                                            );
+                                          })}
+
+                                          {/* Empty row for assignment */}
+                                          {(() => {
+                                             const selectKey = `${evId}_${roleIdx}`;
+                                             const currentStaffType = staffTypeByEvent[selectKey] || 'In-House';
+                                             
+                                             return (
+                                               <div className="flex items-center gap-2">
+                                                 <div className="w-28 shrink-0">
+                                                    <select
+                                                      value={currentStaffType}
+                                                      onChange={(e) => {
+                                                        setStaffTypeByEvent(prev => ({ ...prev, [selectKey]: e.target.value as 'In-House' | 'Freelancer' }));
+                                                        setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: '' }));
+                                                      }}
+                                                      className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-[11px] text-zinc-400 hover:text-zinc-300 rounded-lg px-2 py-1 font-sans focus:outline-none focus:border-purple-500 cursor-pointer h-7"
+                                                    >
+                                                      <option value="In-House">In-House</option>
+                                                      <option value="Freelancer">Freelancer</option>
+                                                    </select>
+                                                 </div>
+                                                 <div className="flex-1 min-w-[200px] flex items-center gap-2">
+                                                    <select
+                                                      value={selectedStaffByEvent[selectKey] || ''}
+                                                      onChange={(e) => {
+                                                        const selectedName = e.target.value;
+                                                        if (selectedName) {
+                                                           const memberInfo = staff?.find(st => st.name === selectedName);
+                                                           const staffId = memberInfo?.staff_id || 'MOCK-' + Math.random().toString(36).substr(2, 4);
+                                                           
+                                                           setEventAllocations((prev: any) => {
+                                                             const existingAlloc = prev[evId] || { staff: [] };
+                                                             if (existingAlloc.staff.some((s: any) => s.staff_name === selectedName && s.staff_role === roleStr)) {
+                                                                return prev;
+                                                             }
+                                                             return {
+                                                               ...prev,
+                                                               [evId]: {
+                                                                 ...existingAlloc,
+                                                                 staff: [...(existingAlloc.staff || []), { staff_role: roleStr, staff_id: staffId, staff_name: selectedName, mobile: memberInfo?.mobile || '' }]
+                                                               }
+                                                             };
+                                                           });
+                                                           setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: '' }));
+                                                        }
+                                                      }}
+                                                      className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-[11px] text-zinc-200 rounded-lg px-2 py-1 font-sans focus:outline-none focus:border-purple-500 cursor-pointer h-7"
+                                                    >
+                                                      <option value="">▼ {assignedToRole.length > 0 ? '+ Add Another Staff' : 'Select Staff'}</option>
+                                                      {staff && staff
+                                                         .filter(s => s.status === 'Active' && s.department === 'Operations' && (s.staff_type || 'In-House') === currentStaffType)
+                                                         .filter(s => !assignedToRole.some((ast: any) => ast.staff_name === s.name))
+                                                         .map(st => (
+                                                           <option key={st.staff_id} value={st.name}>
+                                                             {st.name} {isStaffBusyOnDate(st.name, ev.event_date || '', activeOrderInstance?.order_id || '') ? '🔴 Busy' : '🟢 Available'} - {st.role}
+                                                           </option>
+                                                      ))}
+                                                    </select>
+                                                 </div>
+                                                 <div className="w-6 shrink-0 flex justify-center"></div>
+                                               </div>
+                                             );
+                                          })()}
+                                          
+                                          {/* Validation message if missing */}
+                                          {validationAttempted && isEmpty && (
+                                            <div className="pt-0.5">
+                                              <span className="text-[10px] text-rose-500 font-mono italic">
+                                                ⚠️ Required: Assign at least one staff
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
 
                         {/* Assigned Equipment Section */}
                         {(() => {
@@ -2444,10 +2380,159 @@ export const OperationsLeads: React.FC = () => {
                             </div>
                           );
                         })()}
-</div>
 
+                        {/* Staff Schedule Card */}
+                        {(() => {
+                           const staffNamesToCheck: string[] = [];
+                           
+                           // Check all dropdowns for this event
+                           Object.keys(selectedStaffByEvent).forEach(key => {
+                             if (key.startsWith(`${evId}_`) && selectedStaffByEvent[key]) {
+                               staffNamesToCheck.push(selectedStaffByEvent[key]);
+                             }
+                           });
 
+                           allocStaff.forEach((s: any) => {
+                             if (s.staff_name && !staffNamesToCheck.includes(s.staff_name)) {
+                               staffNamesToCheck.push(s.staff_name);
+                             }
+                           });
+
+                           if (staffNamesToCheck.length === 0) return null;
+
+                           return (
+                             <div className="space-y-4">
+                               {staffNamesToCheck.map(staffName => {
+                                 const memberInfo = staff?.find(st => st.name === staffName);
+                                 if (!memberInfo) return null;
+
+                                 // Find all active and upcoming events assigned to this staff member
+                                 const staffEvents: any[] = [];
+                                 leads?.forEach(otherLead => {
+                                   otherLead.events?.forEach(otherEv => {
+                                     // Skip current event we are scheduling
+                                     if (otherEv.id === evId) return;
+
+                                     const assignedNames = otherEv.assigned_staff_names
+                                       ? otherEv.assigned_staff_names.split(',').map((s: string) => s.trim())
+                                       : [];
+                                     if (assignedNames.includes(staffName)) {
+                                       const otherOrder = orders.find(o => o.lead_id === otherLead.lead_id || o.order_id === otherLead.lead_id);
+                                       const isCompleted = otherOrder ? isCompletedEvent(otherOrder) : false;
+
+                                       if (!isCompleted && otherLead.status !== 'Lost Lead') {
+                                         staffEvents.push({
+                                           lead: otherLead,
+                                           event: otherEv,
+                                           order: otherOrder,
+                                           dateValue: otherEv.event_date || otherLead.Reporting_date || ''
+                                         });
+                                       }
+                                     }
+                                   });
+                                 });
+
+                                 // Sort chronologically by date
+                                 staffEvents.sort((a, b) => {
+                                   const dateA = new Date(a.dateValue).getTime();
+                                   const dateB = new Date(b.dateValue).getTime();
+                                   if (isNaN(dateA)) return 1;
+                                   if (isNaN(dateB)) return -1;
+                                   return dateA - dateB;
+                                 });
+
+                                 // Compare current scheduling event's time coordinates with existing assignments
+                                 const currentEvDate = allocation.reporting_date || ev.event_date;
+                                 const currentEvRepTime = allocation.reporting_time || ev.reporting_time;
+                                 const currentEvStartTime = allocation.event_start_time || ev.event_start_time;
+                                 const currentEvEndTime = allocation.event_end_time || ev.event_end_time;
+
+                                 const evStart = parseDateTime(currentEvDate, currentEvRepTime || currentEvStartTime || '08:00');
+                                 const evEnd = parseDateTime(currentEvDate, currentEvEndTime || currentEvStartTime || '17:00');
+
+                                 const conflictingEvents: any[] = [];
+                                 staffEvents.forEach(se => {
+                                   const seRepDate = se.lead.Reporting_date || se.event.event_date;
+                                   const seRepTime = se.event.reporting_time || se.lead.reporting_time || se.event.event_start_time || '08:00';
+                                   const seEndTime = se.event.event_end_time || se.event.event_start_time || '17:00';
+
+                                   const otherStart = parseDateTime(seRepDate, seRepTime);
+                                   const otherEnd = parseDateTime(se.event.event_date || seRepDate, seEndTime);
+
+                                   let isOverlap = false;
+                                   if (evStart && evEnd && otherStart && otherEnd) {
+                                     isOverlap = evStart < otherEnd && otherStart < evEnd;
+                                   } else {
+                                     if (currentEvDate && se.event.event_date && currentEvDate === se.event.event_date) {
+                                       isOverlap = true;
+                                     }
+                                   }
+
+                                   if (isOverlap) {
+                                     conflictingEvents.push(se);
+                                   }
+                                 });
+
+                                 const hasConflict = conflictingEvents.length > 0;
+
+                                 return (
+                                   <div key={staffName} className="mt-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl space-y-4 text-left shadow-md">
+                                     {/* Header */}
+                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+                                       <div>
+                                         <span className="text-[10px] text-zinc-500 uppercase font-mono block">👤 Staff Name</span>
+                                         <span className="text-sm font-bold text-white font-sans">{staffName}</span>
+                                         <span className="text-[10px] text-zinc-400 font-mono block mt-0.5">{memberInfo.role}</span>
+                                       </div>
+                                       <div className="flex flex-col items-start sm:items-end">
+                                         <span className="text-[10px] text-zinc-500 uppercase font-mono block">Status</span>
+                                         {hasConflict ? (
+                                           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20">
+                                             🔴 Busy
+                                           </span>
+                                         ) : (
+                                           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                             🟢 Available
+                                           </span>
+                                         )}
+                                       </div>
+                                     </div>
+                                   </div>
+                                 );
+                               })}
+                             </div>
+                           );
+                        })()}
                         
+                      </div>
+                      
+                      {/* 4. WhatsApp Sharing */}
+                      {allocStaff.length > 0 && (
+                        <div className="pt-3 mt-4 border-t border-zinc-800">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (activeOrderInstance) {
+                                const assignedStaffNames = getAssignedStaffNamesForOrder(activeOrderInstance);
+                                if (assignedStaffNames.length === 1) {
+                                  const msgText = generateWhatsAppMessageForStaff(activeOrderInstance, assignedStaffNames[0]);
+                                  const url = `https://wa.me/?text=${encodeURIComponent(msgText)}`;
+                                  window.open(url, '_blank');
+                                } else {
+                                  setWhatsappShareModalData({
+                                    orderId: activeOrderInstance.order_id,
+                                    order: activeOrderInstance,
+                                    staffNames: assignedStaffNames
+                                  });
+                                }
+                              }
+                            }}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/30 text-[#25D366] text-[10px] font-mono font-bold rounded cursor-pointer transition-all uppercase"
+                          >
+                            <span>📱</span> Share via WhatsApp
+                          </button>
+                        </div>
+                      )}
                            </div>
                         )}
                     </div>
@@ -2486,6 +2571,7 @@ export const OperationsLeads: React.FC = () => {
         </div>
       )}
 
+      {/* Raw Footage Received Modal */}
       {receivingFootageOrderId && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div id="raw_footage_modal" className="bg-zinc-900 border border-zinc-805 rounded-2xl w-full max-w-lg shadow-2xl relative p-5 max-h-[90vh] overflow-y-auto space-y-4 scrollbar-thin">
@@ -2527,29 +2613,18 @@ export const OperationsLeads: React.FC = () => {
                   }
                 }
 
-                const formattedNotes = `Hard Disk Received: ${hardDiskReceived ? 'YES' : 'NO'}\nMemory Card Received: ${memoryCardReceived ? 'YES' : 'NO'}\nMedia Number: ${footageForm.media_number || 'N/A'}\nReceived Date: ${footageForm.received_date || '—'}\nReceived Time: ${footageForm.received_time || '—'}\nNotes: ${footageForm.upload_notes}`;
-
                 await confirmRawFootageReceived(
                   receivingFootageOrderId,
                   footageForm.footage_link,
                   'Google Drive',
-                  formattedNotes,
+                  footageForm.upload_notes,
                   undefined,
                   undefined,
                   undefined
                 );
                 
                 setReceivingFootageOrderId(null);
-                setFootageForm({ 
-                  footage_link: '', 
-                  storage_type: 'Google Drive', 
-                  upload_notes: '',
-                  media_number: '',
-                  received_date: '',
-                  received_time: ''
-                });
-                setHardDiskReceived(false);
-                setMemoryCardReceived(false);
+                setFootageForm({ footage_link: '', storage_type: 'Google Drive', upload_notes: '' });
                 alert("Raw Footage Handover Complete");
               } catch (err: any) {
                 console.error("Failed to receive raw footage:", err);
@@ -2564,7 +2639,6 @@ export const OperationsLeads: React.FC = () => {
                 </label>
                 <input
                   type="url"
-                  required
                   value={footageForm.footage_link}
                   onChange={(e) => setFootageForm({ ...footageForm, footage_link: e.target.value })}
                   placeholder="e.g. https://drive.google.com/drive/folders/..."
@@ -2572,71 +2646,7 @@ export const OperationsLeads: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
-                    Hard Disk / Memory Card Number
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={footageForm.media_number}
-                    onChange={(e) => setFootageForm({ ...footageForm, media_number: e.target.value })}
-                    placeholder="e.g. HD-04 / SD-12"
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono placeholder:text-zinc-600"
-                  />
-                </div>
-                
-                <div className="flex items-center gap-4 pt-5">
-                  <label className="flex items-center gap-2 text-xs font-mono text-zinc-350 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={hardDiskReceived}
-                      onChange={(e) => setHardDiskReceived(e.target.checked)}
-                      className="rounded bg-zinc-950 border-zinc-805 text-purple-500 focus:ring-0 focus:ring-offset-0 w-4 h-4 cursor-pointer"
-                    />
-                    <span>Hard Disk Received</span>
-                  </label>
-                  
-                  <label className="flex items-center gap-2 text-xs font-mono text-zinc-350 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={memoryCardReceived}
-                      onChange={(e) => setMemoryCardReceived(e.target.checked)}
-                      className="rounded bg-zinc-950 border-zinc-805 text-purple-500 focus:ring-0 focus:ring-offset-0 w-4 h-4 cursor-pointer"
-                    />
-                    <span>Memory Card Received</span>
-                  </label>
-                </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
-                    Received Date
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={footageForm.received_date}
-                    onChange={(e) => setFootageForm({ ...footageForm, received_date: e.target.value })}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
-                    Received Time
-                  </label>
-                  <input
-                    type="time"
-                    required
-                    value={footageForm.received_time}
-                    onChange={(e) => setFootageForm({ ...footageForm, received_time: e.target.value })}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono"
-                  />
-                </div>
-              </div>
 
               <div>
                 <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
@@ -2704,6 +2714,8 @@ export const OperationsLeads: React.FC = () => {
                 </div>
               )}
 
+
+
               <div className="flex justify-end gap-2 pt-2 border-t border-zinc-850">
                 <button
                   type="button"
@@ -2718,84 +2730,6 @@ export const OperationsLeads: React.FC = () => {
                   className="px-4 py-2 bg-purple-650 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold text-xs rounded-xl cursor-pointer flex justify-center items-center gap-1.5 w-full sm:w-auto"
                 >
                   {isSaving ? 'Saving...' : 'Save & Move to Production'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Update Footage Link Modal */}
-      {updatingFootageOrderId && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl relative p-5 space-y-4">
-            <h3 className="text-sm font-bold text-indigo-400 font-mono uppercase flex items-center gap-1.5 border-b border-zinc-800 pb-2">
-              <span>🔗</span> Update Raw Footage Link
-            </h3>
-            <div className="text-[11px] text-zinc-400 leading-relaxed">
-              Updating the drive/cloud link for order <span className="font-mono text-indigo-400 font-bold">{updatingFootageOrderId}</span>. This will synchronize live across all pipelines.
-            </div>
-
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              if (isSaving) return;
-
-              try {
-                setIsSaving(true);
-                const { error } = await supabaseClient
-                  .from('operations')
-                  .update({
-                    Raw_Footage_Drive_Link: updatingFootageLink,
-                    raw_footage_drive_link: updatingFootageLink
-                  })
-                  .eq('order_id', updatingFootageOrderId);
-
-                if (error) {
-                  alert("Failed to update link: " + error.message);
-                } else {
-                  refreshData();
-                  setUpdatingFootageOrderId(null);
-                  setUpdatingFootageLink('');
-                  alert("Raw Footage Drive Link updated successfully.");
-                }
-              } catch (err: any) {
-                console.error("Failed to update footage link:", err);
-                alert("Failed to update link. Error: " + (err.message || "Please try again."));
-              } finally {
-                setIsSaving(false);
-              }
-            }} className="space-y-4 text-left">
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
-                  Raw Footage Drive Link
-                </label>
-                <input
-                  type="url"
-                  required
-                  value={updatingFootageLink}
-                  onChange={(e) => setUpdatingFootageLink(e.target.value)}
-                  placeholder="e.g. https://drive.google.com/drive/folders/..."
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUpdatingFootageOrderId(null);
-                    setUpdatingFootageLink('');
-                  }}
-                  className="px-4 py-2 bg-zinc-800 text-zinc-300 text-xs rounded-xl cursor-pointer hover:bg-zinc-700 transition w-full sm:w-auto"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-750 disabled:opacity-50 text-white font-semibold text-xs rounded-xl cursor-pointer flex justify-center items-center gap-1.5 w-full sm:w-auto"
-                >
-                  {isSaving ? 'Updating...' : 'Update Link'}
                 </button>
               </div>
             </form>
@@ -2899,7 +2833,7 @@ export const OperationsLeads: React.FC = () => {
               <span className="text-xl">📱</span>
               <div className="text-left">
                 <h3 className="text-base font-bold text-white">
-                  Share Assignment Details
+                  Personalized WhatsApp Share
                 </h3>
                 <p className="text-[11px] text-zinc-400">
                   Review and share work assignments for Order <span className="font-mono text-indigo-400 font-bold">{whatsappShareModalData.orderId}</span>
@@ -2908,12 +2842,18 @@ export const OperationsLeads: React.FC = () => {
             </div>
 
             <div className="overflow-y-auto space-y-5 flex-1 pr-1 text-left">
-              {whatsappShareModalData.staffNames.length === 0 ? (
+              {whatsappShareModalData.staffNames.filter(name => {
+                const st = staff?.find(s => s.name === name);
+                return st?.department === 'Operations';
+              }).length === 0 ? (
                 <div className="text-center py-8 text-zinc-500 italic text-xs font-mono">
                   No staff assigned yet.
                 </div>
               ) : (
-                whatsappShareModalData.staffNames.map((name, idx) => {
+                whatsappShareModalData.staffNames.filter(name => {
+                  const st = staff?.find(s => s.name === name);
+                  return st?.department === 'Operations';
+                }).map((name, idx) => {
                   const stObj = staff?.find(s => s.name === name);
                   const isSelected = !!selectedStaffForShare[name];
                   const msgText = editedMessages[name] || '';
@@ -2963,10 +2903,7 @@ export const OperationsLeads: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => {
-                              let cleanPhone = stObj?.mobile ? stObj.mobile.replace(/\D/g, '') : '';
-                              if (cleanPhone.length === 10) {
-                                cleanPhone = '91' + cleanPhone;
-                              }
+                              const cleanPhone = stObj?.mobile ? stObj.mobile.replace(/\D/g, '') : '';
                               const shareUrl = cleanPhone 
                                 ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msgText)}`
                                 : `https://wa.me/?text=${encodeURIComponent(msgText)}`;
@@ -3011,79 +2948,6 @@ export const OperationsLeads: React.FC = () => {
               >
                 Close
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Busy Staff Details Popup */}
-      {busyRosterStaff && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[60] flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl shadow-2xl relative p-6 animate-in zoom-in duration-200">
-            <button 
-              onClick={() => setBusyRosterStaff(null)}
-              className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
-              type="button"
-            >
-              ✕
-            </button>
-            <div className="text-left space-y-4">
-              <div className="flex items-center gap-2.5 border-b border-zinc-800 pb-3">
-                <span className="text-xl">📅</span>
-                <div>
-                  <h3 className="text-sm font-bold text-white font-sans">
-                    Staff Current Assignments
-                  </h3>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">
-                    Active roster details for <span className="text-indigo-400 font-bold">{busyRosterStaff}</span>
-                  </p>
-                </div>
-              </div>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-zinc-300 border-collapse">
-                  <thead>
-                    <tr className="border-b border-zinc-800 text-[10px] uppercase font-mono text-zinc-500">
-                      <th className="py-2 px-3">Order ID</th>
-                      <th className="py-2 px-3">Event Name</th>
-                      <th className="py-2 px-3">Reporting Date</th>
-                      <th className="py-2 px-3">Reporting Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const roster = getStaffRoster(busyRosterStaff);
-                      if (roster.length === 0) {
-                        return (
-                          <tr>
-                            <td colSpan={4} className="py-4 text-center text-zinc-500 italic">
-                              No active assignments found.
-                            </td>
-                          </tr>
-                        );
-                      }
-                      return roster.map((item, idx) => (
-                        <tr key={idx} className="border-b border-zinc-800/50 hover:bg-zinc-850/30 transition-colors">
-                          <td className="py-3 px-3 font-mono text-indigo-400 font-semibold">{item.orderId}</td>
-                          <td className="py-3 px-3 font-medium text-white uppercase">{item.eventName}</td>
-                          <td className="py-3 px-3 font-mono">{item.reportingDate || '—'}</td>
-                          <td className="py-3 px-3 font-mono">{item.reportingTime || '—'}</td>
-                        </tr>
-                      ));
-                    })()}
-                  </tbody>
-                </table>
-              </div>
-              
-              <div className="pt-2 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setBusyRosterStaff(null)}
-                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
-                >
-                  Close
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -3215,200 +3079,80 @@ export const OperationsLeads: React.FC = () => {
         );
       })()}
 
-      {/* Project/Lead Details Modal */}
-      {projectDossierId && (() => {
-        const ord = orders.find(o => o.order_id === projectDossierId);
-        if (!ord) return null;
-        const lead = leads.find(l => l.lead_id === ord.lead_id);
-        const staffDetails = getAssignedStaffDetailsForOrder(ord);
-
-        return (
-          <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-4xl shadow-2xl p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[90vh] overflow-hidden">
-              <button 
-                onClick={() => setProjectDossierId(null)}
-                className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
-                type="button"
-              >
-                ✕
-              </button>
-
-              {/* Header */}
-              <div className="flex items-center gap-2.5 mb-5 border-b border-zinc-800 pb-3 flex-shrink-0">
-                <span className="text-xl">📋</span>
-                <div className="text-left">
-                  <h3 className="text-base font-bold text-white font-sans">
-                    Lead & Project Information Dossier
-                  </h3>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">
-                    Order <span className="font-mono text-indigo-400 font-bold">{ord.order_id}</span> • Customer: <span className="text-zinc-200 font-bold">{ord.customer_name}</span>
-                  </p>
-                </div>
-              </div>
-
-              {/* Content body */}
-              <div className="overflow-y-auto space-y-6 flex-1 pr-1 text-left scrollbar-thin">
-                {/* 1. Customer Information Section */}
-                <div className="bg-zinc-950/40 border border-zinc-850/80 rounded-2xl p-4 space-y-3 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-3 text-[9px] text-zinc-600 uppercase font-mono tracking-wider select-none">
-                    Customer Info
-                  </div>
-                  <h4 className="text-xs font-mono font-bold uppercase text-amber-500 tracking-wider">
-                    👤 Customer Information
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                    <div>
-                      <span className="text-[10px] text-zinc-500 block uppercase font-mono">Customer Name</span>
-                      <span className="font-bold text-white block mt-0.5">{ord.customer_name}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-zinc-500 block uppercase font-mono">Mobile Number</span>
-                      <span className="font-mono text-zinc-200 font-medium block mt-0.5">{ord.mobile || lead?.mobile || 'N/A'}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-zinc-500 block uppercase font-mono">Alt / WhatsApp</span>
-                      <span className="font-mono text-zinc-200 font-medium block mt-0.5">{lead?.whatsapp_number || 'N/A'}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-zinc-500 block uppercase font-mono">Email Address</span>
-                      <span className="text-zinc-200 block mt-0.5">{lead?.email || 'N/A'}</span>
-                    </div>
-                    <div className="col-span-1 sm:col-span-2 md:col-span-4">
-                      <span className="text-[10px] text-zinc-500 block uppercase font-mono">Event Address / Location</span>
-                      <span className="text-zinc-200 block mt-0.5 leading-relaxed">{lead?.event_location || ord.event_location || lead?.address || 'N/A'}</span>
-                    </div>
-                    {lead?.google_maps_link && (
-                      <div className="col-span-1 sm:col-span-2 md:col-span-4">
-                        <span className="text-[10px] text-zinc-500 block uppercase font-mono">Google Maps Link</span>
-                        <a 
-                          href={lead.google_maps_link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-400 hover:text-blue-300 font-mono text-[11px] underline break-all block mt-0.5"
-                        >
-                          {lead.google_maps_link}
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 2. Events & Assigned Staff Sections */}
-                <div className="space-y-4">
-                  <h4 className="text-xs font-mono font-bold uppercase text-purple-400 tracking-wider">
-                    🎬 Event & Rostering Details
-                  </h4>
-
-                  {(() => {
-                    const eventsList = lead?.events && lead.events.length > 0 
-                      ? lead.events 
-                      : [{
-                          event_name: ord.event_type || 'Main Event',
-                          event_date: ord.event_date || '—',
-                          event_start_time: ord.event_time || '—',
-                          event_location: ord.event_location || '—',
-                          assigned_staff_names: ''
-                        }];
-
-                    return eventsList.map((ev: any, evIdx: number) => {
-                      const evName = ev.event_name || ev.event_type || 'Main Event';
-                      // Filter assigned staff for this specific event name
-                      const evStaff = staffDetails.filter(sd => sd.event_name === evName);
-
-                      return (
-                        <div key={evIdx} className="bg-zinc-955 border border-zinc-850 rounded-2xl p-4 space-y-4">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-800/80 pb-3 gap-2">
-                            <div>
-                              <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider block">Event #{evIdx + 1}</span>
-                              <h5 className="text-sm font-bold text-zinc-100 uppercase">{evName}</h5>
-                            </div>
-                            <div className="flex flex-wrap gap-2 text-[11px] font-mono text-zinc-400 bg-zinc-950/60 px-3 py-1.5 rounded-xl border border-zinc-850">
-                              <span>📅 Date: <strong className="text-zinc-200">{ev.event_date || '—'}</strong></span>
-                              <span className="text-zinc-700">•</span>
-                              <span>⏰ Time: <strong className="text-zinc-200">{ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—'}</strong></span>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                            {/* Venue info */}
-                            <div className="md:col-span-4 space-y-1 bg-zinc-900/20 border border-zinc-900/60 p-3 rounded-xl">
-                              <span className="text-[9.5px] text-zinc-500 uppercase font-mono tracking-wider block">Event Venue</span>
-                              <span className="text-xs text-zinc-200 font-sans block leading-relaxed">{ev.event_venue || ev.event_location || lead?.event_location || '—'}</span>
-                            </div>
-
-                            {/* Staff assigned to this event */}
-                            <div className="md:col-span-8 space-y-2">
-                              <span className="text-[9.5px] text-zinc-500 uppercase font-mono tracking-wider block font-bold">Assigned Crew for this Event</span>
-                              
-                              <div className="space-y-2">
-                                {evStaff.length === 0 ? (
-                                  <div className="text-xs text-zinc-500 italic py-2 bg-zinc-900/10 border border-zinc-850/40 rounded-xl text-center">
-                                    No staff rostered yet for this event.
-                                  </div>
-                                ) : (
-                                  evStaff.map((member, mIdx) => (
-                                    <div key={mIdx} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-zinc-900/40 rounded-xl border border-zinc-800/40 hover:border-zinc-700/60 transition-all gap-2">
-                                      <div className="space-y-1">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                          <span className="text-xs font-bold text-white">{member.staff_name}</span>
-                                          <span className="text-[10px] font-mono bg-zinc-800 text-zinc-300 px-1.5 py-0.5 rounded border border-zinc-750">
-                                            {member.staff_role}
-                                          </span>
-                                          <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full ${
-                                            member.staff_type === 'In-House' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
-                                          }`}>
-                                            {member.staff_type}
-                                          </span>
-                                        </div>
-                                        
-                                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-400 font-mono">
-                                          {member.mobile && (
-                                            <span className="flex items-center gap-1">
-                                              📱 {member.mobile}
-                                            </span>
-                                          )}
-                                          {member.reporting_time && (
-                                            <span className="flex items-center gap-1">
-                                              ⏰ Report: {member.reporting_time}
-                                            </span>
-                                          )}
-                                        </div>
-
-                                        {member.assigned_equipment && member.assigned_equipment.length > 0 && (
-                                          <div className="flex flex-wrap gap-1 mt-1.5">
-                                            {member.assigned_equipment.map((equip, eqIdx) => (
-                                              <span key={eqIdx} className="bg-amber-400/10 text-amber-400 px-1.5 py-0.5 rounded text-[9.5px] font-mono border border-amber-400/10" title="Assigned Gear">
-                                                ⚙️ {equip}
-                                              </span>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
+      {/* Busy Staff Roster Popup */}
+      {busyRosterStaff && (() => {
+        // Collect all assignments for this staff member
+        const roster: Array<{ orderId: string; eventName: string; date: string; time: string; }> = [];
+        
+        orders.forEach(ord => {
+           if (!ord.lead_id) return;
+           const parentLead = leads.find(l => l.id === ord.lead_id);
+           if (!parentLead) return;
+           
+           (parentLead.events || []).forEach((ev: any) => {
+              if (ev.staff_allocations) {
+                 const isAssigned = ev.staff_allocations.some((sa: any) => sa.staff_name === busyRosterStaff);
+                 if (isAssigned) {
+                    roster.push({
+                      orderId: ord.order_id,
+                      eventName: ev.event_name || ev.event_type || 'Main Event',
+                      date: ev.event_date || ord.event_date || 'N/A',
+                      time: ev.reporting_time || ev.event_start_time || 'N/A'
                     });
-                  })()}
-                </div>
-              </div>
+                 }
+              }
+           });
+        });
 
-              {/* Footer */}
-              <div className="pt-4 border-t border-zinc-800 mt-4 flex-shrink-0">
+        return createPortal(
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-900/50">
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">📅</span>
+                  <div>
+                    <h3 className="text-sm font-bold text-white font-mono tracking-tight uppercase flex items-center gap-2">
+                       {busyRosterStaff}
+                       <span className="text-[10px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full border border-red-500/30">ROSTER</span>
+                    </h3>
+                  </div>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setProjectDossierId(null)}
-                  className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 active:scale-98 text-zinc-300 text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
+                  onClick={() => setBusyRosterStaff(null)}
+                  className="text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
                 >
-                  Close Dossier
+                  ✕
                 </button>
               </div>
+              <div className="p-4 max-h-[60vh] overflow-y-auto space-y-3">
+                {roster.length === 0 ? (
+                  <div className="text-xs text-zinc-500 italic text-center py-4">No assignments found for {busyRosterStaff}.</div>
+                ) : (
+                  roster.map((r, idx) => (
+                    <div key={idx} className="bg-zinc-900/50 border border-zinc-800/80 p-3 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-zinc-700/80 transition-colors">
+                      <div className="space-y-1">
+                        <div className="text-[10px] text-zinc-500 font-mono tracking-wider">ORDER: <span className="text-zinc-300 font-bold">{r.orderId}</span></div>
+                        <div className="text-xs text-zinc-100 font-bold">{r.eventName}</div>
+                      </div>
+                      <div className="flex items-center gap-3 bg-zinc-950 p-2 rounded-lg border border-zinc-800/80">
+                        <div className="flex flex-col">
+                           <span className="text-[9px] text-zinc-500 font-mono">DATE</span>
+                           <span className="text-[11px] text-zinc-300 font-mono font-bold">{r.date}</span>
+                        </div>
+                        <div className="w-px h-6 bg-zinc-800" />
+                        <div className="flex flex-col">
+                           <span className="text-[9px] text-zinc-500 font-mono">TIME</span>
+                           <span className="text-[11px] text-zinc-300 font-mono font-bold">{r.time}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
-          </div>
+          </div>,
+          document.body
         );
       })()}
 
