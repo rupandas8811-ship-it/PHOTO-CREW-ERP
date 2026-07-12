@@ -1513,6 +1513,7 @@ ${coordinatorName}`;
   const [leadTargetDeliveryDate, setLeadTargetDeliveryDate] = useState('');
   const [leadExpectedDeliveryDate, setLeadExpectedDeliveryDate] = useState('');
   const [leadActualDeliveryDate, setLeadActualDeliveryDate] = useState('');
+  const [dossierError, setDossierError] = useState('');
 
   // Helper calculations for Production Leads workflows
   const calculateDaysRemaining = (dueDateStr?: string) => {
@@ -2430,15 +2431,51 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const balanceDue = payment?.balance_due !== undefined ? payment.balance_due : (totalAmount - advanceReceived);
                       const payStatus = payment?.payment_status || 'Pending';
 
+                      const isFinished = displayStatus === 'Completed' || 
+                                         displayStatus === 'Project Delivered' || 
+                                         displayStatus === 'Project Closed' ||
+                                         displayStatus === 'Delivered' ||
+                                         displayStatus === 'Closed' ||
+                                         prod.production_status === 'Completed' ||
+                                         prod.production_status === 'Project Delivered' ||
+                                         prod.production_status === 'Project Closed' ||
+                                         prod.production_status === 'Delivered' ||
+                                         prod.production_status === 'Closed' ||
+                                         prod.editing_status === 'Completed' ||
+                                         prod.editing_status === 'Project Delivered' ||
+                                         prod.editing_status === 'Project Closed' ||
+                                         prod.editing_status === 'Delivered' ||
+                                         prod.editing_status === 'Closed';
+
                       let flagBg = 'text-green-400 bg-green-500/5 border-green-500/10';
                       let flagLabel = 'On Time';
                       if (daysRem !== null) {
                         if (daysRem < 0) {
-                          flagBg = 'text-red-400 bg-red-500/5 border-red-500/10 animate-pulse';
-                          flagLabel = 'OVERDUE';
+                          if (isFinished) {
+                            flagBg = 'text-zinc-500 bg-zinc-900/30 border-zinc-800';
+                            flagLabel = 'Completed';
+                          } else {
+                            flagBg = 'text-red-400 bg-red-500/5 border-red-500/10 animate-pulse';
+                            flagLabel = 'OVERDUE';
+                          }
                         } else if (daysRem <= 3) {
-                          flagBg = 'text-yellow-400 bg-yellow-500/5 border-yellow-500/10';
-                          flagLabel = 'Due Soon';
+                          if (isFinished) {
+                            flagBg = 'text-zinc-500 bg-zinc-900/30 border-zinc-800';
+                            flagLabel = 'Completed';
+                          } else {
+                            flagBg = 'text-yellow-400 bg-yellow-500/5 border-yellow-500/10';
+                            flagLabel = 'Due Soon';
+                          }
+                        } else {
+                          if (isFinished) {
+                            flagBg = 'text-zinc-500 bg-zinc-900/30 border-zinc-800';
+                            flagLabel = 'Completed';
+                          }
+                        }
+                      } else {
+                        if (isFinished) {
+                          flagBg = 'text-zinc-500 bg-zinc-900/30 border-zinc-800';
+                          flagLabel = 'Completed';
                         }
                       }
 
@@ -2480,6 +2517,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           <td className="p-4 font-bold text-white text-left font-sans">
                             <div className="hover:text-violet-300 transition-colors cursor-pointer" onClick={() => {
                               setSelectedLeadProd(prod);
+                              setDossierError('');
                               setLeadEditor(prod.editor_assigned || 'Unassigned');
                               setLeadStaff(prod.assigned_staff ? prod.assigned_staff.split(', ').map(s => s.trim()) : []);
                               setAssignRoleFilter('');
@@ -2594,7 +2632,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           <td className="p-4">
                             {daysRem !== null ? (
                               <span className={`inline-flex px-2 py-0.5 rounded font-bold border font-mono ${flagBg}`}>
-                                {daysRem} days ({flagLabel})
+                                {flagLabel === 'Completed' ? 'Completed' : `${daysRem} days (${flagLabel})`}
                               </span>
                             ) : (
                               <span className="text-zinc-600 italic">Not set</span>
@@ -5616,6 +5654,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
         const handleSaveLeadDossier = (e: React.FormEvent) => {
           e.preventDefault();
+
+          if (!leadTargetDeliveryDate) {
+            setDossierError('Please select the Target Delivery Date before saving.');
+            return;
+          }
+          setDossierError('');
           
           let mainStatus: EditingStatus = 'Raw Footage Received';
           if (leadProdStatus === 'Pending' || leadProdStatus === 'Raw Footage Received') mainStatus = 'Raw Footage Received';
@@ -6003,8 +6047,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           <input
                             type="date"
                             value={leadTargetDeliveryDate}
-                            onChange={(e) => setLeadTargetDeliveryDate(e.target.value)}
-                            className="w-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 font-mono rounded-xl py-2 px-3 focus:outline-none"
+                            onChange={(e) => {
+                              setLeadTargetDeliveryDate(e.target.value);
+                              if (e.target.value) setDossierError('');
+                            }}
+                            className={`w-full bg-zinc-900 border text-xs text-zinc-100 font-mono rounded-xl py-2 px-3 focus:outline-none transition-all ${
+                              dossierError ? 'border-rose-500/50 focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30' : 'border-zinc-800 focus:border-violet-500/50'
+                            }`}
                           />
                         </div>
                         <div>
@@ -6052,6 +6101,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 </div>
 
                 {/* Submit actions */}
+                {dossierError && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/30 text-rose-400 text-xs rounded-xl font-mono">
+                    ⚠️ {dossierError}
+                  </div>
+                )}
                 <div className="flex justify-end items-center gap-3 border-t border-zinc-900 pt-4">
                   {leadEditor && leadEditor !== 'Unassigned' && (
                     <button

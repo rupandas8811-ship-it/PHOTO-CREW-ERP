@@ -28,6 +28,72 @@ import { SalesCalendar } from './SalesCalendar';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { jsPDF } from 'jspdf';
 
+interface LocalEditableInputProps {
+  value: string;
+  disabled?: boolean;
+  onChange: (val: string) => void;
+  className?: string;
+}
+
+const LocalEditableInput: React.FC<LocalEditableInputProps> = ({ value, disabled, onChange, className }) => {
+  const [localVal, setLocalVal] = React.useState(value);
+  const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const latestValueRef = React.useRef(value);
+
+  React.useEffect(() => {
+    latestValueRef.current = value;
+    setLocalVal(value);
+  }, [value]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVal = e.target.value;
+    setLocalVal(newVal);
+    
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    
+    timeoutRef.current = setTimeout(() => {
+      if (newVal !== latestValueRef.current) {
+        onChange(newVal);
+      }
+    }, 1000);
+  };
+
+  const handleBlur = () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    if (localVal !== value) {
+      onChange(localVal);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (localVal !== value) {
+        onChange(localVal);
+      }
+      e.currentTarget.blur();
+    }
+  };
+
+  React.useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  return (
+    <input
+      type="text"
+      value={localVal}
+      disabled={disabled}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      className={className}
+    />
+  );
+};
+
 const validateAndFormatTime = (timeStr: any, fieldLabel: string): string | null => {
   if (timeStr === undefined || timeStr === null) return null;
   const str = String(timeStr).trim();
@@ -9720,13 +9786,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                             <div className="space-y-2">
                                               {eventInclusions.map((item, idx) => (
                                                 <div key={idx} className="flex items-center gap-2">
-                                                  <input
-                                                    type="text"
+                                                  <LocalEditableInput
                                                     value={item}
                                                     disabled={isLeadLocked}
-                                                    onChange={(e) => {
+                                                    onChange={(newVal) => {
                                                       const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList))];
-                                                      currentList[idx] = e.target.value;
+                                                      currentList[idx] = newVal;
                                                       const updated = {
                                                         ...editableInclusions,
                                                         [eventKey]: currentList,
@@ -9792,13 +9857,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       <div className="space-y-2">
                                         {inclusionsList.map((item, idx) => (
                                           <div key={idx} className="flex items-center gap-2">
-                                            <input
-                                              type="text"
+                                            <LocalEditableInput
                                               value={item}
                                               disabled={isLeadLocked}
-                                              onChange={(e) => {
+                                              onChange={(newVal) => {
                                                 const currentList = [...(editableInclusions[selectedPkgId] || [])];
-                                                currentList[idx] = e.target.value;
+                                                currentList[idx] = newVal;
                                                 const updated = {
                                                   ...editableInclusions,
                                                   [selectedPkgId]: currentList
@@ -9861,13 +9925,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   <div className="space-y-2">
                                     {deliverablesList.map((item, idx) => (
                                       <div key={idx} className="flex items-center gap-2">
-                                        <input
-                                          type="text"
+                                        <LocalEditableInput
                                           value={item}
                                           disabled={isLeadLocked}
-                                          onChange={(e) => {
+                                          onChange={(newVal) => {
                                             const currentList = [...(editableDeliverables[selectedPkgId] || [])];
-                                            currentList[idx] = e.target.value;
+                                            currentList[idx] = newVal;
                                             const updated = {
                                               ...editableDeliverables,
                                               [selectedPkgId]: currentList

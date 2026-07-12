@@ -26,6 +26,7 @@ export const OperationsLeads: React.FC = () => {
     rawFootage,
     staffAssignments,
     saveStaffAssignments,
+    updateLead,
     payments,
     equipmentHandovers,
     addEquipmentHandovers,
@@ -396,6 +397,10 @@ export const OperationsLeads: React.FC = () => {
   };
 
   const getAssignedStaffDetailsForOrder = (ord: Order): AssignedStaffDetails[] => {
+    const hasExisting = staffAssignments?.some(sa => sa.order_id === ord.order_id);
+    if (!hasExisting) {
+      return [];
+    }
     const lead = leads.find(l => l.lead_id === ord.lead_id);
     const staffDetailsList: AssignedStaffDetails[] = [];
     
@@ -817,7 +822,8 @@ export const OperationsLeads: React.FC = () => {
         }
         const includedRoles = eventRoles?.length > 0 ? eventRoles : [];
 
-        if (ev.assigned_staff_names) {
+        const hasExisting = staffAssignments?.some(sa => sa.order_id === order.order_id);
+        if (hasExisting && ev.assigned_staff_names) {
           const names = ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean);
           names.forEach((name: string, i: number) => {
             const st = staff?.find(s => s.name === name);
@@ -1002,7 +1008,42 @@ export const OperationsLeads: React.FC = () => {
                 return; // Stop saving
             }
           }
+
+          // Validate equipment assigned for this event
+          const allocEquipment = eventAllocations[evId]?.equipment || [];
+          if (allocEquipment.length === 0) {
+              setValidationAttempted(true);
+              setAssignValidationError(`Please assign at least one Equipment item for every Event.`);
+              
+              // Open the collapsed event and focus
+              setCollapsedAssignEvents(prev => ({ ...prev, [evId]: false }));
+              
+              // Scroll to error
+              setTimeout(() => {
+                const el = document.getElementById(`assign-event-${evId}`);
+                if (el) {
+                   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                   el.classList.add('ring-2', 'ring-amber-500', 'ring-offset-2', 'ring-offset-zinc-950');
+                   setTimeout(() => el.classList.remove('ring-2', 'ring-amber-500', 'ring-offset-2', 'ring-offset-zinc-950'), 3000);
+                }
+              }, 100);
+              
+              return; // Stop saving
+          }
        }
+    }
+
+    // Global check: At least one equipment must be assigned overall
+    const allAssignedEquipment = Array.from(
+      new Set(
+        Object.values(eventAllocations).flatMap((alloc: any) => alloc.equipment || [])
+      )
+    ) as string[];
+
+    if (allAssignedEquipment.length === 0) {
+      setValidationAttempted(true);
+      setAssignValidationError("Please select at least one equipment item before saving.");
+      return;
     }
 
     try {
@@ -1032,12 +1073,13 @@ export const OperationsLeads: React.FC = () => {
       ) as string[];
       const consolidatedEquipKit = allAssignedEquipment.join(', ');
       
-      // Update lead_events table with assigned staff AND event-specific equipment
+      // Update lead_events table with assigned staff AND event-specific equipment via updateLead API proxy
       const baseMatchedOrder = orders.find(o => o.order_id === assigningOrderId);
-      if (supabaseClient && baseMatchedOrder?.lead_id) {
-         for (const evId of Object.keys(eventAllocations)) {
+      if (baseMatchedOrder?.lead_id && parentLeadInstance) {
+         const updatedEvents = (parentLeadInstance.events || []).map((ev: any) => {
+            const evId = ev.id || '';
             const alloc = eventAllocations[evId];
-            if (evId !== 'default' && alloc.staff) {
+            if (alloc && alloc.staff) {
                const staffNames = alloc.staff.map((s: any) => s.staff_name).join(', ');
                const staffMobiles = alloc.staff.map((s: any) => s.mobile || '').join(', ');
 
@@ -1045,11 +1087,16 @@ export const OperationsLeads: React.FC = () => {
                const equipStr = eventEquipmentList.join(', ');
                const finalStaffMobiles = staffMobiles + (equipStr ? ' || EQUIPMENT: ' + equipStr : '');
 
-               await supabaseClient.from('lead_events')
-                  .update({ assigned_staff_names: staffNames, assigned_staff_mobiles: finalStaffMobiles })
-                  .eq('id', evId);
+               return {
+                  ...ev,
+                  assigned_staff_names: staffNames,
+                  assigned_staff_mobiles: finalStaffMobiles
+               };
             }
-         }
+            return ev;
+         });
+
+         await updateLead(baseMatchedOrder.lead_id, { events: updatedEvents });
       }
 
       // Save the multi-staff role assignments to Supabase & Context state!
@@ -2264,6 +2311,14 @@ export const OperationsLeads: React.FC = () => {
                                 )}
                               </div>
 
+                              {validationAttempted && selectedEquipmentNames.length === 0 && (
+                                <div className="pt-0.5">
+                                  <span className="text-[10px] text-rose-500 font-mono italic">
+                                    ⚠️ Required: Select at least one equipment item
+                                  </span>
+                                </div>
+                              )}
+
                               {/* Search & Select input dropdown */}
                               <div className="relative">
                                 <div className="flex gap-2">
@@ -2585,6 +2640,16 @@ export const OperationsLeads: React.FC = () => {
             <form onSubmit={async (e) => {
               e.preventDefault();
               if (isSaving) return;
+
+              if (!footageForm.footage_link) {
+                alert("Please provide the Raw Footage Drive Link.");
+                return;
+              }
+
+              if (Object.keys(footageHandoverStates).length === 0) {
+                alert("Equipment verification is mandatory. Please ensure at least one equipment item is assigned and verified.");
+                return;
+              }
 
               try {
                 setIsSaving(true);
