@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { convertTo12Hour } from '../utils';
 
 interface EventDropdownCellProps {
   type: 'name' | 'date' | 'time';
   items: string[];
+  events?: any[];
 }
 
-export const EventDropdownCell: React.FC<EventDropdownCellProps> = ({ type, items }) => {
+export const EventDropdownCell: React.FC<EventDropdownCellProps> = ({ type, items, events }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -70,17 +72,42 @@ export const EventDropdownCell: React.FC<EventDropdownCellProps> = ({ type, item
 
       {isOpen && (
         <div 
-          className="absolute left-0 top-full mt-1.5 w-52 rounded-lg bg-zinc-950 border border-zinc-800 shadow-2xl py-1.5 z-[100] animate-in fade-in slide-in-from-top-1 duration-150"
+          className="absolute left-0 top-full mt-1.5 w-60 rounded-xl bg-zinc-950 border border-zinc-800 shadow-2xl py-2 z-[100] max-h-80 overflow-y-auto select-none"
           onClick={(e) => e.stopPropagation()}
         >
-          {items.map((item, idx) => (
-            <div
-              key={idx}
-              className="px-3 py-1.5 text-[11px] font-medium text-zinc-350 border-b border-zinc-900 last:border-0 hover:bg-zinc-900 hover:text-white transition-colors"
-            >
-              {item || '—'}
-            </div>
-          ))}
+          {type === 'name' && events && events.length > 0 ? (
+            events.map((ev, idx) => {
+              const name = ev.event_name || ev.event_type || 'Other';
+              const date = ev.event_date || '—';
+              const time = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—';
+              return (
+                <div
+                  key={idx}
+                  className="px-4 py-2 border-b border-zinc-900/60 last:border-0 hover:bg-zinc-900/50 transition-colors text-left"
+                >
+                  <div className="font-semibold text-xs text-indigo-300 flex items-start gap-1">
+                    <span className="text-indigo-500 mt-0.5">•</span>
+                    <span className="break-words">{name}</span>
+                  </div>
+                  <div className="text-[10px] text-zinc-400 mt-1 ml-3 font-mono">
+                    Date: {date}
+                  </div>
+                  <div className="text-[10px] text-zinc-400 font-mono ml-3">
+                    Time: {time}
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            items.map((item, idx) => (
+              <div
+                key={idx}
+                className="px-4 py-2 text-[11px] font-medium text-zinc-300 border-b border-zinc-900/60 last:border-0 hover:bg-zinc-900/50 transition-colors text-left font-mono"
+              >
+                {item || '—'}
+              </div>
+            ))
+          )}
         </div>
       )}
     </div>

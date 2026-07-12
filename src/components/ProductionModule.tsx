@@ -2226,6 +2226,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               <EventDropdownCell 
                                 type="name" 
                                 items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || ev.event_type || 'Other') : [order.event_type || 'Other']} 
+                                events={lead?.events}
                               />
                             </td>
                             <td className="p-3 text-zinc-400">{order.event_date || 'N/A'}</td>
@@ -2538,6 +2539,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             <EventDropdownCell 
                               type="name" 
                               items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || ev.event_type || 'Other') : [order.event_type || 'Other']} 
+                              events={lead?.events}
                             />
                           </td>
 

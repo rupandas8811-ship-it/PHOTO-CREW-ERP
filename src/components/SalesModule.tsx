@@ -8715,6 +8715,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             <EventDropdownCell 
                               type="name" 
                               items={lead.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || ev.event_type || 'Other') : [lead.event_type === 'Other' ? (lead.custom_event_name || lead.custom_event_type || 'Other') : (lead.event_type || 'Other')]} 
+                              events={lead.events}
                             />
                           </td>
                           <td className="p-3.5 font-mono text-zinc-350">

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { EventDropdownCell } from '../EventDropdownCell';
 import { useRole } from '../RoleContext';
 import { 
   X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin
@@ -1467,6 +1468,7 @@ export const OperationsLeads: React.FC = () => {
               >
                 Customer Name {renderSortIndicator('customer_name')}
               </th>
+              <th className="p-4 font-bold">Event Name</th>
               <th className="p-4 font-bold">Event Date</th>
               <th className="p-4 font-bold">Event Time</th>
               <th className="p-4 font-bold">Reporting Time</th>
@@ -1482,7 +1484,7 @@ export const OperationsLeads: React.FC = () => {
               if (mainBoardList.length === 0) {
                 return (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-zinc-500 italic">
+                    <td colSpan={9} className="p-8 text-center text-zinc-500 italic">
                       No matching operations leads found.
                     </td>
                   </tr>
@@ -1557,17 +1559,6 @@ export const OperationsLeads: React.FC = () => {
                     </td>
                     <td className="p-4 font-bold text-zinc-100">
                       <div>{ord.customer_name}</div>
-                      {lead?.events && lead.events.length > 0 ? (
-                        <div className="space-y-1.5 inner-cell-scroll mt-1">
-                          {lead.events.map((ev: any, evIdx: number) => (
-                            <div key={ev.id || evIdx} className="text-[10px] text-zinc-400 font-sans font-normal truncate" title={ev.event_name || ev.event_type || 'Other'}>
-                              {ev.event_name || ev.event_type || 'Other'}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-[10px] text-zinc-400 font-sans font-normal mt-0.5">{ord.event_type}</div>
-                      )}
                       {op?.equipment_kit && (
                         <div className="flex flex-wrap gap-1 mt-1.5">
                           {op.equipment_kit.split(',').map((kit: string, idx: number) => (
@@ -1578,38 +1569,29 @@ export const OperationsLeads: React.FC = () => {
                         </div>
                       )}
                     </td>
+                    <td className="p-4 text-zinc-300 font-sans">
+                      <EventDropdownCell 
+                        type="name" 
+                        items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || ev.event_type || 'Other') : [ord.event_type || 'Other']} 
+                        events={lead?.events}
+                      />
+                    </td>
                     <td className="p-4 font-mono text-zinc-300">
-                      {lead?.events && lead.events.length > 0 ? (
-                        <div className="space-y-1.5 inner-cell-scroll">
-                          {lead.events.map((ev: any, evIdx: number) => (
-                            <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
-                              <span className="text-zinc-300">{ev.event_date || '—'}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-zinc-600 italic">—</span>
-                      )}
+                      <EventDropdownCell 
+                        type="date" 
+                        items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_date || '—') : [ord.event_date || '—']} 
+                      />
                       {isCompletedEvent(ord) && (
-                        <div className="text-[10px] text-emerald-400 mt-0.5 font-sans font-medium">
+                        <div className="text-[10px] text-emerald-400 mt-1 font-sans font-medium">
                           Done: {getCompletionDate(ord)}
                         </div>
                       )}
                     </td>
                     <td className="p-4 font-mono text-zinc-300">
-                      {lead?.events && lead.events.length > 0 ? (
-                        <div className="space-y-1.5 inner-cell-scroll">
-                          {lead.events.map((ev: any, evIdx: number) => (
-                            <div key={ev.id || evIdx} className="flex flex-col text-[10px]">
-                              <span className="text-zinc-300">
-                                {ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—'}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-zinc-600 italic">—</span>
-                      )}
+                      <EventDropdownCell 
+                        type="time" 
+                        items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—') : [ord.event_start_time ? convertTo12Hour(ord.event_start_time) : '—']} 
+                      />
                     </td>
                     <td className="p-4 font-mono text-zinc-300">
                       {op?.reporting_time || <span className="text-zinc-600 italic">—</span>}
