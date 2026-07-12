@@ -315,47 +315,48 @@ const generateQuotationPDF = (
   };
 
     // NEW PREP FOR TEAM MEMBERS (INCLUSIONS) AND DELIVERABLES
-  const eventInclusionsMap: Record<string, { members: string[], shootType: string }> = {};
-  const eventDeliverablesMap: Record<string, { pkgName: string, items: string[] }> = {};
+  const orderedEventInclusions: { eventName: string; shootType: string; members: string[] }[] = [];
+  const orderedEventDeliverables: { eventName: string; pkgName: string; items: string[] }[] = [];
   let generalInclusions: string[] = [];
-  let generalDeliverables: { pkgName: string, items: string[] }[] = [];
+  const generalDeliverables: { pkgName: string; items: string[] }[] = [];
 
-  activePkgs.forEach((pkg) => {
-    const pkgId = pkg.package_id || pkg.id || 'default';
-    const pkgName = pkg.package_name || pkg.name || 'Base Package';
+  const pkg = activePkgs[0];
+  const pkgId = pkg ? (pkg.package_id || pkg.id || 'default') : 'default';
+  const pkgName = pkg ? (pkg.package_name || pkg.name || 'Base Package') : 'Base Package';
 
-    const incKeys = Object.keys(editableInclusions || {}).filter(k => k.startsWith(`${pkgId}_`));
-    if (incKeys.length > 0) {
-      incKeys.forEach((key) => {
-        const eventId = key.substring(pkgId.length + 1);
-        const eventObj = (lead.events || []).find((e: any) => e.id === eventId);
-        if (!eventObj) return; // Skip if event doesn't exist
-        const eventName = eventObj.event_name || eventObj.event_type || 'Event';
-        const eventShootType = eventObj.event_shoot_type || lead.desired_event_shoot_type || lead.shoot_type || 'N/A';
-        if (!eventInclusionsMap[eventName]) eventInclusionsMap[eventName] = { members: [], shootType: eventShootType };
-        eventInclusionsMap[eventName].members.push(...(editableInclusions![key] || []).filter(Boolean));
+  const inclusionsList = (editableInclusions?.[pkgId] || []).filter(Boolean);
+  const deliverablesList = (editableDeliverables?.[pkgId] || []).filter(Boolean);
+
+  if (lead.events && lead.events.length > 0) {
+    lead.events.forEach((event: any) => {
+      const eventKey = `${pkgId}_${event.id}`;
+      const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
+      const eventInclusions = editableInclusions?.[eventKey] !== undefined
+        ? editableInclusions[eventKey]
+        : (editableInclusions?.[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList);
+
+      const eventName = event.event_name || event.event_type || 'Unnamed Event';
+      const eventShootType = event.event_shoot_type || event.shoot_type || lead.desired_event_shoot_type || lead.shoot_type || 'N/A';
+
+      orderedEventInclusions.push({
+        eventName,
+        shootType: eventShootType,
+        members: (eventInclusions || []).filter(Boolean)
       });
-    } else {
-      generalInclusions.push(...(editableInclusions?.[pkgId] || []).filter(Boolean));
-    }
 
-    const delKeys = Object.keys(editableDeliverables || {}).filter(k => k.startsWith(`${pkgId}_`));
-    if (delKeys.length > 0) {
-      delKeys.forEach((key) => {
-        const eventId = key.substring(pkgId.length + 1);
-        const eventObj = (lead.events || []).find((e: any) => e.id === eventId);
-        if (!eventObj) return; // Skip if event doesn't exist
-        const eventName = eventObj.event_name || eventObj.event_type || 'Event';
-        if (!eventDeliverablesMap[eventName]) eventDeliverablesMap[eventName] = { pkgName, items: [] };
-        eventDeliverablesMap[eventName].items.push(...(editableDeliverables![key] || []).filter(Boolean));
+      orderedEventDeliverables.push({
+        eventName,
+        pkgName,
+        items: deliverablesList
       });
-    } else {
-      generalDeliverables.push({ pkgName, items: (editableDeliverables?.[pkgId] || []).filter(Boolean) });
-    }
-  });
+    });
+  } else {
+    generalInclusions = inclusionsList;
+    generalDeliverables.push({ pkgName, items: deliverablesList });
+  }
 
-  const hasEventsInclusions = Object.keys(eventInclusionsMap).length > 0;
-  const hasEventsDeliverables = Object.keys(eventDeliverablesMap).length > 0;
+  const hasEventsInclusions = orderedEventInclusions.length > 0;
+  const hasEventsDeliverables = orderedEventDeliverables.length > 0;
 
   const custRemarks = lead.remarks_raw || lead.remarks || '';
   const teamRemarks = lead.notes || ''; 
@@ -430,7 +431,7 @@ const generateQuotationPDF = (
     };
 
     if (hasEventsInclusions) {
-      Object.entries(eventInclusionsMap).forEach(([_, data]) => {
+      orderedEventInclusions.forEach((data) => {
          simY += 10.5;
          simTable(data.members);
       });
@@ -439,9 +440,9 @@ const generateQuotationPDF = (
     }
     
     if (hasEventsDeliverables) {
-      Object.entries(eventDeliverablesMap).forEach(([_, data]) => simTable(data.items));
+      orderedEventDeliverables.forEach((data) => simTable(data.items));
     } else if (generalDeliverables.length > 0) {
-      simTable(generalDeliverables);
+      generalDeliverables.forEach((data) => simTable(data.items));
     }
 
     const pricingH = 4.5 + cfg.pricingCardHeight;
@@ -1008,8 +1009,8 @@ const generateQuotationPDF = (
 
 
   if (hasEventsInclusions) {
-    Object.entries(eventInclusionsMap).forEach(([eventName, data]) => {
-      drawTeamMembers(eventName, data.shootType, data.members);
+    orderedEventInclusions.forEach((data) => {
+      drawTeamMembers(data.eventName, data.shootType, data.members);
     });
   } else if (generalInclusions.length > 0) {
     drawTeamMembers(null, null, generalInclusions);
@@ -1129,8 +1130,8 @@ const generateQuotationPDF = (
 
 
   if (hasEventsDeliverables) {
-    Object.entries(eventDeliverablesMap).forEach(([eventName, data]) => {
-      drawNewDeliverablesTable(eventName, [data]);
+    orderedEventDeliverables.forEach((data) => {
+      drawNewDeliverablesTable(data.eventName, [{ pkgName: data.pkgName, items: data.items }]);
     });
   } else if (generalDeliverables.length > 0) {
     drawNewDeliverablesTable(null, generalDeliverables);
@@ -1741,6 +1742,27 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setCrmToast({ message, type });
     setTimeout(() => setCrmToast(null), 3000);
   };
+
+  React.useEffect(() => {
+    if (crmToast) {
+      const timer = setTimeout(() => {
+        const el = document.getElementById('crm-toast-container') || document.getElementById('crm-create-toast-container');
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          const isInViewport = (
+            rect.top >= 0 &&
+            rect.left >= 0 &&
+            rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+            rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+          );
+          if (!isInViewport) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [crmToast]);
 
   const logStatusUpdateError = (params: {
     leadId: string | null;
@@ -3146,7 +3168,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         notes_special_customizations: wizardLeadData.notes,
         Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option || '',
         sales_staff_name: salesStaffName,
-        sales_staff_mobile: salesStaffMobile
+        sales_staff_mobile: salesStaffMobile,
+        events: crmEvents
       };
     } else {
       return {
@@ -3156,7 +3179,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         notes_special_customizations: selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
         Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || '',
         sales_staff_name: salesStaffName,
-        sales_staff_mobile: salesStaffMobile
+        sales_staff_mobile: salesStaffMobile,
+        events: createEvents
       };
     }
   };
@@ -4210,7 +4234,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   };
 
   const handleSavePackageOnly = async () => {
-    if (!selectedLead) return;
+    if (!selectedLead || isSaving) return;
     setIsSaving(true);
     try {
       // 1. Perform unified validation
@@ -8026,7 +8050,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
 
             {crmToast && (
-              <div className={`mx-4 mt-4 p-3 rounded-xl shadow-lg flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2 duration-200 shrink-0 ${
+              <div id="crm-create-toast-container" className={`mx-4 mt-4 p-3 rounded-xl shadow-lg flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2 duration-200 shrink-0 ${
                 crmToast.type === 'success' 
                   ? 'bg-emerald-950/90 border border-emerald-500/20 text-emerald-400' 
                   : 'bg-red-950/90 border border-red-500/20 text-red-400'
@@ -9451,7 +9475,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
             {/* Custom Toast Alert */}
             {crmToast && (
-              <div className={`mx-4 mt-1.5 p-1.5 rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200 shrink-0 ${
+              <div id="crm-toast-container" className={`mx-4 mt-1.5 p-1.5 rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200 shrink-0 ${
                 crmToast.type === 'success' 
                   ? 'bg-emerald-950 border border-emerald-500/20 text-emerald-400' 
                   : 'bg-red-950 border border-red-500/20 text-red-400'
@@ -9970,9 +9994,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   <button
                                     type="button"
                                     onClick={handleSavePackageOnly}
-                                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] font-bold uppercase tracking-wider rounded-lg shadow transition-colors flex items-center gap-2"
+                                    disabled={isSaving}
+                                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] font-bold uppercase tracking-wider rounded-lg shadow transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
-                                    Save Package
+                                    {isSaving ? 'Saving...' : 'Save Package'}
                                   </button>
                                 </div>
                               )}

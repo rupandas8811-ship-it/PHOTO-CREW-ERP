@@ -2115,39 +2115,49 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           { event: '*', schema: 'public', table },
           (payload) => {
             updateDiagnosticMetric('realtime', 'ok');
-            if (payload.eventType === 'INSERT') {
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
               setter((prev: any[]) => {
-  const item = payload.new;
-  let mappedItem = table === 'users' ? { ...item, id: mapFromDbUserId(item.id) } : item;
-  if (table === 'notifications') mappedItem = mapNotificationFromDb(item);
-  if (table === 'leads') {
-    const existingLead = prev.find((l: any) => l.lead_id === mappedItem.lead_id);
-    let finalEvents = existingLead?.events || [];
-    if (finalEvents.length === 0) {
-      finalEvents = deserializeLeadEvents(mappedItem.notes_special_customizations).events || [];
-    }
-    mappedItem = { 
-      ...mappedItem, 
-      status: mappedItem.current_status || mappedItem.status || 'New Lead', 
-      current_status: mappedItem.current_status || mappedItem.status || 'New Lead',
-      events: finalEvents
-    };
-  }
-  if (table === 'orders') mappedItem = { ...mappedItem, current_stage: mappedItem.current_stage || mappedItem.order_status };
-  if (table === 'operations_staff') {
-    let extra: any = {};
-    if (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) {
-      try { extra = JSON.parse(item.notes); } catch (e) {}
-    }
-    mappedItem = { ...item, ...extra, staff_id: mapFromDbStaffId(item.staff_id), notes: extra.notes || item.notes };
-  }
-  if (table === 'production_staff') {
-    mappedItem = mapProductionStaffFromDb(item);
-  }
-  if (table === 'packages') mappedItem = mapDbRecordToPackage(item);
-  if (table === 'equipment') mappedItem = { ...item, equipment_id: mapFromDbEquipmentId(item.equipment_id) };
-  return prev.map((x: any) => (x[key] === mappedItem[key] ? mappedItem : x));
-});
+                const item = payload.new;
+                let mappedItem = table === 'users' ? { ...item, id: mapFromDbUserId(item.id) } : item;
+                if (table === 'notifications') mappedItem = mapNotificationFromDb(item);
+                if (table === 'leads') {
+                  const existingLead = prev.find((l: any) => l.lead_id === mappedItem.lead_id);
+                  let finalEvents = existingLead?.events || [];
+                  if (finalEvents.length === 0) {
+                    finalEvents = deserializeLeadEvents(mappedItem.notes_special_customizations).events || [];
+                  }
+                  mappedItem = { 
+                    ...mappedItem, 
+                    status: mappedItem.current_status || mappedItem.status || 'New Lead', 
+                    current_status: mappedItem.current_status || mappedItem.status || 'New Lead',
+                    events: finalEvents
+                  };
+                }
+                if (table === 'orders') mappedItem = { ...mappedItem, current_stage: mappedItem.current_stage || mappedItem.order_status };
+                if (table === 'operations_staff') {
+                  let extra: any = {};
+                  if (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) {
+                    try { extra = JSON.parse(item.notes); } catch (e) {}
+                  }
+                  mappedItem = { ...item, ...extra, staff_id: mapFromDbStaffId(item.staff_id), notes: extra.notes || item.notes };
+                }
+                if (table === 'production_staff') {
+                  mappedItem = mapProductionStaffFromDb(item);
+                }
+                if (table === 'packages') mappedItem = mapDbRecordToPackage(item);
+                if (table === 'equipment') mappedItem = { ...item, equipment_id: mapFromDbEquipmentId(item.equipment_id) };
+                
+                const exists = prev.some((x: any) => x[key] === mappedItem[key]);
+                if (exists) {
+                  return prev.map((x: any) => (x[key] === mappedItem[key] ? mappedItem : x));
+                } else {
+                  if (['leads', 'orders', 'activity_logs', 'notifications'].includes(table)) {
+                    return [mappedItem, ...prev];
+                  } else {
+                    return [...prev, mappedItem];
+                  }
+                }
+              });
             } else if (payload.eventType === 'DELETE') {
               setter((prev: any[]) => {
                 const oldItem = payload.old;
@@ -2194,12 +2204,18 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
+    // Background polling fallback every 15 seconds to guarantee absolute synchronization
+    const pollingInterval = setInterval(() => {
+      fetchFromDb(false).catch(e => console.warn('fetchFromDb polling failed:', e?.message || e));
+    }, 15000);
+
     // Realtime subscriptions handle granular updates. No global sync needed.
     return () => {
       channels.forEach(ch => supabaseClient.removeChannel(ch));
       supabaseClient.removeChannel(leadEventsChannel);
       window.removeEventListener('focus', handleFocusOrVisible);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(pollingInterval);
     };
   }, []);
 
