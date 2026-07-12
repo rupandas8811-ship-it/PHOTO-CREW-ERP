@@ -3541,6 +3541,17 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const changedByRole = roleParts[1] || currentRole || 'System';
 
     if (assignments.length > 0) {
+      if (supabaseClient) {
+        // Delete all old assignments for this order to allow multiple staff per role without overwriting
+        const { error: deleteErr } = await supabaseClient
+          .from('staff_assignments')
+          .delete()
+          .eq('order_id', orderId);
+        if (deleteErr) {
+          console.error("Warning: Could not delete old staff assignments:", deleteErr);
+        }
+      }
+
       for (const a of assignments) {
         // STEP 2: SAVE ASSIGNMENT HISTORY
         const newHist = {
@@ -3554,12 +3565,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const resHist = await pushInsert('lead_staff_assignment_history', newHist);
         if (!resHist.success) throw new Error(`Error saving assignment history:\n\n${resHist.error}`);
 
-        // STEP 3: UPDATE CURRENT ASSIGNMENT
-        const existing = staffAssignments.find(
-          (ea) => ea.order_id === orderId && ea.staff_role === a.staff_role
-        );
-        const assignId = existing?.assignment_id || `ASST-${Math.floor(1000 + Math.random() * 9000)}`;
-        const assignDate = existing?.assignment_date || timestamp.split('T')[0];
+        // STEP 3: INSERT CURRENT ASSIGNMENT
+        const assignId = `ASST-${Math.floor(100000 + Math.random() * 900000)}`;
+        const assignDate = timestamp.split('T')[0];
 
         const newAssign = {
           assignment_id: assignId,
@@ -3572,13 +3580,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           updated_by: changedBy
         };
 
-        if (existing) {
-          const resAssign = await pushUpdate('staff_assignments', 'assignment_id', assignId, newAssign);
-          if (!resAssign.success) throw new Error(`Error updating staff assignment:\n\n${resAssign.error}`);
-        } else {
-          const resAssign = await pushInsert('staff_assignments', newAssign);
-          if (!resAssign.success) throw new Error(`Error creating staff assignment:\n\n${resAssign.error}`);
-        }
+        const resAssign = await pushInsert('staff_assignments', newAssign);
+        if (!resAssign.success) throw new Error(`Error creating staff assignment:\n\n${resAssign.error}`);
       }
 
       // STEP 4: UPDATE OPERATIONS TABLE

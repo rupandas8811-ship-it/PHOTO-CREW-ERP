@@ -828,24 +828,44 @@ export const OperationsLeads: React.FC = () => {
           const names = ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean);
           names.forEach((name: string, i: number) => {
             const st = staff?.find(s => s.name === name);
-            const assignedRole = includedRoles[i] || (st ? st.role : 'Staff');
+            const saMatch = staffAssignments?.find(sa => sa.order_id === order.order_id && sa.staff_name === name);
+            const assignedRole = saMatch?.staff_role || includedRoles[i] || (st ? st.role : 'Staff');
+            const stType = saMatch?.staff_type || st?.staff_type || (st as any)?.Staff_Type || 'In-House';
+            const cleanType = (stType === 'Freelancer' || stType === 'freelancer') ? 'Freelancer' : 'In-House';
+            
             if (st) {
                staffList.push({
                  staff_role: assignedRole,
                  staff_id: st.staff_id,
                  staff_name: st.name,
-                 mobile: st.mobile
+                 mobile: st.mobile,
+                 staff_type: cleanType
                });
             } else {
                staffList.push({
                  staff_role: assignedRole,
                  staff_id: 'MOCK-' + Math.random().toString(36).substr(2, 4),
                  staff_name: name,
-                 mobile: ''
+                 mobile: '',
+                 staff_type: cleanType
                });
             }
           });
         }
+
+        // For any role in includedRoles that doesn't have an assignment yet, add at least 1 empty row
+        includedRoles.forEach((roleStr: string) => {
+          const roleStaff = staffList.filter((s: any) => s.staff_role === roleStr);
+          if (roleStaff.length === 0) {
+            staffList.push({
+              staff_role: roleStr,
+              staff_id: '',
+              staff_name: '',
+              mobile: '',
+              staff_type: 'In-House'
+            });
+          }
+        });
 
         let assignedEquipment: string[] = [];
         let mobilesRaw = ev.assigned_staff_mobiles || '';
@@ -981,9 +1001,10 @@ export const OperationsLeads: React.FC = () => {
           
           if (includedRoles.length > 0) {
             const allocStaff = eventAllocations[evId]?.staff || [];
+            const validAllocStaff = allocStaff.filter((s: any) => s.staff_name && s.staff_name.trim() !== '');
             let isMissingStaff = false;
             for (const roleStr of Array.from(new Set<string>(includedRoles as string[]))) {
-              if (!allocStaff.some((s: any) => s.staff_role === roleStr)) {
+              if (!validAllocStaff.some((s: any) => s.staff_role === roleStr)) {
                  isMissingStaff = true;
                  break;
               }
@@ -1055,12 +1076,14 @@ export const OperationsLeads: React.FC = () => {
       Object.values(eventAllocations).forEach((alloc: any) => {
         if (alloc.staff && alloc.staff.length > 0) {
           alloc.staff.forEach((st: any) => {
-            if (!allAssignedStaff.find(a => a.staff_name === st.staff_name)) {
-               allAssignedStaff.push({
-                 staff_role: st.staff_role,
-                 staff_id: st.staff_id,
-                 staff_name: st.staff_name
-               });
+            if (st.staff_name && st.staff_name.trim() !== '') {
+              if (!allAssignedStaff.find(a => a.staff_name === st.staff_name && a.staff_role === st.staff_role)) {
+                 allAssignedStaff.push({
+                   staff_role: st.staff_role,
+                   staff_id: st.staff_id,
+                   staff_name: st.staff_name
+                 });
+              }
             }
           });
         }
@@ -1077,25 +1100,26 @@ export const OperationsLeads: React.FC = () => {
       // Update lead_events table with assigned staff AND event-specific equipment via updateLead API proxy
       const baseMatchedOrder = orders.find(o => o.order_id === assigningOrderId);
       if (baseMatchedOrder?.lead_id && parentLeadInstance) {
-         const updatedEvents = (parentLeadInstance.events || []).map((ev: any) => {
-            const evId = ev.id || '';
-            const alloc = eventAllocations[evId];
-            if (alloc && alloc.staff) {
-               const staffNames = alloc.staff.map((s: any) => s.staff_name).join(', ');
-               const staffMobiles = alloc.staff.map((s: any) => s.mobile || '').join(', ');
+          const updatedEvents = (parentLeadInstance.events || []).map((ev: any) => {
+             const evId = ev.id || '';
+             const alloc = eventAllocations[evId];
+             if (alloc && alloc.staff) {
+                const validStaff = alloc.staff.filter((s: any) => s.staff_name && s.staff_name.trim() !== '');
+                const staffNames = validStaff.map((s: any) => s.staff_name).join(', ');
+                const staffMobiles = validStaff.map((s: any) => s.mobile || '').join(', ');
 
-               const eventEquipmentList = alloc.equipment || [];
-               const equipStr = eventEquipmentList.join(', ');
-               const finalStaffMobiles = staffMobiles + (equipStr ? ' || EQUIPMENT: ' + equipStr : '');
+                const eventEquipmentList = alloc.equipment || [];
+                const equipStr = eventEquipmentList.join(', ');
+                const finalStaffMobiles = staffMobiles + (equipStr ? ' || EQUIPMENT: ' + equipStr : '');
 
-               return {
-                  ...ev,
-                  assigned_staff_names: staffNames,
-                  assigned_staff_mobiles: finalStaffMobiles
-               };
-            }
-            return ev;
-         });
+                return {
+                   ...ev,
+                   assigned_staff_names: staffNames,
+                   assigned_staff_mobiles: finalStaffMobiles
+                };
+             }
+             return ev;
+          });
 
          await updateLead(baseMatchedOrder.lead_id, { events: updatedEvents });
       }
@@ -2091,7 +2115,7 @@ export const OperationsLeads: React.FC = () => {
                                 )}
                                 {includedRoles.map((roleStr, roleIdx) => {
                                   const assignedToRole = allocStaff.filter((s: any) => s.staff_role === roleStr);
-                                  const isEmpty = assignedToRole.length === 0;
+                                  const isEmpty = assignedToRole.filter((s: any) => s.staff_name && s.staff_name.trim() !== '').length === 0;
 
                                   return (
                                     <tr 
@@ -2115,42 +2139,198 @@ export const OperationsLeads: React.FC = () => {
                                         </div>
                                       </td>
 
-                                      {/* Right Column: Compact Staff Dropdowns */}
+                                      {/* Right Column: Multi-staff assignments */}
                                       <td className="px-3.5 py-1.5">
-                                        <div className="space-y-1.5">
-                                          {/* Render Assigned Staff Rows */}
-                                          {assignedToRole.map((assignedStaff: any, idx: number) => {
-                                            const stFull = staff?.find(s => s.name === assignedStaff.staff_name);
+                                        <div className="space-y-2">
+                                          {assignedToRole.map((assignedStaff: any, rowIdx: number) => {
+                                            const currentStaffType = assignedStaff.staff_type || 'In-House';
+                                            
                                             return (
-                                              <div key={`assigned_${idx}`} className="flex items-center gap-2">
-                                                <div className="w-28 shrink-0 flex items-center px-2 py-1 bg-zinc-900/50 border border-zinc-800 rounded-lg h-7">
-                                                  <span className="text-[11px] text-zinc-400 font-sans truncate">{stFull?.staff_type || 'In-House'}</span>
+                                              <div key={`row_${rowIdx}`} className="flex items-center gap-2">
+                                                {/* Staff Type Select */}
+                                                <div className="w-32 shrink-0">
+                                                  <select
+                                                    value={currentStaffType}
+                                                    onChange={(e) => {
+                                                      const newType = e.target.value as 'In-House' | 'Freelancer';
+                                                      
+                                                      setEventAllocations((prev: any) => {
+                                                        const existingAlloc = prev[evId] || { staff: [] };
+                                                        
+                                                        let targetIdx = 0;
+                                                        const updatedStaff = existingAlloc.staff.map((s: any) => {
+                                                          if (s.staff_role === roleStr) {
+                                                            if (targetIdx === rowIdx) {
+                                                              targetIdx++;
+                                                              return {
+                                                                ...s,
+                                                                staff_type: newType,
+                                                                staff_name: '',
+                                                                staff_id: '',
+                                                                mobile: ''
+                                                              };
+                                                            }
+                                                            targetIdx++;
+                                                          }
+                                                          return s;
+                                                        });
+                                                        
+                                                        return {
+                                                          ...prev,
+                                                          [evId]: {
+                                                            ...existingAlloc,
+                                                            staff: updatedStaff
+                                                          }
+                                                        };
+                                                      });
+                                                    }}
+                                                    className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-[11px] text-zinc-400 hover:text-zinc-300 rounded-lg px-2 py-1 font-sans focus:outline-none focus:border-amber-500 cursor-pointer h-7"
+                                                  >
+                                                    <option value="In-House">In-House</option>
+                                                    <option value="Freelancer">Freelancer</option>
+                                                  </select>
                                                 </div>
-                                                <div className="flex-1 min-w-[200px] flex items-center justify-between bg-zinc-900/50 border border-zinc-800 rounded-lg px-2 py-1 h-7">
-                                                  <span className="text-[11px] font-bold text-emerald-400 truncate">{assignedStaff.staff_name}</span>
-                                                  {isStaffBusyOnDate(assignedStaff.staff_name, ev.event_date || '', activeOrderInstance?.order_id || '') ? (
-                                                    <button type="button" onClick={() => setBusyRosterStaff(assignedStaff.staff_name)} className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-mono uppercase border border-red-500/20 cursor-pointer hover:bg-red-500/20 transition-colors shrink-0">🔴 Busy</button>
-                                                  ) : (
-                                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono uppercase border border-emerald-500/20 shrink-0">🟢 Available</span>
+
+                                                {/* Staff Name Select */}
+                                                <div className="flex-1 min-w-[200px] flex items-center gap-2">
+                                                  <select
+                                                    value={assignedStaff.staff_name || ''}
+                                                    onChange={(e) => {
+                                                      const selectedName = e.target.value;
+                                                      const memberInfo = staff?.find(st => st.name === selectedName);
+                                                      const staffId = memberInfo?.staff_id || '';
+                                                      
+                                                      setEventAllocations((prev: any) => {
+                                                        const existingAlloc = prev[evId] || { staff: [] };
+                                                        
+                                                        let targetIdx = 0;
+                                                        const updatedStaff = existingAlloc.staff.map((s: any) => {
+                                                          if (s.staff_role === roleStr) {
+                                                            if (targetIdx === rowIdx) {
+                                                              targetIdx++;
+                                                              return {
+                                                                ...s,
+                                                                staff_name: selectedName,
+                                                                staff_id: staffId,
+                                                                mobile: memberInfo?.mobile || ''
+                                                              };
+                                                            }
+                                                            targetIdx++;
+                                                          }
+                                                          return s;
+                                                        });
+                                                        
+                                                        return {
+                                                          ...prev,
+                                                          [evId]: {
+                                                            ...existingAlloc,
+                                                            staff: updatedStaff
+                                                          }
+                                                        };
+                                                      });
+                                                    }}
+                                                    className={`w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-[11px] rounded-lg px-2 py-1 font-sans focus:outline-none focus:border-amber-500 cursor-pointer h-7 ${
+                                                      assignedStaff.staff_name ? 'text-emerald-400 font-bold' : 'text-zinc-400 font-normal'
+                                                    }`}
+                                                  >
+                                                    {(() => {
+                                                      const normType = (type: string | undefined): string => {
+                                                        const clean = (type || 'In-House').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+                                                        return (clean === 'inhouse' || clean === 'in-house' || clean === 'in house') ? 'in-house' : 'freelancer';
+                                                      };
+                                                      
+                                                      const filteredStaff = (staff || []).filter(s => {
+                                                        if (s.status !== 'Active') return false;
+                                                        if (s.department !== 'Operations') return false;
+                                                        const sType = s.staff_type || s.Staff_Type;
+                                                        return normType(sType) === normType(currentStaffType);
+                                                      });
+                                                      
+                                                      const availableStaff = filteredStaff.filter(s => 
+                                                        s.name === assignedStaff.staff_name ||
+                                                        !assignedToRole.some((ast: any) => ast.staff_name === s.name)
+                                                      );
+                                                      
+                                                      if (availableStaff.length === 0) {
+                                                        return <option value="" disabled>No staff available.</option>;
+                                                      }
+                                                      
+                                                      return (
+                                                        <>
+                                                          <option value="">▼ Select Staff</option>
+                                                          {availableStaff.map(st => {
+                                                            const isBusy = isStaffBusyOnDate(st.name, ev.event_date || '', activeOrderInstance?.order_id || '');
+                                                            return (
+                                                              <option key={st.staff_id} value={st.name}>
+                                                                {st.name} {isBusy ? '🔴 Busy' : '🟢 Available'} - {st.role}
+                                                              </option>
+                                                            );
+                                                          })}
+                                                        </>
+                                                      );
+                                                    })()}
+                                                  </select>
+
+                                                  {assignedStaff.staff_name && (
+                                                    isStaffBusyOnDate(assignedStaff.staff_name, ev.event_date || '', activeOrderInstance?.order_id || '') ? (
+                                                      <button 
+                                                        type="button" 
+                                                        onClick={() => setBusyRosterStaff(assignedStaff.staff_name)} 
+                                                        className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-mono uppercase border border-red-500/20 cursor-pointer hover:bg-red-500/20 transition-colors shrink-0"
+                                                      >
+                                                        🔴 Busy
+                                                      </button>
+                                                    ) : (
+                                                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono uppercase border border-emerald-500/20 shrink-0">
+                                                        🟢 Available
+                                                      </span>
+                                                    )
                                                   )}
                                                 </div>
+
+                                                {/* Remove Row Button */}
                                                 <div className="w-6 shrink-0 flex justify-center">
                                                   <button
                                                     type="button"
                                                     onClick={() => {
                                                       setEventAllocations((prev: any) => {
                                                         const existingAlloc = prev[evId] || { staff: [] };
+                                                        
+                                                        let targetIdx = 0;
+                                                        let updatedStaff = existingAlloc.staff.filter((s: any) => {
+                                                          if (s.staff_role === roleStr) {
+                                                            if (targetIdx === rowIdx) {
+                                                              targetIdx++;
+                                                              return false;
+                                                            }
+                                                            targetIdx++;
+                                                          }
+                                                          return true;
+                                                        });
+                                                        
+                                                        // Ensure at least one row remains
+                                                        const roleStaffRemaining = updatedStaff.filter((s: any) => s.staff_role === roleStr);
+                                                        if (roleStaffRemaining.length === 0) {
+                                                          updatedStaff.push({
+                                                            staff_role: roleStr,
+                                                            staff_id: '',
+                                                            staff_name: '',
+                                                            mobile: '',
+                                                            staff_type: 'In-House'
+                                                          });
+                                                        }
+                                                        
                                                         return {
                                                           ...prev,
                                                           [evId]: {
                                                             ...existingAlloc,
-                                                            staff: existingAlloc.staff.filter((s: any) => !(s.staff_name === assignedStaff.staff_name && s.staff_role === roleStr))
+                                                            staff: updatedStaff
                                                           }
                                                         };
                                                       });
                                                     }}
-                                                    className="text-zinc-600 hover:text-rose-400 transition-colors p-1 cursor-pointer text-xs"
-                                                    title="Remove assignment"
+                                                    className="text-zinc-600 hover:text-rose-400 transition-colors p-1 cursor-pointer text-xs font-bold"
+                                                    title="Remove staff assignment row"
                                                   >
                                                     ✕
                                                   </button>
@@ -2159,116 +2339,37 @@ export const OperationsLeads: React.FC = () => {
                                             );
                                           })}
 
-                                          {/* Empty row for assignment */}
-                                          {(() => {
-                                             const selectKey = `${evId}_${roleIdx}`;
-                                             const currentStaffType = staffTypeByEvent[selectKey] || 'In-House';
-                                             
-                                             return (
-                                               <div className="flex items-center gap-2">
-                                                 <div className="w-28 shrink-0">
-                                                    <select
-                                                      value={currentStaffType}
-                                                      onChange={(e) => {
-                                                        const newType = e.target.value as 'In-House' | 'Freelancer';
-                                                        setStaffTypeByEvent(prev => ({ ...prev, [selectKey]: newType }));
-                                                        setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: '' }));
-                                                        
-                                                        // Clear any previously assigned staff for this event-role that do not match the newly selected Staff Type
-                                                        const normType = (type: string | undefined): string => {
-                                                          const clean = (type || 'In-House').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
-                                                          return (clean === 'inhouse' || clean === 'in-house' || clean === 'in house') ? 'in-house' : 'freelancer';
-                                                        };
-                                                        
-                                                        setEventAllocations((prev: any) => {
-                                                          const existingAlloc = prev[evId] || { staff: [] };
-                                                          const updatedStaff = (existingAlloc.staff || []).filter((s: any) => {
-                                                            if (s.staff_role !== roleStr) return true;
-                                                            
-                                                            const stInfo = staff?.find(st => st.name === s.staff_name);
-                                                            const stType = stInfo?.staff_type || stInfo?.Staff_Type;
-                                                            return normType(stType) === normType(newType);
-                                                          });
-                                                          
-                                                          return {
-                                                            ...prev,
-                                                            [evId]: {
-                                                              ...existingAlloc,
-                                                              staff: updatedStaff
-                                                            }
-                                                          };
-                                                        });
-                                                      }}
-                                                      className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-[11px] text-zinc-400 hover:text-zinc-300 rounded-lg px-2 py-1 font-sans focus:outline-none focus:border-purple-500 cursor-pointer h-7"
-                                                    >
-                                                      <option value="In-House">In-House</option>
-                                                      <option value="Freelancer">Freelancer</option>
-                                                    </select>
-                                                 </div>
-                                                 <div className="flex-1 min-w-[200px] flex items-center gap-2">
-                                                    <select
-                                                      value={selectedStaffByEvent[selectKey] || ''}
-                                                      onChange={(e) => {
-                                                        const selectedName = e.target.value;
-                                                        if (selectedName) {
-                                                           const memberInfo = staff?.find(st => st.name === selectedName);
-                                                           const staffId = memberInfo?.staff_id || 'MOCK-' + Math.random().toString(36).substr(2, 4);
-                                                           
-                                                           setEventAllocations((prev: any) => {
-                                                             const existingAlloc = prev[evId] || { staff: [] };
-                                                             if (existingAlloc.staff.some((s: any) => s.staff_name === selectedName && s.staff_role === roleStr)) {
-                                                                return prev;
-                                                             }
-                                                             return {
-                                                               ...prev,
-                                                               [evId]: {
-                                                                 ...existingAlloc,
-                                                                 staff: [...(existingAlloc.staff || []), { staff_role: roleStr, staff_id: staffId, staff_name: selectedName, mobile: memberInfo?.mobile || '' }]
-                                                               }
-                                                             };
-                                                           });
-                                                           setSelectedStaffByEvent(prev => ({ ...prev, [selectKey]: '' }));
+                                          {/* Add Staff Button */}
+                                          <div className="pt-1">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setEventAllocations((prev: any) => {
+                                                  const existingAlloc = prev[evId] || { staff: [] };
+                                                  return {
+                                                    ...prev,
+                                                    [evId]: {
+                                                      ...existingAlloc,
+                                                      staff: [
+                                                        ...existingAlloc.staff,
+                                                        {
+                                                          staff_role: roleStr,
+                                                          staff_id: '',
+                                                          staff_name: '',
+                                                          mobile: '',
+                                                          staff_type: 'In-House'
                                                         }
-                                                      }}
-                                                      className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-[11px] text-zinc-200 rounded-lg px-2 py-1 font-sans focus:outline-none focus:border-purple-500 cursor-pointer h-7"
-                                                    >
-                                                      {(() => {
-                                                        const normType = (type: string | undefined): string => {
-                                                          const clean = (type || 'In-House').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
-                                                          return (clean === 'inhouse' || clean === 'in-house' || clean === 'in house') ? 'in-house' : 'freelancer';
-                                                        };
-                                                        
-                                                        const filteredStaff = (staff || []).filter(s => {
-                                                          if (s.status !== 'Active') return false;
-                                                          if (s.department !== 'Operations') return false;
-                                                          const sType = s.staff_type || s.Staff_Type;
-                                                          return normType(sType) === normType(currentStaffType);
-                                                        });
-                                                        
-                                                        const availableStaff = filteredStaff.filter(s => !assignedToRole.some((ast: any) => ast.staff_name === s.name));
-                                                        
-                                                        if (availableStaff.length === 0) {
-                                                          return <option value="" disabled>No staff available.</option>;
-                                                        }
-                                                        
-                                                        return (
-                                                          <>
-                                                            <option value="">▼ {assignedToRole.length > 0 ? '+ Add Another Staff' : 'Select Staff'}</option>
-                                                            {availableStaff.map(st => (
-                                                              <option key={st.staff_id} value={st.name}>
-                                                                {st.name} {isStaffBusyOnDate(st.name, ev.event_date || '', activeOrderInstance?.order_id || '') ? '🔴 Busy' : '🟢 Available'} - {st.role}
-                                                              </option>
-                                                            ))}
-                                                          </>
-                                                        );
-                                                      })()}
-                                                    </select>
-                                                 </div>
-                                                 <div className="w-6 shrink-0 flex justify-center"></div>
-                                               </div>
-                                             );
-                                          })()}
-                                          
+                                                      ]
+                                                    }
+                                                  };
+                                                });
+                                              }}
+                                              className="inline-flex items-center gap-1 text-[11px] font-sans font-bold text-amber-500 hover:text-amber-400 cursor-pointer transition-colors bg-amber-500/5 hover:bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20"
+                                            >
+                                              + Add Staff
+                                            </button>
+                                          </div>
+
                                           {/* Validation message if missing */}
                                           {validationAttempted && isEmpty && (
                                             <div className="pt-0.5">
