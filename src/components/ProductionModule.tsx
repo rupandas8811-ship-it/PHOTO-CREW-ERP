@@ -645,6 +645,7 @@ ${coordinatorName}`;
   const [editingStaffMember, setEditingStaffMember] = useState<Staff | null>(null);
   const [viewingStaffMember, setViewingStaffMember] = useState<Staff | null>(null);
   const [selectedMetricDetail, setSelectedMetricDetail] = useState<{ type: string; memberName: string; list: any[] } | null>(null);
+  const [selectedStaffForTasks, setSelectedStaffForTasks] = useState<string | null>(null);
 
   // Form states for Staff
   const [staffFormName, setStaffFormName] = useState('');
@@ -2957,7 +2958,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   setLeadClientReviewDate(toInputDateFormat((prod as any).client_review_upload_date || (crLog ? crLog.timestamp : null)));
                                   setLeadClientApprovalDate(toInputDateFormat((prod as any).client_approval_date || (caLog ? caLog.timestamp : null)));
                                 }}
-                                className="text-[9px] text-zinc-500 hover:text-zinc-350 hover:underline mt-0.5 cursor-pointer"
+                                className="hidden text-[9px] text-zinc-500 hover:text-zinc-350 hover:underline mt-0.5 cursor-pointer"
                               >
                                 Edit Full Dossier ✎
                               </button>
@@ -2991,7 +2992,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         }
 
         const totalEditors = staff.length;
-        const activeEditors = staff.filter(s => s.status === 'Active' || s.status === 'On Duty' || s.status === 'active' || s.status === 'Active Status').length;
+        const activeEditors = (staff || []).filter(s => s.status === 'Active' || s.status === 'On Duty' || s.status === 'active' || s.status === 'Active Status').length;
         const assignedProjects = production.filter(p => p.editor_assigned).length;
         
         // Projects In Progress
@@ -3526,7 +3527,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         const averageDeliveryTimeDays = countable > 0 ? (sumDays / countable).toFixed(1) : "3.6";
 
         // Team Utilization
-        const activeStaffCount = staff.filter(s => s.status === 'Active').length;
+        const activeStaffCount = (staff || []).filter(s => s.status === 'Active').length;
         const assignedStaffNames = Array.from(new Set(
           production
             .filter(p => p.editing_status !== 'Delivered' && p.production_status !== 'Closed')
@@ -4456,7 +4457,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         };
 
         // Use productionStaff directly from the dedicated production_staff database table
-        const productionStaffList = staff.filter(s => s.department === 'Post-Production' || s.role === 'Editor' || s.Staff_Type || (s.Skill && s.Skill.length > 0));
+        const productionStaffList = (staff || []).filter(s => s.department === 'Post-Production' || s.role === 'Editor' || s.Staff_Type || (s.Skill && s.Skill.length > 0));
 
         return (
           <div className="space-y-6 animate-fade-in">
@@ -4957,6 +4958,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
                     <th className="px-4 py-3 font-bold">Staff Name</th>
                     <th className="px-4 py-3 font-bold">Order ID</th>
+                    <th className="px-4 py-3 font-bold">Assigned Tasks</th>
                     <th className="px-4 py-3 font-bold">Date Assigned</th>
                     <th className="px-4 py-3 font-bold">Delivery Target Date</th>
                     <th className="px-4 py-3 font-bold">Status</th>
@@ -4965,23 +4967,50 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 <tbody className="divide-y divide-zinc-900 font-sans text-xs text-zinc-300">
                   {(() => {
                     // Build integrated roster rows for the Staff Roster table from assigned editors
-                    const rosterRows = [...editorAssignments].map(assign => {
-                      const correlatedProj = production.find(p => p.production_id === assign.production_id);
+                    const groupedRoster = new Map<string, any>();
+                    [...(editorAssignments || [])].forEach(assign => {
+                      const correlatedProj = (production || []).find(p => p.production_id === assign.production_id);
+                      const { order } = resolveOrderAndLead(correlatedProj);
                       const trackingId = correlatedProj?.tracking_id;
-                      const linkedOrder = orders.find(o => o.order_id === trackingId || o.lead_id === trackingId);
-                      const orderId = linkedOrder?.order_id || 'N/A';
+                      const orderId = order?.order_id && order.order_id !== 'NULL' && order.order_id !== 'NIL' ? order.order_id : (trackingId || 'N/A');
                       
-                      return {
-                        assignmentId: assign.assignment_id,
-                        staffName: assign.staff_name,
-                        orderId: orderId,
-                        dateAssigned: assign.assigned_date || '—',
-                        deliveryTargetDate: assign.target_finish_date || '—',
-                        status: assign.status,
-                        speciality: assign.speciality || 'Editor',
-                        eventName: linkedOrder?.event_type || linkedOrder?.custom_event_name || 'Project',
-                      };
+                      const staffName = assign.staff_name || 'Unassigned';
+                      const isCompleted = assign.status === 'Completed';
+                      
+                      if (!groupedRoster.has(staffName)) {
+                        groupedRoster.set(staffName, {
+                          staffName: staffName,
+                          orderId: orderId,
+                          dateAssigned: assign.assigned_date || '—',
+                          deliveryTargetDate: assign.target_finish_date || '—',
+                          status: assign.status,
+                          speciality: assign.speciality || 'Editor',
+                          eventName: order?.event_type || order?.custom_event_name || 'Project',
+                          assignedTasks: isCompleted ? 0 : 1,
+                          assignmentId: assign.assignment_id, // just for sorting
+                          latestAssignmentTime: new Date(assign.assigned_date || 0).getTime()
+                        });
+                      } else {
+                        const existing = groupedRoster.get(staffName);
+                        if (!isCompleted) {
+                            existing.assignedTasks += 1;
+                        }
+                        
+                        const assignTime = new Date(assign.assigned_date || 0).getTime();
+                        if (assignTime > existing.latestAssignmentTime) {
+                           existing.orderId = orderId;
+                           existing.dateAssigned = assign.assigned_date || '—';
+                           existing.deliveryTargetDate = assign.target_finish_date || '—';
+                           existing.status = assign.status;
+                           existing.speciality = assign.speciality || 'Editor';
+                           existing.eventName = order?.event_type || order?.custom_event_name || 'Project';
+                           existing.latestAssignmentTime = assignTime;
+                           existing.assignmentId = assign.assignment_id;
+                        }
+                      }
                     });
+                    
+                    const rosterRows = Array.from(groupedRoster.values());
 
                     // Filter roster rows by search query and status dropdown
                     const filteredRosterRows = rosterRows.filter(row => {
@@ -5009,7 +5038,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     if (sortedRosterRows.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={5} className="px-4 py-8 text-center text-zinc-500 font-mono text-xs">
+                          <td colSpan={6} className="px-4 py-8 text-center text-zinc-500 font-mono text-xs">
                             No matching roster entries found.
                           </td>
                         </tr>
@@ -5030,6 +5059,17 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           {/* Order ID */}
                           <td className="px-4 py-3 font-mono text-xs font-bold text-violet-400">
                             {row.orderId}
+                          </td>
+
+                          {/* Assigned Tasks */}
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedStaffForTasks(row.staffName)}
+                              className="text-xs font-bold text-amber-400 hover:text-amber-300 font-mono underline cursor-pointer w-full text-left"
+                            >
+                              {row.assignedTasks}
+                            </button>
                           </td>
 
                           {/* Date Assigned */}
@@ -5538,7 +5578,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-4 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono"
                             >
                               <option value="">Unassigned</option>
-                              {staff.filter(s => s.status === 'Active').map(s => (
+                              {(staff || []).filter(s => s.status === 'Active').map(s => (
                                 <option key={s.staff_id} value={s.name}>{s.name} ({s.role.split(' ')[0]})</option>
                               ))}
                             </select>
@@ -6042,7 +6082,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             Please select a Production Role above to view available specialists.
                           </div>
                         ) : (() => {
-                          const matchingStaff = staff.filter(s => 
+                          const matchingStaff = (staff || []).filter(s => 
                             s.status === 'Active' && 
                             (s.production_role_speciality === assignRoleFilter || s.role === assignRoleFilter)
                           );
@@ -8343,6 +8383,96 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   >
                     Close Profile Card
                   </button>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* ASSIGNED TASKS POPUP */}
+      <AnimatePresence>
+        {selectedStaffForTasks && (() => {
+          const staffTasks = [...(editorAssignments || [])].filter(a => 
+            a.staff_name.toLowerCase() === selectedStaffForTasks.toLowerCase() && 
+            a.status !== 'Completed'
+          );
+
+          return (
+            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl relative flex flex-col max-h-[85vh]"
+              >
+                {/* Header */}
+                <div className="p-4 sm:p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d11]">
+                  <div>
+                    <h3 className="text-sm font-black text-white flex items-center gap-2 uppercase tracking-wider font-mono">
+                      <span>📋</span> Assigned Tasks
+                    </h3>
+                    <p className="text-[10px] text-zinc-500 mt-1 font-mono">
+                      STAFF: <span className="text-amber-400 font-bold">{selectedStaffForTasks}</span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStaffForTasks(null)}
+                    className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer font-bold text-xs"
+                  >
+                    ✕ Close
+                  </button>
+                </div>
+
+                {/* Body Table */}
+                <div className="p-0 overflow-y-auto flex-1">
+                  {staffTasks.length === 0 ? (
+                    <div className="p-8 text-center text-zinc-500 font-mono text-xs">
+                      No assigned tasks found.
+                    </div>
+                  ) : (
+                    <table className="w-full text-left border-collapse min-w-[600px]">
+                      <thead className="bg-zinc-900/40 sticky top-0 border-b border-zinc-900">
+                        <tr className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
+                          <th className="px-4 py-3 font-bold">Order ID</th>
+                          <th className="px-4 py-3 font-bold">Event Name</th>
+                          <th className="px-4 py-3 font-bold">Deliverable</th>
+                          <th className="px-4 py-3 font-bold">Target Delivery Date</th>
+                          <th className="px-4 py-3 font-bold">Current Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-900 font-sans text-xs text-zinc-300">
+                        {staffTasks.map(task => {
+                          const correlatedProj = (production || []).find(p => p.production_id === task.production_id);
+                          const { order } = resolveOrderAndLead(correlatedProj);
+                          const trackingId = correlatedProj?.tracking_id;
+                          const orderId = order?.order_id && order.order_id !== 'NULL' && order.order_id !== 'NIL' ? order.order_id : (trackingId || 'N/A');
+                          const eventName = order?.event_type || order?.custom_event_name || 'Project';
+
+                          return (
+                            <tr key={task.assignment_id} className="hover:bg-zinc-900/30 transition-colors">
+                              <td className="px-4 py-3 font-mono font-bold text-violet-400">{orderId}</td>
+                              <td className="px-4 py-3 font-medium">{eventName}</td>
+                              <td className="px-4 py-3 font-medium text-amber-100">{task.speciality || 'Editor'}</td>
+                              <td className="px-4 py-3 font-mono text-[10px] text-zinc-400">{task.target_finish_date || '—'}</td>
+                              <td className="px-4 py-3">
+                                <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider ${
+                                  task.status === 'Completed'
+                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
+                                    : task.status === 'Revision'
+                                      ? 'bg-rose-500/10 text-rose-400 border border-rose-500/15'
+                                      : 'bg-amber-500/10 text-amber-400 border border-amber-500/15'
+                                }`}>
+                                  {task.status}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </motion.div>
             </div>

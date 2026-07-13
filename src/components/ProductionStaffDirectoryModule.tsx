@@ -174,7 +174,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     const memberNameLower = memberName.toLowerCase();
     
     // A project is assigned to him if his name is matching primary editor_assigned OR if he has an editorAssignment
-    const staffProjects = production.filter(p => {
+    const staffProjects = (production || []).filter(p => {
       const isPrimary = p.editor_assigned?.toLowerCase() === memberNameLower;
       const isAssignedCrew = editorAssignments.some(a => 
         a.production_id === p.production_id && (a.staff_id === memberId || a.staff_name?.toLowerCase() === memberNameLower)
@@ -258,7 +258,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
 
   // Live filter computation
   const filteredStaff = useMemo(() => {
-    return staff.filter(member => {
+    return (staff || []).filter(member => {
       const nameMatch = member.name.toLowerCase().includes(searchName.trim().toLowerCase());
       
       const whatsappClean = (member.whatsapp_number || '').trim();
@@ -828,7 +828,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                       required
                     >
                       <option value="">-- Choose Role Speciality --</option>
-                      {specialities.filter(s => s.active).map(spec => (
+                      {(specialities || []).filter(s => s.active).map(spec => (
                         <option key={spec.speciality_id} value={spec.name}>{spec.name}</option>
                       ))}
                     </select>
