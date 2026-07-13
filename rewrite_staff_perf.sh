@@ -1,3 +1,4 @@
+cat << 'INNEREOF' > src/components/analytics/owner/OwnerStaffPerformanceDetailed.tsx
 import React, { useState, useMemo } from 'react';
 import { useRole } from '../../RoleContext';
 import { CameraLensStatsCard } from '../../CameraLensStatsCard';
@@ -816,3 +817,4 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
     </div>
   );
 };
+INNEREOF

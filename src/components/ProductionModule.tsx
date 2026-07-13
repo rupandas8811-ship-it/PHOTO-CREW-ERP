@@ -1422,6 +1422,23 @@ ${coordinatorName}`;
 
   // Step-by-step action popup modal states
   const [activeWorkflowProd, setActiveWorkflowProd] = useState<Production | null>(null);
+  useEffect(() => {
+    const handler = (e: any) => {
+      if (e.detail.role === 'production') {
+        const p = production.find(prod => {
+          const rf = rawFootage.find(x => x.tracking_id === prod.tracking_id);
+          return rf?.order_id === e.detail.orderId;
+        });
+        if (p) {
+          setActiveSubTab('production_workflow');
+          setSelectedLeadProd(p);
+        }
+      }
+    };
+    window.addEventListener('calendar-action-click-deferred', handler);
+    return () => window.removeEventListener('calendar-action-click-deferred', handler);
+  }, [production, rawFootage]);
+  
   const [workflowActionType, setWorkflowActionType] = useState<'assign_editor' | 'send_review' | 'request_revision' | 'deliver_project' | 'manage_payment_close' | 'manage_status' | 'close_project' | null>(null);
 
   // Form states for each step popup
@@ -1724,8 +1741,8 @@ ${coordinatorName}`;
               if (error) throw error;
               const loadedAssignments = dbAssignments || [];
 
-              // 2. Set target delivery date
-              setWfTargetDeliveryDate(activeWorkflowProd?.target_delivery_date || activeWorkflowProd?.expected_delivery_date || '');
+              // 2. Set target delivery date to empty (do not prefill)
+              setWfTargetDeliveryDate('');
 
               // 3. Find deliverables from confirmed quotation or order
               let parsedDeliverables: string[] = [];
@@ -5882,6 +5899,22 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             setIsSavingDossier(false);
           }
         };
+
+
+        
+        const formatDate = (dateStr: string) => {
+          if (!dateStr) return 'Pending';
+          try {
+            return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          } catch(e) {
+            return dateStr;
+          }
+        };
+        const formattedFootageReceived = selectedLeadProd.raw_footage_received_date ? formatDate(selectedLeadProd.raw_footage_received_date) : 'Pending';
+        const formattedEditingStarted = selectedLeadProd.editing_started_date ? formatDate(selectedLeadProd.editing_started_date) : 'Pending';
+        const formattedReviewUploaded = selectedLeadProd.review_uploaded_date ? formatDate(selectedLeadProd.review_uploaded_date) : 'Pending';
+        const formattedApprovalDate = selectedLeadProd.client_approval_date ? formatDate(selectedLeadProd.client_approval_date) : 'Pending';
+        const formattedHandoverDate = selectedLeadProd.delivery_date ? formatDate(selectedLeadProd.delivery_date) : 'Pending';
 
         // Resolve customer details
         const customerName = order.customer_name || lead?.customer_name || '—';

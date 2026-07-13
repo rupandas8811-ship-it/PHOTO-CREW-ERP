@@ -784,6 +784,20 @@ export const OperationsLeads: React.FC = () => {
     return list;
   }, [filteredOrders, sortBy, sortOrder, staffAssignments]);
 
+  useEffect(() => {
+    const handler = (e: any) => {
+      if (e.detail.role === 'operations') {
+        const order = orders.find(o => o.order_id === e.detail.orderId);
+        if (order) {
+          // Switch to list view if needed (assuming OperationsLeads is already the active subtab when this is called)
+          startAssigning(order);
+        }
+      }
+    };
+    window.addEventListener('calendar-action-click-deferred', handler);
+    return () => window.removeEventListener('calendar-action-click-deferred', handler);
+  }, [orders]);
+  
   const startAssigning = (order: Order) => {
     setAssignValidationError(null);
     const op = getOpDetails(order.order_id);
@@ -1370,13 +1384,12 @@ export const OperationsLeads: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* 1. Results Summary Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
         {[
           { label: "New Orders Received", val: stats.newOrders, theme: 'purple' as CameraLensTheme, filterValue: 'New Orders', trendText: 'Fresh', chartPoints: [10, 18, 14, 25, 20, 31, 35] },
           { label: "Today's Events", val: stats.todaysEvents, theme: 'cyan' as CameraLensTheme, filterValue: "Today's Events", trendText: 'Live', chartPoints: [5, 9, 7, 14, 11, 16, 15] },
           { label: "Scheduled Events", val: stats.scheduled, theme: 'green' as CameraLensTheme, filterValue: 'Scheduled Events', trendText: 'Rostered', chartPoints: [8, 15, 12, 20, 16, 25, 24] },
           { label: "Pending Assignments", val: stats.pendingAssignments, theme: 'red' as CameraLensTheme, filterValue: 'Pending Assignments', trendText: 'Action Req', chartPoints: [2, 4, 1, 5, 3, 6, 2] },
-          { label: "Completed", val: stats.completed, theme: 'purple' as CameraLensTheme, filterValue: 'Completed', trendText: 'Closed Out', chartPoints: [11, 14, 12, 18, 15, 20, 17] },
         ].map((card, idx) => (
           <CameraLensStatsCard
             key={idx}

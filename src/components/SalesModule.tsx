@@ -3870,6 +3870,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   }, [selectedLead?.lead_id, orders, payments]);
 
   // Handle lead select
+  useEffect(() => {
+    const handler = (e: any) => {
+      if (e.detail.role === 'sales' || e.detail.role === 'owner') {
+        const targetLead = leads.find(l => l.lead_id === e.detail.leadId || l.order_id === e.detail.orderId);
+        if (targetLead) {
+          if (externalSetActiveTab) externalSetActiveTab('list'); else setInternalTab('list');
+          handleSelectLead(targetLead);
+        }
+      }
+    };
+    window.addEventListener('calendar-action-click-deferred', handler);
+    return () => window.removeEventListener('calendar-action-click-deferred', handler);
+  }, [leads]);
+  
   const handleSelectLead = async (lead: Lead) => {
     setSelectedLead(lead);
     setCrmEvents(lead.events || []);

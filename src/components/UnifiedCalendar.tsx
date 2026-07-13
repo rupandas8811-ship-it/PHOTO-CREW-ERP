@@ -32,7 +32,7 @@ interface UnifiedCalendarProps {
 export interface CalendarEvent {
   id: string;
   sourceType: 'lead' | 'order' | 'operation' | 'production' | 'memo';
-  eventClass: 
+    eventClass: 
     | 'New Lead' 
     | 'Follow-up' 
     | 'Quotation Sent' 
@@ -41,7 +41,8 @@ export interface CalendarEvent {
     | 'Event Completed' 
     | 'Raw Footage Pending' 
     | 'Editing In Progress' 
-    | 'Delivery Due' 
+    | 'Target Delivery'
+    | 'Delivery Overdue'
     | 'Overdue' 
     | 'Calendar Memo';
   date: string; // "YYYY-MM-DD"
@@ -124,6 +125,9 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   const [showAddMemo, setShowAddMemo] = useState(false);
   const [newMemoTitle, setNewMemoTitle] = useState('');
   const [newMemoMessage, setNewMemoMessage] = useState('');
+  
+  const [popupDate, setPopupDate] = useState<string | null>(null);
+  const [teamPopupEvent, setTeamPopupEvent] = useState<any>(null);
   
   const todayStr = systemTodayStr; // Anchor date for relative analysis
 
@@ -228,8 +232,9 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
 
 
 
+  
   // Helper to extract follow-up dates from remarks
-  const parseFollowUpDate = (remarks: string | undefined): string | null => {
+  const parseFollowUpDate = (remarks) => {
     if (!remarks) return null;
     const match = remarks.match(/Next follow-up:\s*(\d{4}-\d{2}-\d{2})/i);
     return match && match[1] ? match[1] : null;
@@ -237,86 +242,52 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
 
   // Convert raw records into a standardized structure
   const allEvents = useMemo(() => {
-    const events: CalendarEvent[] = [];
+    const events = [];
 
-    // Helper for determining Overdue status
-    const isDateOverdue = (dateStr: string) => {
-      return dateStr < todayStr;
-    };
+    const validStages = [
+      'Order Confirmed',
+      'Staff Assigned',
+      'Event Scheduled',
+      'Operations Assigned',
+      'Raw Footage Pending',
+      'Raw Footage Received',
+      'Editing In Progress',
+      'Editing',
+      'Client Review',
+      'Client Approval',
+      'Ready for Delivery',
+      'Pending Delivery'
+    ];
 
-    // 1. Parse Leads (Relevant for Sales, Owners)
-    leads.forEach(l => {
-      // Event Date Event
-      let eventClass: CalendarEvent['eventClass'] = 'New Lead';
-      if (l.status === 'Follow Up') eventClass = 'Follow-up';
-      else if (l.status === 'Quotation Sent') eventClass = 'Quotation Sent';
-      else if (l.status === 'New Lead') eventClass = 'New Lead';
-      else if (l.status === 'Negotiation') eventClass = 'Quotation Sent';
-
-      events.push({
-        id: `lead-shoot-${l.lead_id}`,
-        sourceType: 'lead',
-        eventClass,
-        date: l.event_date,
-        customerName: l.customer_name,
-        mobile: l.mobile,
-        eventType: l.event_type || 'Shoot Event',
-        eventTime: l.event_time || '10:00 AM',
-        eventLocation: l.event_location || 'Unknown',
-        currentStage: l.status,
-        notes: l.remarks || 'No notes defined.',
-        packageName: 'Custom Estimate',
-        totalAmount: l.budget || 0,
-        raw: l
-      });
-
-      // Follow-up Target Date Event
-      const fDate = parseFollowUpDate(l.remarks);
-      if (fDate) {
-        events.push({
-          id: `lead-follow-${l.lead_id}`,
-          sourceType: 'lead',
-          eventClass: isDateOverdue(fDate) && l.status !== 'Closed' ? 'Overdue' : 'Follow-up',
-          date: fDate,
-          customerName: l.customer_name,
-          mobile: l.mobile,
-          eventType: 'Follow-up Call',
-          eventTime: '11:00 AM',
-          eventLocation: 'Phone Call Sessions',
-          currentStage: l.status,
-          notes: `Call notes: ${l.remarks}`,
-          packageName: 'N/A',
-          totalAmount: l.budget || 0,
-          raw: l
-        });
-      }
-    });
-
-    // 2. Parse Confirmed Orders (Relevant for Sales, Operations, Production, Owners)
     orders.forEach(o => {
-      const op = operations.find(x => x.order_id === o.order_id);
-      
-      const assigns = staffAssignments ? staffAssignments.filter(x => x.order_id === o.order_id) : [];
-      const assignedPhotographers = assigns.filter(a => a.staff_role.toLowerCase().includes('photographer')).map(a => a.staff_name).join(', ');
-      const assignedVideographers = assigns.filter(a => a.staff_role.toLowerCase().includes('videographer')).map(a => a.staff_name).join(', ');
-      const assignedDrones = assigns.filter(a => a.staff_role.toLowerCase().includes('drone') || a.staff_role.toLowerCase().includes('aerial')).map(a => a.staff_name).join(', ');
-      const assignedAssistants = assigns.filter(a => a.staff_role.toLowerCase().includes('assistant')).map(a => a.staff_name).join(', ');
+      if (['Delivered', 'Completed', 'Cancelled', 'Closed'].includes(o.current_stage)) return;
+      if (['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Lost Lead'].includes(o.current_stage)) return;
 
-      let eventClass: CalendarEvent['eventClass'] = 'Booking Confirmed';
-      if (o.current_stage === 'Event Scheduled' || o.current_stage === 'Operations Assigned') {
-        eventClass = 'Event Scheduled';
-      } else if (o.current_stage === 'Event Completed') {
-        eventClass = 'Event Completed';
-      } else if (o.current_stage === 'Order Confirmed') {
-        eventClass = 'Booking Confirmed';
-      } else if (o.current_stage === 'Raw Footage Received') {
-        eventClass = 'Raw Footage Pending';
+      const assigns = staffAssignments ? staffAssignments.filter(x => x.order_id === o.order_id) : [];
+      const uniqueStaff = new Set(assigns.map(a => a.staff_name));
+      const assignedTeamCount = uniqueStaff.size;
+
+      const prod = production.find(p => {
+        const rf = rawFootage.find(x => x.tracking_id === p.tracking_id);
+        return rf?.order_id === o.order_id;
+      });
+      const editDue = prod?.expected_delivery_date || prod?.target_delivery_date;
+
+      let isOverdue = false;
+      let overdueDays = 0;
+      if (editDue && editDue < todayStr) {
+        isOverdue = true;
+        const targetDate = parseLocalDate(editDue);
+        const todayDate = parseLocalDate(todayStr);
+        const diffTime = Math.abs(todayDate.getTime() - targetDate.getTime());
+        overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       }
 
+      
       events.push({
-        id: `order-shoot-${o.order_id}`,
+        id: 'order-shoot-' + o.order_id,
         sourceType: 'order',
-        eventClass,
+        eventClass: 'Event Scheduled',
         date: o.event_date,
         customerName: o.customer_name,
         mobile: o.mobile,
@@ -324,111 +295,51 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
         eventTime: o.event_time || '10:00 AM',
         eventLocation: o.event_location,
         currentStage: o.current_stage,
-        notes: op?.remarks || 'Awaiting dispatch confirmation.',
+        notes: isOverdue ? 'Overdue\n' + overdueDays + ' Days' : 'On Track',
         packageName: o.package_name || 'Standard Bundle',
         totalAmount: o.quotation_amount || 0,
-        
-        // Crew assigned details
-        photographer: assignedPhotographers || op?.photographer_assigned,
-        videographer: assignedVideographers || op?.videographer_assigned,
-        drone: assignedDrones || op?.drone_operator_assigned,
-        assistant: assignedAssistants || op?.assistant_assigned,
-        kit: op?.equipment_kit,
-        reportingTime: op?.reporting_time,
-        raw: o
-      });
-    });
-
-    // 3. Parse Production/Editing Tracks (Relevant for Production, Owners)
-    production.forEach(p => {
-      const rf = rawFootage.find(x => x.tracking_id === p.tracking_id);
-      const o = rf ? orders.find(x => x.order_id === rf.order_id) : null;
-      if (!o) return;
-
-      const editDue = p.expected_delivery_date || p.target_delivery_date;
-
-      // Editing start date
-      if (p.editing_start_date) {
-        events.push({
-          id: `prod-start-${p.production_id}`,
-          sourceType: 'production',
-          eventClass: 'Editing In Progress',
-          date: p.editing_start_date,
-          customerName: o.customer_name,
-          mobile: o.mobile,
-          eventType: `Post Production: ${o.event_type}`,
-          eventTime: '09:00 AM',
-          eventLocation: 'Production Cloud Center',
-          currentStage: p.editing_status,
-          notes: p.remarks || 'No editor details log.',
-          editor: p.editor_assigned,
-          editingStatus: p.editing_status,
-          expectedDeliveryDate: editDue,
+        orderId: o.order_id,
+        raw: {
+          ...o,
+          assignedTeamCount,
+          isOverdue,
+          overdueDays,
           targetDeliveryDate: editDue,
-          orderId: o.order_id,
-          raw: p
-        });
-      }
+          assigns
+        }
+      });
 
-      // Final delivery target date
       if (editDue) {
-        const isOverdue = isDateOverdue(editDue) && !['Delivered', 'Closed', 'Approved'].includes(p.editing_status);
         events.push({
-          id: `prod-due-${p.production_id}`,
-          sourceType: 'production',
-          eventClass: isOverdue ? 'Overdue' : 'Delivery Due',
+          id: 'order-delivery-' + o.order_id,
+          sourceType: 'order',
+          eventClass: isOverdue ? 'Delivery Overdue' : 'Target Delivery',
           date: editDue,
           customerName: o.customer_name,
           mobile: o.mobile,
-          eventType: `Delivery Target: ${o.event_type}`,
-          eventTime: '06:00 PM',
-          eventLocation: 'Digital Delivery Desk',
-          currentStage: p.editing_status,
-          notes: p.remarks || 'Verify asset export criteria.',
-          editor: p.editor_assigned,
-          editingStatus: p.editing_status,
-          expectedDeliveryDate: editDue,
-          targetDeliveryDate: editDue,
+          eventType: o.event_type,
+          eventTime: 'Target Delivery',
+          eventLocation: o.event_location,
+          currentStage: o.current_stage,
+          notes: isOverdue ? 'Overdue\n' + overdueDays + ' Days' : 'On Track',
+          packageName: o.package_name || 'Standard Bundle',
+          totalAmount: o.quotation_amount || 0,
           orderId: o.order_id,
-          raw: p
+          raw: {
+            ...o,
+            assignedTeamCount,
+            isOverdue,
+            overdueDays,
+            targetDeliveryDate: editDue,
+            assigns
+          }
         });
       }
     });
 
-    // 4. Parse Memos/Notifications of Calendar type
-    notifications
-      .filter(n => n.notification_type === 'Calendar Memo')
-      .forEach(m => {
-        // We can segment memos based on recipient or author role
-        const dateVal = m.project_id; // stores "YYYY-MM-DD"
-        if (!dateVal) return;
-
-        // Skip other role-specific memos unless owner view
-        if (role === 'sales' && m.recipient_role === 'Operations Team') return;
-        if (role === 'sales' && m.recipient_role === 'Production Team') return;
-        if (role === 'operations' && m.recipient_role === 'Sales Team') return;
-        if (role === 'operations' && m.recipient_role === 'Production Team') return;
-        if (role === 'production' && m.recipient_role === 'Sales Team') return;
-        if (role === 'production' && m.recipient_role === 'Operations Team') return;
-
-        events.push({
-          id: m.notification_id,
-          sourceType: 'memo',
-          eventClass: 'Calendar Memo',
-          date: dateVal,
-          customerName: 'Workspace Memo',
-          mobile: 'N/A',
-          eventType: m.task_id || 'Note',
-          eventTime: 'All Day',
-          eventLocation: m.recipient_role || 'General',
-          currentStage: 'Active',
-          notes: m.message,
-          raw: m
-        });
-      });
 
     return events;
-  }, [leads, orders, operations, production, rawFootage, notifications, role]);
+  }, [orders, staffAssignments, production, rawFootage, todayStr]);
 
   // Filters Event list by role first
   const roleFilteredEvents = useMemo(() => {
@@ -443,17 +354,18 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
         return ev.sourceType === 'order' && ev.currentStage === 'Event Scheduled';
       }
       if (role === 'production') {
-        // Production focuses strictly on Target Delivery Date events
-        return ev.sourceType === 'production' && (ev.eventClass === 'Delivery Due' || ev.eventClass === 'Overdue');
+        // Production focuses on BOTH Event Scheduled and Target Delivery Dates
+        return ev.sourceType === 'order' && (ev.eventClass === 'Event Scheduled' || ev.eventClass === 'Target Delivery' || ev.eventClass === 'Delivery Overdue');
       }
       if (role === 'worker') {
         // Worker only sees order and operations
         return ev.sourceType === 'order' && ev.currentStage === 'Event Scheduled';
       }
       if (role === 'owner') {
-        // Owner only sees Scheduled Events
-        return ev.sourceType === 'order' && ev.currentStage === 'Event Scheduled';
+        // Owner sees BOTH Event Scheduled and Target Delivery Dates
+        return ev.sourceType === 'order' && (ev.eventClass === 'Event Scheduled' || ev.eventClass === 'Target Delivery' || ev.eventClass === 'Delivery Overdue');
       }
+      
       return true;
     });
   }, [allEvents, role]);
@@ -505,7 +417,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
     'Event Completed',
     'Raw Footage Pending',
     'Editing In Progress',
-    'Delivery Due',
+    
     'Overdue',
     'Calendar Memo'
   ];
@@ -631,11 +543,24 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
           badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20',
           card: 'border-l-4 border-l-emerald-500 bg-emerald-950/15 hover:bg-emerald-950/25 border border-zinc-800'
         };
+      
       case 'Event Scheduled':
         return {
           dotBg: 'bg-cyan-500',
           badge: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20 hover:bg-cyan-500/20',
           card: 'border-l-4 border-l-cyan-500 bg-cyan-950/10 hover:bg-cyan-950/20 border border-zinc-800'
+        };
+      case 'Target Delivery':
+        return {
+          dotBg: 'bg-indigo-500',
+          badge: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20 hover:bg-indigo-500/20',
+          card: 'border-l-4 border-l-indigo-500 bg-indigo-950/10 hover:bg-indigo-950/20 border border-zinc-800'
+        };
+      case 'Delivery Overdue':
+        return {
+          dotBg: 'bg-red-500',
+          badge: 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20',
+          card: 'border-l-4 border-l-red-500 bg-red-950/10 hover:bg-red-950/20 border border-red-900/50'
         };
       case 'Event Completed':
         return {
@@ -655,12 +580,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
           badge: 'bg-violet-500/10 text-violet-400 border-violet-500/20 hover:bg-violet-500/20',
           card: 'border-l-4 border-l-violet-500 bg-violet-950/10 hover:bg-violet-950/20 border border-zinc-800'
         };
-      case 'Delivery Due':
-        return {
-          dotBg: 'bg-amber-600',
-          badge: 'bg-amber-600/10 text-amber-400 border-amber-605/20 hover:bg-amber-600/20',
-          card: 'border-l-4 border-l-amber-600 bg-amber-950/10 hover:bg-amber-950/20 border border-zinc-800'
-        };
+      
       case 'Overdue':
         return {
           dotBg: 'bg-red-500',
@@ -716,7 +636,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
 
     // 5. Deliveries Due (Expected dates in the next 7 days in Post Production)
     const deliveriesDue = roleFilteredEvents.filter(e => {
-      const isPostEvent = e.sourceType === 'production' && e.eventClass === 'Delivery Due';
+      const isPostEvent = e.sourceType === 'order' && (e.eventClass === 'Target Delivery' || e.eventClass === 'Delivery Overdue');
       if (!isPostEvent) return false;
       return e.date >= todayStr && e.date <= sevenDaysLater;
     });
@@ -1156,9 +1076,12 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                       id={`cell_day_${cell.dateString || idx}`}
                       onClick={() => {
                         if (cell.dateString) {
-                          setSelectedDate(cell.dateString);
-                          // "Clicking the date should open all events scheduled for that day"
-                          setCalendarView('day');
+                          const evsForDate = filteredEvents.filter(e => e.date === cell.dateString);
+                          if (evsForDate.length > 0) {
+                            setPopupDate(cell.dateString);
+                          } else {
+                            setSelectedDate(cell.dateString);
+                          }
                         }
                       }}
                       className={cellClasses}
@@ -1675,297 +1598,155 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
       )}
 
 
-      {/* 6. LARGE EVENT DETAILS POPUP PANEL OVERLAY */}
-      {selectedEvent && (
+      
+      {/* EVENTS SCHEDULED MODAL FOR A SPECIFIC DATE */}
+      {popupDate && (
         <div 
-          id="dialog_event_detail"
           className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-fade-in overflow-y-auto"
         >
-          <div className="bg-zinc-900 border border-zinc-805 w-full max-w-2xl p-6 rounded-2xl shadow-2xl relative space-y-6 my-8">
+          <div className="bg-zinc-900 border border-zinc-805 w-full max-w-6xl p-6 rounded-2xl shadow-2xl relative space-y-6 my-8">
             <button
-              id="close_dialog_event_detail"
-              onClick={() => setSelectedEvent(null)}
+              onClick={() => setPopupDate(null)}
               className="absolute right-4 top-4 p-1.5 hover:bg-zinc-850 rounded-lg text-zinc-400 hover:text-white transition"
             >
               <X className="w-5 h-5" />
             </button>
-
-            {/* Modal Heading Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-mono uppercase px-2.5 py-0.5 bg-zinc-950 text-yellow-500 rounded border border-zinc-800">
-                    {selectedEvent.eventType}
-                  </span>
-                  <span className={`text-[10px] px-2.5 py-0.5 border rounded border-opacity-30 rounded-md font-mono font-bold shadow ${getColorClasses(selectedEvent.eventClass).badge}`}>
-                    {selectedEvent.eventClass}
-                  </span>
-                </div>
-
-                <h3 className="text-lg font-black text-white mt-1">
-                  {selectedEvent.customerName}
-                </h3>
-              </div>
-
-              <div className="text-right sm:text-right text-xs text-zinc-450 font-mono">
-                <div>LOGISTICS DOSSIER</div>
-                <div className="text-yellow-500 mt-0.5">ID: {selectedEvent.id.toUpperCase().slice(0, 15)}</div>
-              </div>
+            <div className="border-b border-zinc-800 pb-4">
+              <h3 className="text-lg font-black text-white">Events Scheduled - {popupDate}</h3>
             </div>
-
-            {/* Core details layout grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
-              
-              {/* Left Details block */}
-              <div className="space-y-3.5 bg-zinc-950/20 border border-zinc-850 p-4 rounded-xl">
-                <h4 className="text-[10px] font-mono uppercase text-zinc-450 tracking-wider border-b border-zinc-850 pb-1.5 flex items-center gap-1">
-                  <User className="w-3.5 h-3.5 text-zinc-500" />
-                  <span>Contact & Event Parameters</span>
-                </h4>
-
-                <div className="grid grid-cols-3 gap-y-2 text-zinc-300">
-                  {selectedEvent.sourceType === 'production' ? (
-                    <>
-                      <span className="text-zinc-500 font-mono">Customer</span>
-                      <span className="col-span-2 font-bold text-white">
-                        {selectedEvent.customerName}
-                      </span>
-
-                      {selectedEvent.orderId && (
-                        <>
-                          <span className="text-zinc-500 font-mono">Order ID</span>
-                          <span className="col-span-2 font-bold text-yellow-500">{selectedEvent.orderId}</span>
-                        </>
-                      )}
-
-                      <span className="text-zinc-500 font-mono">Event Type</span>
-                      <span className="col-span-2 text-zinc-200 font-mono">
-                        {selectedEvent.eventType}
-                      </span>
-
-                      {selectedEvent.targetDeliveryDate && (
-                        <>
-                          <span className="text-zinc-500 font-mono">Target Delivery</span>
-                          <span className="col-span-2 font-bold text-pink-400">{selectedEvent.targetDeliveryDate}</span>
-                        </>
-                      )}
-
-                      <span className="text-zinc-500 font-mono">Prod Status</span>
-                      <span className="col-span-2 px-2 py-0.5 bg-zinc-950 rounded border border-zinc-800 text-zinc-300 self-start font-mono font-bold">
-                        {selectedEvent.currentStage || selectedEvent.editingStatus || 'Pending'}
-                      </span>
-
-                      <span className="text-zinc-500 font-mono">Contact </span>
-                      <span className="col-span-2 font-semibold">
-                        {selectedEvent.mobile !== 'N/A' ? (
-                          <a href={`tel:${selectedEvent.mobile}`} className="hover:text-yellow-500 flex items-center gap-1.5 font-bold">
-                            <Phone className="w-3.5 h-3.5 text-zinc-500 inline" />
-                            {selectedEvent.mobile}
-                          </a>
-                        ) : 'N/A'}
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-zinc-500 font-mono">Contact </span>
-                      <span className="col-span-2 font-semibold">
-                        {selectedEvent.mobile !== 'N/A' ? (
-                          <a href={`tel:${selectedEvent.mobile}`} className="hover:text-yellow-500 flex items-center gap-1.5 font-bold">
-                            <Phone className="w-3.5 h-3.5 text-zinc-500 inline" />
-                            {selectedEvent.mobile}
-                          </a>
-                        ) : 'N/A'}
-                      </span>
-
-                      <span className="text-zinc-500 font-mono">Date</span>
-                      <span className="col-span-2 font-mono font-bold text-yellow-405">
-                        {selectedEvent.date}
-                      </span>
-
-                      <span className="text-zinc-500 font-mono">Session time</span>
-                      <span className="col-span-2 font-mono">
-                        {selectedEvent.eventTime}
-                      </span>
-
-                      <span className="text-zinc-500 font-mono">Venue Address</span>
-                      <span className="col-span-2 text-zinc-350 leading-relaxed font-mono text-[11px]">
-                        {selectedEvent.eventLocation}
-                      </span>
-
-                      {selectedEvent.packageName && (
-                        <>
-                          <span className="text-zinc-500 font-mono">Kit Package</span>
-                          <span className="col-span-2 font-semibold break-words text-[11px]">
-                            {selectedEvent.packageName}
-                          </span>
-                        </>
-                      )}
-
-                      {selectedEvent.totalAmount !== undefined && selectedEvent.totalAmount > 0 && (
-                        <>
-                          <span className="text-zinc-500 font-mono">Budget</span>
-                          <span className="col-span-2 font-bold text-emerald-450">
-                            {formatINR(selectedEvent.totalAmount)}
-                          </span>
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Right Details Block - Operations & Production allocation parameters */}
-              {role !== 'sales' && (
-              <div className="space-y-3.5 bg-zinc-950/20 border border-zinc-850 p-4 rounded-xl">
-                <h4 className="text-[10px] font-mono uppercase text-zinc-450 tracking-wider border-b border-zinc-850 pb-1.5 flex items-center gap-1">
-                  <Briefcase className="w-3.5 h-3.5 text-zinc-500" />
-                  <span>Squad Allocation & Workflow</span>
-                </h4>
-
-                <div className="grid grid-cols-3 gap-y-2.5 text-zinc-300 font-mono text-[11px]">
-                  {/* Photo & Video Staff Assignments (Operations Track) */}
-                  {selectedEvent.photographer && (
-                    <>
-                      <span className="text-zinc-500 flex items-center gap-1">
-                        <Camera className="w-3 h-3 text-zinc-600" />
-                        <span>Photo</span>
-                      </span>
-                      <span className="col-span-2 text-zinc-200 font-bold">{selectedEvent.photographer}</span>
-                    </>
-                  )}
-
-                  {selectedEvent.videographer && (
-                    <>
-                      <span className="text-zinc-500 flex items-center gap-1">
-                        <Video className="w-3 h-3 text-zinc-600" />
-                        <span>Video</span>
-                      </span>
-                      <span className="col-span-2 text-zinc-200 font-bold">{selectedEvent.videographer}</span>
-                    </>
-                  )}
-
-                  {selectedEvent.drone && (
-                    <>
-                      <span className="text-zinc-500">Drone Op</span>
-                      <span className="col-span-2 text-zinc-300">{selectedEvent.drone}</span>
-                    </>
-                  )}
-
-                  {selectedEvent.kit && (
-                    <>
-                      <span className="text-zinc-500">Gears Block</span>
-                      <span className="col-span-2 text-zinc-350 break-words">{selectedEvent.kit}</span>
-                    </>
-                  )}
-
-                  {selectedEvent.reportingTime && (
-                    <>
-                      <span className="text-zinc-500">Report Hr</span>
-                      <span className="col-span-2 text-yellow-500 font-bold">{selectedEvent.reportingTime}</span>
-                    </>
-                  )}
-
-                  {/* Editors Assignments (Post Production Track) */}
-                  {role !== 'worker' && selectedEvent.editor && (
-                    <>
-                      <span className="text-zinc-500 flex items-center gap-1">
-                        <Video className="w-3 h-3 text-zinc-650" />
-                        <span>Lead Editor</span>
-                      </span>
-                      <span className="col-span-2 text-zinc-100 font-bold">{selectedEvent.editor}</span>
-                    </>
-                  )}
-
-                  {role !== 'worker' && selectedEvent.editingStatus && (
-                    <>
-                      <span className="text-zinc-500">VFX Status</span>
-                      <span className="col-span-2 px-2 py-0.5 bg-zinc-950 rounded border border-zinc-800 text-zinc-300 self-start">
-                        {selectedEvent.editingStatus}
-                      </span>
-                    </>
-                  )}
-
-                  {role !== 'worker' && selectedEvent.expectedDeliveryDate && (
-                    <>
-                      <span className="text-zinc-500">Target ETA</span>
-                      <span className="col-span-2 text-pink-400 font-bold">{selectedEvent.expectedDeliveryDate}</span>
-                    </>
-                  )}
-
-                  {/* Default fallback if nothing allocated */}
-                  {!selectedEvent.photographer && (!selectedEvent.editor || role === 'worker') && (
-                    <div className="col-span-3 text-center py-6 text-zinc-650 italic">
-                      Awaiting squad dispatch roster values
-                    </div>
-                  )}
-                </div>
-              </div>
-              )}
-
+            
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-zinc-800 text-xs font-mono text-zinc-400 uppercase">
+                    <th className="p-3">Order ID</th>
+                    <th className="p-3">Customer Name</th>
+                    <th className="p-3">Event Name</th>
+                    <th className="p-3">Event Time</th>
+                    <th className="p-3">Current Status</th>
+                    <th className="p-3">Overdue Status</th>
+                    <th className="p-3">Assigned Team Count</th>
+                    <th className="p-3">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm">
+                  {filteredEvents.filter(e => e.date === popupDate).map(ev => (
+                    <tr key={ev.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/20">
+                      <td className="p-3 font-mono text-xs text-yellow-500">{ev.orderId}</td>
+                      <td className="p-3 text-white font-medium">{ev.customerName}</td>
+                      <td className="p-3 text-zinc-300">{ev.eventType}</td>
+                      <td className="p-3 text-zinc-300 font-mono text-xs">{ev.eventTime}</td>
+                      <td className="p-3">
+                        <span className="px-2 py-1 rounded bg-zinc-800 text-xs text-zinc-300 border border-zinc-700 whitespace-nowrap">
+                          {ev.currentStage}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        {ev.raw.isOverdue ? (
+                          <span className="text-red-400 font-bold text-xs whitespace-pre-wrap">{ev.notes}</span>
+                        ) : (
+                          <span className="text-emerald-400 font-bold text-xs">On Track</span>
+                        )}
+                      </td>
+                      <td className="p-3 text-center">
+                        <button 
+                          onClick={() => setTeamPopupEvent(ev)}
+                          className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white rounded cursor-pointer font-bold transition"
+                        >
+                          {ev.raw.assignedTeamCount}
+                        </button>
+                      </td>
+                      <td className="p-3">
+                        <button 
+                          onClick={() => {
+                             // Dispatch custom event to trigger parent dashboards
+                             window.dispatchEvent(new CustomEvent('calendar-action-click', { detail: { orderId: ev.orderId, role, leadId: ev.raw.lead_id } }));
+                             setPopupDate(null);
+                          }}
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-bold text-xs cursor-pointer shadow"
+                        >
+                          Details
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-
-            {/* Notes log and comments */}
-            {selectedEvent.notes && (
-              <div className="bg-zinc-950/20 border border-zinc-850 p-4 rounded-xl text-xs space-y-2">
-                <h4 className="text-[10px] font-mono uppercase text-zinc-450 tracking-wider">
-                  Remarks & Internal Notes Log
-                </h4>
-                <p className="text-zinc-300 italic leading-relaxed whitespace-pre-wrap">
-                  "{selectedEvent.notes}"
-                </p>
-              </div>
-            )}
-
-            {/* Workflow Activity status / audit logs */}
-            <div className="bg-zinc-950/25 border border-zinc-850 p-4 rounded-xl text-xs space-y-3">
-              <h4 className="text-[10px] font-mono uppercase text-zinc-450 tracking-wider">
-                Workflow Activity Timeline
-              </h4>
-
-              <div className="space-y-4 max-h-[160px] overflow-y-auto pr-1 no-scrollbar pt-1">
-                {eventTimeline.length === 0 ? (
-                  <div className="text-center py-4 text-zinc-650 italic font-mono">
-                    Awaiting state transition logs
-                  </div>
-                ) : (
-                  <div className="relative border-l border-zinc-800 ml-2 pl-4 space-y-4">
-                    {eventTimeline.map((l, id) => (
-                      <div key={id} id={`timeline_log_${id}`} className="relative">
-                        <div className="absolute -left-[21px] top-0.5 bg-zinc-900 w-2.5 h-2.5 rounded-full ring-2 ring-yellow-500/20 border border-yellow-500" />
-                        <div>
-                          <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-500">
-                            <span className="text-zinc-300 font-bold">{l.user_name}</span>
-                            <span>•</span>
-                            <span>{l.role}</span>
-                            <span>•</span>
-                            <span>{formatTime12Hour(l.timestamp)} ({l.timestamp.slice(0, 10)})</span>
-                          </div>
-                          <p className="text-zinc-300 text-[11px] mt-0.5 leading-relaxed font-sans">
-                            {l.action}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Action buttons */}
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                id="btn_dismiss_detail"
-                onClick={() => setSelectedEvent(null)}
-                className="px-5 py-2.5 bg-zinc-950 hover:bg-zinc-900 border border-zinc-850 hover:border-zinc-700 text-zinc-300 rounded-xl text-xs font-bold transition cursor-pointer"
-              >
-                Dismiss Closed
-              </button>
-            </div>
-
           </div>
         </div>
       )}
 
+      {/* TEAM POPUP */}
+      {teamPopupEvent && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-zinc-950/90 backdrop-blur-md animate-in zoom-in duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 w-full max-w-5xl p-6 rounded-2xl shadow-2xl relative">
+            <button
+              onClick={() => setTeamPopupEvent(null)}
+              className="absolute right-4 top-4 p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h3 className="text-lg font-black text-white mb-4">Assigned Team: {teamPopupEvent.orderId}</h3>
+            
+            <div className="overflow-x-auto max-h-[60vh] overflow-y-auto custom-scrollbar">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-zinc-700 text-xs font-mono text-zinc-400 bg-zinc-950/50 sticky top-0">
+                    <th className="p-3">Staff Name</th>
+                    <th className="p-3">Staff Type</th>
+                    <th className="p-3">Department</th>
+                    <th className="p-3">Assigned Role</th>
+                    <th className="p-3">Assigned Deliverable(s)</th>
+                    <th className="p-3">Mobile Number</th>
+                    <th className="p-3">Current Status</th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm text-zinc-200">
+                  {(() => {
+                    // Group assignments by staff_id or staff_name to merge deliverables
+                    const assigns = teamPopupEvent.raw.assigns || [];
+                    const grouped = {};
+                    assigns.forEach(a => {
+                      if (!grouped[a.staff_name]) {
+                        grouped[a.staff_name] = { ...a, all_deliverables: [a.deliverable_name].filter(Boolean) };
+                      } else {
+                        if (a.deliverable_name && !grouped[a.staff_name].all_deliverables.includes(a.deliverable_name)) {
+                          grouped[a.staff_name].all_deliverables.push(a.deliverable_name);
+                        }
+                      }
+                    });
+                    
+                    if (Object.values(grouped).length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={7} className="p-6 text-center text-zinc-500 italic">No staff assigned yet.</td>
+                        </tr>
+                      );
+                    }
+                    
+                    return Object.values(grouped).map((a: any, idx) => (
+                      <tr key={idx} className="border-b border-zinc-800/30 hover:bg-zinc-800/20">
+                        <td className="p-3 font-bold">{a.staff_name}</td>
+                        <td className="p-3 text-xs">{a.staff_type}</td>
+                        <td className="p-3 text-xs">{a.department}</td>
+                        <td className="p-3 text-xs">{a.staff_role}</td>
+                        <td className="p-3 text-xs">{a.all_deliverables.join(', ') || 'General Event'}</td>
+                        <td className="p-3 text-xs font-mono">{a.staff_mobile || 'N/A'}</td>
+                        <td className="p-3">
+                          <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[10px] border border-zinc-700">
+                            {a.assignment_status || 'Assigned'}
+                          </span>
+                        </td>
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
