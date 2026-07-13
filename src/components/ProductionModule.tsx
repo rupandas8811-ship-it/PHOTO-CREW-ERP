@@ -43,6 +43,33 @@ function getIndividualDeliverables(description: string): string[] {
     .filter(line => line.length > 0);
 }
 
+function toInputDateFormat(dateStr?: string | null): string {
+  if (!dateStr) return '';
+  try {
+    let cleanStr = dateStr;
+    if (cleanStr.includes('T')) {
+      cleanStr = cleanStr.split('T')[0];
+    }
+    const parts = cleanStr.split('-');
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      } else if (parts[2].length === 4) {
+        // DD-MM-YYYY
+        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+    }
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${year}-${month}-${day}`;
+  } catch (e) {
+    return '';
+  }
+}
+
 function parseExactDeliverables(description: string): string[] {
   if (!description) return [];
   try {
@@ -1513,6 +1540,11 @@ ${coordinatorName}`;
   const [leadTargetDeliveryDate, setLeadTargetDeliveryDate] = useState('');
   const [leadExpectedDeliveryDate, setLeadExpectedDeliveryDate] = useState('');
   const [leadActualDeliveryDate, setLeadActualDeliveryDate] = useState('');
+  const [leadRawFootageDate, setLeadRawFootageDate] = useState('');
+  const [leadClientReviewDate, setLeadClientReviewDate] = useState('');
+  const [leadClientApprovalDate, setLeadClientApprovalDate] = useState('');
+  const [isSavingDossier, setIsSavingDossier] = useState(false);
+  const [dossierSuccessMessage, setDossierSuccessMessage] = useState('');
   const [dossierError, setDossierError] = useState('');
 
   // Helper calculations for Production Leads workflows
@@ -2631,6 +2663,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             <div className="hover:text-violet-300 transition-colors cursor-pointer" onClick={() => {
                               setSelectedLeadProd(prod);
                               setDossierError('');
+                              setDossierSuccessMessage('');
                               setLeadEditor(prod.editor_assigned || 'Unassigned');
                               setLeadStaff(prod.assigned_staff ? prod.assigned_staff.split(', ').map(s => s.trim()) : []);
                               setAssignRoleFilter('');
@@ -2642,6 +2675,31 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               setLeadTargetDeliveryDate(prod.target_delivery_date || '');
                               setLeadExpectedDeliveryDate(prod.expected_delivery_date || '');
                               setLeadActualDeliveryDate(prod.delivery_date || prod.actual_delivery_date || '');
+                              
+                              const pLogs = (logs || []).filter(log => 
+                                log.record_id === prod.production_id ||
+                                log.record_id === prod.tracking_id ||
+                                log.record_id === order.order_id
+                              );
+                              const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
+                              const computedRfDate = rf && (rf.status === 'Received' || rf.raw_received) 
+                                ? (rf.uploaded_date || rf.event_completed_date) 
+                                : '';
+                              const crLog = pLogs.find(log => 
+                                log.new_stage === 'Client Review Sent' || 
+                                log.new_stage === 'Customer Review' ||
+                                log.action.includes('Client Review Sent') ||
+                                log.action.includes('Customer Review')
+                              );
+                              const caLog = pLogs.find(log => 
+                                log.new_stage === 'Final Approval' || 
+                                log.new_stage === 'Approved' ||
+                                log.action.includes('Final Approval') ||
+                                log.action.includes('Approved')
+                              );
+                              setLeadRawFootageDate(toInputDateFormat((prod as any).raw_footage_received_date || computedRfDate));
+                              setLeadClientReviewDate(toInputDateFormat((prod as any).client_review_upload_date || (crLog ? crLog.timestamp : null)));
+                              setLeadClientApprovalDate(toInputDateFormat((prod as any).client_approval_date || (caLog ? caLog.timestamp : null)));
                             }}>{order.customer_name}</div>
                             <div className="text-[10px] text-zinc-455 mt-0.5 font-normal">{order.mobile || 'No contact phone'}</div>
                           </td>
@@ -2860,6 +2918,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 type="button"
                                 onClick={() => {
                                   setSelectedLeadProd(prod);
+                                  setDossierError('');
+                                  setDossierSuccessMessage('');
                                   setLeadEditor(prod.editor_assigned || 'Unassigned');
                                   setLeadStaff(prod.assigned_staff ? prod.assigned_staff.split(', ').map(s => s.trim()) : []);
                                   setAssignRoleFilter('');
@@ -2871,6 +2931,31 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   setLeadTargetDeliveryDate(prod.target_delivery_date || '');
                                   setLeadExpectedDeliveryDate(prod.expected_delivery_date || '');
                                   setLeadActualDeliveryDate(prod.delivery_date || prod.actual_delivery_date || '');
+
+                                  const pLogs = (logs || []).filter(log => 
+                                    log.record_id === prod.production_id ||
+                                    log.record_id === prod.tracking_id ||
+                                    log.record_id === order.order_id
+                                  );
+                                  const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
+                                  const computedRfDate = rf && (rf.status === 'Received' || rf.raw_received) 
+                                    ? (rf.uploaded_date || rf.event_completed_date) 
+                                    : '';
+                                  const crLog = pLogs.find(log => 
+                                    log.new_stage === 'Client Review Sent' || 
+                                    log.new_stage === 'Customer Review' ||
+                                    log.action.includes('Client Review Sent') ||
+                                    log.action.includes('Customer Review')
+                                  );
+                                  const caLog = pLogs.find(log => 
+                                    log.new_stage === 'Final Approval' || 
+                                    log.new_stage === 'Approved' ||
+                                    log.action.includes('Final Approval') ||
+                                    log.action.includes('Approved')
+                                  );
+                                  setLeadRawFootageDate(toInputDateFormat((prod as any).raw_footage_received_date || computedRfDate));
+                                  setLeadClientReviewDate(toInputDateFormat((prod as any).client_review_upload_date || (crLog ? crLog.timestamp : null)));
+                                  setLeadClientApprovalDate(toInputDateFormat((prod as any).client_approval_date || (caLog ? caLog.timestamp : null)));
                                 }}
                                 className="text-[9px] text-zinc-500 hover:text-zinc-350 hover:underline mt-0.5 cursor-pointer"
                               >
@@ -5670,8 +5755,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
       {/* 1. PROJECT DETAILS POPUP MODAL */}
       {selectedLeadProd && (() => {
-        const rf = rawFootage.find(f => f.tracking_id === selectedLeadProd.tracking_id);
-        const order = rf ? orders.find(o => o.order_id === rf.order_id) : null;
+        const { order, lead } = resolveOrderAndLead(selectedLeadProd);
         if (!order) return null;
 
         const projectLogs = (logs || []).filter(log => 
@@ -5680,93 +5764,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           log.record_id === order.order_id
         );
 
-        // Calculate timeline dates dynamically from the corresponding tables
-        const rfRecord = rawFootage.find(f => 
-          f.tracking_id === selectedLeadProd.tracking_id || 
-          f.order_id === order.order_id
-        );
-        const rawFootageDateRaw = rfRecord && (rfRecord.status === 'Received' || rfRecord.raw_received) 
-          ? (rfRecord.uploaded_date || rfRecord.event_completed_date) 
-          : null;
-
-        const editingStartedLog = projectLogs.find(log => 
-          log.new_stage === 'Editing Started' || 
-          log.action.includes('Editing Started')
-        );
-        const editingStartedDateRaw = selectedLeadProd.editing_start_date || 
-          (editingStartedLog ? editingStartedLog.timestamp : null);
-
-        const clientReviewLog = projectLogs.find(log => 
-          log.new_stage === 'Client Review Sent' || 
-          log.new_stage === 'Customer Review' ||
-          log.action.includes('Client Review Sent') ||
-          log.action.includes('Customer Review')
-        );
-        const clientReviewDateRaw = clientReviewLog ? clientReviewLog.timestamp : null;
-
-        const clientApprovalLog = projectLogs.find(log => 
-          log.new_stage === 'Final Approval' || 
-          log.new_stage === 'Approved' ||
-          log.action.includes('Final Approval') ||
-          log.action.includes('Approved')
-        );
-        const clientApprovalDateRaw = clientApprovalLog ? clientApprovalLog.timestamp : null;
-
-        const isDelivered = ['Project Delivered', 'Delivered', 'Completed', 'Closed', 'Project Closed'].includes(selectedLeadProd.editing_status);
-        const handoverLog = projectLogs.find(log => 
-          log.new_stage === 'Project Delivered' || 
-          log.new_stage === 'Delivered' || 
-          log.new_stage === 'Completed' ||
-          log.action.includes('Project Delivered') ||
-          log.action.includes('Delivered')
-        );
-        const handoverDateRaw = isDelivered 
-          ? (selectedLeadProd.delivery_date || selectedLeadProd.actual_delivery_date || (handoverLog ? handoverLog.timestamp : null)) 
-          : null;
-
-        const formatTimelineDate = (dateStr?: string | null): string => {
-          if (!dateStr) return 'Pending';
-          try {
-            let cleanStr = dateStr;
-            if (cleanStr.includes('T')) {
-              cleanStr = cleanStr.split('T')[0];
-            }
-            const parts = cleanStr.split('-');
-            if (parts.length === 3) {
-              if (parts[0].length === 4) {
-                // YYYY-MM-DD
-                const [year, month, day] = parts;
-                return `${day.padStart(2, '0')}-${month.padStart(2, '0')}-${year}`;
-              } else if (parts[2].length === 4) {
-                // DD-MM-YYYY or MM-DD-YYYY
-                const [day, month, year] = parts;
-                return `${day.padStart(2, '0')}-${month.padStart(2, '0')}-${year}`;
-              }
-            }
-            const d = new Date(dateStr);
-            if (isNaN(d.getTime())) return 'Pending';
-            const day = String(d.getDate()).padStart(2, '0');
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            const year = d.getFullYear();
-            return `${day}-${month}-${year}`;
-          } catch (e) {
-            return 'Pending';
-          }
-        };
-
-        const formattedFootageReceived = formatTimelineDate(rawFootageDateRaw);
-        const formattedEditingStarted = formatTimelineDate(editingStartedDateRaw);
-        const formattedReviewUploaded = formatTimelineDate(clientReviewDateRaw);
-        const formattedApprovalDate = formatTimelineDate(clientApprovalDateRaw);
-        const formattedHandoverDate = formatTimelineDate(handoverDateRaw);
-
         // Load payments info
         const payment = payments.find(p => p.order_id === order.order_id);
         const totalAmount = order.quotation_amount || 0;
         const advanceReceived = payment?.advance_received !== undefined ? payment.advance_received : (payment?.advance_paid || 0);
         const balanceDue = payment?.balance_due !== undefined ? payment.balance_due : (totalAmount - advanceReceived);
 
-        const handleSaveLeadDossier = (e: React.FormEvent) => {
+        // Handle Save
+        const handleSaveLeadDossier = async (e: React.FormEvent) => {
           e.preventDefault();
 
           if (!leadTargetDeliveryDate) {
@@ -5774,37 +5779,89 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             return;
           }
           setDossierError('');
+          setDossierSuccessMessage('');
+          setIsSavingDossier(true);
           
-          let mainStatus: EditingStatus = 'Raw Footage Received';
-          if (leadProdStatus === 'Pending' || leadProdStatus === 'Raw Footage Received') mainStatus = 'Raw Footage Received';
-          else if (leadProdStatus === 'Editor Assigned') mainStatus = 'Editor Assigned';
-          else if (leadProdStatus === 'Editing Started') mainStatus = 'Editing Started';
-          else if (leadProdStatus === 'Editing' || leadProdStatus === 'In Progress' || leadProdStatus === 'Editing In Progress') mainStatus = 'Editing In Progress';
-          else if (leadProdStatus === 'Internal QC Review') mainStatus = 'Internal QC Review';
-          else if (leadProdStatus === 'Customer Review' || leadProdStatus === 'Client Review Sent') mainStatus = 'Client Review Sent';
-          else if (leadProdStatus === 'Revision Required') mainStatus = 'Revision Required';
-          else if (leadProdStatus === 'Revision In Progress') mainStatus = 'Revision In Progress';
-          else if (leadProdStatus === 'Approved' || leadProdStatus === 'Final Approval') mainStatus = 'Final Approval';
-          else if (leadProdStatus === 'Delivered' || leadProdStatus === 'Project Delivered') mainStatus = 'Project Delivered';
-          else if (leadProdStatus === 'Closed' || leadProdStatus === 'Completed' || leadProdStatus === 'Project Closed') mainStatus = 'Completed';
+          try {
+            let mainStatus: EditingStatus = 'Raw Footage Received';
+            if (leadProdStatus === 'Pending' || leadProdStatus === 'Raw Footage Received') mainStatus = 'Raw Footage Received';
+            else if (leadProdStatus === 'Editor Assigned') mainStatus = 'Editor Assigned';
+            else if (leadProdStatus === 'Editing Started') mainStatus = 'Editing Started';
+            else if (leadProdStatus === 'Editing' || leadProdStatus === 'In Progress' || leadProdStatus === 'Editing In Progress') mainStatus = 'Editing In Progress';
+            else if (leadProdStatus === 'Internal QC Review') mainStatus = 'Internal QC Review';
+            else if (leadProdStatus === 'Customer Review' || leadProdStatus === 'Client Review Sent') mainStatus = 'Client Review Sent';
+            else if (leadProdStatus === 'Revision Required') mainStatus = 'Revision Required';
+            else if (leadProdStatus === 'Revision In Progress') mainStatus = 'Revision In Progress';
+            else if (leadProdStatus === 'Approved' || leadProdStatus === 'Final Approval') mainStatus = 'Final Approval';
+            else if (leadProdStatus === 'Delivered' || leadProdStatus === 'Project Delivered') mainStatus = 'Project Delivered';
+            else if (leadProdStatus === 'Closed' || leadProdStatus === 'Completed' || leadProdStatus === 'Project Closed') mainStatus = 'Completed';
 
-          updateProduction(selectedLeadProd.production_id, {
-            editor_assigned: leadEditor,
-            assigned_staff: leadStaff.join(', '),
-            project_priority: leadPriority,
-            raw_footage_status: leadFootageStatus,
-            production_status: leadProdStatus,
-            editing_status: mainStatus,
-            remarks: leadRemarks,
-            editing_start_date: leadStartDate || undefined,
-            target_delivery_date: leadTargetDeliveryDate || undefined,
-            expected_delivery_date: leadExpectedDeliveryDate || undefined,
-            delivery_date: leadActualDeliveryDate || undefined,
-          });
+            await updateProduction(selectedLeadProd.production_id, {
+              editor_assigned: leadEditor,
+              assigned_staff: leadStaff.join(', '),
+              project_priority: leadPriority,
+              raw_footage_status: leadFootageStatus,
+              production_status: leadProdStatus,
+              editing_status: mainStatus,
+              remarks: leadRemarks,
+              editing_start_date: leadStartDate || undefined,
+              target_delivery_date: leadTargetDeliveryDate || undefined,
+              expected_delivery_date: leadExpectedDeliveryDate || undefined,
+              delivery_date: leadActualDeliveryDate || undefined,
+              raw_footage_received_date: leadRawFootageDate || undefined,
+              client_review_upload_date: leadClientReviewDate || undefined,
+              client_approval_date: leadClientApprovalDate || undefined,
+            });
 
-          alert(`ERP Master Dossier for Order ${order.order_id} has been fully synchronized and written to Supabase!`);
-          setSelectedLeadProd(null);
+            setDossierSuccessMessage('ERP Master Dossier has been successfully saved!');
+            
+            // Scroll to the success message
+            setTimeout(() => {
+              const successEl = document.getElementById('dossier-success-container');
+              if (successEl) {
+                successEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }, 100);
+
+          } catch (err: any) {
+            setDossierError(err?.message || 'Failed to save dossier settings.');
+          } finally {
+            setIsSavingDossier(false);
+          }
         };
+
+        // Resolve customer details
+        const customerName = order.customer_name || lead?.customer_name || '—';
+        const customerMobile = order.mobile || lead?.mobile || '—';
+        const customerWhatsApp = order.whatsapp_number || lead?.whatsapp_number || customerMobile || '—';
+
+        // Resolve Event Scheduled details
+        const eventList = lead?.events && lead.events.length > 0 
+          ? lead.events 
+          : [{
+              event_name: order.custom_event_name || lead?.custom_event_name || order.event_type || lead?.event_type || 'Event',
+              event_date: order.event_date || lead?.event_date || '—',
+              event_start_time: order.event_time || lead?.event_time || '—'
+            }];
+
+        // Resolve Deliverables and assigned staff
+        let parsedDeliverables: string[] = [];
+        let deliverablesText = order?.deliverables_description || lead?.deliverables_description || '';
+
+        if (!deliverablesText && lead) {
+          const targetLeadQuotations = quotations?.filter((q: any) => q.lead_id === lead.lead_id) || [];
+          targetLeadQuotations.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          const targetLatestQuote = targetLeadQuotations[0];
+          if (targetLatestQuote) {
+            deliverablesText = targetLatestQuote.deliverables_description || '';
+          }
+        }
+
+        parsedDeliverables = parseExactDeliverables(deliverablesText);
+
+        const linkedAssignments = editorAssignments.filter(a => a.production_id === selectedLeadProd.production_id);
+        const assignedDeliverables = Array.from(new Set(linkedAssignments.map(a => a.speciality).filter(Boolean))) as string[];
+        const allLeadDeliverables = Array.from(new Set([...parsedDeliverables, ...assignedDeliverables]));
 
         return (
           <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 z-50 animate-fade-in text-zinc-105 select-none md:select-text">
