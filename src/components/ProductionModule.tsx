@@ -999,32 +999,45 @@ ${coordinatorName}`;
   };
 
   const getAssignedEditorsList = (prod: Production) => {
-    const fromAssignments = editorAssignments.filter(a => a.production_id === prod.production_id);
+    const fromAssignments = (editorAssignments || []).filter(a => a.production_id === prod.production_id);
     if (fromAssignments.length > 0) {
-      return fromAssignments.map(a => {
-        const staffRec = productionStaff.find(s => s.staff_id === a.staff_id);
-        return {
-          name: a.staff_name,
-          deliverable: a.speciality,
-          role: staffRec?.role || 'Editor',
-          mobile: staffRec?.mobile || 'N/A',
-          type: staffRec?.staff_type || (staffRec as any)?.Staff_Type || 'In-House',
-          status: staffRec?.status || 'Active'
-        };
+      const grouped = new Map<string, any>();
+      fromAssignments.forEach(a => {
+        if (!grouped.has(a.staff_name)) {
+          const staffRec = (productionStaff || []).find(s => s.staff_id === a.staff_id || s.name === a.staff_name);
+          grouped.set(a.staff_name, {
+            name: a.staff_name,
+            deliverables: [a.speciality].filter(Boolean),
+            role: staffRec?.role || staffRec?.production_role_speciality || 'Editor',
+            mobile: staffRec?.mobile || 'N/A',
+            type: staffRec?.staff_type || (staffRec as any)?.Staff_Type || 'In-House',
+            status: staffRec?.status || 'Active'
+          });
+        } else {
+          const existing = grouped.get(a.staff_name);
+          if (a.speciality && !existing.deliverables.includes(a.speciality)) {
+             existing.deliverables.push(a.speciality);
+          }
+        }
       });
+      return Array.from(grouped.values()).map(item => ({
+         ...item,
+         deliverable: item.deliverables.join(', ')
+      }));
     }
     const staffStr = prod.assigned_staff || prod.editor_assigned;
     if (staffStr && staffStr !== 'Unassigned') {
       return staffStr.split(',').map(s => {
         const name = s.trim();
-        const staffRec = productionStaff.find(st => st.name === name);
+        const staffRec = (productionStaff || []).find(st => st.name === name);
         return {
-          name: name,
-          deliverable: 'Unspecified',
-          role: staffRec?.role || 'Editor',
+          name,
+          deliverable: 'Assigned',
+          role: staffRec?.role || staffRec?.production_role_speciality || 'Editor',
           mobile: staffRec?.mobile || 'N/A',
           type: staffRec?.staff_type || (staffRec as any)?.Staff_Type || 'In-House',
-          status: staffRec?.status || 'Active'
+          status: staffRec?.status || 'Active',
+          deliverables: ['Assigned']
         };
       });
     }
@@ -4769,7 +4782,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 <div className="flex flex-col">
                                   <span className="font-bold text-sm text-zinc-100">{member.name}</span>
                                   <div className="flex flex-wrap gap-1 mt-1">
-                                    {(member.Skill || member.production_role_speciality || 'Editor').split(',').map((s: string, idx: number) => (
+                                    {((Array.isArray(member.Skill) ? member.Skill : typeof member.Skill === 'string' ? member.Skill.split(',') : member.production_role_speciality ? member.production_role_speciality.split(',') : ['Editor'])).map((s: string, idx: number) => (
                                       <span key={idx} className="px-1.5 py-0.5 bg-purple-500/10 border border-purple-500/20 rounded text-[9px] text-purple-400 font-mono">
                                         {s.trim()}
                                       </span>
@@ -4850,7 +4863,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       setNewStaffType(member.Staff_Type || member.staff_type || '');
                                       setNewStaffMobile(member.mobile);
                                       setNewStaffWhatsapp(member.whatsapp_number || '');
-                                      setNewStaffSkills(member.Skill ? member.Skill.split(',').map((s: string) => s.trim()).filter(Boolean) : member.production_role_speciality ? member.production_role_speciality.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
+                                      setNewStaffSkills(Array.isArray(member.Skill) ? member.Skill : member.Skill ? member.Skill.split(',').map((s: string) => s.trim()).filter(Boolean) : member.production_role_speciality ? member.production_role_speciality.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
                                     }}
                                     className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-amber-500 hover:text-amber-400 border border-zinc-850 rounded font-bold cursor-pointer transition-colors text-[10px] font-mono"
                                   >
@@ -7647,7 +7660,15 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             {editor.type}
                           </span>
                         </td>
-                        <td className="p-3 text-emerald-400">{editor.deliverable}</td>
+                        <td className="p-3">
+                          <div className="flex flex-wrap gap-1">
+                            {(editor.deliverables || editor.deliverable?.split(",") || []).map((del: string, i: number) => (
+                              <span key={i} className="px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded text-[9px] font-mono font-bold uppercase">
+                                {del.trim()}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
                         <td className="p-3">{editor.role}</td>
                         <td className="p-3 font-mono text-zinc-400">{editor.mobile}</td>
                         <td className="p-3">
