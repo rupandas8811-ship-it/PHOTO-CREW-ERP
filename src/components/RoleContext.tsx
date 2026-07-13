@@ -3604,7 +3604,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lead_id: leadId,
         order_id: orderId,
         old_status: targetLead.current_status || 'Order Confirmed',
-        new_status: 'Staff Assigned',
+        new_status: 'Event Scheduled',
         changed_by: changedBy,
         changed_by_role: changedByRole,
         remarks: `Assigned: ${assignments.map(a => `${a.staff_role} (${a.staff_name})`).join(', ')}`,
@@ -3613,14 +3613,14 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await pushInsert('lead_status_history', statusHist);
 
       const resLead = await pushUpdate('leads', 'lead_id', leadId, { 
-        current_status: 'Staff Assigned', 
-        status: 'Staff Assigned',
+        current_status: 'Event Scheduled', 
+        status: 'Event Scheduled',
         updated_by: changedBy
       });
       if (!resLead.success) throw new Error(`Error updating lead status:\n\n${resLead.error}`);
 
       const resOrder = await pushUpdate('orders', 'order_id', orderId, { 
-        current_stage: 'Staff Assigned', 
+        current_stage: 'Event Scheduled', 
         updated_by: changedBy
       });
       if (!resOrder.success) throw new Error(`Error updating order stage:\n\n${resOrder.error}`);

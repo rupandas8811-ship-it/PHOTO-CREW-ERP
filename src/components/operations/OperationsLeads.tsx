@@ -486,14 +486,7 @@ export const OperationsLeads: React.FC = () => {
     const clientName = ord.customer_name;
     const clientContact = ord.mobile || (lead ? lead.mobile : 'N/A');
     const clientWhatsapp = lead?.whatsapp_number || 'N/A';
-
-    let text = `Staff Name:\n${staffName}\n\n`;
-    text += `Customer:\n${clientName}\n\n`;
-    text += `Mobile:\n${clientContact}\n\n`;
-    text += `WhatsApp:\n${clientWhatsapp}\n\n`;
-    text += `Order ID:\n${ord.order_id}\n\n`;
-
-    const staffDetails = staff?.find(s => s.name === staffName);
+    const orderId = ord.order_id;
 
     let assignedEvents: any[] = [];
     if (modalEventAllocations && lead?.events) {
@@ -526,14 +519,14 @@ export const OperationsLeads: React.FC = () => {
        });
     }
 
+    let text = `Hey ${staffName}! You've been assigned for ${clientName}.\n\n`;
+    text += `Order ID: ${orderId}\n`;
+
     if (assignedEvents.length === 0) {
        const eventName = ord.event_type || 'N/A';
        const eventDate = ord.event_date || 'N/A';
        const eventTime = ord.event_time || 'N/A';
-       const reportingDate = lead?.Reporting_date || eventDate || 'N/A';
-       const reportingTime = lead?.reporting_time || 'N/A';
        const location = lead?.event_location || ord.event_location || 'N/A';
-       const mapsLink = (lead as any)?.google_maps_link || 'N/A';
        
        let assignedRoles = ['Crew'];
        if (finalAssignments) {
@@ -550,52 +543,34 @@ export const OperationsLeads: React.FC = () => {
           }
        }
 
-       text += `--------------------------------------------------\n\n`;
-       text += `Event:\n${eventName}\n\n`;
-       text += `Date:\n${eventDate}\n\n`;
-       text += `Time:\n${eventTime}\n\n`;
-       text += `Reporting Date:\n${reportingDate}\n\n`;
-       text += `Reporting Time:\n${reportingTime}\n\n`;
-       text += `Google Maps Location:\n${mapsLink}\n\n`;
-       text += `Reporting Location:\n${location}\n\n`;
-       text += `Assigned Team Members:\n\n`;
+       text += `Event: ${eventName}\n`;
+       text += `Date: ${eventDate}\n`;
+       text += `Time: ${eventTime}\n`;
+       text += `Role: ${assignedRoles.join(', ')}\n\n`;
+       text += `Location:\n${location}\n\n`;
+    } else {
+       assignedEvents.forEach((ev, index) => {
+          const eventName = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');
+          const eventDate = ev.event_date || 'N/A';
+          const eventTime = ev.event_start_time || ev.reporting_time || (ev.alloc?.reporting_time) || 'N/A';
+          const location = ev.event_location || lead?.event_location || 'N/A';
+          
+          let assignedRoles = ev.roles || ['Crew'];
+          assignedRoles = Array.from(new Set(assignedRoles));
 
-       assignedRoles.forEach(r => {
-           text += `• ${r}\n`;
-           text += `  Name: ${staffName}\n`;
-           text += `  Mobile: ${staffDetails?.mobile || 'N/A'}\n\n`;
+          if (index > 0) text += `\n---\n\n`;
+          text += `Event: ${eventName}\n`;
+          text += `Date: ${eventDate}\n`;
+          text += `Time: ${eventTime}\n`;
+          text += `Role: ${assignedRoles.join(', ')}\n\n`;
+          text += `Location:\n${location}\n\n`;
        });
-       return text;
     }
 
-    assignedEvents.forEach((ev) => {
-       const eventName = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');
-       const eventDate = ev.event_date || 'N/A';
-       const reportingDate = ev.reporting_date || (ev.alloc?.reporting_date) || ev.event_date || 'N/A';
-       const reportingTime = ev.reporting_time || (ev.alloc?.reporting_time) || 'N/A';
-       const eventStartTime = ev.event_start_time || 'N/A';
-       const location = ev.event_location || lead?.event_location || 'N/A';
-       const mapsLink = ev.google_maps_link || 'N/A';
-       
-       let assignedRoles = ev.roles || ['Crew'];
-       assignedRoles = Array.from(new Set(assignedRoles));
-
-       text += `--------------------------------------------------\n\n`;
-       text += `Event:\n${eventName}\n\n`;
-       text += `Date:\n${eventDate}\n\n`;
-       text += `Time:\n${eventStartTime}\n\n`;
-       text += `Reporting Date:\n${reportingDate}\n\n`;
-       text += `Reporting Time:\n${reportingTime}\n\n`;
-       text += `Google Maps Location:\n${mapsLink}\n\n`;
-       text += `Reporting Location:\n${location}\n\n`;
-       text += `Assigned Team Members:\n\n`;
-
-       assignedRoles.forEach((r: string) => {
-           text += `• ${r}\n`;
-           text += `  Name: ${staffName}\n`;
-           text += `  Mobile: ${staffDetails?.mobile || 'N/A'}\n\n`;
-       });
-    });
+    text += `Client Contact:\n`;
+    text += `📞 ${clientContact}\n`;
+    text += `💬 ${clientWhatsapp}\n\n`;
+    text += `Shoot us a quick ‘Confirmed’ if everything looks good on your end.`;
 
     return text;
   };

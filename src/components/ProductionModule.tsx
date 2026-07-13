@@ -83,7 +83,7 @@ function parseExactDeliverables(description: string): string[] {
     }
   } catch (e) {}
   return description
-    .split(/\r?\n/)
+    .split(/[,\n]/)
     .map(line => line.trim())
     .filter(Boolean);
 }
@@ -311,11 +311,19 @@ const StaffSelectDropdown = ({
   }, []);
 
   const filteredStaff = useMemo(() => {
-    return productionStaff.filter(s => {
-      if (s.status !== 'Active') return false;
+    const map = new Map<string, any>();
+    productionStaff.forEach(s => {
+      if (s.status !== 'Active') return;
       const type = s.staff_type || (s as any).Staff_Type || 'In-House';
-      return type.toLowerCase() === staffType.toLowerCase();
+      const cleanType = type.replace(/[\s-]/g, '').toLowerCase();
+      const cleanFilter = staffType.replace(/[\s-]/g, '').toLowerCase();
+      if (cleanType === cleanFilter) {
+         if (!map.has(s.name)) {
+            map.set(s.name, s);
+         }
+      }
     });
+    return Array.from(map.values());
   }, [productionStaff, staffType]);
 
   const currentStaff = useMemo(() => {
@@ -373,25 +381,24 @@ const StaffSelectDropdown = ({
             Clear Selection
           </div>
           {filteredStaff.map(s => {
-            const isBusy = editorAssignments.some(a => a.staff_id === s.staff_id && a.status !== 'Completed');
-            const isAlreadyAssigned = allRowsForDeliverable.some(r => r.staffId === s.staff_id && r.id !== rowId);
-
-            return (
-              <div
-                key={s.staff_id}
-                onClick={() => {
-                  if (isAlreadyAssigned) return;
-                  onSelect(s.staff_id);
-                  setIsOpen(false);
-                }}
-                className={`px-3 py-2 text-xs flex items-center justify-between gap-2 transition-colors ${
-                  isAlreadyAssigned 
-                    ? 'opacity-50 cursor-not-allowed bg-zinc-950 text-zinc-650' 
-                    : 'hover:bg-zinc-900 cursor-pointer text-zinc-350 hover:text-white'
-                }`}
-              >
-                <span className="flex items-center gap-1.5 truncate">
-                  <span className="text-xs shrink-0">{isBusy ? '🔴' : '🟢'}</span>
+              const isBusy = editorAssignments.some(a => a.staff_id === s.staff_id && a.status !== 'Completed');
+              const isAlreadyAssigned = allRowsForDeliverable.some(r => r.staffId === s.staff_id && r.id !== rowId);
+              return (
+                <div
+                  key={s.staff_id}
+                  onClick={() => {
+                    if (isAlreadyAssigned) return;
+                    onSelect(s.staff_id);
+                    setIsOpen(false);
+                  }}
+                  className={`px-3 py-2 text-xs flex items-center justify-between gap-2 transition-colors ${
+                    isAlreadyAssigned 
+                      ? 'opacity-50 cursor-not-allowed bg-zinc-950 text-zinc-650' 
+                      : 'hover:bg-zinc-900 cursor-pointer text-zinc-350 hover:text-white'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5 truncate">
+                    <span className="text-xs shrink-0">{isBusy ? '🔴' : '🟢'}</span>
                   <span className="font-medium truncate">{s.name}</span>
                   <span className="text-[10px] text-zinc-550 font-mono truncate">({s.role || 'Staff'})</span>
                   {isAlreadyAssigned && <span className="text-[9px] text-zinc-600 font-mono italic">(Already assigned)</span>}
@@ -422,7 +429,7 @@ const StaffSelectDropdown = ({
           })}
           {filteredStaff.length === 0 && (
             <div className="px-3 py-3 text-xs text-zinc-500 italic font-mono text-center">
-              No active {staffType} staff.
+              No Production Staff Available.
             </div>
           )}
         </div>
@@ -6561,7 +6568,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           onChange={(e) => {
                             const newDate = e.target.value;
                             setWfTargetDeliveryDate(newDate);
-                            autoSaveAssignments(deliverableStaffRows, newDate);
                           }}
                           className={`bg-zinc-950 border text-xs text-zinc-300 rounded-xl px-3 py-1.5 font-mono focus:outline-none min-h-[34px] sm:w-48 ${
                             validationAttempted && !wfTargetDeliveryDate
@@ -6630,12 +6636,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                                         staffType: newType,
                                                         staffId: ''
                                                       };
-                                                      const newRowsMap = {
+                                                      return {
                                                         ...prev,
                                                         [deliverable]: updatedRows
                                                       };
-                                                      autoSaveAssignments(newRowsMap, wfTargetDeliveryDate);
-                                                      return newRowsMap;
                                                     });
                                                   }}
                                                   className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-[11px] text-zinc-400 hover:text-zinc-300 rounded-lg px-2 py-1 font-sans focus:outline-none focus:border-purple-500 cursor-pointer h-7"
@@ -6659,15 +6663,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                                         ...updatedRows[rIndex],
                                                         staffId: val
                                                       };
-                                                      const newRowsMap = {
+                                                      return {
                                                         ...prev,
                                                         [deliverable]: updatedRows
                                                       };
-                                                      autoSaveAssignments(newRowsMap, wfTargetDeliveryDate);
-                                                      return newRowsMap;
                                                     });
                                                   }}
-                                                  productionStaff={productionStaff}
+                                                  productionStaff={productionStaffList}
                                                   editorAssignments={editorAssignments}
                                                   onOpenRoster={(name) => setRosterStaffName(name)}
                                                   allRowsForDeliverable={rows}
@@ -6682,12 +6684,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                                     onClick={() => {
                                                       setDeliverableStaffRows(prev => {
                                                         const updatedRows = (prev[deliverable] || []).filter(r => r.id !== row.id);
-                                                        const newRowsMap = {
+                                                        return {
                                                           ...prev,
                                                           [deliverable]: updatedRows
                                                         };
-                                                        autoSaveAssignments(newRowsMap, wfTargetDeliveryDate);
-                                                        return newRowsMap;
                                                       });
                                                     }}
                                                     className="text-zinc-600 hover:text-rose-400 transition-colors p-1 cursor-pointer text-xs"
@@ -6713,15 +6713,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                             type="button"
                                             onClick={() => {
                                               setDeliverableStaffRows(prev => {
-                                                const newRowsMap = {
+                                                return {
                                                   ...prev,
                                                   [deliverable]: [
                                                     ...(prev[deliverable] || []),
                                                     { id: `row-${Math.random()}`, staffType: 'In-House', staffId: '' }
                                                   ]
                                                 };
-                                                autoSaveAssignments(newRowsMap, wfTargetDeliveryDate);
-                                                return newRowsMap;
                                               });
                                             }}
                                             className="px-2.5 py-0.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-855 text-purple-400 hover:text-purple-300 text-[10px] font-mono rounded transition-all cursor-pointer flex items-center gap-1 mt-0.5"
@@ -6818,6 +6816,36 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           className="flex-1 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-855 text-zinc-400 hover:text-white text-xs font-mono font-bold rounded-xl transition-colors cursor-pointer text-center"
                         >
                           Close
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setValidationAttempted(true);
+                            if (!wfTargetDeliveryDate) {
+                              setWfError('Target Delivery Date is required.');
+                              return;
+                            }
+                            // Validate that at least one staff is assigned to each deliverable
+                            for (const d of customDeliverables) {
+                              const rows = deliverableStaffRows[d] || [];
+                              if (rows.filter(r => r.staffId).length === 0) {
+                                setWfError(`Assign at least one staff for deliverable: ${d}`);
+                                return;
+                              }
+                            }
+                            
+                            setWfError('');
+                            await autoSaveAssignments(deliverableStaffRows, wfTargetDeliveryDate);
+                            setWfSuccess('Editor assignments saved successfully!');
+                            setTimeout(() => {
+                              setActiveWorkflowProd(null);
+                              setWorkflowActionType(null);
+                              setWfSuccess('');
+                            }, 1500);
+                          }}
+                          className="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 border border-purple-500 text-white text-xs font-mono font-bold rounded-xl transition-colors cursor-pointer text-center"
+                        >
+                          Submit
                         </button>
                       </div>
                     </div>
