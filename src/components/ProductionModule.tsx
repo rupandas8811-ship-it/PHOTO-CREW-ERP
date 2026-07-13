@@ -1542,6 +1542,98 @@ ${coordinatorName}`;
     return prod.project_priority || 'Medium';
   };
 
+  const autoSaveAssignments = async (
+    currentRowsMap: Record<string, Array<{ id: string; staffType: 'In-House' | 'Freelancer'; staffId: string }>>,
+    targetDate: string
+  ) => {
+    if (!activeWorkflowProd) return;
+    try {
+      // 1. Delete all existing assignments for this production
+      const { error: deleteError } = await supabaseClient
+        .from('editor_assignments')
+        .delete()
+        .eq('production_id', activeWorkflowProd.production_id);
+
+      if (deleteError) throw deleteError;
+
+      // 2. Prepare and insert new assignments
+      const newAssignments = [];
+      const activeStaffList = productionStaff.filter(s => s.status === 'Active');
+      const currentDeliverablesList = Object.keys(currentRowsMap);
+
+      for (const d of currentDeliverablesList) {
+        const rows = currentRowsMap[d] || [];
+        
+        // Prevent duplicate assignments of same staff to same deliverable
+        const seenStaffIds = new Set<string>();
+
+        for (const row of rows) {
+          if (!row.staffId) continue;
+          if (seenStaffIds.has(row.staffId)) continue;
+          seenStaffIds.add(row.staffId);
+          
+          const staffMem = activeStaffList.find(s => s.staff_id === row.staffId);
+          if (staffMem) {
+            const id = `EDR-${Math.floor(100000 + Math.random() * 900000)}`;
+            newAssignments.push({
+              assignment_id: id,
+              production_id: activeWorkflowProd.production_id,
+              staff_id: staffMem.staff_id,
+              staff_name: staffMem.name,
+              speciality: d, // Deliverable Name
+              assigned_date: new Date().toISOString().split('T')[0],
+              target_finish_date: targetDate || activeWorkflowProd?.target_delivery_date || activeWorkflowProd?.expected_delivery_date || '', 
+              status: 'Assigned',
+              created_at: new Date().toISOString()
+            });
+          }
+        }
+      }
+
+      if (newAssignments.length > 0) {
+        const { error: insertError } = await supabaseClient
+          .from('editor_assignments')
+          .insert(newAssignments);
+
+        if (insertError) throw insertError;
+      }
+
+      // 3. Update production table with primary assigned editors details and target delivery date
+      const uniqueStaffNames = Array.from(new Set(newAssignments.map(a => a.staff_name)));
+      const primaryEditor = uniqueStaffNames[0] || 'Unassigned';
+      const assignedStaffJoined = uniqueStaffNames.join(', ');
+      
+      const assignedRoles = Array.from(new Set(newAssignments.map(a => {
+        const staffMem = activeStaffList.find(s => s.staff_name === a.staff_name);
+        return staffMem?.role || 'Editor';
+      })));
+      const rolesJoined = assignedRoles.join(', ');
+
+      await updateProduction(activeWorkflowProd.production_id, {
+        editor_assigned: primaryEditor,
+        assigned_staff: assignedStaffJoined,
+        editing_status: 'Editor Assigned',
+        production_status: 'Editor Assigned',
+        production_role: rolesJoined,
+        assigned_role: rolesJoined,
+        target_delivery_date: targetDate
+      } as any);
+
+      // Refresh page data
+      if (typeof refreshData === 'function') {
+        refreshData();
+      }
+    } catch (err) {
+      console.error("Failed to auto-save assignments:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (workflowActionType !== 'assign_editor') {
+      setLastModalProdId(null);
+    }
+  }, [workflowActionType]);
+
   useEffect(() => {
     if (workflowActionType) {
       if (workflowActionType === 'manage_status') {
@@ -1571,99 +1663,119 @@ ${coordinatorName}`;
         setDeliveryDate('');
         setClosingNotes('');
       } else if (workflowActionType === 'assign_editor') {
-        const assignedForThis = activeWorkflowProd ? editorAssignments.filter(a => a.production_id === activeWorkflowProd.production_id) : [];
-        setWfTargetDeliveryDate(activeWorkflowProd?.target_delivery_date || activeWorkflowProd?.expected_delivery_date || '');
-        
-        // Find deliverables from confirmed quotation
-        let parsedDeliverables: string[] = [];
-        if (activeWorkflowProd) {
-          const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
+        const currentProdId = activeWorkflowProd?.production_id || null;
+        if (currentProdId && currentProdId !== lastModalProdId) {
+          setLastModalProdId(currentProdId);
           
-          let deliverablesText = order?.deliverables_description || lead?.deliverables_description || '';
-          
-          if (!deliverablesText && lead) {
-            const targetLeadQuotations = quotations?.filter((q: any) => q.lead_id === lead.lead_id) || [];
-            targetLeadQuotations.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-            const targetLatestQuote = targetLeadQuotations[0];
-            if (targetLatestQuote) {
-              deliverablesText = targetLatestQuote.deliverables_description || '';
-            }
-          }
-          
-          parsedDeliverables = parseExactDeliverables(deliverablesText);
-        }
-        const assignedDeliverables = Array.from(new Set(assignedForThis.map(a => a.speciality))) as string[];
-        const allDeliverables: string[] = Array.from(new Set([...parsedDeliverables, ...assignedDeliverables]));
-        
-        setCustomDeliverables(allDeliverables);
+          const loadExistingAssignments = async () => {
+            try {
+              // 1. Fetch current assignments from Supabase
+              const { data: dbAssignments, error } = await supabaseClient
+                .from('editor_assignments')
+                .select('*')
+                .eq('production_id', currentProdId);
 
-        // Load existing staff map & dates map
-        const initialStaffMap: Record<string, string[]> = {};
-        const initialDatesMap: Record<string, string> = {};
-        const initialStaffTypeMap: Record<string, 'In-House' | 'Freelancer'> = {};
-        const initialRowsMap: Record<string, Array<{ id: string; staffType: 'In-House' | 'Freelancer'; staffId: string }>> = {};
-        
-        assignedForThis.forEach(a => {
-          const deliverable = a.speciality;
-          if (deliverable) {
-            if (!initialStaffMap[deliverable]) {
-              initialStaffMap[deliverable] = [];
-            }
-            if (!initialStaffMap[deliverable].includes(a.staff_id)) {
-              initialStaffMap[deliverable].push(a.staff_id);
-            }
-            initialDatesMap[deliverable] = a.target_finish_date || '';
-            
-            const st = productionStaff.find(s => s.staff_id === a.staff_id);
-            if (st && (st.staff_type || (st as any).Staff_Type)) {
-              initialStaffTypeMap[deliverable] = (st.staff_type || (st as any).Staff_Type) as 'In-House' | 'Freelancer';
-            }
-          }
-        });
+              if (error) throw error;
+              const loadedAssignments = dbAssignments || [];
 
-        allDeliverables.forEach(deliverable => {
-          const existingForDeliverable = assignedForThis.filter(a => a.speciality === deliverable);
-          if (existingForDeliverable.length > 0) {
-            initialRowsMap[deliverable] = existingForDeliverable.map(a => {
-              const staffMem = productionStaff.find(s => s.staff_id === a.staff_id);
-              const type = staffMem?.staff_type || (staffMem as any)?.Staff_Type || 'In-House';
-              return {
-                id: a.assignment_id || `row-${Math.random()}`,
-                staffType: type as 'In-House' | 'Freelancer',
-                staffId: a.staff_id
-              };
-            });
-          } else {
-            initialRowsMap[deliverable] = [{
-              id: `row-${Math.random()}`,
-              staffType: 'In-House',
-              staffId: ''
-            }];
-          }
-        });
-        
-        setDeliverableStaffRows(initialRowsMap);
-        setValidationAttempted(false);
-        
-        setSelectedWfStaffByDeliverable(initialStaffMap);
-        setDeliverablesTargetDates(initialDatesMap);
-        setWfStaffTypeByDeliverable(initialStaffTypeMap);
-        setWfProjectNotes(activeWorkflowProd?.project_notes || activeWorkflowProd?.remarks || '');
+              // 2. Set target delivery date
+              setWfTargetDeliveryDate(activeWorkflowProd?.target_delivery_date || activeWorkflowProd?.expected_delivery_date || '');
 
-        if (assignedForThis.length === 0) {
-          setWfEditor('');
-          setWfPriority('Medium');
-          setWfInternalComments('');
-          setAssignmentRows([{ speciality: '', staffId: '', staffName: '' }]);
-          setSelectedEditors([]);
-        } else {
-          const assignedStaffList = assignedForThis.map(a => staff.find(s => s.staff_id === a.staff_id)).filter((s): s is Staff => !!s);
-          setSelectedEditors(assignedStaffList);
-          setAssignmentRows(assignedForThis.map(a => ({
-            speciality: a.speciality,
-            staffId: a.staff_id,
-            staffName: a.staff_name
-          })));
+              // 3. Find deliverables from confirmed quotation or order
+              let parsedDeliverables: string[] = [];
+              const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
+              let deliverablesText = order?.deliverables_description || lead?.deliverables_description || '';
+
+              if (!deliverablesText && lead) {
+                const targetLeadQuotations = quotations?.filter((q: any) => q.lead_id === lead.lead_id) || [];
+                targetLeadQuotations.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                const targetLatestQuote = targetLeadQuotations[0];
+                if (targetLatestQuote) {
+                  deliverablesText = targetLatestQuote.deliverables_description || '';
+                }
+              }
+
+              parsedDeliverables = parseExactDeliverables(deliverablesText);
+
+              const assignedDeliverables = Array.from(new Set(loadedAssignments.map(a => a.speciality))) as string[];
+              const allDeliverables: string[] = Array.from(new Set([...parsedDeliverables, ...assignedDeliverables]));
+
+              setCustomDeliverables(allDeliverables);
+
+              // 4. Map loaded assignments to staff rows
+              const initialStaffMap: Record<string, string[]> = {};
+              const initialDatesMap: Record<string, string> = {};
+              const initialStaffTypeMap: Record<string, 'In-House' | 'Freelancer'> = {};
+              const initialRowsMap: Record<string, Array<{ id: string; staffType: 'In-House' | 'Freelancer'; staffId: string }>> = {};
+
+              loadedAssignments.forEach(a => {
+                const deliverable = a.speciality;
+                if (deliverable) {
+                  if (!initialStaffMap[deliverable]) {
+                    initialStaffMap[deliverable] = [];
+                  }
+                  if (!initialStaffMap[deliverable].includes(a.staff_id)) {
+                    initialStaffMap[deliverable].push(a.staff_id);
+                  }
+                  initialDatesMap[deliverable] = a.target_finish_date || '';
+
+                  const st = productionStaff.find(s => s.staff_id === a.staff_id);
+                  if (st && (st.staff_type || (st as any).Staff_Type)) {
+                    initialStaffTypeMap[deliverable] = (st.staff_type || (st as any).Staff_Type) as 'In-House' | 'Freelancer';
+                  }
+                }
+              });
+
+              allDeliverables.forEach(deliverable => {
+                const existingForDeliverable = loadedAssignments.filter(a => a.speciality === deliverable);
+                if (existingForDeliverable.length > 0) {
+                  initialRowsMap[deliverable] = existingForDeliverable.map(a => {
+                    const staffMem = productionStaff.find(s => s.staff_id === a.staff_id);
+                    const type = staffMem?.staff_type || (staffMem as any)?.Staff_Type || 'In-House';
+                    return {
+                      id: a.assignment_id || `row-${Math.random()}`,
+                      staffType: type as 'In-House' | 'Freelancer',
+                      staffId: a.staff_id
+                    };
+                  });
+                } else {
+                  initialRowsMap[deliverable] = [{
+                    id: `row-${Math.random()}`,
+                    staffType: 'In-House',
+                    staffId: ''
+                  }];
+                }
+              });
+
+              setDeliverableStaffRows(initialRowsMap);
+              setValidationAttempted(false);
+
+              setSelectedWfStaffByDeliverable(initialStaffMap);
+              setDeliverablesTargetDates(initialDatesMap);
+              setWfStaffTypeByDeliverable(initialStaffTypeMap);
+              setWfProjectNotes(activeWorkflowProd?.project_notes || activeWorkflowProd?.remarks || '');
+
+              if (loadedAssignments.length === 0) {
+                setWfEditor('');
+                setWfPriority('Medium');
+                setWfInternalComments('');
+                setAssignmentRows([{ speciality: '', staffId: '', staffName: '' }]);
+                setSelectedEditors([]);
+              } else {
+                const assignedStaffList = loadedAssignments.map(a => staff.find(s => s.staff_id === a.staff_id)).filter((s): s is Staff => !!s);
+                setSelectedEditors(assignedStaffList);
+                setAssignmentRows(loadedAssignments.map(a => ({
+                  speciality: a.speciality,
+                  staffId: a.staff_id,
+                  staffName: a.staff_name
+                })));
+              }
+            } catch (err) {
+              console.error("Failed to load existing assignments directly from Supabase:", err);
+            }
+          };
+
+          loadExistingAssignments();
         }
       }
 
@@ -6304,7 +6416,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           id="wf-target-delivery-date"
                           value={wfTargetDeliveryDate}
                           onChange={(e) => {
-                            setWfTargetDeliveryDate(e.target.value);
+                            const newDate = e.target.value;
+                            setWfTargetDeliveryDate(newDate);
+                            autoSaveAssignments(deliverableStaffRows, newDate);
                           }}
                           className={`bg-zinc-950 border text-xs text-zinc-300 rounded-xl px-3 py-1.5 font-mono focus:outline-none min-h-[34px] sm:w-48 ${
                             validationAttempted && !wfTargetDeliveryDate
@@ -6348,21 +6462,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                         >
                                           ✔ {deliverable}
                                         </div>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setCustomDeliverables(prev => prev.filter(d => d !== deliverable));
-                                            setDeliverableStaffRows(prev => {
-                                              const copy = { ...prev };
-                                              delete copy[deliverable];
-                                              return copy;
-                                            });
-                                          }}
-                                          className="text-zinc-600 hover:text-rose-400 transition-colors p-1 cursor-pointer text-[10px] shrink-0"
-                                          title="Remove Deliverable"
-                                        >
-                                          ✕
-                                        </button>
                                       </div>
                                     </td>
 
@@ -6388,10 +6487,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                                         staffType: newType,
                                                         staffId: ''
                                                       };
-                                                      return {
+                                                      const newRowsMap = {
                                                         ...prev,
                                                         [deliverable]: updatedRows
                                                       };
+                                                      autoSaveAssignments(newRowsMap, wfTargetDeliveryDate);
+                                                      return newRowsMap;
                                                     });
                                                   }}
                                                   className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-[11px] text-zinc-400 hover:text-zinc-300 rounded-lg px-2 py-1 font-sans focus:outline-none focus:border-purple-500 cursor-pointer h-7"
@@ -6415,10 +6516,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                                         ...updatedRows[rIndex],
                                                         staffId: val
                                                       };
-                                                      return {
+                                                      const newRowsMap = {
                                                         ...prev,
                                                         [deliverable]: updatedRows
                                                       };
+                                                      autoSaveAssignments(newRowsMap, wfTargetDeliveryDate);
+                                                      return newRowsMap;
                                                     });
                                                   }}
                                                   productionStaff={productionStaff}
@@ -6436,10 +6539,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                                     onClick={() => {
                                                       setDeliverableStaffRows(prev => {
                                                         const updatedRows = (prev[deliverable] || []).filter(r => r.id !== row.id);
-                                                        return {
+                                                        const newRowsMap = {
                                                           ...prev,
                                                           [deliverable]: updatedRows
                                                         };
+                                                        autoSaveAssignments(newRowsMap, wfTargetDeliveryDate);
+                                                        return newRowsMap;
                                                       });
                                                     }}
                                                     className="text-zinc-600 hover:text-rose-400 transition-colors p-1 cursor-pointer text-xs"
@@ -6464,13 +6569,17 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                           <button
                                             type="button"
                                             onClick={() => {
-                                              setDeliverableStaffRows(prev => ({
-                                                ...prev,
-                                                [deliverable]: [
-                                                  ...(prev[deliverable] || []),
-                                                  { id: `row-${Math.random()}`, staffType: 'In-House', staffId: '' }
-                                                ]
-                                              }));
+                                              setDeliverableStaffRows(prev => {
+                                                const newRowsMap = {
+                                                  ...prev,
+                                                  [deliverable]: [
+                                                    ...(prev[deliverable] || []),
+                                                    { id: `row-${Math.random()}`, staffType: 'In-House', staffId: '' }
+                                                  ]
+                                                };
+                                                autoSaveAssignments(newRowsMap, wfTargetDeliveryDate);
+                                                return newRowsMap;
+                                              });
                                             }}
                                             className="px-2.5 py-0.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-855 text-purple-400 hover:text-purple-300 text-[10px] font-mono rounded transition-all cursor-pointer flex items-center gap-1 mt-0.5"
                                           >
@@ -6488,45 +6597,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                         {customDeliverables.length === 0 && (
                           <div className="text-center py-6 text-zinc-500 text-xs italic font-mono bg-zinc-900/10 border-t border-zinc-900">
-                            No deliverables found. Use the input below to add them.
+                            No deliverables found for this order.
                           </div>
                         )}
-                      </div>
-
-                      {/* Add Custom Deliverable Input */}
-                      <div className="bg-zinc-900/10 border border-zinc-900/50 rounded-xl p-3 space-y-2">
-                        <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
-                          Add Custom Deliverable
-                        </label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            placeholder="e.g. Traditional Wedding Video (60 mins)"
-                            value={newDeliverableInput}
-                            onChange={(e) => setNewDeliverableInput(e.target.value)}
-                            className="flex-1 bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-xs text-zinc-300 rounded-xl px-3 py-2 focus:outline-none focus:border-purple-500 font-sans"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!newDeliverableInput.trim()) return;
-                              if (customDeliverables.includes(newDeliverableInput.trim())) {
-                                setWfError('This deliverable already exists.');
-                                return;
-                              }
-                              setCustomDeliverables(prev => [...prev, newDeliverableInput.trim()]);
-                              setDeliverableStaffRows(prev => ({
-                                ...prev,
-                                [newDeliverableInput.trim()]: [{ id: `row-${Math.random()}`, staffType: 'In-House', staffId: '' }]
-                              }));
-                              setNewDeliverableInput('');
-                              setWfError('');
-                            }}
-                            className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-855 text-zinc-300 hover:text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
-                          >
-                            + Add
-                          </button>
-                        </div>
                       </div>
 
                       {/* Read-only Production Staff Roster Popup */}
@@ -6601,183 +6674,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           }}
                           className="flex-1 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-855 text-zinc-400 hover:text-white text-xs font-mono font-bold rounded-xl transition-colors cursor-pointer text-center"
                         >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isSaving}
-                          onClick={async () => {
-                            setWfError('');
-                            setWfSuccess('');
-                            setValidationAttempted(true);
-
-                            // Validate Target Delivery Date
-                            if (!wfTargetDeliveryDate) {
-                              setWfError('Please select the Target Delivery Date and assign Production staff to all Deliverables before saving.');
-                              setTimeout(() => {
-                                const el = document.getElementById('wf-target-delivery-date-container');
-                                if (el) {
-                                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                  const input = el.querySelector('input');
-                                  if (input) input.focus();
-                                }
-                              }, 50);
-                              return;
-                            }
-
-                            // Validate: Every Deliverable has at least one assigned Production staff
-                            const emptyDeliverables = customDeliverables.filter(d => {
-                              const rows = deliverableStaffRows[d] || [];
-                              return rows.filter(r => r.staffId).length === 0;
-                            });
-
-                            if (emptyDeliverables.length > 0) {
-                              setWfError('Please select the Target Delivery Date and assign Production staff to all Deliverables before saving.');
-                              setTimeout(() => {
-                                const firstEmptyIndex = customDeliverables.indexOf(emptyDeliverables[0]);
-                                const el = document.getElementById(`deliverable-block-${firstEmptyIndex}`);
-                                if (el) {
-                                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                  const sel = el.querySelector('select');
-                                  if (sel) sel.focus();
-                                }
-                              }, 50);
-                              return;
-                            }
-
-                            try {
-                              setIsSaving(true);
-                              
-                              // 1. Delete all existing assignments for this production
-                              const { error: deleteError } = await supabaseClient
-                                .from('editor_assignments')
-                                .delete()
-                                .eq('production_id', activeWorkflowProd.production_id);
-
-                              if (deleteError) throw deleteError;
-
-                              // 2. Prepare and insert new assignments
-                              const newAssignments = [];
-                              const activeStaffList = productionStaff.filter(s => s.status === 'Active');
-
-                              for (const d of customDeliverables) {
-                                const rows = deliverableStaffRows[d] || [];
-                                
-                                for (const row of rows) {
-                                  if (!row.staffId) continue;
-                                  
-                                  const staffMem = activeStaffList.find(s => s.staff_id === row.staffId);
-                                  if (staffMem) {
-                                    const id = `EDR-${Math.floor(100000 + Math.random() * 900000)}`;
-                                    newAssignments.push({
-                                      assignment_id: id,
-                                      production_id: activeWorkflowProd.production_id,
-                                      staff_id: staffMem.staff_id,
-                                      staff_name: staffMem.name,
-                                      speciality: d, // Deliverable Name
-                                      assigned_date: new Date().toISOString().split('T')[0],
-                                      target_finish_date: wfTargetDeliveryDate, // Target Delivery Date is lead-wide
-                                      status: 'Assigned',
-                                      created_at: new Date().toISOString()
-                                    });
-                                  }
-                                }
-                              }
-
-                              if (newAssignments.length > 0) {
-                                const { error: insertError } = await supabaseClient
-                                  .from('editor_assignments')
-                                  .insert(newAssignments);
-
-                                if (insertError) throw insertError;
-                              }
-
-                              // 3. Update production table with primary assigned editors details and target delivery date
-                              const uniqueStaffNames = Array.from(new Set(newAssignments.map(a => a.staff_name)));
-                              const primaryEditor = uniqueStaffNames[0] || 'Unassigned';
-                              const assignedStaffJoined = uniqueStaffNames.join(', ');
-                              
-                              const assignedRoles = Array.from(new Set(newAssignments.map(a => {
-                                const staffMem = activeStaffList.find(s => s.staff_name === a.staff_name);
-                                return staffMem?.role || 'Editor';
-                              })));
-                              const rolesJoined = assignedRoles.join(', ');
-
-                              await updateProduction(activeWorkflowProd.production_id, {
-                                editor_assigned: primaryEditor,
-                                assigned_staff: assignedStaffJoined,
-                                editing_status: 'Editor Assigned',
-                                production_status: 'Editor Assigned',
-                                production_role: rolesJoined,
-                                assigned_role: rolesJoined,
-                                target_delivery_date: wfTargetDeliveryDate
-                              } as any);
-
-                              // Refresh page data
-                              if (typeof refreshData === 'function') {
-                                refreshData();
-                              }
-
-                              setWfSuccess('✅ Production staff assigned successfully.');
-
-                              // Extract and bundle staff assignments for WhatsApp Popup
-                              const groupedStaffAssignments: any[] = [];
-                              const uniqueAssignedStaffIds = Array.from(new Set(newAssignments.map(a => a.staff_id)));
-                              
-                              uniqueAssignedStaffIds.forEach(sId => {
-                                const staffMem = activeStaffList.find(s => s.staff_id === sId);
-                                if (staffMem) {
-                                  const staffDeliverables = newAssignments
-                                    .filter(a => a.staff_id === sId)
-                                    .map(a => ({
-                                      name: a.speciality,
-                                      deadline: a.target_finish_date
-                                    }));
-
-                                  groupedStaffAssignments.push({
-                                    staff: staffMem,
-                                    deliverables: staffDeliverables
-                                  });
-                                }
-                              });
-
-                              // Setup raw details for WhatsApp share
-                              const { order: orderObj, lead: leadObj } = resolveOrderAndLead(activeWorkflowProd);
-                              const opObj = operations?.find(o => o.order_id === orderObj?.order_id || o.order_id === activeWorkflowProd.tracking_id);
-
-                              setWhatsappShareData({
-                                production_id: activeWorkflowProd.production_id,
-                                customer_name: orderObj?.customer_name || leadObj?.customer_name || 'Customer',
-                                mobile: orderObj?.customer_mobile || orderObj?.mobile || leadObj?.customer_mobile || leadObj?.mobile || '—',
-                                event_name: orderObj?.custom_event_name || leadObj?.custom_event_name || 'Event',
-                                event_type: orderObj?.event_type || leadObj?.event_type || 'Shoot',
-                                notes: wfProjectNotes,
-                                global_deadline: wfTargetDeliveryDate,
-                                staffAssignments: groupedStaffAssignments,
-                                reporting_date: orderObj?.Reporting_date || leadObj?.Reporting_date || '—',
-                                reporting_time: orderObj?.reporting_time || leadObj?.reporting_time || opObj?.reporting_time || '—',
-                                assigned_equipment: opObj?.equipment_kit || '—',
-                                coordinator_name: currentUserName || 'Operations Coordinator',
-                                coordinator_contact: currentUser?.mobile || currentUser?.phone || '—'
-                              });
-
-                              // Close Assign Modal and Open WhatsApp Share Modal instantly
-                              setTimeout(() => {
-                                setActiveWorkflowProd(null);
-                                setWorkflowActionType(null);
-                                setWhatsappShareModalOpen(true);
-                              }, 1500);
-
-                            } catch (err: any) {
-                              console.error("Failed to assign production staff:", err);
-                              setWfError("Failed to save deliverable assignments. " + (err.message || "Please try again."));
-                            } finally {
-                              setIsSaving(false);
-                            }
-                          }}
-                          className="flex-1 px-5 py-2.5 bg-purple-600 hover:bg-purple-500 border border-purple-500 text-white text-xs font-mono font-bold rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
-                        >
-                          {isSaving ? 'Assigning Crew...' : 'Assign Staff'}
+                          Close
                         </button>
                       </div>
                     </div>
