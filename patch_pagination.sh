@@ -1,3 +1,4 @@
+cat << 'INNEREOF' > replacement.txt
 import React, { useState, useMemo } from 'react';
 import { useRole } from '../../RoleContext';
 import { CameraLensStatsCard } from '../../CameraLensStatsCard';
@@ -426,3 +427,5 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
     </div>
   );
 };
+INNEREOF
+cp replacement.txt src/components/analytics/owner/OwnerStaffPerformanceDetailed.tsx

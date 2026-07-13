@@ -1,23 +1,17 @@
+cat << 'INNEREOF' > replacement.txt
 import React, { useState, useMemo } from 'react';
 import { useRole } from '../../RoleContext';
 import { CameraLensStatsCard } from '../../CameraLensStatsCard';
-import { Users, Award, Briefcase, Activity, Filter, CheckCircle2, AlertCircle, Search, ChevronLeft, ChevronRight, ArrowUpDown } from 'lucide-react';
+import { Users, Award, Briefcase, Activity, Filter, CheckCircle2, AlertCircle, Search } from 'lucide-react';
 import { Staff } from '../../../types';
 
 export const OwnerStaffPerformanceDetailed: React.FC = () => {
-  const { staff, productionStaff, users, leads, assignments, editorAssignments, isDataLoading } = useRole();
-  const [error, setError] = useState<string | null>(null);
+  const { staff, productionStaff, users, leads, assignments, editorAssignments } = useRole();
   const [deptFilter, setDeptFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // Pagination & Sorting state
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
-  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'score', direction: 'desc' });
 
   // 1. Process staff performance metrics
   const staffMetrics = useMemo(() => {
-    try {
     // Sales Staff
     const salesStaffMetrics = (users || []).filter(u => u.role === 'Sales Team').map(user => {
        const nameLower = user.name.toLowerCase();
@@ -97,54 +91,17 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
         };
     });
 
-      return [...salesStaffMetrics, ...opsStaffMetrics, ...prodStaffMetrics];
-    } catch (err: any) {
-      console.error("Error calculating staff metrics:", err);
-      setTimeout(() => setError(err.message), 0);
-      return [];
-    }
+    return [...salesStaffMetrics, ...opsStaffMetrics, ...prodStaffMetrics];
   }, [users, staff, productionStaff, leads, assignments, editorAssignments]);
 
-  // 2. Filtered & Sorted list
-  const filteredAndSortedStaff = useMemo(() => {
-    let result = staffMetrics.filter(s => {
+  // 2. Filtered list
+  const filteredStaff = useMemo(() => {
+    return staffMetrics.filter(s => {
       const matchDept = deptFilter === 'All' || s.department === deptFilter;
       const matchSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase());
       return matchDept && matchSearch;
     });
-
-    result.sort((a: any, b: any) => {
-      let aVal = a[sortConfig.key];
-      let bVal = b[sortConfig.key];
-      
-      // Basic string/number sorting
-      if (typeof aVal === 'string' && typeof bVal === 'string') {
-        aVal = aVal.toLowerCase();
-        bVal = bVal.toLowerCase();
-      }
-
-      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return result;
-  }, [staffMetrics, deptFilter, searchQuery, sortConfig]);
-
-  // Pagination logic
-  const totalPages = Math.ceil(filteredAndSortedStaff.length / itemsPerPage);
-  const paginatedStaff = filteredAndSortedStaff.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
-
-  const handleSort = (key: string) => {
-    let direction: 'asc' | 'desc' = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    }
-    setSortConfig({ key, direction });
-  };
+  }, [staffMetrics, deptFilter, searchQuery]);
 
   // 3. Summaries
   const totalStaff = staffMetrics.length;
@@ -156,35 +113,6 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
   const totalCompleted = staffMetrics.reduce((sum, s) => sum + s.completed, 0);
   const totalPending = staffMetrics.reduce((sum, s) => sum + s.pending, 0);
   const totalOverdue = staffMetrics.reduce((sum, s) => sum + s.overdue, 0);
-
-  if (isDataLoading) {
-    return (
-      <div className="flex items-center justify-center p-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500"></div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="p-6 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400">
-        <AlertCircle className="w-6 h-6 mb-2" />
-        <p>{error}</p>
-      </div>
-    );
-  }
-
-  const SortHeader: React.FC<{ label: string, sortKey: string, align?: 'left' | 'center' | 'right' }> = ({ label, sortKey, align = 'left' }) => (
-    <th 
-      className={`p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono cursor-pointer hover:text-amber-400 transition-colors text-${align}`}
-      onClick={() => handleSort(sortKey)}
-    >
-      <div className={`flex items-center gap-1 ${align === 'center' ? 'justify-center' : align === 'right' ? 'justify-end' : 'justify-start'}`}>
-        {label}
-        <ArrowUpDown className="w-3 h-3 opacity-50" />
-      </div>
-    </th>
-  );
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -260,19 +188,13 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
                 type="text"
                 placeholder="Search staff..."
                 value={searchQuery}
-                onChange={e => {
-                  setSearchQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
+                onChange={e => setSearchQuery(e.target.value)}
                 className="bg-zinc-900/50 border border-zinc-800 focus:border-amber-500/50 text-white text-xs rounded-xl pl-9 pr-4 py-2 outline-none w-48 font-mono transition-all"
               />
             </div>
             <select
               value={deptFilter}
-              onChange={(e) => {
-                setDeptFilter(e.target.value);
-                setCurrentPage(1);
-              }}
+              onChange={(e) => setDeptFilter(e.target.value)}
               className="bg-zinc-900/50 border border-zinc-800 text-zinc-300 text-xs rounded-xl px-3 py-2 outline-none focus:border-amber-500/50 font-mono transition-all cursor-pointer"
             >
               <option value="All">All Departments</option>
@@ -287,21 +209,21 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
           <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead>
               <tr className="bg-zinc-900/30 border-b border-zinc-850">
-                <SortHeader label="Staff Name" sortKey="name" />
-                <SortHeader label="Department" sortKey="department" />
-                <SortHeader label="Staff Type" sortKey="Staff_Type" />
-                <SortHeader label="Mobile Number" sortKey="mobile" />
-                <SortHeader label="Total Assigned" sortKey="totalAssigned" align="center" />
-                <SortHeader label="Completed" sortKey="completed" align="center" />
-                <SortHeader label="Pending" sortKey="pending" align="center" />
-                <SortHeader label="Overdue" sortKey="overdue" align="center" />
-                <SortHeader label="Current Status" sortKey="status" />
-                <SortHeader label="Performance %" sortKey="score" />
-                <SortHeader label="Last Assigned" sortKey="lastAssignedDate" />
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">Staff Name</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">Department</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">Staff Type</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">Mobile Number</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono text-center">Total Assigned Tasks</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono text-center">Completed Tasks</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono text-center">Pending Tasks</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono text-center">Overdue Tasks</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">Current Status</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">Performance %</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">Last Assigned Date</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-850/50">
-              {paginatedStaff.map((member) => (
+              {filteredStaff.map((member) => (
                 <tr key={member.staff_id} className="hover:bg-zinc-900/20 transition-colors group">
                   <td className="p-4">
                     <div className="flex items-center gap-3">
@@ -364,15 +286,11 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
                     </div>
                   </td>
                   <td className="p-4">
-                    <span className="text-zinc-500 font-mono text-[10px]">
-                       {member.lastAssignedDate && member.lastAssignedDate !== 'N/A' 
-                          ? new Date(member.lastAssignedDate).toLocaleDateString('en-GB')
-                          : 'N/A'}
-                    </span>
+                    <span className="text-zinc-500 font-mono text-[10px]">{member.lastAssignedDate}</span>
                   </td>
                 </tr>
               ))}
-              {paginatedStaff.length === 0 && (
+              {filteredStaff.length === 0 && (
                 <tr>
                   <td colSpan={11} className="p-8 text-center text-zinc-500 font-mono text-xs">
                     No staff members found matching criteria.
@@ -382,47 +300,9 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
             </tbody>
           </table>
         </div>
-
-        {/* Pagination Controls */}
-        {totalPages > 1 && (
-          <div className="p-4 border-t border-zinc-900/60 flex items-center justify-between">
-            <div className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">
-              Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredAndSortedStaff.length)} of {filteredAndSortedStaff.length} entries
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-                className="p-1.5 rounded-lg border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              
-              {Array.from({ length: totalPages }).map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setCurrentPage(i + 1)}
-                  className={`w-7 h-7 rounded-lg text-xs font-mono transition-colors ${
-                    currentPage === i + 1
-                      ? 'bg-amber-500/10 border border-amber-500/20 text-amber-500'
-                      : 'border border-transparent text-zinc-500 hover:text-white hover:bg-zinc-800'
-                  }`}
-                >
-                  {i + 1}
-                </button>
-              ))}
-
-              <button
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="p-1.5 rounded-lg border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
 };
+INNEREOF
+cp replacement.txt src/components/analytics/owner/OwnerStaffPerformanceDetailed.tsx
