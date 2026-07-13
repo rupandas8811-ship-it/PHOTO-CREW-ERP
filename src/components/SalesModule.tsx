@@ -344,16 +344,13 @@ const generateQuotationPDF = (
         members: (eventInclusions || []).filter(Boolean)
       });
 
-      orderedEventDeliverables.push({
-        eventName,
-        pkgName,
-        items: deliverablesList
-      });
-    });
+          });
   } else {
     generalInclusions = inclusionsList;
-    generalDeliverables.push({ pkgName, items: deliverablesList });
   }
+  
+  // Deliverables are always per-package, not per-event
+  generalDeliverables.push({ pkgName, items: deliverablesList });
 
   const hasEventsInclusions = orderedEventInclusions.length > 0;
   const hasEventsDeliverables = orderedEventDeliverables.length > 0;
