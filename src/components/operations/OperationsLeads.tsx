@@ -487,10 +487,35 @@ export const OperationsLeads: React.FC = () => {
     const clientContact = ord.mobile || (lead ? lead.mobile : 'N/A');
     const clientWhatsapp = lead?.whatsapp_number || 'N/A';
 
-    let text = `Hello ${staffName},\n\nYou have been assigned to the following event.\n\n`;
-    text += `Customer Name:\n${clientName}\n\n`;
-    text += `Customer Mobile:\n${clientContact}\n\n`;
-    text += `Customer WhatsApp:\n${clientWhatsapp}\n\n`;
+    let text = `Staff Name: ${staffName}\n`;
+    text += `Customer: ${clientName}\n`;
+    text += `Mobile: ${clientContact}\n`;
+    text += `WhatsApp: ${clientWhatsapp}\n`;
+    text += `Order ID: ${ord.order_id}\n\n`;
+
+    const allDeliverables = lead?.deliverables_description
+        ? lead.deliverables_description.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
+        : [];
+
+    const getMatchedDeliverables = (role: string) => {
+      const r = role.toLowerCase();
+      return allDeliverables.filter(d => {
+        const text = d.toLowerCase();
+        if (r.includes('photo') || r.includes('candid') || r.includes('traditional')) {
+           return text.includes('photo') || text.includes('portrait') || text.includes('candid') || text.includes('traditional') || text.includes('album') || text.includes('print') || text.includes('frame');
+        }
+        if (r.includes('video') || r.includes('cinema') || r.includes('teaser') || r.includes('film')) {
+           return text.includes('video') || text.includes('cinema') || text.includes('teaser') || text.includes('reel') || text.includes('short') || text.includes('film') || text.includes('trailer') || text.includes('promo');
+        }
+        if (r.includes('drone') || r.includes('aerial')) {
+           return text.includes('drone') || text.includes('aerial');
+        }
+        return false;
+      });
+    };
+
+    const staffDetails = staff?.find(s => s.name === staffName);
+    const actualStaffRole = staffDetails?.role || 'Staff';
 
     let assignedEvents: any[] = [];
     if (modalEventAllocations && lead?.events) {
@@ -510,60 +535,72 @@ export const OperationsLeads: React.FC = () => {
          return names.includes(staffName.toLowerCase());
        }).map((ev: any) => {
          let fallbackRoles = ['Crew'];
-         const history = leadStaffAssignmentHistory?.filter((h: any) => h.order_id === ord.order_id);
-         if (history && history.length > 0) {
-            const myRoles = history.find((h: any) => h.assigned_staff === staffName);
-            if (myRoles && myRoles.assigned_roles) {
-               fallbackRoles = myRoles.assigned_roles.split(',').map((r: string) => r.trim());
-            }
+         const myAssignments = staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id && sa.staff_name === staffName) : [];
+         if (myAssignments.length > 0) {
+            fallbackRoles = Array.from(new Set(myAssignments.map(sa => sa.staff_role)));
+         } else {
+             const history = leadStaffAssignmentHistory?.filter((h: any) => h.order_id === ord.order_id && h.assigned_staff === staffName);
+             if (history && history.length > 0) {
+                 fallbackRoles = Array.from(new Set(history.map((h: any) => h.assigned_role || h.assigned_roles)));
+             }
          }
          return { ...ev, roles: fallbackRoles }; 
        });
     }
 
     if (assignedEvents.length === 0) {
-       const shootType = ord.shoot_type || (lead ? lead.shoot_type : 'N/A');
        const eventName = ord.event_type || 'N/A';
        const eventDate = ord.event_date || 'N/A';
-       const reportingTime = lead?.reporting_time || 'N/A';
        const eventTime = ord.event_time || 'N/A';
+       const reportingDate = lead?.Reporting_date || eventDate || 'N/A';
+       const reportingTime = lead?.reporting_time || 'N/A';
        const location = lead?.event_location || ord.event_location || 'N/A';
        const mapsLink = (lead as any)?.google_maps_link || 'N/A';
-       const guestPax = (lead as any)?.guest_pax || 'N/A';
-       const staffPax = (lead as any)?.staff_pax || 'N/A';
        
        let assignedRoles = ['Crew'];
        if (finalAssignments) {
           assignedRoles = Array.from(new Set(finalAssignments.filter(a => a.staff_name === staffName).map(a => a.staff_role)));
        } else {
-          const history = leadStaffAssignmentHistory?.filter((h: any) => h.order_id === ord.order_id);
-          if (history && history.length > 0) {
-             const myRoles = history.find((h: any) => h.assigned_staff === staffName);
-             if (myRoles && myRoles.assigned_roles) {
-                assignedRoles = myRoles.assigned_roles.split(',').map((r: string) => r.trim());
+          const myAssignments = staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id && sa.staff_name === staffName) : [];
+          if (myAssignments.length > 0) {
+             assignedRoles = Array.from(new Set(myAssignments.map(sa => sa.staff_role)));
+          } else {
+             const history = leadStaffAssignmentHistory?.filter((h: any) => h.order_id === ord.order_id && h.assigned_staff === staffName);
+             if (history && history.length > 0) {
+                 assignedRoles = Array.from(new Set(history.map((h: any) => h.assigned_role || h.assigned_roles)));
              }
           }
        }
 
-       text += `Event:\n${eventName}\n\n`;
-       text += `Event Date:\n${eventDate}\n\n`;
-       text += `Reporting Date:\n${lead?.Reporting_date || eventDate || 'N/A'}\n\n`;
-       text += `Reporting Time:\n${reportingTime}\n\n`;
-       text += `Event Start Time:\n${eventTime}\n\n`;
-       text += `Venue:\n${location}\n\n`;
-       text += `Location:\n${mapsLink}\n\n`;
-       text += `Shoot Type:\n${shootType}\n\n`;
-       text += `Guest Pax:\n${guestPax}\n\n`;
-       text += `Staff Pax:\n${staffPax}\n\n`;
-       text += `Assigned Responsibilities:\n\n`;
+       text += `--------------------------------\n`;
+       text += `Event: ${eventName}\n`;
+       text += `Date: ${eventDate}\n`;
+       text += `Time: ${eventTime}\n`;
+       text += `Reporting Date: ${reportingDate}\n`;
+       text += `Reporting Time: ${reportingTime}\n`;
+       text += `Google Maps Location: ${mapsLink}\n`;
+       text += `Reporting Location: ${location}\n\n`;
+
        assignedRoles.forEach(r => {
-         text += `• ${r}\n`;
+           text += `Team Member: ${r}\n`;
+           text += `Assigned Role: ${actualStaffRole}\n`;
+           text += `Assigned Deliverables:\n\n`;
+           const matchedDels = getMatchedDeliverables(r);
+           if (matchedDels.length > 0) {
+               matchedDels.forEach(md => {
+                   text += `• ${md}\n`;
+               });
+           } else {
+               text += `• Standard coverage\n`;
+           }
+           text += `\n`;
        });
-       text += `\nPlease report on time.\n\nThank you.`;
+       text += `--------------------------------\n\n`;
+       text += `Please report on time.\n\nThank you.`;
        return text;
     }
 
-    assignedEvents.forEach((ev, idx) => {
+    assignedEvents.forEach((ev) => {
        const eventName = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');
        const eventDate = ev.event_date || 'N/A';
        const reportingDate = ev.reporting_date || (ev.alloc?.reporting_date) || ev.event_date || 'N/A';
@@ -571,30 +608,36 @@ export const OperationsLeads: React.FC = () => {
        const eventStartTime = ev.event_start_time || 'N/A';
        const location = ev.event_location || lead?.event_location || 'N/A';
        const mapsLink = ev.google_maps_link || 'N/A';
-       const shootType = ev.event_shoot_type || 'N/A';
-       const guestPax = ev.guest_pax || 'N/A';
-       const staffPax = ev.staff_pax || 'N/A';
        
        let assignedRoles = ev.roles || ['Crew'];
        assignedRoles = Array.from(new Set(assignedRoles));
 
-       text += `Event${assignedEvents.length > 1 ? ` ${idx + 1}` : ''}:\n${eventName}\n\n`;
-       text += `Event Date:\n${eventDate}\n\n`;
-       text += `Reporting Date:\n${reportingDate}\n\n`;
-       text += `Reporting Time:\n${reportingTime}\n\n`;
-       text += `Event Start Time:\n${eventStartTime}\n\n`;
-       text += `Venue:\n${location}\n\n`;
-       text += `Location:\n${mapsLink}\n\n`;
-       text += `Shoot Type:\n${shootType}\n\n`;
-       text += `Guest Pax:\n${guestPax}\n\n`;
-       text += `Staff Pax:\n${staffPax}\n\n`;
-       text += `Assigned Responsibilities:\n\n`;
-       assignedRoles.forEach((r) => {
-         text += `• ${r}\n`;
+       text += `--------------------------------\n`;
+       text += `Event: ${eventName}\n`;
+       text += `Date: ${eventDate}\n`;
+       text += `Time: ${eventStartTime}\n`;
+       text += `Reporting Date: ${reportingDate}\n`;
+       text += `Reporting Time: ${reportingTime}\n`;
+       text += `Google Maps Location: ${mapsLink}\n`;
+       text += `Reporting Location: ${location}\n\n`;
+
+       assignedRoles.forEach((r: string) => {
+           text += `Team Member: ${r}\n`;
+           text += `Assigned Role: ${actualStaffRole}\n`;
+           text += `Assigned Deliverables:\n\n`;
+           const matchedDels = getMatchedDeliverables(r);
+           if (matchedDels.length > 0) {
+               matchedDels.forEach((md: string) => {
+                   text += `• ${md}\n`;
+               });
+           } else {
+               text += `• Standard coverage\n`;
+           }
+           text += `\n`;
        });
-       text += `\n`;
     });
-    
+
+    text += `--------------------------------\n\n`;
     text += `Please report on time.\n\nThank you.`;
     return text;
   };
