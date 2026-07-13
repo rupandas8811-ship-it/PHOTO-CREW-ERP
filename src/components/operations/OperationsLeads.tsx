@@ -487,35 +487,13 @@ export const OperationsLeads: React.FC = () => {
     const clientContact = ord.mobile || (lead ? lead.mobile : 'N/A');
     const clientWhatsapp = lead?.whatsapp_number || 'N/A';
 
-    let text = `Staff Name: ${staffName}\n`;
-    text += `Customer: ${clientName}\n`;
-    text += `Mobile: ${clientContact}\n`;
-    text += `WhatsApp: ${clientWhatsapp}\n`;
-    text += `Order ID: ${ord.order_id}\n\n`;
-
-    const allDeliverables = lead?.deliverables_description
-        ? lead.deliverables_description.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
-        : [];
-
-    const getMatchedDeliverables = (role: string) => {
-      const r = role.toLowerCase();
-      return allDeliverables.filter(d => {
-        const text = d.toLowerCase();
-        if (r.includes('photo') || r.includes('candid') || r.includes('traditional')) {
-           return text.includes('photo') || text.includes('portrait') || text.includes('candid') || text.includes('traditional') || text.includes('album') || text.includes('print') || text.includes('frame');
-        }
-        if (r.includes('video') || r.includes('cinema') || r.includes('teaser') || r.includes('film')) {
-           return text.includes('video') || text.includes('cinema') || text.includes('teaser') || text.includes('reel') || text.includes('short') || text.includes('film') || text.includes('trailer') || text.includes('promo');
-        }
-        if (r.includes('drone') || r.includes('aerial')) {
-           return text.includes('drone') || text.includes('aerial');
-        }
-        return false;
-      });
-    };
+    let text = `Staff Name:\n${staffName}\n\n`;
+    text += `Customer:\n${clientName}\n\n`;
+    text += `Mobile:\n${clientContact}\n\n`;
+    text += `WhatsApp:\n${clientWhatsapp}\n\n`;
+    text += `Order ID:\n${ord.order_id}\n\n`;
 
     const staffDetails = staff?.find(s => s.name === staffName);
-    const actualStaffRole = staffDetails?.role || 'Staff';
 
     let assignedEvents: any[] = [];
     if (modalEventAllocations && lead?.events) {
@@ -572,31 +550,21 @@ export const OperationsLeads: React.FC = () => {
           }
        }
 
-       text += `--------------------------------\n`;
-       text += `Event: ${eventName}\n`;
-       text += `Date: ${eventDate}\n`;
-       text += `Time: ${eventTime}\n`;
-       text += `Reporting Date: ${reportingDate}\n`;
-       text += `Reporting Time: ${reportingTime}\n`;
-       text += `Google Maps Location: ${mapsLink}\n`;
-       text += `Reporting Location: ${location}\n\n`;
+       text += `--------------------------------------------------\n\n`;
+       text += `Event:\n${eventName}\n\n`;
+       text += `Date:\n${eventDate}\n\n`;
+       text += `Time:\n${eventTime}\n\n`;
+       text += `Reporting Date:\n${reportingDate}\n\n`;
+       text += `Reporting Time:\n${reportingTime}\n\n`;
+       text += `Google Maps Location:\n${mapsLink}\n\n`;
+       text += `Reporting Location:\n${location}\n\n`;
+       text += `Assigned Team Members:\n\n`;
 
        assignedRoles.forEach(r => {
-           text += `Team Member: ${r}\n`;
-           text += `Assigned Role: ${actualStaffRole}\n`;
-           text += `Assigned Deliverables:\n\n`;
-           const matchedDels = getMatchedDeliverables(r);
-           if (matchedDels.length > 0) {
-               matchedDels.forEach(md => {
-                   text += `• ${md}\n`;
-               });
-           } else {
-               text += `• Standard coverage\n`;
-           }
-           text += `\n`;
+           text += `• ${r}\n`;
+           text += `  Name: ${staffName}\n`;
+           text += `  Mobile: ${staffDetails?.mobile || 'N/A'}\n\n`;
        });
-       text += `--------------------------------\n\n`;
-       text += `Please report on time.\n\nThank you.`;
        return text;
     }
 
@@ -612,33 +580,23 @@ export const OperationsLeads: React.FC = () => {
        let assignedRoles = ev.roles || ['Crew'];
        assignedRoles = Array.from(new Set(assignedRoles));
 
-       text += `--------------------------------\n`;
-       text += `Event: ${eventName}\n`;
-       text += `Date: ${eventDate}\n`;
-       text += `Time: ${eventStartTime}\n`;
-       text += `Reporting Date: ${reportingDate}\n`;
-       text += `Reporting Time: ${reportingTime}\n`;
-       text += `Google Maps Location: ${mapsLink}\n`;
-       text += `Reporting Location: ${location}\n\n`;
+       text += `--------------------------------------------------\n\n`;
+       text += `Event:\n${eventName}\n\n`;
+       text += `Date:\n${eventDate}\n\n`;
+       text += `Time:\n${eventStartTime}\n\n`;
+       text += `Reporting Date:\n${reportingDate}\n\n`;
+       text += `Reporting Time:\n${reportingTime}\n\n`;
+       text += `Google Maps Location:\n${mapsLink}\n\n`;
+       text += `Reporting Location:\n${location}\n\n`;
+       text += `Assigned Team Members:\n\n`;
 
        assignedRoles.forEach((r: string) => {
-           text += `Team Member: ${r}\n`;
-           text += `Assigned Role: ${actualStaffRole}\n`;
-           text += `Assigned Deliverables:\n\n`;
-           const matchedDels = getMatchedDeliverables(r);
-           if (matchedDels.length > 0) {
-               matchedDels.forEach((md: string) => {
-                   text += `• ${md}\n`;
-               });
-           } else {
-               text += `• Standard coverage\n`;
-           }
-           text += `\n`;
+           text += `• ${r}\n`;
+           text += `  Name: ${staffName}\n`;
+           text += `  Mobile: ${staffDetails?.mobile || 'N/A'}\n\n`;
        });
     });
 
-    text += `--------------------------------\n\n`;
-    text += `Please report on time.\n\nThank you.`;
     return text;
   };
 
