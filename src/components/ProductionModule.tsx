@@ -846,7 +846,7 @@ ${coordinatorName}`;
   };
 
   const filteredStaff = useMemo(() => {
-    return (staff || []).filter(s => {
+    return (productionStaff || []).filter(s => {
       const matchesName = s.name.toLowerCase().includes(searchStaffName.toLowerCase());
       const whatsappToMatch = s.whatsapp_number || s.mobile || '';
       const matchesWhatsapp = whatsappToMatch.toLowerCase().includes(searchStaffWhatsapp.toLowerCase());
@@ -854,7 +854,7 @@ ${coordinatorName}`;
       const matchesStatus = perfStatusFilter === 'All' || s.status === perfStatusFilter;
       return matchesName && matchesWhatsapp && matchesRole && matchesStatus;
     });
-  }, [staff, searchStaffName, searchStaffWhatsapp, perfRoleFilter, perfStatusFilter]);
+  }, [productionStaff, searchStaffName, searchStaffWhatsapp, perfRoleFilter, perfStatusFilter]);
 
   // Reports Exporters
   const handleDownloadCSV = () => {
@@ -1651,17 +1651,11 @@ ${coordinatorName}`;
       const eventType = selectedEvent?.event_type || selectedEvent?.event_shoot_type || orderData?.event_type || 'Shoot Type';
       const eventDate = selectedEvent?.event_date || orderData?.event_date || '—';
 
-      // Staff names list
-      const uniqueStaff = Array.from(new Set(assignmentsData?.map(a => a.staff_name) || []));
-      const assignedStaffStr = uniqueStaff.join(', ') || primaryEditor || 'None';
-
-      // Assigned deliverables assigned to primary editor, with fallback to all
-      const editorDeliverables = (assignmentsData || [])
-        .filter(a => a.staff_name === primaryEditor)
-        .map(a => a.speciality);
-      const displayDeliverables = editorDeliverables.length > 0 
-        ? editorDeliverables 
-        : (assignmentsData?.map(a => a.speciality) || []);
+      // Assigned deliverables assigned to primary editor (strictly filtered, case-insensitive, no fallback)
+      const displayDeliverables = (assignmentsData || [])
+        .filter(a => a.staff_name && a.staff_name.trim().toLowerCase() === primaryEditor.trim().toLowerCase())
+        .map(a => a.speciality)
+        .filter(Boolean);
       const deliverableListText = displayDeliverables.length > 0
         ? displayDeliverables.map(d => `• ${d}`).join('\n')
         : 'None Assigned';
@@ -1682,7 +1676,6 @@ ${coordinatorName}`;
 *Event Date:* ${eventDate}
 
 *Assigned Editor Name:* ${primaryEditor}
-*Assigned Staff Name(s):* ${assignedStaffStr}
 
 *Assigned Deliverables:*
 ${deliverableListText}
@@ -2696,17 +2689,27 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 >
                                   <span>👤</span> Assign Editor
                                 </button>
-                                {prod.editor_assigned && prod.editor_assigned !== 'Unassigned' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      prepareEditorWhatsappData(prod.production_id);
-                                    }}
-                                    className="px-3 py-1.5 bg-emerald-600 border border-emerald-500 text-white hover:bg-emerald-500 hover:border-emerald-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer inline-flex items-center gap-1"
-                                  >
-                                    <span>💬</span> Share with Editor
-                                  </button>
-                                )}
+                                {(() => {
+                                  const isEditorAssigned = prod.editor_assigned && prod.editor_assigned !== 'Unassigned' && prod.editor_assigned.trim() !== '';
+                                  const hasSavedAssignments = editorAssignments.some(a => a.production_id === prod.production_id);
+                                  const isStatusActive = prodStatus && !['delivered', 'project delivered', 'completed', 'project closed', 'cancelled', 'canceled', 'closed'].includes(prodStatus.toLowerCase()) && 
+                                                         prod.editing_status && !['delivered', 'project delivered', 'completed', 'project closed', 'cancelled', 'canceled', 'closed'].includes(prod.editing_status.toLowerCase());
+                                  
+                                  if (isEditorAssigned && hasSavedAssignments && isStatusActive) {
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          prepareEditorWhatsappData(prod.production_id);
+                                        }}
+                                        className="px-2 py-1 bg-emerald-600 border border-emerald-500 text-white hover:bg-emerald-500 hover:border-emerald-400 transition-all text-[9px] font-bold uppercase tracking-wider rounded-lg shadow-sm cursor-pointer inline-flex items-center gap-1 mt-1"
+                                      >
+                                        <span>💬</span> Share
+                                      </button>
+                                    );
+                                  }
+                                  return null;
+                                })()}
                               </div>
                             </td>
                           </tr>
@@ -3162,17 +3165,27 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 </span>
                               )}
 
-                              {prod.editor_assigned && prod.editor_assigned !== 'Unassigned' && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    prepareEditorWhatsappData(prod.production_id);
-                                  }}
-                                  className="w-full max-w-[160px] px-3 py-1.5 bg-emerald-600 border border-emerald-500 text-white hover:bg-emerald-500 hover:border-emerald-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1"
-                                >
-                                  <span>💬</span> Share with Editor
-                                </button>
-                              )}
+                              {(() => {
+                                const isEditorAssigned = prod.editor_assigned && prod.editor_assigned !== 'Unassigned' && prod.editor_assigned.trim() !== '';
+                                const hasSavedAssignments = editorAssignments.some(a => a.production_id === prod.production_id);
+                                const isStatusActive = displayStatus && !['delivered', 'project delivered', 'completed', 'project closed', 'cancelled', 'canceled', 'closed'].includes(displayStatus.toLowerCase()) && 
+                                                       prod.editing_status && !['delivered', 'project delivered', 'completed', 'project closed', 'cancelled', 'canceled', 'closed'].includes(prod.editing_status.toLowerCase());
+                                
+                                if (isEditorAssigned && hasSavedAssignments && isStatusActive) {
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        prepareEditorWhatsappData(prod.production_id);
+                                      }}
+                                      className="w-full max-w-[160px] px-2 py-1 bg-emerald-600 border border-emerald-500 text-white hover:bg-emerald-500 hover:border-emerald-400 transition-all text-[9px] font-bold uppercase tracking-wider rounded-lg shadow-sm cursor-pointer flex items-center justify-center gap-1"
+                                    >
+                                      <span>💬</span> Share
+                                    </button>
+                                  );
+                                }
+                                return null;
+                              })()}
 
                               {/* Detail Dossier link */}
                               <button
@@ -3237,7 +3250,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
       {/* 2. STAFF PERFORMANCE */}
       {activeSubTab === 'staff_performance' && (() => {
-        if (!staff) {
+        if (!productionStaff) {
           return (
             <div className="bg-zinc-950 border border-zinc-900 p-12 rounded-3xl text-center space-y-4 max-w-xl mx-auto mt-6">
               <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mx-auto">
@@ -3251,8 +3264,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           );
         }
 
-        const totalEditors = staff.length;
-        const activeEditors = (staff || []).filter(s => s.status === 'Active' || s.status === 'On Duty' || s.status === 'active' || s.status === 'Active Status').length;
+        const totalEditors = productionStaff.length;
+        const activeEditors = (productionStaff || []).filter(s => s.status === 'Active' || s.status === 'On Duty' || s.status === 'active' || s.status === 'Active Status').length;
         const assignedProjects = production.filter(p => p.editor_assigned).length;
         
         // Projects In Progress
@@ -3787,7 +3800,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         const averageDeliveryTimeDays = countable > 0 ? (sumDays / countable).toFixed(1) : "3.6";
 
         // Team Utilization
-        const activeStaffCount = (staff || []).filter(s => s.status === 'Active').length;
+        const activeStaffCount = (productionStaff || []).filter(s => s.status === 'Active').length;
         const assignedStaffNames = Array.from(new Set(
           production
             .filter(p => p.editing_status !== 'Delivered' && p.production_status !== 'Closed')
@@ -3799,7 +3812,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               }
               return res;
             })
-        )).filter(name => staff.some(s => s.name === name));
+        )).filter(name => (productionStaff || []).some(s => s.name === name));
         
         const utilizationRate = activeStaffCount > 0 
           ? Math.round((assignedStaffNames.length / activeStaffCount) * 100) 
@@ -3818,7 +3831,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         ];
 
         // Chart Data 2: Staff Performance Ranking
-        const staffRankingData = staff.map(member => {
+        const staffRankingData = (productionStaff || []).map(member => {
           const finished = production.filter(p => 
             (p.editor_assigned === member.name || (p.assigned_staff && p.assigned_staff.includes(member.name))) && 
             (p.editing_status === 'Delivered' || p.production_status === 'Closed')
@@ -3836,7 +3849,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         ];
 
         // Chart Data 4: Workload Distribution (Projects assigned per role)
-        const roleWorkloads = staff.reduce((acc, curr) => {
+        const roleWorkloads = (productionStaff || []).reduce((acc, curr) => {
           const roleHead = curr.role.split(' ')[0] || 'Editor';
           const cnt = production.filter(p => 
             p.editor_assigned === curr.name || (p.assigned_staff && p.assigned_staff.includes(curr.name))
@@ -4392,7 +4405,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               </h3>
               
               <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
-                {staff.map(member => {
+                {(productionStaff || []).map(member => {
                   const wl = getStaffWorkload(member.name);
                   return (
                     <div key={member.staff_id} className="bg-zinc-900/40 p-4 rounded-xl border border-zinc-900 hover:border-zinc-800 transition-colors">
@@ -5563,7 +5576,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             </h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-              {staff.map(member => {
+              {(productionStaff || []).map(member => {
                 const memberNameClean = member.name || 'Unnamed Editor';
                 const wl = getStaffWorkload(memberNameClean);
                 const activeJobs = production.filter(p => 
@@ -5840,7 +5853,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-4 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono"
                             >
                               <option value="">Unassigned</option>
-                              {(staff || []).filter(s => s.status === 'Active').map(s => (
+                              {(productionStaff || []).filter(s => s.status === 'Active').map(s => (
                                 <option key={s.staff_id} value={s.name}>{s.name} ({s.role.split(' ')[0]})</option>
                               ))}
                             </select>
@@ -5930,7 +5943,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                         {/* Assigned Staff Details and WhatsApp Integration */}
                         {(() => {
-                          const assignedStaffRecord = staff.find(s => s.name.toLowerCase() === editor.toLowerCase());
+                          const assignedStaffRecord = (productionStaff || []).find(s => s.name.toLowerCase() === editor.toLowerCase());
                           if (assignedStaffRecord) {
                             const handleSendWhatsApp = () => {
                               const pName = linkedOrder?.package_name || 'Event Post-Production';
@@ -6360,7 +6373,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             Please select a Production Role above to view available specialists.
                           </div>
                         ) : (() => {
-                          const matchingStaff = (staff || []).filter(s => 
+                          const matchingStaff = (productionStaff || []).filter(s => 
                             s.status === 'Active' && 
                             (s.production_role_speciality === assignRoleFilter || s.role === assignRoleFilter)
                           );

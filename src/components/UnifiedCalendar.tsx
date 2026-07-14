@@ -247,14 +247,16 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
     try {
       const events: CalendarEvent[] = [];
 
-      const preSales = ['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Lost Lead'];
-      const finished = ['Delivered', 'Project Delivered', 'Completed', 'Project Closed', 'Closed', 'Cancelled', 'Event Cancelled'];
-
       leads.forEach(ld => {
         if (!ld) return;
-        // 1. Only display leads that are confirmed (not pre-sales) and not yet Delivered/Completed
-        if (preSales.includes(ld.status)) return;
-        if (finished.includes(ld.status)) return;
+        // Display only leads where:
+        // - Status = Order Confirmed
+        // - Status is NOT Delivered
+        // - Status is NOT Completed
+        // - Status is NOT Cancelled
+        // Remove the event automatically when status changes.
+        const statusClean = (ld.status || ld.current_status || '').trim();
+        if (statusClean !== 'Order Confirmed') return;
 
         // 2. Fetch events from ld.events or fall back to lead-level event if no events are saved
         const eventsList = (ld.events && ld.events.length > 0) ? ld.events : [
@@ -311,6 +313,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
             targetDeliveryDate: targetDeliveryDate,
             raw: {
               ...ld,
+              ...ev,
               lead_id: ld.lead_id,
               order_id: ld.lead_id,
               event_name: evName,
@@ -1078,11 +1081,10 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                       id={`cell_day_${cell.dateString || idx}`}
                       onClick={() => {
                         if (cell.dateString) {
+                          setSelectedDate(cell.dateString);
                           const evsForDate = filteredEvents.filter(e => e.date === cell.dateString);
                           if (evsForDate.length > 0) {
                             setPopupDate(cell.dateString);
-                          } else {
-                            setSelectedDate(cell.dateString);
                           }
                         }
                       }}
