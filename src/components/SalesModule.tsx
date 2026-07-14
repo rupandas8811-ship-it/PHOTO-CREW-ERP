@@ -4119,10 +4119,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       // Step 5
       status: lead.status || 'New Lead',
       // Order Confirmed Rule fields
-      confirmed_event_date: lead.event_date || '',
-      confirmed_event_time: lead.event_time || '',
-      final_amount: 0,
-      advance_received: 0,
+      confirmed_event_date: lead.booking_date || lead.event_date || '',
+      confirmed_event_time: lead.booking_time || lead.event_time || '',
+      final_amount: lead.final_package_amount || lead.Final_Quotation_Amount || 0,
+      advance_received: lead.advance_collected || 0,
       total_pax: lead.total_pax || 0,
       reference_source: lead.reference_source || '',
       lead_value: lead.lead_value || 0,
@@ -10066,7 +10066,92 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         <p className="text-[10px] text-zinc-400 mt-0.5">Determine final CRM pipeline stages or transition the contract to Operations.</p>
                       </div>
                       <div className="space-y-4 text-left">
-                        {wizardLeadData.status === 'Order Confirmed' && (
+                        {wizardLeadData.status === 'Order Confirmed' ? (
+                          selectedLead?.status === 'Order Confirmed' ? (
+                            <div id="configure_confirmed_order_section" className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
+                              <div className="border-b border-emerald-500/20 pb-1.5">
+                                <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest font-mono">💍 Order Confirmation Details</h4>
+                                <p className="text-[10px] text-zinc-400 mt-0.5">These are the finalized details saved for this order from the database.</p>
+                              </div>
+                              
+                              <div className="hidden">
+                                <input type="text" value={selectedLead?.booking_date || selectedLead?.event_date || wizardLeadData.confirmed_event_date || ''} onChange={() => {}} />
+                                <input type="number" value={selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0} onChange={() => {}} />
+                                <input type="number" value={selectedLead?.advance_collected || wizardLeadData.advance_received || 0} onChange={() => {}} />
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-left text-xs">
+                                <div>
+                                  <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Order Status</span>
+                                  <strong className="text-emerald-400">Order Confirmed</strong>
+                                </div>
+                                <div>
+                                  <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Booking Date & Time</span>
+                                  <strong className="text-slate-200">{selectedLead?.booking_date || 'N/A'} {selectedLead?.booking_time ? `at ${selectedLead.booking_time}` : ''}</strong>
+                                </div>
+                                <div>
+                                  <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Final Package Amount</span>
+                                  <strong className="text-amber-400 font-mono">₹{Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0).toLocaleString('en-IN')}</strong>
+                                </div>
+                                <div>
+                                  <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Advance Payment</span>
+                                  <strong className="text-emerald-400 font-mono">₹{Number(selectedLead?.advance_collected || wizardLeadData.advance_received || 0).toLocaleString('en-IN')}</strong>
+                                </div>
+                                <div>
+                                  <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Payment Mode</span>
+                                  <strong className="text-slate-200">{selectedLead?.payment_mode || 'N/A'}</strong>
+                                </div>
+                                <div>
+                                  <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Transaction ID</span>
+                                  <strong className="text-slate-200">{selectedLead?.transaction_id || 'N/A'}</strong>
+                                </div>
+                                <div className="col-span-1 sm:col-span-2">
+                                  <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Booking Notes</span>
+                                  <p className="text-slate-300 whitespace-pre-wrap">{selectedLead?.contract_notes || 'No extra notes'}</p>
+                                </div>
+                              </div>
+
+                              {crmEvents && crmEvents.length > 0 && (
+                                <div className="mt-4 space-y-3">
+                                  <h5 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest font-mono border-b border-emerald-500/20 pb-1.5">Event-wise Details</h5>
+                                  {crmEvents.map((ev: any) => (
+                                    <div key={ev.id} className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
+                                      <div className="col-span-1 sm:col-span-3">
+                                        <span className="text-xs font-bold text-slate-200">🎬 {ev.event_name || ev.event_type}</span>
+                                      </div>
+                                      <div>
+                                         <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Event Date</span>
+                                         <strong className="text-slate-300 font-mono">{ev.event_date || 'N/A'}</strong>
+                                      </div>
+                                      <div>
+                                         <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Reporting Date</span>
+                                         <strong className="text-slate-300 font-mono">{ev.reporting_date || ev.event_date || 'N/A'}</strong>
+                                      </div>
+                                      <div>
+                                         <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Reporting Time</span>
+                                         <strong className="text-slate-300 font-mono">{ev.reporting_time || 'N/A'}</strong>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              <div className="bg-slate-950 p-3 rounded-lg border border-slate-850 flex items-center justify-between text-xs mt-4">
+                                <div>
+                                  <span className="text-[10px] text-zinc-550 uppercase font-bold font-mono">Calculated Pending Amount</span>
+                                  <strong className="block text-red-500 text-sm font-mono mt-0.5">
+                                    ₹{(Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0) - Number(selectedLead?.advance_collected || wizardLeadData.advance_received || 0)).toLocaleString('en-IN')}
+                                  </strong>
+                                </div>
+                                {(Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0) - Number(selectedLead?.advance_collected || wizardLeadData.advance_received || 0)) > 0 ? (
+                                  <span className="text-[9px] bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Payment Pending</span>
+                                ) : (
+                                  <span className="text-[9px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Fully Paid</span>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+
                           <div id="configure_confirmed_order_section" className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
                             <div className="border-b border-emerald-500/20 pb-1.5">
                               <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest font-mono">💍 Configure Confirmed Order & Booking Contract</h4>
@@ -10185,6 +10270,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               </div>
                               <span className="text-[9px] bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Payment Pending</span>
                             </div>
+                          </div>
+                          )
+                        ) : (
+                          <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-center">
+                            <span className="text-slate-500 text-xs font-mono">No Order Confirmation Details Available.</span>
                           </div>
                         )}
                       </div>

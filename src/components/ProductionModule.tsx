@@ -6669,7 +6669,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                                       };
                                                     });
                                                   }}
-                                                  productionStaff={productionStaffList}
+                                                  productionStaff={productionStaff}
                                                   editorAssignments={editorAssignments}
                                                   onOpenRoster={(name) => setRosterStaffName(name)}
                                                   allRowsForDeliverable={rows}

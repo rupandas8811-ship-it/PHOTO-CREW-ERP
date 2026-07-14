@@ -212,6 +212,13 @@ export interface Lead {
   sales_staff_mobile?: string;
   guest_pax?: number;
   staff_pax?: number;
+  booking_date?: string;
+  booking_time?: string;
+  final_package_amount?: number;
+  advance_collected?: number;
+  payment_mode?: string;
+  transaction_id?: string;
+  contract_notes?: string;
 }
 
 export interface LeadPackage {
