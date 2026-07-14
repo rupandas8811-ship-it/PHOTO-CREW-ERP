@@ -1032,7 +1032,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       cloned.mobile = cloned.mobile || cloned.phone;
     }
 
-    if (table === 'operations_staff' || table === 'production_staff') {
+    if (table === 'operations_staff') {
       const existing = staff.find(s => s.staff_id === record.staff_id);
       const merged = existing ? { ...existing, ...cloned } : cloned;
       
