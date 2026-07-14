@@ -94,7 +94,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
     notifications, 
     addNotification,
     logs,
-    staffAssignments
+    staffAssignments,
+    isDataLoading
   } = useRole();
 
   const systemToday = new Date();
@@ -112,6 +113,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   const [currentDate, setCurrentDate] = useState<Date>(systemToday);
   const [selectedDate, setSelectedDate] = useState<string | null>(systemTodayStr);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [calendarError, setCalendarError] = useState<string | null>(null);
   
   // Tab states
   const [calendarView, setCalendarView] = useState<'month' | 'week' | 'day' | 'agenda'>('month');
@@ -242,81 +244,98 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
 
   // Convert raw records into a standardized structure
   const allEvents = useMemo(() => {
-    const events: CalendarEvent[] = [];
+    try {
+      const events: CalendarEvent[] = [];
 
-    const preSales = ['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Lost Lead'];
-    const finished = ['Delivered', 'Completed', 'Closed', 'Cancelled'];
+      const preSales = ['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Lost Lead'];
+      const finished = ['Delivered', 'Project Delivered', 'Completed', 'Project Closed', 'Closed', 'Cancelled', 'Event Cancelled'];
 
-    leads.forEach(ld => {
-      // 1. Only display leads that are confirmed (not pre-sales) and not yet Delivered/Completed
-      if (preSales.includes(ld.status)) return;
-      if (finished.includes(ld.status)) return;
+      leads.forEach(ld => {
+        if (!ld) return;
+        // 1. Only display leads that are confirmed (not pre-sales) and not yet Delivered/Completed
+        if (preSales.includes(ld.status)) return;
+        if (finished.includes(ld.status)) return;
 
-      // 2. Fetch events from ld.events or fall back to lead-level event if no events are saved
-      const eventsList = (ld.events && ld.events.length > 0) ? ld.events : [
-        {
-          id: `fallback-${ld.lead_id}`,
-          event_date: ld.event_date,
-          event_start_time: ld.event_time,
-          event_name: ld.custom_event_name || ld.event_type || 'Event Shoot',
-          event_type: ld.event_type,
-          event_location: ld.event_location || 'Studio'
-        }
-      ];
-
-      // Find production record for Target Delivery Date (if any)
-      const prodRecord = production.find(p => p.tracking_id === ld.lead_id || p.order_id === ld.lead_id);
-      const targetDeliveryDate = prodRecord?.expected_delivery_date || ld.delivery_target_date || '';
-
-      // Find staff assignments
-      const assigns = staffAssignments ? staffAssignments.filter(x => x.lead_id === ld.lead_id || x.order_id === ld.lead_id) : [];
-      const uniqueStaff = new Set(assigns.map(a => a.staff_name));
-      const assignedTeamCount = uniqueStaff.size;
-
-      eventsList.forEach((ev, index) => {
-        const evDate = ev.event_date || ld.event_date || '';
-        if (!evDate) return; // skip if no date at all
-
-        const evStartTime = ev.event_start_time || ev.event_time || ld.event_time || '10:00 AM';
-        const evName = ev.event_name || ld.custom_event_name || ld.event_type || 'Event Shoot';
-        const evType = ev.event_type || ld.event_type || 'Shoot';
-        const evLoc = ev.event_location || ld.event_location || 'Studio';
-
-        events.push({
-          id: `lead-event-${ld.lead_id}-${index}-${ev.id || 'idx'}`,
-          sourceType: 'order',
-          eventClass: 'Event Scheduled',
-          date: evDate,
-          customerName: ld.customer_name,
-          mobile: ld.mobile,
-          eventType: evType,
-          eventTime: evStartTime,
-          eventLocation: evLoc,
-          currentStage: ld.status,
-          notes: 'On Track',
-          packageName: ld.Select_Package_Option || 'Custom Package',
-          totalAmount: ld.package_price || ld.budget || 0,
-          orderId: ld.lead_id, // Map lead_id to orderId for compatibility
-          targetDeliveryDate: targetDeliveryDate,
-          raw: {
-            ...ld,
-            lead_id: ld.lead_id,
-            order_id: ld.lead_id,
-            event_name: evName,
-            event_type: evType,
-            event_date: evDate,
-            event_start_time: evStartTime,
-            assignedTeamCount,
-            assigns,
-            targetDeliveryDate: targetDeliveryDate,
-            sales_person: ld.sales_person || ld.created_by || 'Sales Team'
+        // 2. Fetch events from ld.events or fall back to lead-level event if no events are saved
+        const eventsList = (ld.events && ld.events.length > 0) ? ld.events : [
+          {
+            id: `fallback-${ld.lead_id}`,
+            event_date: ld.event_date,
+            event_start_time: ld.event_time,
+            event_name: ld.custom_event_name || ld.event_type || 'Event Shoot',
+            event_type: ld.event_type,
+            event_location: ld.event_location || 'Studio'
           }
+        ];
+
+        // Find production record for Target Delivery Date (if any)
+        const ord = orders?.find(o => o.lead_id === ld.lead_id);
+        const orderId = ord?.order_id || ld.lead_id;
+        const prodRecord = production?.find(p => p.tracking_id === ld.lead_id || p.order_id === ld.lead_id || p.tracking_id === orderId || (p as any).order_id === orderId);
+        const targetDeliveryDate = prodRecord?.expected_delivery_date || prodRecord?.target_delivery_date || ld.delivery_target_date || '';
+
+        // Find staff assignments
+        const assigns = staffAssignments ? staffAssignments.filter(x => 
+          x.order_id === ld.lead_id || 
+          x.order_id === orderId || 
+          (x as any).lead_id === ld.lead_id
+        ) : [];
+        const uniqueStaff = new Set(assigns.map(a => a.staff_name));
+        const assignedTeamCount = uniqueStaff.size;
+
+        eventsList.forEach((ev, index) => {
+          if (!ev) return;
+          const evDate = ev.event_date || ld.event_date || '';
+          if (!evDate) return; // skip if no date at all
+
+          const evStartTime = ev.event_start_time || ev.event_time || ld.event_time || '10:00 AM';
+          const evName = ev.event_name || ld.custom_event_name || ld.event_type || 'Event Shoot';
+          const evType = ev.event_type || ld.event_type || 'Shoot';
+          const evLoc = ev.event_location || ld.event_location || 'Studio';
+
+          events.push({
+            id: `lead-event-${ld.lead_id}-${index}-${ev.id || 'idx'}`,
+            sourceType: 'order',
+            eventClass: 'Event Scheduled',
+            date: evDate,
+            customerName: ld.customer_name,
+            mobile: ld.mobile,
+            eventType: evType,
+            eventTime: evStartTime,
+            eventLocation: evLoc,
+            currentStage: ld.status,
+            notes: 'On Track',
+            packageName: ld.Select_Package_Option || 'Custom Package',
+            totalAmount: ld.package_price || ld.budget || 0,
+            orderId: ld.lead_id, // Map lead_id to orderId for compatibility
+            targetDeliveryDate: targetDeliveryDate,
+            raw: {
+              ...ld,
+              lead_id: ld.lead_id,
+              order_id: ld.lead_id,
+              event_name: evName,
+              event_type: evType,
+              event_date: evDate,
+              event_start_time: evStartTime,
+              assignedTeamCount,
+              assigns,
+              targetDeliveryDate: targetDeliveryDate,
+              sales_person: ld.sales_person || ld.created_by || 'Sales Team'
+            }
+          });
         });
       });
-    });
 
-    return events;
-  }, [leads, production, staffAssignments]);
+      return events;
+    } catch (err: any) {
+      console.error("Error computing calendar events:", err);
+      // Fail-safe error state
+      if (!calendarError) {
+        setCalendarError(err.message || "Unknown error occurred while parsing database events.");
+      }
+      return [];
+    }
+  }, [leads, orders, production, staffAssignments]);
 
   // Filters Event list by role first
   const roleFilteredEvents = useMemo(() => {
@@ -678,11 +697,32 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
               <span className="text-[10px] font-mono tracking-wider uppercase px-2 py-0.5 bg-yellow-500/10 text-yellow-500 rounded border border-yellow-500/20">
                 {role.toUpperCase()} COMPASS
               </span>
-              <span className="text-xs text-zinc-400">• Dynamic Studio Slate</span>
+              {isDataLoading ? (
+                <span className="text-xs text-yellow-500 flex items-center gap-1.5 font-mono animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
+                  Synchronizing Database...
+                </span>
+              ) : (
+                <span className="text-xs text-zinc-400 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Live Sync Connected
+                </span>
+              )}
             </div>
             <h1 className="text-xl font-bold tracking-tight text-white mt-0.5">
               {role === 'owner' ? 'Studio Master Calendar' : `${role.slice(0,1).toUpperCase() + role.slice(1)} Logistics Slate`}
             </h1>
+            {calendarError && (
+              <div className="mt-2 p-2.5 bg-red-950/60 border border-red-500/30 rounded-lg text-xs text-red-200 flex items-center justify-between gap-2 max-w-md">
+                <span>{calendarError}</span>
+                <button 
+                  onClick={() => setCalendarError(null)}
+                  className="text-red-400 hover:text-white font-bold"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
