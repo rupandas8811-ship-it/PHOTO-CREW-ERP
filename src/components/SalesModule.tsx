@@ -10103,7 +10103,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 </div>
                                 <div>
                                   <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Transaction ID</span>
-                                  <strong className="text-slate-200">{selectedLead?.transaction_id || 'N/A'}</strong>
+                                  <strong className="text-slate-200">
+                                    {payments?.find(p => p.order_id === (orders?.find(o => o.lead_id === selectedLead?.lead_id)?.order_id || selectedLead?.lead_id))?.transaction_id || selectedLead?.transaction_id || 'Nil'}
+                                  </strong>
                                 </div>
                                 <div className="col-span-1 sm:col-span-2">
                                   <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Booking Notes</span>
