@@ -1587,6 +1587,129 @@ ${coordinatorName}`;
   const [assignedEditorsModalProd, setAssignedEditorsModalProd] = useState<Production | null>(null);
   const [rosterStaffName, setRosterStaffName] = useState<string | null>(null);
 
+  // New States for Editor WhatsApp Share Feature
+  const [editorWhatsappModalOpen, setEditorWhatsappModalOpen] = useState(false);
+  const [editorWhatsappProdId, setEditorWhatsappProdId] = useState<string | null>(null);
+  const [editorWhatsappData, setEditorWhatsappData] = useState<{
+    prod: any;
+    order: any;
+    lead: any;
+    assignments: any[];
+    rf: any;
+    message: string;
+    editorPhone: string;
+    selectedEventIndex: number;
+  } | null>(null);
+  const [isGeneratingEditorWhatsapp, setIsGeneratingEditorWhatsapp] = useState(false);
+  const [editorWhatsappError, setEditorWhatsappError] = useState<string | null>(null);
+
+  const prepareEditorWhatsappData = async (productionId: string, eventIndex: number = 0) => {
+    setEditorWhatsappProdId(productionId);
+    setIsGeneratingEditorWhatsapp(true);
+    setEditorWhatsappError(null);
+    setEditorWhatsappModalOpen(true);
+    try {
+      // 1. Fetch latest data from database
+      const { data: prodData, error: prodErr } = await supabaseClient
+        .from('production')
+        .select('*')
+        .eq('production_id', productionId)
+        .single();
+      if (prodErr) throw prodErr;
+
+      const { data: assignmentsData, error: assignmentsErr } = await supabaseClient
+        .from('editor_assignments')
+        .select('*')
+        .eq('production_id', productionId);
+      if (assignmentsErr) throw assignmentsErr;
+
+      // Find resolved order & lead
+      const trackingId = prodData.tracking_id;
+      const rfItem = rawFootage.find(f => f.tracking_id === trackingId || f.order_id === trackingId);
+      let orderData = orders.find(o => o.order_id === trackingId || o.lead_id === trackingId);
+      if (!orderData && rfItem) {
+        orderData = orders.find(o => o.order_id === rfItem.order_id);
+      }
+
+      const leadId = orderData?.lead_id || trackingId;
+      const leadData = leadsData?.find(l => l.lead_id === leadId);
+
+      // Find primary editor & their phone number
+      const primaryEditor = prodData.editor_assigned || 'Unassigned';
+      const activeStaffList = productionStaff || [];
+      const primaryStaff = activeStaffList.find(s => s.name === primaryEditor);
+      const editorPhone = primaryStaff ? (primaryStaff.whatsapp_number || primaryStaff.mobile || '') : '';
+
+      // Events list
+      const eventsList = leadData?.events || [];
+      const selectedEvent = eventsList[eventIndex] || null;
+
+      // Build fields for WhatsApp prefilled message
+      const customerName = orderData?.customer_name || leadData?.customer_name || '—';
+      const orderId = orderData?.order_id || prodData?.tracking_id || '—';
+      const eventName = selectedEvent?.event_name || orderData?.event_type || 'Event';
+      const eventType = selectedEvent?.event_type || selectedEvent?.event_shoot_type || orderData?.event_type || 'Shoot Type';
+      const eventDate = selectedEvent?.event_date || orderData?.event_date || '—';
+
+      // Staff names list
+      const uniqueStaff = Array.from(new Set(assignmentsData?.map(a => a.staff_name) || []));
+      const assignedStaffStr = uniqueStaff.join(', ') || primaryEditor || 'None';
+
+      // Assigned deliverables assigned to primary editor, with fallback to all
+      const editorDeliverables = (assignmentsData || [])
+        .filter(a => a.staff_name === primaryEditor)
+        .map(a => a.speciality);
+      const displayDeliverables = editorDeliverables.length > 0 
+        ? editorDeliverables 
+        : (assignmentsData?.map(a => a.speciality) || []);
+      const deliverableListText = displayDeliverables.length > 0
+        ? displayDeliverables.map(d => `• ${d}`).join('\n')
+        : 'None Assigned';
+
+      // Raw footage drive link
+      const driveLink = prodData?.raw_footage_location || rfItem?.server_path || '—';
+
+      // Target Delivery date
+      const targetDate = prodData?.target_delivery_date || prodData?.expected_delivery_date || '—';
+
+      const msg = `*PHOTOCREW STUDIO TASK ASSIGNMENT*
+
+*Customer Name:* ${customerName}
+*Order ID:* ${orderId}
+
+*Event Name:* ${eventName}
+*Event Type / Shoot Type:* ${eventType}
+*Event Date:* ${eventDate}
+
+*Assigned Editor Name:* ${primaryEditor}
+*Assigned Staff Name(s):* ${assignedStaffStr}
+
+*Assigned Deliverables:*
+${deliverableListText}
+
+*Raw Footage Drive Link:* ${driveLink}
+*Target Delivery Date:* ${targetDate}
+
+_Please acknowledge receipt of this task assignment._`;
+
+      setEditorWhatsappData({
+        prod: prodData,
+        order: orderData,
+        lead: leadData,
+        assignments: assignmentsData || [],
+        rf: rfItem,
+        message: msg,
+        editorPhone,
+        selectedEventIndex: eventIndex,
+      });
+    } catch (err: any) {
+      console.error("Error preparing Editor WhatsApp data:", err);
+      setEditorWhatsappError(err.message || "Failed to load database values.");
+    } finally {
+      setIsGeneratingEditorWhatsapp(false);
+    }
+  };
+
   const staffActiveAssignments = useMemo(() => {
     if (!rosterStaffName) return [];
     return (editorAssignments || [])
@@ -2543,35 +2666,48 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               <StatusText status={prodStatus} />
                             </td>
                             <td className="p-3 text-right pr-4">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveWorkflowProd(prod);
-                                  setWfEditor(prod.editor_assigned || 'Unassigned');
-                                  setWfTargetDeliveryDate('');
-                                  setWfPriority(prod.project_priority || 'Medium');
-                                  setWfProjectNotes(prod.project_notes || prod.remarks || '');
-                                  setWfInternalComments(prod.internal_comments || '');
-                                  setWfError('');
-                                  
-                                  const assignedForThis = editorAssignments.filter(a => a.production_id === prod.production_id);
-                                  setSelectedStaffIds(assignedForThis.map(a => a.staff_id));
-                                  if (assignedForThis.length > 0) {
-                                    setAssignmentRows(assignedForThis.map(a => ({
-                                      speciality: a.speciality,
-                                      staffId: a.staff_id,
-                                      staffName: a.staff_name
-                                    })));
-                                  } else {
-                                    setAssignmentRows([{ speciality: '', staffId: '', staffName: '' }]);
-                                  }
-                                  
-                                  setWorkflowActionType('assign_editor');
-                                }}
-                                className="px-3 py-1.5 bg-purple-600 border border-purple-500 text-white hover:bg-purple-500 hover:border-purple-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer inline-flex items-center gap-1"
-                              >
-                                <span>👤</span> Assign Editor
-                              </button>
+                              <div className="inline-flex flex-col gap-1 items-end">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveWorkflowProd(prod);
+                                    setWfEditor(prod.editor_assigned || 'Unassigned');
+                                    setWfTargetDeliveryDate('');
+                                    setWfPriority(prod.project_priority || 'Medium');
+                                    setWfProjectNotes(prod.project_notes || prod.remarks || '');
+                                    setWfInternalComments(prod.internal_comments || '');
+                                    setWfError('');
+                                    
+                                    const assignedForThis = editorAssignments.filter(a => a.production_id === prod.production_id);
+                                    setSelectedStaffIds(assignedForThis.map(a => a.staff_id));
+                                    if (assignedForThis.length > 0) {
+                                      setAssignmentRows(assignedForThis.map(a => ({
+                                        speciality: a.speciality,
+                                        staffId: a.staff_id,
+                                        staffName: a.staff_name
+                                      })));
+                                    } else {
+                                      setAssignmentRows([{ speciality: '', staffId: '', staffName: '' }]);
+                                    }
+                                    
+                                    setWorkflowActionType('assign_editor');
+                                  }}
+                                  className="px-3 py-1.5 bg-purple-600 border border-purple-500 text-white hover:bg-purple-500 hover:border-purple-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer inline-flex items-center gap-1"
+                                >
+                                  <span>👤</span> Assign Editor
+                                </button>
+                                {prod.editor_assigned && prod.editor_assigned !== 'Unassigned' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      prepareEditorWhatsappData(prod.production_id);
+                                    }}
+                                    className="px-3 py-1.5 bg-emerald-600 border border-emerald-500 text-white hover:bg-emerald-500 hover:border-emerald-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer inline-flex items-center gap-1"
+                                  >
+                                    <span>💬</span> Share with Editor
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );
@@ -3024,6 +3160,18 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 <span className="text-[10px] text-emerald-400 font-extrabold flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-950/20 border border-emerald-850">
                                   ✓ Completed
                                 </span>
+                              )}
+
+                              {prod.editor_assigned && prod.editor_assigned !== 'Unassigned' && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    prepareEditorWhatsappData(prod.production_id);
+                                  }}
+                                  className="w-full max-w-[160px] px-3 py-1.5 bg-emerald-600 border border-emerald-500 text-white hover:bg-emerald-500 hover:border-emerald-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1"
+                                >
+                                  <span>💬</span> Share with Editor
+                                </button>
                               )}
 
                               {/* Detail Dossier link */}
@@ -6912,12 +7060,15 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             }
                             
                             setWfError('');
+                            const prodId = activeWorkflowProd.production_id;
                             await autoSaveAssignments(deliverableStaffRows, wfTargetDeliveryDate);
                             setWfSuccess('Editor assignments saved successfully!');
                             setTimeout(() => {
                               setActiveWorkflowProd(null);
                               setWorkflowActionType(null);
                               setWfSuccess('');
+                              // Trigger WhatsApp sharing modal automatically
+                              prepareEditorWhatsappData(prodId);
                             }, 1500);
                           }}
                           className="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 border border-purple-500 text-white text-xs font-mono font-bold rounded-xl transition-colors cursor-pointer text-center"
@@ -7823,6 +7974,175 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   })()}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDITOR WHATSAPP SHARING POPUP */}
+      {editorWhatsappModalOpen && (
+        <div className="fixed inset-0 z-[115] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all duration-300">
+            
+            {/* Header */}
+            <div className="p-5 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
+              <div>
+                <span className="text-[9px] font-mono font-black uppercase tracking-widest text-[#10b981] block mb-0.5 animate-pulse">
+                  System Integration • WhatsApp Automation
+                </span>
+                <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">
+                  Editor WhatsApp Sharing Panel
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditorWhatsappModalOpen(false);
+                  setEditorWhatsappData(null);
+                  setEditorWhatsappError(null);
+                }}
+                className="p-1.5 hover:bg-zinc-900 text-zinc-500 hover:text-white rounded-lg cursor-pointer transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-6 max-h-[70vh]">
+              {isGeneratingEditorWhatsapp ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                  <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                  <p className="text-xs text-zinc-400 font-mono">Fetching latest database records...</p>
+                </div>
+              ) : editorWhatsappError ? (
+                <div className="bg-rose-500/10 border border-rose-500/20 p-5 rounded-xl space-y-4 text-center">
+                  <p className="text-xs text-rose-400 font-mono">⚠️ Error: {editorWhatsappError}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (editorWhatsappProdId) {
+                        prepareEditorWhatsappData(editorWhatsappProdId);
+                      }
+                    }}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-mono font-bold transition-all cursor-pointer"
+                  >
+                    Retry Loading
+                  </button>
+                </div>
+              ) : editorWhatsappData ? (
+                <>
+                  {/* Event selector if multiple events exist */}
+                  {editorWhatsappData.lead?.events && editorWhatsappData.lead.events.length > 1 && (
+                    <div className="bg-zinc-900/40 border border-zinc-850 p-4 rounded-xl space-y-3 text-left">
+                      <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">
+                        Multiple Events Detected — Select Event to Share:
+                      </span>
+                      <div className="flex flex-col gap-2">
+                        {editorWhatsappData.lead.events.map((ev: any, idx: number) => {
+                          const isSelected = editorWhatsappData.selectedEventIndex === idx;
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                if (editorWhatsappData.prod?.production_id) {
+                                  prepareEditorWhatsappData(editorWhatsappData.prod.production_id, idx);
+                                }
+                              }}
+                              className={`w-full text-left p-2.5 rounded-lg border transition-all text-xs flex justify-between items-center ${
+                                isSelected
+                                  ? 'border-emerald-500 bg-emerald-500/10 text-emerald-300'
+                                  : 'border-zinc-850 bg-zinc-950 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                              }`}
+                            >
+                              <div className="flex flex-col gap-1">
+                                <span className="font-bold">{ev.event_name || ev.event_type || 'Event'}</span>
+                                <span className="text-[10px] font-mono text-zinc-500">{ev.event_date || '—'}</span>
+                              </div>
+                              {isSelected && <span className="text-emerald-400 font-bold font-mono">✓ Selected</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Editor Contact details input */}
+                  <div className="bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl space-y-4 text-left">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="flex-1 space-y-1">
+                        <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">Primary Editor</span>
+                        <span className="text-xs font-bold text-zinc-200 block">{editorWhatsappData.prod?.editor_assigned || 'Unassigned'}</span>
+                      </div>
+
+                      <div className="md:w-72 space-y-1.5">
+                        <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
+                          WhatsApp Contact Number {!editorWhatsappData.editorPhone.trim() && <span className="text-rose-500">(Required)</span>}
+                        </label>
+                        <input
+                          type="text"
+                          value={editorWhatsappData.editorPhone}
+                          onChange={(e) => {
+                            setEditorWhatsappData(prev => prev ? { ...prev, editorPhone: e.target.value } : null);
+                          }}
+                          placeholder="e.g. +65 8123 4567"
+                          className={`w-full bg-zinc-950 border text-xs text-zinc-200 rounded-xl px-3 py-2 font-mono focus:outline-none ${
+                            !editorWhatsappData.editorPhone.trim()
+                              ? 'border-rose-500/50 focus:border-rose-500' 
+                              : 'border-zinc-900 hover:border-zinc-850 focus:border-emerald-500'
+                          }`}
+                        />
+                      </div>
+                    </div>
+
+                    {!editorWhatsappData.editorPhone.trim() && (
+                      <p className="text-[10px] text-rose-400 font-mono">⚠️ No mobile number saved. Please enter number before sharing.</p>
+                    )}
+                  </div>
+
+                  {/* Message Preview */}
+                  <div className="space-y-2 text-left">
+                    <span className="text-[10px] text-emerald-400 font-black tracking-widest font-mono uppercase block">
+                      Message Preview
+                    </span>
+                    <pre className="text-xs text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed bg-zinc-900/60 p-4 rounded-xl border border-zinc-900 select-all overflow-x-auto max-h-[30vh]">
+                      {editorWhatsappData.message}
+                    </pre>
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-zinc-900 bg-[#0c0d10] flex justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditorWhatsappModalOpen(false);
+                  setEditorWhatsappData(null);
+                  setEditorWhatsappError(null);
+                }}
+                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-zinc-400 hover:text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              
+              <button
+                type="button"
+                disabled={isGeneratingEditorWhatsapp || !editorWhatsappData || !editorWhatsappData.editorPhone.trim()}
+                onClick={() => {
+                  if (!editorWhatsappData) return;
+                  const formattedPhone = formatSingaporeWhatsAppNumber(editorWhatsappData.editorPhone);
+                  const encodedMsg = encodeURIComponent(editorWhatsappData.message);
+                  const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedMsg}`;
+                  window.open(whatsappUrl, '_blank');
+                  setEditorWhatsappModalOpen(false);
+                  setEditorWhatsappData(null);
+                }}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 border border-emerald-500 text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
+              >
+                💬 Share via WhatsApp
+              </button>
             </div>
           </div>
         </div>
