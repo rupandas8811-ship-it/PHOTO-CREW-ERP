@@ -974,7 +974,15 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 items-start">
         
         {/* LEFT COLUMN: Main viewport calendar area */}
-        <div className="xl:col-span-3 bg-zinc-950/45 border border-zinc-905 p-6 rounded-2xl shadow-xl space-y-6">
+        <div className="xl:col-span-3 bg-zinc-950/45 border border-zinc-905 p-6 rounded-2xl shadow-xl space-y-6 relative">
+          {isDataLoading && (
+            <div className="absolute inset-0 bg-zinc-950/70 backdrop-blur-[1px] flex items-center justify-center rounded-2xl z-50">
+              <div className="flex flex-col items-center gap-3 bg-zinc-900 border border-zinc-800 p-6 rounded-xl shadow-2xl animate-fade-in">
+                <div className="w-6 h-6 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" />
+                <span className="text-xs text-zinc-300 font-mono">Loading calendar events...</span>
+              </div>
+            </div>
+          )}
           
           {/* Calendar Controller Month Toggle Banner */}
           <div className="flex justify-between items-center border-b border-zinc-900 pb-4">
@@ -1127,7 +1135,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                               id={`micro_evt_${ev.id}`}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setSelectedEvent(ev);
+                                setPopupDate(ev.date);
                               }}
                               className={`${h.bg} ${h.glow} text-[9px] p-1.5 rounded-lg border transition-all duration-150 hover:scale-[1.03] flex flex-col gap-0.5 cursor-pointer`}
                             >
@@ -1192,7 +1200,16 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                   return (
                     <div
                       key={dIdx}
-                      onClick={() => setSelectedDate(day.dateStr)}
+                      onClick={() => {
+                        if (day.dateStr) {
+                          const evsForDate = filteredEvents.filter(e => e.date === day.dateStr);
+                          if (evsForDate.length > 0) {
+                            setPopupDate(day.dateStr);
+                          } else {
+                            setSelectedDate(day.dateStr);
+                          }
+                        }
+                      }}
                       className={`min-h-[250px] bg-zinc-950/20 border rounded-2xl p-3 flex flex-col transition-all cursor-pointer ${
                         isSelected 
                           ? 'border-yellow-500 bg-zinc-900/40 ring-1 ring-yellow-500/10' 
@@ -1223,7 +1240,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                                 id={`week_card_${ev.id}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setSelectedEvent(ev);
+                                  setPopupDate(ev.date);
                                 }}
                                 className={`p-2 rounded-xl text-xs flex flex-col gap-1 transition ${col.card}`}
                               >
@@ -1296,7 +1313,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                       <div
                         key={ev.id}
                         id={`day_card_${ev.id}`}
-                        onClick={() => setSelectedEvent(ev)}
+                        onClick={() => setPopupDate(ev.date)}
                         className={`p-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all cursor-pointer ${col.card}`}
                       >
                         <div className="space-y-1.5">
@@ -1381,7 +1398,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                         <div
                           key={ev.id}
                           id={`agenda_row_${ev.id}`}
-                          onClick={() => setSelectedEvent(ev)}
+                          onClick={() => setPopupDate(ev.date)}
                           className={`p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition cursor-pointer ${col.card}`}
                         >
                           <div className="flex items-start gap-3 w-full sm:w-auto">
@@ -1459,7 +1476,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                     <div
                       key={ev.id}
                       id={`day_summary_card_${ev.id}`}
-                      onClick={() => setSelectedEvent(ev)}
+                      onClick={() => setPopupDate(ev.date)}
                       className={`p-3 rounded-xl transition cursor-pointer text-xs flex flex-col gap-2 ${col.card}`}
                     >
                       <div className="flex justify-between items-start gap-1">
@@ -1612,181 +1629,66 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  {role === 'sales' && (
-                    <tr className="border-b border-zinc-800 text-xs font-mono text-zinc-400 uppercase">
-                      <th className="p-3">Lead ID</th>
-                      <th className="p-3">Client Name</th>
-                      <th className="p-3">Mobile Number</th>
-                      <th className="p-3">Event Name</th>
-                      <th className="p-3">Event Type</th>
-                      <th className="p-3">Event Date</th>
-                      <th className="p-3">Event Start Time</th>
-                      <th className="p-3">Assigned Sales Staff</th>
-                      <th className="p-3">Current Lead Status</th>
-                      <th className="p-3">Current Workflow Stage</th>
-                      <th className="p-3">Action</th>
-                    </tr>
-                  )}
-                  {role === 'operations' && (
-                    <tr className="border-b border-zinc-800 text-xs font-mono text-zinc-400 uppercase">
-                      <th className="p-3">Lead ID</th>
-                      <th className="p-3">Client Name</th>
-                      <th className="p-3">Event Name</th>
-                      <th className="p-3">Event Type</th>
-                      <th className="p-3">Event Date</th>
-                      <th className="p-3">Event Start Time</th>
-                      <th className="p-3">Assigned Team</th>
-                      <th className="p-3">Current Status</th>
-                      <th className="p-3">Action</th>
-                    </tr>
-                  )}
-                  {role === 'production' && (
-                    <tr className="border-b border-zinc-800 text-xs font-mono text-zinc-400 uppercase">
-                      <th className="p-3">Lead ID</th>
-                      <th className="p-3">Client Name</th>
-                      <th className="p-3">Event Name</th>
-                      <th className="p-3">Event Type</th>
-                      <th className="p-3">Event Date</th>
-                      <th className="p-3">Event Start Time</th>
-                      <th className="p-3">Current Production Status</th>
-                      <th className="p-3">Assigned Production Team</th>
-                      <th className="p-3">Target Delivery Date</th>
-                      <th className="p-3">Current Workflow Status</th>
-                      <th className="p-3">Action</th>
-                    </tr>
-                  )}
-                  {role !== 'sales' && role !== 'operations' && role !== 'production' && (
-                    <tr className="border-b border-zinc-800 text-xs font-mono text-zinc-400 uppercase">
-                      <th className="p-3">Lead ID</th>
-                      <th className="p-3">Client Name</th>
-                      <th className="p-3">Event Name</th>
-                      <th className="p-3">Event Type</th>
-                      <th className="p-3">Event Date</th>
-                      <th className="p-3">Event Start Time</th>
-                      <th className="p-3">Current Status</th>
-                      <th className="p-3">Assigned Team</th>
-                      <th className="p-3">Target Delivery Date</th>
-                      <th className="p-3">Current Workflow Stage</th>
-                      <th className="p-3">Action</th>
-                    </tr>
-                  )}
+                  <tr className="border-b border-zinc-800 text-xs font-mono text-zinc-455 uppercase text-left whitespace-nowrap">
+                    <th className="p-3">Lead ID</th>
+                    <th className="p-3">Client Name</th>
+                    <th className="p-3">Event Name</th>
+                    <th className="p-3">Event Type</th>
+                    <th className="p-3">Event Date</th>
+                    <th className="p-3">Event Start Time</th>
+                    <th className="p-3">Event End Time</th>
+                    <th className="p-3">Reporting Date</th>
+                    <th className="p-3">Reporting Time</th>
+                    <th className="p-3">Current Status</th>
+                    {(role === 'production' || role === 'owner') && (
+                      <>
+                        <th className="p-3 text-cyan-400">Production Status</th>
+                        <th className="p-3 text-pink-400">Target Delivery Date</th>
+                      </>
+                    )}
+                    <th className="p-3">Action</th>
+                  </tr>
                 </thead>
                 <tbody className="text-sm">
                   {filteredEvents.filter(e => e.date === popupDate).map(ev => {
-                    const assignedTeamStr = ev.raw.assigns && ev.raw.assigns.length > 0 
-                      ? Array.from(new Set(ev.raw.assigns.map((a: any) => a.staff_name))).join(', ') 
-                      : 'None Assigned';
-                    const prodStatus = production.find(p => p.tracking_id === ev.raw.lead_id || p.order_id === ev.raw.lead_id)?.editing_status || ev.raw.editing_status || 'Pending';
-                    const prodAssignedEditor = production.find(p => p.tracking_id === ev.raw.lead_id || p.order_id === ev.raw.lead_id)?.editor_assigned || ev.raw.assigned_editor || 'None Assigned';
+                    const eventEndTimeStr = ev.raw?.event_end_time || 'N/A';
+                    const reportingDateStr = ev.raw?.reporting_date || 'N/A';
+                    const reportingTimeStr = ev.raw?.reporting_time || 'N/A';
 
                     return (
                       <tr key={ev.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/20">
-                        {role === 'sales' && (
+                        <td className="p-3 font-mono text-xs text-yellow-500">{ev.orderId}</td>
+                        <td className="p-3 text-white font-medium">{ev.customerName}</td>
+                        <td className="p-3 text-zinc-300">{ev.raw?.event_name || 'N/A'}</td>
+                        <td className="p-3 text-zinc-350">{ev.eventType}</td>
+                        <td className="p-3 text-zinc-350 font-mono text-xs">{ev.date}</td>
+                        <td className="p-3 text-zinc-300 font-mono text-xs">{ev.eventTime}</td>
+                        <td className="p-3 text-zinc-300 font-mono text-xs">{eventEndTimeStr}</td>
+                        <td className="p-3 text-zinc-350 font-mono text-xs">{reportingDateStr}</td>
+                        <td className="p-3 text-zinc-350 font-mono text-xs">{reportingTimeStr}</td>
+                        <td className="p-3">
+                          <span className="px-2 py-1 rounded bg-zinc-800 text-xs text-zinc-300 border border-zinc-700 whitespace-nowrap">
+                            {ev.currentStage}
+                          </span>
+                        </td>
+                        {(role === 'production' || role === 'owner') && (
                           <>
-                            <td className="p-3 font-mono text-xs text-yellow-500">{ev.orderId}</td>
-                            <td className="p-3 text-white font-medium">{ev.customerName}</td>
-                            <td className="p-3 text-zinc-300 font-mono text-xs">{ev.mobile || 'N/A'}</td>
-                            <td className="p-3 text-zinc-300">{ev.raw.event_name || 'N/A'}</td>
-                            <td className="p-3 text-zinc-300">{ev.eventType}</td>
-                            <td className="p-3 text-zinc-350 font-mono text-xs">{ev.date}</td>
-                            <td className="p-3 text-zinc-300 font-mono text-xs">{ev.eventTime}</td>
-                            <td className="p-3 text-zinc-300">{ev.raw.sales_person || 'N/A'}</td>
-                            <td className="p-3">
-                              <span className="px-2 py-1 rounded bg-zinc-800 text-xs text-zinc-300 border border-zinc-700 whitespace-nowrap">
-                                {ev.currentStage}
-                              </span>
-                            </td>
-                            <td className="p-3">
-                              <span className="px-2 py-1 rounded bg-zinc-850 text-xs text-zinc-400 border border-zinc-800 whitespace-nowrap">
-                                {ev.currentStage}
-                              </span>
-                            </td>
-                          </>
-                        )}
-
-                        {role === 'operations' && (
-                          <>
-                            <td className="p-3 font-mono text-xs text-yellow-500">{ev.orderId}</td>
-                            <td className="p-3 text-white font-medium">{ev.customerName}</td>
-                            <td className="p-3 text-zinc-300">{ev.raw.event_name || 'N/A'}</td>
-                            <td className="p-3 text-zinc-300">{ev.eventType}</td>
-                            <td className="p-3 text-zinc-350 font-mono text-xs">{ev.date}</td>
-                            <td className="p-3 text-zinc-300 font-mono text-xs">{ev.eventTime}</td>
-                            <td className="p-3">
-                              <button 
-                                onClick={() => setTeamPopupEvent(ev)}
-                                className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white rounded cursor-pointer font-bold transition text-xs"
-                              >
-                                {assignedTeamStr}
-                              </button>
-                            </td>
-                            <td className="p-3">
-                              <span className="px-2 py-1 rounded bg-zinc-800 text-xs text-zinc-300 border border-zinc-700 whitespace-nowrap">
-                                {ev.currentStage}
-                              </span>
-                            </td>
-                          </>
-                        )}
-
-                        {role === 'production' && (
-                          <>
-                            <td className="p-3 font-mono text-xs text-yellow-500">{ev.orderId}</td>
-                            <td className="p-3 text-white font-medium">{ev.customerName}</td>
-                            <td className="p-3 text-zinc-300">{ev.raw.event_name || 'N/A'}</td>
-                            <td className="p-3 text-zinc-300">{ev.eventType}</td>
-                            <td className="p-3 text-zinc-350 font-mono text-xs">{ev.date}</td>
-                            <td className="p-3 text-zinc-300 font-mono text-xs">{ev.eventTime}</td>
                             <td className="p-3">
                               <span className="px-2 py-0.5 rounded bg-zinc-850 text-xs text-cyan-400 border border-cyan-500/20 whitespace-nowrap font-mono">
-                                {prodStatus}
+                                {ev.productionStatus || 'New Project'}
                               </span>
                             </td>
-                            <td className="p-3 text-zinc-300">{prodAssignedEditor}</td>
-                            <td className="p-3 text-pink-400 font-mono text-xs">{ev.targetDeliveryDate || 'N/A'}</td>
-                            <td className="p-3">
-                              <span className="px-2 py-1 rounded bg-zinc-800 text-xs text-zinc-300 border border-zinc-700 whitespace-nowrap">
-                                {ev.currentStage}
-                              </span>
+                            <td className="p-3 text-pink-400 font-mono text-xs">
+                              {ev.targetDeliveryDate || 'N/A'}
                             </td>
                           </>
                         )}
-
-                        {role !== 'sales' && role !== 'operations' && role !== 'production' && (
-                          <>
-                            <td className="p-3 font-mono text-xs text-yellow-500">{ev.orderId}</td>
-                            <td className="p-3 text-white font-medium">{ev.customerName}</td>
-                            <td className="p-3 text-zinc-300">{ev.raw.event_name || 'N/A'}</td>
-                            <td className="p-3 text-zinc-300">{ev.eventType}</td>
-                            <td className="p-3 text-zinc-350 font-mono text-xs">{ev.date}</td>
-                            <td className="p-3 text-zinc-300 font-mono text-xs">{ev.eventTime}</td>
-                            <td className="p-3">
-                              <span className="px-2 py-1 rounded bg-zinc-800 text-xs text-zinc-300 border border-zinc-700 whitespace-nowrap">
-                                {ev.currentStage}
-                              </span>
-                            </td>
-                            <td className="p-3">
-                              <button 
-                                onClick={() => setTeamPopupEvent(ev)}
-                                className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white rounded cursor-pointer font-bold transition text-xs"
-                              >
-                                {assignedTeamStr}
-                              </button>
-                            </td>
-                            <td className="p-3 text-pink-400 font-mono text-xs">{ev.targetDeliveryDate || 'N/A'}</td>
-                            <td className="p-3">
-                              <span className="px-2 py-1 rounded bg-zinc-850 text-xs text-zinc-400 border border-zinc-800 whitespace-nowrap font-mono">
-                                {ev.currentStage}
-                              </span>
-                            </td>
-                          </>
-                        )}
-
                         <td className="p-3">
                           <button 
                             onClick={() => {
                                // Dispatch custom event to trigger parent dashboards
-                               window.dispatchEvent(new CustomEvent('calendar-action-click', { detail: { orderId: ev.orderId, role, leadId: ev.raw.lead_id } }));
-                               window.dispatchEvent(new CustomEvent('calendar-action-click-deferred', { detail: { orderId: ev.orderId, role, leadId: ev.raw.lead_id } }));
+                               window.dispatchEvent(new CustomEvent('calendar-action-click', { detail: { orderId: ev.orderId, role, leadId: ev.raw?.lead_id } }));
+                               window.dispatchEvent(new CustomEvent('calendar-action-click-deferred', { detail: { orderId: ev.orderId, role, leadId: ev.raw?.lead_id } }));
                                setPopupDate(null);
                             }}
                             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-bold text-xs cursor-pointer shadow whitespace-nowrap"
