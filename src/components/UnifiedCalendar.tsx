@@ -242,133 +242,87 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
 
   // Convert raw records into a standardized structure
   const allEvents = useMemo(() => {
-    const events = [];
+    const events: CalendarEvent[] = [];
 
-    const validStages = [
-      'Order Confirmed',
-      'Staff Assigned',
-      'Event Scheduled',
-      'Operations Assigned',
-      'Raw Footage Pending',
-      'Raw Footage Received',
-      'Editing In Progress',
-      'Editing',
-      'Client Review',
-      'Client Approval',
-      'Ready for Delivery',
-      'Pending Delivery'
-    ];
+    const preSales = ['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Lost Lead'];
+    const finished = ['Delivered', 'Completed', 'Closed', 'Cancelled'];
 
-    orders.forEach(o => {
-      if (['Delivered', 'Completed', 'Cancelled', 'Closed'].includes(o.current_stage)) return;
-      if (['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Lost Lead'].includes(o.current_stage)) return;
+    leads.forEach(ld => {
+      // 1. Only display leads that are confirmed (not pre-sales) and not yet Delivered/Completed
+      if (preSales.includes(ld.status)) return;
+      if (finished.includes(ld.status)) return;
 
-      const assigns = staffAssignments ? staffAssignments.filter(x => x.order_id === o.order_id) : [];
+      // 2. Fetch events from ld.events or fall back to lead-level event if no events are saved
+      const eventsList = (ld.events && ld.events.length > 0) ? ld.events : [
+        {
+          id: `fallback-${ld.lead_id}`,
+          event_date: ld.event_date,
+          event_start_time: ld.event_time,
+          event_name: ld.custom_event_name || ld.event_type || 'Event Shoot',
+          event_type: ld.event_type,
+          event_location: ld.event_location || 'Studio'
+        }
+      ];
+
+      // Find production record for Target Delivery Date (if any)
+      const prodRecord = production.find(p => p.tracking_id === ld.lead_id || p.order_id === ld.lead_id);
+      const targetDeliveryDate = prodRecord?.expected_delivery_date || ld.delivery_target_date || '';
+
+      // Find staff assignments
+      const assigns = staffAssignments ? staffAssignments.filter(x => x.lead_id === ld.lead_id || x.order_id === ld.lead_id) : [];
       const uniqueStaff = new Set(assigns.map(a => a.staff_name));
       const assignedTeamCount = uniqueStaff.size;
 
-      const prod = production.find(p => {
-        const rf = rawFootage.find(x => x.tracking_id === p.tracking_id);
-        return rf?.order_id === o.order_id;
-      });
-      const editDue = prod?.expected_delivery_date || prod?.target_delivery_date;
+      eventsList.forEach((ev, index) => {
+        const evDate = ev.event_date || ld.event_date || '';
+        if (!evDate) return; // skip if no date at all
 
-      let isOverdue = false;
-      let overdueDays = 0;
-      if (editDue && editDue < todayStr) {
-        isOverdue = true;
-        const targetDate = parseLocalDate(editDue);
-        const todayDate = parseLocalDate(todayStr);
-        const diffTime = Math.abs(todayDate.getTime() - targetDate.getTime());
-        overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      }
+        const evStartTime = ev.event_start_time || ev.event_time || ld.event_time || '10:00 AM';
+        const evName = ev.event_name || ld.custom_event_name || ld.event_type || 'Event Shoot';
+        const evType = ev.event_type || ld.event_type || 'Shoot';
+        const evLoc = ev.event_location || ld.event_location || 'Studio';
 
-      
-      events.push({
-        id: 'order-shoot-' + o.order_id,
-        sourceType: 'order',
-        eventClass: 'Event Scheduled',
-        date: o.event_date,
-        customerName: o.customer_name,
-        mobile: o.mobile,
-        eventType: o.event_type,
-        eventTime: o.event_time || '10:00 AM',
-        eventLocation: o.event_location,
-        currentStage: o.current_stage,
-        notes: isOverdue ? 'Overdue\n' + overdueDays + ' Days' : 'On Track',
-        packageName: o.package_name || 'Standard Bundle',
-        totalAmount: o.quotation_amount || 0,
-        orderId: o.order_id,
-        raw: {
-          ...o,
-          assignedTeamCount,
-          isOverdue,
-          overdueDays,
-          targetDeliveryDate: editDue,
-          assigns
-        }
-      });
-
-      if (editDue) {
         events.push({
-          id: 'order-delivery-' + o.order_id,
+          id: `lead-event-${ld.lead_id}-${index}-${ev.id || 'idx'}`,
           sourceType: 'order',
-          eventClass: isOverdue ? 'Delivery Overdue' : 'Target Delivery',
-          date: editDue,
-          customerName: o.customer_name,
-          mobile: o.mobile,
-          eventType: o.event_type,
-          eventTime: 'Target Delivery',
-          eventLocation: o.event_location,
-          currentStage: o.current_stage,
-          notes: isOverdue ? 'Overdue\n' + overdueDays + ' Days' : 'On Track',
-          packageName: o.package_name || 'Standard Bundle',
-          totalAmount: o.quotation_amount || 0,
-          orderId: o.order_id,
+          eventClass: 'Event Scheduled',
+          date: evDate,
+          customerName: ld.customer_name,
+          mobile: ld.mobile,
+          eventType: evType,
+          eventTime: evStartTime,
+          eventLocation: evLoc,
+          currentStage: ld.status,
+          notes: 'On Track',
+          packageName: ld.Select_Package_Option || 'Custom Package',
+          totalAmount: ld.package_price || ld.budget || 0,
+          orderId: ld.lead_id, // Map lead_id to orderId for compatibility
+          targetDeliveryDate: targetDeliveryDate,
           raw: {
-            ...o,
+            ...ld,
+            lead_id: ld.lead_id,
+            order_id: ld.lead_id,
+            event_name: evName,
+            event_type: evType,
+            event_date: evDate,
+            event_start_time: evStartTime,
             assignedTeamCount,
-            isOverdue,
-            overdueDays,
-            targetDeliveryDate: editDue,
-            assigns
+            assigns,
+            targetDeliveryDate: targetDeliveryDate,
+            sales_person: ld.sales_person || ld.created_by || 'Sales Team'
           }
         });
-      }
+      });
     });
 
-
     return events;
-  }, [orders, staffAssignments, production, rawFootage, todayStr]);
+  }, [leads, production, staffAssignments]);
 
   // Filters Event list by role first
   const roleFilteredEvents = useMemo(() => {
-    return allEvents.filter(ev => {
-      if (role === 'sales') {
-        // Sales focuses on Scheduled events
-        if (ev.sourceType === 'order' && ev.currentStage === 'Event Scheduled') return true;
-        return false;
-      }
-      if (role === 'operations') {
-        // Operations calendar strictly shows ONLY events with 'Event Scheduled' status
-        return ev.sourceType === 'order' && ev.currentStage === 'Event Scheduled';
-      }
-      if (role === 'production') {
-        // Production focuses on BOTH Event Scheduled and Target Delivery Dates
-        return ev.sourceType === 'order' && (ev.eventClass === 'Event Scheduled' || ev.eventClass === 'Target Delivery' || ev.eventClass === 'Delivery Overdue');
-      }
-      if (role === 'worker') {
-        // Worker only sees order and operations
-        return ev.sourceType === 'order' && ev.currentStage === 'Event Scheduled';
-      }
-      if (role === 'owner') {
-        // Owner sees BOTH Event Scheduled and Target Delivery Dates
-        return ev.sourceType === 'order' && (ev.eventClass === 'Event Scheduled' || ev.eventClass === 'Target Delivery' || ev.eventClass === 'Delivery Overdue');
-      }
-      
-      return true;
-    });
-  }, [allEvents, role]);
+    // Both Sales, Operations, Production, and Owner show exactly the same Order Confirmed not yet Delivered/Completed events
+    return allEvents;
+  }, [allEvents]);
 
   // Inline filter by search, type, and classes
   const filteredEvents = useMemo(() => {
@@ -1618,58 +1572,191 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-zinc-800 text-xs font-mono text-zinc-400 uppercase">
-                    <th className="p-3">Order ID</th>
-                    <th className="p-3">Customer Name</th>
-                    <th className="p-3">Event Name</th>
-                    <th className="p-3">Event Time</th>
-                    <th className="p-3">Current Status</th>
-                    <th className="p-3">Overdue Status</th>
-                    <th className="p-3">Assigned Team Count</th>
-                    <th className="p-3">Action</th>
-                  </tr>
+                  {role === 'sales' && (
+                    <tr className="border-b border-zinc-800 text-xs font-mono text-zinc-400 uppercase">
+                      <th className="p-3">Lead ID</th>
+                      <th className="p-3">Client Name</th>
+                      <th className="p-3">Mobile Number</th>
+                      <th className="p-3">Event Name</th>
+                      <th className="p-3">Event Type</th>
+                      <th className="p-3">Event Date</th>
+                      <th className="p-3">Event Start Time</th>
+                      <th className="p-3">Assigned Sales Staff</th>
+                      <th className="p-3">Current Lead Status</th>
+                      <th className="p-3">Current Workflow Stage</th>
+                      <th className="p-3">Action</th>
+                    </tr>
+                  )}
+                  {role === 'operations' && (
+                    <tr className="border-b border-zinc-800 text-xs font-mono text-zinc-400 uppercase">
+                      <th className="p-3">Lead ID</th>
+                      <th className="p-3">Client Name</th>
+                      <th className="p-3">Event Name</th>
+                      <th className="p-3">Event Type</th>
+                      <th className="p-3">Event Date</th>
+                      <th className="p-3">Event Start Time</th>
+                      <th className="p-3">Assigned Team</th>
+                      <th className="p-3">Current Status</th>
+                      <th className="p-3">Action</th>
+                    </tr>
+                  )}
+                  {role === 'production' && (
+                    <tr className="border-b border-zinc-800 text-xs font-mono text-zinc-400 uppercase">
+                      <th className="p-3">Lead ID</th>
+                      <th className="p-3">Client Name</th>
+                      <th className="p-3">Event Name</th>
+                      <th className="p-3">Event Type</th>
+                      <th className="p-3">Event Date</th>
+                      <th className="p-3">Event Start Time</th>
+                      <th className="p-3">Current Production Status</th>
+                      <th className="p-3">Assigned Production Team</th>
+                      <th className="p-3">Target Delivery Date</th>
+                      <th className="p-3">Current Workflow Status</th>
+                      <th className="p-3">Action</th>
+                    </tr>
+                  )}
+                  {role !== 'sales' && role !== 'operations' && role !== 'production' && (
+                    <tr className="border-b border-zinc-800 text-xs font-mono text-zinc-400 uppercase">
+                      <th className="p-3">Lead ID</th>
+                      <th className="p-3">Client Name</th>
+                      <th className="p-3">Event Name</th>
+                      <th className="p-3">Event Type</th>
+                      <th className="p-3">Event Date</th>
+                      <th className="p-3">Event Start Time</th>
+                      <th className="p-3">Current Status</th>
+                      <th className="p-3">Assigned Team</th>
+                      <th className="p-3">Target Delivery Date</th>
+                      <th className="p-3">Current Workflow Stage</th>
+                      <th className="p-3">Action</th>
+                    </tr>
+                  )}
                 </thead>
                 <tbody className="text-sm">
-                  {filteredEvents.filter(e => e.date === popupDate).map(ev => (
-                    <tr key={ev.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/20">
-                      <td className="p-3 font-mono text-xs text-yellow-500">{ev.orderId}</td>
-                      <td className="p-3 text-white font-medium">{ev.customerName}</td>
-                      <td className="p-3 text-zinc-300">{ev.eventType}</td>
-                      <td className="p-3 text-zinc-300 font-mono text-xs">{ev.eventTime}</td>
-                      <td className="p-3">
-                        <span className="px-2 py-1 rounded bg-zinc-800 text-xs text-zinc-300 border border-zinc-700 whitespace-nowrap">
-                          {ev.currentStage}
-                        </span>
-                      </td>
-                      <td className="p-3">
-                        {ev.raw.isOverdue ? (
-                          <span className="text-red-400 font-bold text-xs whitespace-pre-wrap">{ev.notes}</span>
-                        ) : (
-                          <span className="text-emerald-400 font-bold text-xs">On Track</span>
+                  {filteredEvents.filter(e => e.date === popupDate).map(ev => {
+                    const assignedTeamStr = ev.raw.assigns && ev.raw.assigns.length > 0 
+                      ? Array.from(new Set(ev.raw.assigns.map((a: any) => a.staff_name))).join(', ') 
+                      : 'None Assigned';
+                    const prodStatus = production.find(p => p.tracking_id === ev.raw.lead_id || p.order_id === ev.raw.lead_id)?.editing_status || ev.raw.editing_status || 'Pending';
+                    const prodAssignedEditor = production.find(p => p.tracking_id === ev.raw.lead_id || p.order_id === ev.raw.lead_id)?.editor_assigned || ev.raw.assigned_editor || 'None Assigned';
+
+                    return (
+                      <tr key={ev.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/20">
+                        {role === 'sales' && (
+                          <>
+                            <td className="p-3 font-mono text-xs text-yellow-500">{ev.orderId}</td>
+                            <td className="p-3 text-white font-medium">{ev.customerName}</td>
+                            <td className="p-3 text-zinc-300 font-mono text-xs">{ev.mobile || 'N/A'}</td>
+                            <td className="p-3 text-zinc-300">{ev.raw.event_name || 'N/A'}</td>
+                            <td className="p-3 text-zinc-300">{ev.eventType}</td>
+                            <td className="p-3 text-zinc-350 font-mono text-xs">{ev.date}</td>
+                            <td className="p-3 text-zinc-300 font-mono text-xs">{ev.eventTime}</td>
+                            <td className="p-3 text-zinc-300">{ev.raw.sales_person || 'N/A'}</td>
+                            <td className="p-3">
+                              <span className="px-2 py-1 rounded bg-zinc-800 text-xs text-zinc-300 border border-zinc-700 whitespace-nowrap">
+                                {ev.currentStage}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <span className="px-2 py-1 rounded bg-zinc-850 text-xs text-zinc-400 border border-zinc-800 whitespace-nowrap">
+                                {ev.currentStage}
+                              </span>
+                            </td>
+                          </>
                         )}
-                      </td>
-                      <td className="p-3 text-center">
-                        <button 
-                          onClick={() => setTeamPopupEvent(ev)}
-                          className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white rounded cursor-pointer font-bold transition"
-                        >
-                          {ev.raw.assignedTeamCount}
-                        </button>
-                      </td>
-                      <td className="p-3">
-                        <button 
-                          onClick={() => {
-                             // Dispatch custom event to trigger parent dashboards
-                             window.dispatchEvent(new CustomEvent('calendar-action-click', { detail: { orderId: ev.orderId, role, leadId: ev.raw.lead_id } }));
-                             setPopupDate(null);
-                          }}
-                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-bold text-xs cursor-pointer shadow"
-                        >
-                          Details
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+
+                        {role === 'operations' && (
+                          <>
+                            <td className="p-3 font-mono text-xs text-yellow-500">{ev.orderId}</td>
+                            <td className="p-3 text-white font-medium">{ev.customerName}</td>
+                            <td className="p-3 text-zinc-300">{ev.raw.event_name || 'N/A'}</td>
+                            <td className="p-3 text-zinc-300">{ev.eventType}</td>
+                            <td className="p-3 text-zinc-350 font-mono text-xs">{ev.date}</td>
+                            <td className="p-3 text-zinc-300 font-mono text-xs">{ev.eventTime}</td>
+                            <td className="p-3">
+                              <button 
+                                onClick={() => setTeamPopupEvent(ev)}
+                                className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white rounded cursor-pointer font-bold transition text-xs"
+                              >
+                                {assignedTeamStr}
+                              </button>
+                            </td>
+                            <td className="p-3">
+                              <span className="px-2 py-1 rounded bg-zinc-800 text-xs text-zinc-300 border border-zinc-700 whitespace-nowrap">
+                                {ev.currentStage}
+                              </span>
+                            </td>
+                          </>
+                        )}
+
+                        {role === 'production' && (
+                          <>
+                            <td className="p-3 font-mono text-xs text-yellow-500">{ev.orderId}</td>
+                            <td className="p-3 text-white font-medium">{ev.customerName}</td>
+                            <td className="p-3 text-zinc-300">{ev.raw.event_name || 'N/A'}</td>
+                            <td className="p-3 text-zinc-300">{ev.eventType}</td>
+                            <td className="p-3 text-zinc-350 font-mono text-xs">{ev.date}</td>
+                            <td className="p-3 text-zinc-300 font-mono text-xs">{ev.eventTime}</td>
+                            <td className="p-3">
+                              <span className="px-2 py-0.5 rounded bg-zinc-850 text-xs text-cyan-400 border border-cyan-500/20 whitespace-nowrap font-mono">
+                                {prodStatus}
+                              </span>
+                            </td>
+                            <td className="p-3 text-zinc-300">{prodAssignedEditor}</td>
+                            <td className="p-3 text-pink-400 font-mono text-xs">{ev.targetDeliveryDate || 'N/A'}</td>
+                            <td className="p-3">
+                              <span className="px-2 py-1 rounded bg-zinc-800 text-xs text-zinc-300 border border-zinc-700 whitespace-nowrap">
+                                {ev.currentStage}
+                              </span>
+                            </td>
+                          </>
+                        )}
+
+                        {role !== 'sales' && role !== 'operations' && role !== 'production' && (
+                          <>
+                            <td className="p-3 font-mono text-xs text-yellow-500">{ev.orderId}</td>
+                            <td className="p-3 text-white font-medium">{ev.customerName}</td>
+                            <td className="p-3 text-zinc-300">{ev.raw.event_name || 'N/A'}</td>
+                            <td className="p-3 text-zinc-300">{ev.eventType}</td>
+                            <td className="p-3 text-zinc-350 font-mono text-xs">{ev.date}</td>
+                            <td className="p-3 text-zinc-300 font-mono text-xs">{ev.eventTime}</td>
+                            <td className="p-3">
+                              <span className="px-2 py-1 rounded bg-zinc-800 text-xs text-zinc-300 border border-zinc-700 whitespace-nowrap">
+                                {ev.currentStage}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <button 
+                                onClick={() => setTeamPopupEvent(ev)}
+                                className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white rounded cursor-pointer font-bold transition text-xs"
+                              >
+                                {assignedTeamStr}
+                              </button>
+                            </td>
+                            <td className="p-3 text-pink-400 font-mono text-xs">{ev.targetDeliveryDate || 'N/A'}</td>
+                            <td className="p-3">
+                              <span className="px-2 py-1 rounded bg-zinc-850 text-xs text-zinc-400 border border-zinc-800 whitespace-nowrap font-mono">
+                                {ev.currentStage}
+                              </span>
+                            </td>
+                          </>
+                        )}
+
+                        <td className="p-3">
+                          <button 
+                            onClick={() => {
+                               // Dispatch custom event to trigger parent dashboards
+                               window.dispatchEvent(new CustomEvent('calendar-action-click', { detail: { orderId: ev.orderId, role, leadId: ev.raw.lead_id } }));
+                               window.dispatchEvent(new CustomEvent('calendar-action-click-deferred', { detail: { orderId: ev.orderId, role, leadId: ev.raw.lead_id } }));
+                               setPopupDate(null);
+                            }}
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-bold text-xs cursor-pointer shadow whitespace-nowrap"
+                          >
+                            Details
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
