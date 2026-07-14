@@ -662,7 +662,7 @@ ${coordinatorName}`;
       'Payment Pending'
     ];
 
-    return (leadsData || []).filter(l => {
+    const mapped = (leadsData || []).filter(l => {
       const order = orders.find(o => o.lead_id === l.lead_id);
       const stage = l.status || order?.current_stage;
       return postProdStages.includes(stage);
@@ -697,6 +697,16 @@ ${coordinatorName}`;
         expected_delivery_date: (l as any).delivery_target_date || defaultTargetDate
       };
     });
+
+    mapped.sort((a, b) => {
+      const leadA = leadsData?.find(l => l.lead_id === a.tracking_id || `PRD-${l.lead_id}` === a.production_id);
+      const leadB = leadsData?.find(l => l.lead_id === b.tracking_id || `PRD-${l.lead_id}` === b.production_id);
+      const timeA = leadA ? (leadA.created_at ? new Date(leadA.created_at).getTime() : new Date(leadA.created_date).getTime()) : 0;
+      const timeB = leadB ? (leadB.created_at ? new Date(leadB.created_at).getTime() : new Date(leadB.created_date).getTime()) : 0;
+      return timeB - timeA;
+    });
+
+    return mapped;
   }, [leadsData, orders, rawFootage, production]);
 
   // Staff Performance Filter State
@@ -2541,6 +2551,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
           {/* Newly Arrived - Raw Footage Received Queue */}
           {(() => {
+            return null;
             const rawFootageLeads = filteredLeadsList.filter(prod => {
               const { order } = resolveOrderAndLead(prod);
               if (!order) return false;
@@ -2771,7 +2782,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       if (!order) return false;
                       
                       // Only show in active Production table once editor assignment has been completed
-                      if (prod.editing_status === 'Raw Footage Received') return false;
+                      // if (prod.editing_status === 'Raw Footage Received') return false;
                       
                       const searchLower = leadSearch.toLowerCase();
                       const clientMatch = order.customer_name?.toLowerCase().includes(searchLower) || order.order_id.toLowerCase().includes(searchLower);

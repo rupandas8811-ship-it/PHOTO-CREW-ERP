@@ -238,8 +238,8 @@ export const OperationsLeads: React.FC = () => {
   }>>({});
 
   // Sorting state
-  const [sortBy, setSortBy] = useState<'event_date' | 'customer_name' | 'status' | 'assignment_date'>('event_date');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [sortBy, setSortBy] = useState<'event_date' | 'customer_name' | 'status' | 'assignment_date' | 'created_at'>('created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   // Dual Dropdown and Multi-Staff Assign State
   const [activeAssignments, setActiveAssignments] = useState<{ staff_role: string; staff_id: string; staff_name: string }[]>([]);
@@ -614,11 +614,18 @@ export const OperationsLeads: React.FC = () => {
        });
     }
 
+    const matchedStaff = finalAssignments || (staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id) : []);
+    const globalAssignedStaff = matchedStaff.map(sa => `${sa.staff_name} (${sa.staff_role})`).join(', ') || 'None';
+
+    const op = operations?.find(o => o.order_id === ord.order_id);
+    const globalAssignedEquipment = op?.equipment_kit || 'None';
+
     let text = `Hey ${staffName}! You've been assigned for ${clientName}.\n\n`;
     text += `Order ID: ${orderId}\n`;
 
     if (assignedEvents.length === 0) {
-       const eventName = ord.event_type || 'N/A';
+       const eventName = ord.custom_event_name || lead?.custom_event_name || ord.event_type || 'N/A';
+       const eventType = ord.shoot_type || lead?.shoot_type || ord.event_type || 'N/A';
        const eventDate = ord.event_date || 'N/A';
        const eventTime = ord.event_time || 'N/A';
        const location = lead?.event_location || ord.event_location || 'N/A';
@@ -640,31 +647,44 @@ export const OperationsLeads: React.FC = () => {
           }
        }
 
-       text += `Event: ${eventName}\n`;
-       text += `Date: ${eventDate}\n`;
-       text += `Time: ${eventTime}\n`;
+       text += `Event Name: ${eventName}\n`;
+       text += `Event Type/Shoot Type: ${eventType}\n`;
+       text += `Event Date: ${eventDate}\n`;
+       text += `Event Time: ${eventTime}\n`;
        text += `Reporting Date: ${reportingDate}\n`;
        text += `Reporting Time: ${reportingTime}\n`;
+       text += `Assigned Staff Name(s): ${globalAssignedStaff}\n`;
+       text += `Assigned Equipment: ${globalAssignedEquipment}\n`;
        text += `Role: ${assignedRoles.join(', ')}\n\n`;
        text += `Location:\n${location}\n\n`;
     } else {
        assignedEvents.forEach((ev, index) => {
-          const eventName = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');
+          const eventName = ev.event_name || (ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A'));
+          const eventType = ev.event_shoot_type || ev.event_type || 'N/A';
           const eventDate = ev.event_date || 'N/A';
           const eventTime = ev.event_start_time || ev.reporting_time || (ev.alloc?.reporting_time) || 'N/A';
           const reportingDate = ev.reporting_date || ev.alloc?.reporting_date || ord.Reporting_date || lead?.Reporting_date || 'Not Assigned';
           const reportingTime = ev.reporting_time || ev.alloc?.reporting_time || ord.reporting_time || lead?.reporting_time || 'Not Assigned';
           const location = ev.event_location || lead?.event_location || 'N/A';
           
+          const eventStaff = ev.assigned_staff_names || (ev.alloc?.staff ? ev.alloc.staff.map((s: any) => `${s.staff_name} (${s.staff_role})`).join(', ') : '');
+          const eventStaffList = eventStaff || globalAssignedStaff;
+
+          const eventEquipment = ev.alloc?.equipment ? ev.alloc.equipment.join(', ') : '';
+          const eventEquipmentList = eventEquipment || globalAssignedEquipment;
+
           let assignedRoles = ev.roles || ['Crew'];
           assignedRoles = Array.from(new Set(assignedRoles));
 
           if (index > 0) text += `\n---\n\n`;
-          text += `Event: ${eventName}\n`;
-          text += `Date: ${eventDate}\n`;
-          text += `Time: ${eventTime}\n`;
+          text += `Event Name: ${eventName}\n`;
+          text += `Event Type/Shoot Type: ${eventType}\n`;
+          text += `Event Date: ${eventDate}\n`;
+          text += `Event Time: ${eventTime}\n`;
           text += `Reporting Date: ${reportingDate}\n`;
           text += `Reporting Time: ${reportingTime}\n`;
+          text += `Assigned Staff Name(s): ${eventStaffList}\n`;
+          text += `Assigned Equipment: ${eventEquipmentList}\n`;
           text += `Role: ${assignedRoles.join(', ')}\n\n`;
           text += `Location:\n${location}\n\n`;
        });
@@ -854,6 +874,11 @@ export const OperationsLeads: React.FC = () => {
         const assignsB = staffAssignments ? staffAssignments.filter(x => x.order_id === b.order_id) : [];
         valA = assignsA.length > 0 ? assignsA[0].assignment_date : 'ZZZZ-ZZ-ZZ'; // place unassigned last
         valB = assignsB.length > 0 ? assignsB[0].assignment_date : 'ZZZZ-ZZ-ZZ';
+      } else if (sortBy === 'created_at') {
+        const leadA = leads ? leads.find(l => l.lead_id === a.lead_id) : null;
+        const leadB = leads ? leads.find(l => l.lead_id === b.lead_id) : null;
+        valA = leadA ? (leadA.created_at ? new Date(leadA.created_at).getTime() : new Date(leadA.created_date).getTime()) : (a.created_at ? new Date(a.created_at).getTime() : 0);
+        valB = leadB ? (leadB.created_at ? new Date(leadB.created_at).getTime() : new Date(leadB.created_date).getTime()) : (b.created_at ? new Date(b.created_at).getTime() : 0);
       }
 
       if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
@@ -861,7 +886,7 @@ export const OperationsLeads: React.FC = () => {
       return 0;
     });
     return list;
-  }, [filteredOrders, sortBy, sortOrder, staffAssignments]);
+  }, [filteredOrders, sortBy, sortOrder, staffAssignments, leads]);
 
   useEffect(() => {
     const handler = (e: any) => {
