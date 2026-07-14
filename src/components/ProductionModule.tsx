@@ -297,6 +297,7 @@ const StaffSelectDropdown = ({
 }: StaffSelectDropdownProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { isDataLoading, refreshData } = useRole();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -326,9 +327,34 @@ const StaffSelectDropdown = ({
     return Array.from(map.values());
   }, [productionStaff, staffType]);
 
+  // If the Staff Type changes, clear any previously selected staff member that no longer matches the selected type or is not active
+  useEffect(() => {
+    if (selectedStaffId && productionStaff.length > 0) {
+      const match = productionStaff.find(s => s.staff_id === selectedStaffId);
+      if (match) {
+        const type = match.staff_type || (match as any).Staff_Type || 'In-House';
+        const cleanType = type.replace(/[\s-]/g, '').toLowerCase();
+        const cleanFilter = staffType.replace(/[\s-]/g, '').toLowerCase();
+        
+        if (cleanType !== cleanFilter || match.status !== 'Active') {
+          onSelect('');
+        }
+      } else {
+        onSelect('');
+      }
+    }
+  }, [staffType, selectedStaffId, productionStaff, onSelect]);
+
   const currentStaff = useMemo(() => {
-    return filteredStaff.find(s => s.staff_id === selectedStaffId);
-  }, [filteredStaff, selectedStaffId]);
+    // Note: look in the entire active productionStaff list first, but only allow showing it if it matches the active status and current staffType filter
+    const staffMember = productionStaff.find(s => s.staff_id === selectedStaffId);
+    if (!staffMember || staffMember.status !== 'Active') return null;
+    const type = staffMember.staff_type || (staffMember as any).Staff_Type || 'In-House';
+    const cleanType = type.replace(/[\s-]/g, '').toLowerCase();
+    const cleanFilter = staffType.replace(/[\s-]/g, '').toLowerCase();
+    if (cleanType !== cleanFilter) return null;
+    return staffMember;
+  }, [productionStaff, selectedStaffId, staffType]);
 
   const currentStaffIsBusy = useMemo(() => {
     if (!currentStaff) return false;
@@ -343,7 +369,12 @@ const StaffSelectDropdown = ({
         className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-xs text-zinc-300 rounded-xl px-2.5 py-1.5 font-sans focus:outline-none focus:border-purple-500 cursor-pointer min-h-[34px] flex items-center justify-between gap-1.5"
       >
         <span className="truncate">
-          {currentStaff ? (
+          {isDataLoading && productionStaff.length === 0 ? (
+            <span className="flex items-center gap-1.5 text-zinc-500 italic">
+              <span className="w-3.5 h-3.5 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin shrink-0" />
+              <span>Fetching staff...</span>
+            </span>
+          ) : currentStaff ? (
             <span className="flex items-center gap-1.5">
               <span className="text-xs shrink-0">{currentStaffIsBusy ? '🔴' : '🟢'}</span>
               <span className="truncate">{currentStaff.name}</span>
@@ -380,56 +411,81 @@ const StaffSelectDropdown = ({
           >
             Clear Selection
           </div>
-          {filteredStaff.map(s => {
-              const isBusy = editorAssignments.some(a => a.staff_id === s.staff_id && a.status !== 'Completed');
-              const isAlreadyAssigned = allRowsForDeliverable.some(r => r.staffId === s.staff_id && r.id !== rowId);
-              return (
-                <div
-                  key={s.staff_id}
-                  onClick={() => {
-                    if (isAlreadyAssigned) return;
-                    onSelect(s.staff_id);
-                    setIsOpen(false);
-                  }}
-                  className={`px-3 py-2 text-xs flex items-center justify-between gap-2 transition-colors ${
-                    isAlreadyAssigned 
-                      ? 'opacity-50 cursor-not-allowed bg-zinc-950 text-zinc-650' 
-                      : 'hover:bg-zinc-900 cursor-pointer text-zinc-350 hover:text-white'
-                  }`}
-                >
-                  <span className="flex items-center gap-1.5 truncate">
-                    <span className="text-xs shrink-0">{isBusy ? '🔴' : '🟢'}</span>
-                  <span className="font-medium truncate">{s.name}</span>
-                  <span className="text-[10px] text-zinc-550 font-mono truncate">({s.role || 'Staff'})</span>
-                  {isAlreadyAssigned && <span className="text-[9px] text-zinc-600 font-mono italic">(Already assigned)</span>}
-                </span>
-
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
-                    isBusy ? 'bg-rose-950/30 text-rose-400 border border-rose-900/30' : 'bg-emerald-950/30 text-emerald-400 border border-emerald-900/30'
-                  }`}>
-                    {isBusy ? 'Busy' : 'Available'}
-                  </span>
-                  
-                  {isBusy && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenRoster(s.name);
+          {isDataLoading && productionStaff.length === 0 ? (
+            <div className="px-3 py-4 text-xs text-zinc-400 font-mono text-center flex flex-col items-center justify-center gap-2">
+              <span className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin shrink-0" />
+              <span>Loading staff roster...</span>
+            </div>
+          ) : (
+            <>
+              {filteredStaff.map(s => {
+                  const isBusy = editorAssignments.some(a => a.staff_id === s.staff_id && a.status !== 'Completed');
+                  const isAlreadyAssigned = allRowsForDeliverable.some(r => r.staffId === s.staff_id && r.id !== rowId);
+                  return (
+                    <div
+                      key={s.staff_id}
+                      onClick={() => {
+                        if (isAlreadyAssigned) return;
+                        onSelect(s.staff_id);
+                        setIsOpen(false);
                       }}
-                      className="text-[9px] font-mono text-[#a78bfa] hover:text-[#c084fc] hover:underline px-1 py-0.5"
+                      className={`px-3 py-2 text-xs flex items-center justify-between gap-2 transition-colors ${
+                        isAlreadyAssigned 
+                          ? 'opacity-50 cursor-not-allowed bg-zinc-950 text-zinc-650' 
+                          : 'hover:bg-zinc-900 cursor-pointer text-zinc-350 hover:text-white'
+                      }`}
                     >
-                      Roster
-                    </button>
-                  )}
+                      <span className="flex items-center gap-1.5 truncate">
+                        <span className="text-xs shrink-0">{isBusy ? '🔴' : '🟢'}</span>
+                        <span className="font-medium truncate">{s.name}</span>
+                        <span className="text-[10px] text-zinc-550 font-mono truncate">({s.role || 'Staff'})</span>
+                        {isAlreadyAssigned && <span className="text-[9px] text-zinc-600 font-mono italic">(Already assigned)</span>}
+                      </span>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                          isBusy ? 'bg-rose-950/30 text-rose-400 border border-rose-900/30' : 'bg-emerald-950/30 text-emerald-400 border border-emerald-900/30'
+                        }`}>
+                          {isBusy ? 'Busy' : 'Available'}
+                        </span>
+                        
+                        {isBusy && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenRoster(s.name);
+                            }}
+                            className="text-[9px] font-mono text-[#a78bfa] hover:text-[#c084fc] hover:underline px-1 py-0.5"
+                          >
+                            Roster
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+              })}
+              {filteredStaff.length === 0 && (
+                <div className="px-3 py-4 text-xs text-rose-400 italic font-mono text-center">
+                  No staff available for the selected Staff Type.
                 </div>
-              </div>
-            );
-          })}
-          {filteredStaff.length === 0 && (
-            <div className="px-3 py-3 text-xs text-zinc-500 italic font-mono text-center">
-              No Production Staff Available.
+              )}
+            </>
+          )}
+          {productionStaff.length === 0 && !isDataLoading && (
+            <div className="px-3 py-4 text-xs text-zinc-400 italic font-mono text-center flex flex-col items-center gap-2">
+              <span>Database Connection Error or No Staff Registered.</span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof refreshData === 'function') {
+                    refreshData();
+                  }
+                }}
+                className="px-2 py-1 bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 border border-purple-500/30 text-[10px] rounded transition-all font-sans font-bold"
+              >
+                Retry Fetch
+              </button>
             </div>
           )}
         </div>
@@ -1739,6 +1795,10 @@ ${coordinatorName}`;
           
           const loadExistingAssignments = async () => {
             try {
+              // Refresh staff from the database on modal open
+              if (typeof refreshData === 'function') {
+                refreshData();
+              }
               // 1. Fetch current assignments from Supabase
               const { data: dbAssignments, error } = await supabaseClient
                 .from('editor_assignments')
