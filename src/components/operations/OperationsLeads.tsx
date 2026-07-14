@@ -580,7 +580,7 @@ export const OperationsLeads: React.FC = () => {
     
     const clientName = ord.customer_name;
     const clientContact = ord.mobile || (lead ? lead.mobile : 'N/A');
-    const clientWhatsapp = lead?.whatsapp_number || 'N/A';
+    const clientWhatsapp = lead?.whatsapp_number || ord.whatsapp_number || 'Not Available';
     const orderId = ord.order_id;
 
     let assignedEvents: any[] = [];
@@ -622,6 +622,8 @@ export const OperationsLeads: React.FC = () => {
        const eventDate = ord.event_date || 'N/A';
        const eventTime = ord.event_time || 'N/A';
        const location = lead?.event_location || ord.event_location || 'N/A';
+       const reportingDate = ord.Reporting_date || lead?.Reporting_date || 'Not Assigned';
+       const reportingTime = ord.reporting_time || lead?.reporting_time || 'Not Assigned';
        
        let assignedRoles = ['Crew'];
        if (finalAssignments) {
@@ -641,6 +643,8 @@ export const OperationsLeads: React.FC = () => {
        text += `Event: ${eventName}\n`;
        text += `Date: ${eventDate}\n`;
        text += `Time: ${eventTime}\n`;
+       text += `Reporting Date: ${reportingDate}\n`;
+       text += `Reporting Time: ${reportingTime}\n`;
        text += `Role: ${assignedRoles.join(', ')}\n\n`;
        text += `Location:\n${location}\n\n`;
     } else {
@@ -648,6 +652,8 @@ export const OperationsLeads: React.FC = () => {
           const eventName = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');
           const eventDate = ev.event_date || 'N/A';
           const eventTime = ev.event_start_time || ev.reporting_time || (ev.alloc?.reporting_time) || 'N/A';
+          const reportingDate = ev.reporting_date || ev.alloc?.reporting_date || ord.Reporting_date || lead?.Reporting_date || 'Not Assigned';
+          const reportingTime = ev.reporting_time || ev.alloc?.reporting_time || ord.reporting_time || lead?.reporting_time || 'Not Assigned';
           const location = ev.event_location || lead?.event_location || 'N/A';
           
           let assignedRoles = ev.roles || ['Crew'];
@@ -657,6 +663,8 @@ export const OperationsLeads: React.FC = () => {
           text += `Event: ${eventName}\n`;
           text += `Date: ${eventDate}\n`;
           text += `Time: ${eventTime}\n`;
+          text += `Reporting Date: ${reportingDate}\n`;
+          text += `Reporting Time: ${reportingTime}\n`;
           text += `Role: ${assignedRoles.join(', ')}\n\n`;
           text += `Location:\n${location}\n\n`;
        });
