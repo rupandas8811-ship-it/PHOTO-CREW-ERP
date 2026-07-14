@@ -17,7 +17,20 @@ export const OwnerRevenueDetailed: React.FC = () => {
   const metrics = useMemo(() => {
     const totalCollected = payments.reduce((sum, p) => sum + (p.advance_received || 0) + (p.final_payment_received || 0), 0);
     const totalPending = payments.reduce((sum, p) => sum + (p.balance_due || 0), 0);
-    const totalQuotation = quotations.reduce((sum, q) => sum + (q.grand_total || 0), 0);
+    
+    // Sum Final Quotation Amount for leads whose status is between Order Confirmed and Delivered (inclusive)
+    const totalQuotation = leads.reduce((sum, l) => {
+      const excluded = [
+        'Draft', 'New Lead', 'Quotation Pending', 'Cancelled', 'Rejected',
+        'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Lost Lead', 'Lost'
+      ];
+      if (l.status && !excluded.includes(l.status)) {
+        const amt = Number(l.Final_Quotation_Amount) || Number(l.final_amount) || Number(l.final_package_amount) || Number(l.budget) || 0;
+        return sum + amt;
+      }
+      return sum;
+    }, 0);
+
     const totalAdvance = payments.reduce((sum, p) => sum + (p.advance_received || 0), 0);
     const totalFinal = payments.reduce((sum, p) => sum + (p.final_payment_received || 0), 0);
     const outstandingBalance = payments.reduce((sum, p) => sum + (p.balance_due || 0), 0);
@@ -108,6 +121,76 @@ export const OwnerRevenueDetailed: React.FC = () => {
     });
     return Object.entries(packages).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 8);
   }, [orders]);
+
+  // Unified recent transactions list using precise Date & Time from payment records/history
+  const recentTransactions = useMemo(() => {
+    const list: {
+      date: string;
+      orderId: string;
+      customerName: string;
+      transactionId: string;
+      paymentMode: string;
+      amount: number;
+      receivedBy?: string;
+    }[] = [];
+
+    payments.forEach(p => {
+      const order = orders.find(o => o.order_id === p.order_id);
+      const customerName = order?.customer_name || 'System Transaction';
+      
+      const historyKey = `payment_history_${p.order_id}`;
+      const existingHistoryStr = localStorage.getItem(historyKey);
+      let historyList: any[] = [];
+      if (existingHistoryStr) {
+        try {
+          historyList = JSON.parse(existingHistoryStr);
+        } catch (e) {
+          console.error("Failed to parse local storage payment history", e);
+        }
+      } else {
+        // Fallback prepopulated history if none exists but total paid is greater than zero
+        const adv = p.advance_received || 0;
+        const finalRecv = p.final_payment_received || 0;
+        
+        if (adv > 0) {
+          historyList.push({
+            date: p.payment_date || order?.created_at || new Date().toISOString(),
+            amount: adv,
+            transactionId: 'ADVANCE-INITIAL',
+            paymentMode: 'Bank Transfer',
+            updatedBy: 'System',
+            notes: 'Initial advance payment'
+          });
+        }
+        if (finalRecv > 0) {
+          historyList.push({
+            date: p.payment_date || order?.created_at || new Date().toISOString(),
+            amount: finalRecv,
+            transactionId: p.transaction_id || 'FINAL-INITIAL',
+            paymentMode: 'Bank Transfer',
+            updatedBy: 'System',
+            notes: 'Recorded final payment'
+          });
+        }
+      }
+
+      historyList.forEach(h => {
+        list.push({
+          date: h.date || new Date().toISOString(),
+          orderId: p.order_id,
+          customerName,
+          transactionId: (!h.transactionId || h.transactionId.trim() === '' || h.transactionId === 'null' || h.transactionId === 'NULL') ? 'N/A' : h.transactionId,
+          paymentMode: h.paymentMode || 'N/A',
+          amount: h.amount || 0,
+          receivedBy: h.updatedBy || 'System'
+        });
+      });
+    });
+
+    // Sort by Date & Time descending (newest first)
+    list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return list;
+  }, [payments, orders]);
 
   const COLORS = ['#10B981', '#6366F1', '#F59E0B', '#EF4444', '#A78BFA', '#F472B6', '#2DD4BF', '#FACC15'];
 
@@ -306,36 +389,42 @@ export const OwnerRevenueDetailed: React.FC = () => {
           <table className="w-full text-left border-collapse font-sans text-xs">
             <thead>
               <tr className="bg-zinc-900/50 text-zinc-450 font-mono text-[10px] uppercase tracking-wider">
-                <th className="p-4">Transaction Date</th>
+                <th className="p-4">Transaction Date & Time</th>
+                <th className="p-4">Order ID</th>
                 <th className="p-4">Customer Name</th>
-                <th className="p-4">Quotation Amt</th>
-                <th className="p-4">Advance Paid</th>
-                <th className="p-4">Final Paid</th>
-                <th className="p-4">Balance Due</th>
-                <th className="p-4">Status</th>
+                <th className="p-4">Transaction ID</th>
+                <th className="p-4">Payment Mode</th>
+                <th className="p-4">Amount Received</th>
+                <th className="p-4">Received By</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-900">
-              {payments.slice(0, 10).map((p, idx) => (
-                <tr key={idx} className="hover:bg-zinc-900/40 transition-colors">
-                  <td className="p-4 text-zinc-400 font-mono">{p.created_at ? new Date(p.created_at).toLocaleDateString() : 'N/A'}</td>
-                  <td className="p-4 font-bold text-zinc-100">{orders.find(o => o.order_id === p.order_id)?.customer_name || 'System Transaction'}</td>
-                  <td className="p-4 text-zinc-300 font-mono">{formatINR(quotations.find(q => q.order_id === p.order_id)?.grand_total || 0)}</td>
-                  <td className="p-4 text-emerald-400 font-mono font-bold">+{formatINR(p.advance_received || 0)}</td>
-                  <td className="p-4 text-emerald-400 font-mono font-bold">+{formatINR(p.final_payment_received || 0)}</td>
-                  <td className="p-4 text-rose-400 font-mono font-bold">{formatINR(p.balance_due || 0)}</td>
-                  <td className="p-4">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      p.payment_status === 'Fully Paid' ? 'bg-emerald-500/10 text-emerald-500' :
-                      p.payment_status === 'Partially Paid' ? 'bg-indigo-500/10 text-indigo-500' :
-                      'bg-amber-500/10 text-amber-500'
-                    }`}>
-                      {p.payment_status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {payments.length === 0 && (
+              {recentTransactions.slice(0, 10).map((txn, idx) => {
+                let displayDate = txn.date;
+                try {
+                  displayDate = new Date(txn.date).toLocaleString('en-IN', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: true
+                  });
+                } catch(e) {}
+                
+                return (
+                  <tr key={idx} className="hover:bg-zinc-900/40 transition-colors">
+                    <td className="p-4 text-zinc-400 font-mono">{displayDate}</td>
+                    <td className="p-4 text-zinc-300 font-mono">{txn.orderId}</td>
+                    <td className="p-4 font-bold text-zinc-100">{txn.customerName}</td>
+                    <td className="p-4 text-zinc-400 font-mono">{txn.transactionId}</td>
+                    <td className="p-4 text-zinc-300">{txn.paymentMode}</td>
+                    <td className="p-4 text-emerald-400 font-mono font-bold">+{formatINR(txn.amount)}</td>
+                    <td className="p-4 text-zinc-450">{txn.receivedBy || 'N/A'}</td>
+                  </tr>
+                );
+              })}
+              {recentTransactions.length === 0 && (
                 <tr>
                   <td colSpan={7} className="p-10 text-center text-zinc-500 italic">No recent payment transactions detected in ledger.</td>
                 </tr>
