@@ -31,6 +31,7 @@ export const OperationsStaffManagement: React.FC = () => {
 
   const [selectedStaffBookings, setSelectedStaffBookings] = useState<{ staffName: string; bookings: any[] } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [operatingId, setOperatingId] = useState<string | null>(null);
 
   const handleSelectEdit = (st: any) => {
     setEditingId(st.staff_id);
@@ -152,19 +153,45 @@ export const OperationsStaffManagement: React.FC = () => {
     }
   };
 
-  const handleDelete = (id: string, name: string) => {
-    if (confirm(`De-register agent "${name}" from operational roster?`)) {
-      deleteStaff(id);
-      alert('Roster entry dropped.');
+  const handleDelete = async (id: string, name: string) => {
+    if (confirm(`Are you absolutely sure you want to delete staff member "${name}"? This action cannot be undone.`)) {
+      try {
+        setOperatingId(id);
+        await deleteStaff(id);
+        const toast = document.createElement('div');
+        toast.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-2 rounded-xl shadow-lg z-50 font-sans text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-5';
+        toast.innerHTML = `✅ Staff member "${name}" deleted successfully.`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+      } catch (err: any) {
+        const toast = document.createElement('div');
+        toast.className = 'fixed bottom-4 right-4 bg-rose-600 text-white px-4 py-2 rounded-xl shadow-lg z-50 font-sans text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-5';
+        toast.innerHTML = `❌ Failed to delete staff member: ${err.message || err}`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+      } finally {
+        setOperatingId(null);
+      }
     }
   };
 
   const handleStatusChange = async (staffId: string, newStatus: 'Active' | 'Inactive') => {
     try {
+      setOperatingId(staffId);
       await updateStaff(staffId, { status: newStatus });
-      alert('✅ Staff status updated successfully.');
+      const toast = document.createElement('div');
+      toast.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-2 rounded-xl shadow-lg z-50 font-sans text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-5';
+      toast.innerHTML = `✅ Staff member successfully ${newStatus === 'Active' ? 'activated' : 'deactivated'}.`;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
     } catch (err: any) {
-      alert(`Operation failed: ${err.message || err}`);
+      const toast = document.createElement('div');
+      toast.className = 'fixed bottom-4 right-4 bg-rose-600 text-white px-4 py-2 rounded-xl shadow-lg z-50 font-sans text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-5';
+      toast.innerHTML = `❌ Failed to update status: ${err.message || err}`;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    } finally {
+      setOperatingId(null);
     }
   };
 
@@ -544,19 +571,51 @@ export const OperationsStaffManagement: React.FC = () => {
                             <>
                               <button
                                 onClick={() => handleSelectEdit(st)}
-                                className="p-1.5 hover:bg-zinc-850 text-zinc-400 hover:text-white rounded border border-transparent hover:border-zinc-800 transition-all cursor-pointer"
+                                disabled={operatingId !== null}
+                                className="p-1.5 hover:bg-zinc-850 text-zinc-400 hover:text-white rounded border border-transparent hover:border-zinc-800 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                 title="Edit operatives profile"
                               >
                                 <Edit className="w-3.5 h-3.5" />
                               </button>
-                              <select
-                                value={st.status}
-                                onChange={(e) => handleStatusChange(st.staff_id, e.target.value as 'Active' | 'Inactive')}
-                                className="bg-zinc-950 border border-zinc-850 hover:border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-zinc-300 focus:outline-none focus:border-amber-500/50 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+
+                              {st.status === 'Active' ? (
+                                <button
+                                  onClick={() => handleStatusChange(st.staff_id, 'Inactive')}
+                                  disabled={operatingId !== null}
+                                  className="px-2 py-1 text-[10px] font-mono font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/25 hover:border-amber-500/40 rounded-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                                  title="Deactivate Staff Member"
+                                >
+                                  {operatingId === st.staff_id ? (
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                                  ) : null}
+                                  <span>Deactivate</span>
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleStatusChange(st.staff_id, 'Active')}
+                                  disabled={operatingId !== null}
+                                  className="px-2 py-1 text-[10px] font-mono font-bold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-450 border border-emerald-500/25 hover:border-emerald-500/40 rounded-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                                  title="Activate Staff Member"
+                                >
+                                  {operatingId === st.staff_id ? (
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                                  ) : null}
+                                  <span>Activate</span>
+                                </button>
+                              )}
+
+                              <button
+                                onClick={() => handleDelete(st.staff_id, st.name)}
+                                disabled={operatingId !== null}
+                                className="p-1.5 bg-rose-500/10 hover:bg-rose-500/25 text-rose-450 border border-rose-500/20 rounded-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center"
+                                title="Delete Staff Member"
                               >
-                                <option value="Active">Active</option>
-                                <option value="Inactive">Inactive</option>
-                              </select>
+                                {operatingId === st.staff_id ? (
+                                  <span className="w-3 h-3 border-2 border-rose-450 border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                )}
+                              </button>
                             </>
                           )}
                         </div>
