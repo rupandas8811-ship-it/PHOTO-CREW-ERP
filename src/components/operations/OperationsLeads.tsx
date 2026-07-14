@@ -12,6 +12,101 @@ import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
 import { convertTimeToDbFormat, triggerAutoScrollAndFocus, convertTo12Hour } from '../../utils';
 import { supabaseClient } from '../../supabaseClient';
 
+const OperationsActionColumn = ({ ord, assignedStaffNames, startAssigning, actionItems, isOpen, setActiveMenuOrderId, setMenuCoords, setActiveMenuItems }: any) => {
+  const [dbStatus, setDbStatus] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchStatus = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        if (!supabaseClient) throw new Error("Supabase client not available");
+        // Check order status first, then lead status if order not found
+        const { data: orderData, error: orderError } = await supabaseClient
+          .from('orders')
+          .select('current_stage')
+          .eq('order_id', ord.order_id)
+          .maybeSingle();
+
+        if (orderError && orderError.code !== 'PGRST116') throw orderError;
+        
+        let status = orderData?.current_stage;
+        
+        if (!status) {
+            const { data: leadData, error: leadError } = await supabaseClient
+              .from('leads')
+              .select('current_status')
+              .eq('lead_id', ord.lead_id)
+              .maybeSingle();
+            
+            if (leadError && leadError.code !== 'PGRST116') throw leadError;
+            status = leadData?.current_status;
+        }
+
+        if (isMounted) {
+          setDbStatus(status || ord.current_stage);
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          setError(err.message || "Failed to fetch status");
+          setDbStatus(ord.current_stage); // fallback
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+    fetchStatus();
+    return () => { isMounted = false; };
+  }, [ord.lead_id, ord.order_id, ord.current_stage]);
+
+  return (
+    <div className="flex items-center justify-end gap-2 relative actions-menu-container">
+      {loading ? (
+         <span className="text-zinc-500 text-[10px] italic">Loading...</span>
+      ) : error ? (
+         <span className="text-red-400 text-[10px] italic" title={error}>Error</span>
+      ) : (dbStatus === 'Order Confirmed' && assignedStaffNames.length === 0) ? (
+        <button
+          type="button"
+          onClick={() => startAssigning(ord)}
+          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-sans font-black border border-emerald-500/50 shadow-lg shadow-emerald-500/20 cursor-pointer transition-all inline-flex items-center gap-1.5 outline-none"
+        >
+          Assign Staff
+        </button>
+      ) : null}
+      <div className="relative inline-block text-left">
+        <button
+          type="button"
+          onClick={(e) => {
+            if (isOpen) {
+              setActiveMenuOrderId(null);
+            } else {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const spaceBelow = window.innerHeight - rect.bottom;
+              const openUpward = spaceBelow < 250;
+              setMenuCoords({
+                x: rect.right,
+                y: openUpward ? rect.top : rect.bottom,
+                openUpward
+              });
+              setActiveMenuItems(actionItems);
+              setActiveMenuOrderId(ord.order_id);
+            }
+          }}
+          className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 focus:ring-2 focus:ring-indigo-500/40 active:scale-95 text-white rounded-xl text-xs font-sans font-black border border-indigo-500/25 shadow-lg shadow-indigo-500/20 cursor-pointer transition-all inline-flex items-center gap-1.5 outline-none action-button-trigger"
+        >
+          🎯 Actions <span className={`text-[9px] text-indigo-200 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : ''}`}>▼</span>
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export const OperationsLeads: React.FC = () => {
   const { 
     currentRole, 
@@ -1693,8 +1788,20 @@ export const OperationsLeads: React.FC = () => {
                         )}
                         {(() => {
                           const actionItems: { label: string; onClick: () => void }[] = [];
+                          const assignedStaffNames = getAssignedStaffNamesForOrder(ord);
 
-                          // 1. View Details
+                          // 1. Assign Staff (Only for Order Confirmed and no staff assigned)
+                          if (currentStage === 'Order Confirmed' && assignedStaffNames.length === 0) {
+                            actionItems.push({
+                              label: 'Assign Staff',
+                              onClick: () => {
+                                startAssigning(ord);
+                                setActiveMenuOrderId(null);
+                              }
+                            });
+                          }
+
+                          // 2. View Details
                           actionItems.push({
                             label: 'View Details',
                             onClick: () => {
@@ -1703,8 +1810,7 @@ export const OperationsLeads: React.FC = () => {
                             }
                           });
 
-                          // 2. Share via WhatsApp
-                          const assignedStaffNames = getAssignedStaffNamesForOrder(ord);
+                          // 3. Share via WhatsApp
                           if (assignedStaffNames.length > 0) {
                             actionItems.push({
                               label: 'Share via WhatsApp',
@@ -1801,32 +1907,17 @@ export const OperationsLeads: React.FC = () => {
                           }
 
                           const isOpen = activeMenuOrderId === ord.order_id;
-
                           return (
-                            <div className="relative inline-block text-left actions-menu-container">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  if (isOpen) {
-                                    setActiveMenuOrderId(null);
-                                  } else {
-                                    const rect = e.currentTarget.getBoundingClientRect();
-                                    const spaceBelow = window.innerHeight - rect.bottom;
-                                    const openUpward = spaceBelow < 250;
-                                    setMenuCoords({
-                                      x: rect.right,
-                                      y: openUpward ? rect.top : rect.bottom,
-                                      openUpward
-                                    });
-                                    setActiveMenuItems(actionItems);
-                                    setActiveMenuOrderId(ord.order_id);
-                                  }
-                                }}
-                                className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 focus:ring-2 focus:ring-indigo-500/40 active:scale-95 text-white rounded-xl text-xs font-sans font-black border border-indigo-500/25 shadow-lg shadow-indigo-500/20 cursor-pointer transition-all inline-flex items-center gap-1.5 outline-none action-button-trigger"
-                              >
-                                🎯 Actions <span className={`text-[9px] text-indigo-200 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : ''}`}>▼</span>
-                              </button>
-                            </div>
+                            <OperationsActionColumn
+                              ord={ord}
+                              assignedStaffNames={assignedStaffNames}
+                              startAssigning={startAssigning}
+                              actionItems={actionItems}
+                              isOpen={isOpen}
+                              setActiveMenuOrderId={setActiveMenuOrderId}
+                              setMenuCoords={setMenuCoords}
+                              setActiveMenuItems={setActiveMenuItems}
+                            />
                           );
                         })()}
                       </div>
