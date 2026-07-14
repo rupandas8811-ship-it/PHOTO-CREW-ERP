@@ -4415,17 +4415,18 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           try {
             if (editingStaffId) {
               // Update explicit record being edited
-              await updateStaff(editingStaffId, {
+              await updateProductionStaff(editingStaffId, {
                 name,
                 mobile,
                 whatsapp_number: whatsapp,
                 Skill: skillsArray as any,
+                staff_type: newStaffType as any,
                 Staff_Type: newStaffType as any
               });
               setAddStaffSuccess('✅ Staff details updated successfully.');
             } else {
               // Check if duplicate exists (name or mobile matching)
-              const existingStaff = staff.find(
+              const existingStaff = (productionStaff || []).find(
                 (s) =>
                   s.name.toLowerCase() === name.toLowerCase() ||
                   s.mobile === mobile
@@ -4433,21 +4434,22 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
               if (existingStaff) {
                 // Update existing staff
-                await updateStaff(existingStaff.staff_id, {
+                await updateProductionStaff(existingStaff.staff_id, {
                   mobile,
                   whatsapp_number: whatsapp,
                   Skill: skillsArray as any,
+                  staff_type: newStaffType as any,
                   Staff_Type: newStaffType as any
                 });
                 setAddStaffSuccess('✅ Staff details updated successfully.');
               } else {
-                // Create new staff record in operations_staff table
-                await addStaff({
+                // Create new staff record in production_staff table
+                await addProductionStaff({
                   name,
                   mobile,
                   whatsapp_number: whatsapp,
                   Skill: skillsArray as any,
-                  Staff_Type: newStaffType as any,
+                  staff_type: newStaffType as any,
                   email: `${name.toLowerCase().replace(/\s+/g, '')}@photocrew.com`,
                   role: 'Editor',
                   department: 'Post-Production',
@@ -4484,7 +4486,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             setNewStaffSkills(updatedSkills);
             if (editingStaffId) {
               try {
-                await updateStaff(editingStaffId, { Skill: updatedSkills as any });
+                await updateProductionStaff(editingStaffId, { Skill: updatedSkills as any });
               } catch (e) {
                 console.error('Failed real-time skill save', e);
               }
@@ -4494,7 +4496,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         };
 
         // Use productionStaff directly from the dedicated production_staff database table
-        const productionStaffList = (staff || []).filter(s => s.department === 'Post-Production' || s.role === 'Editor' || s.Staff_Type || (s.Skill && s.Skill.length > 0));
+        const productionStaffList = productionStaff || [];
 
         return (
           <div className="space-y-6 animate-fade-in">
@@ -4568,7 +4570,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           setNewStaffType(val);
                           if (editingStaffId) {
                             try {
-                              await updateStaff(editingStaffId, { Staff_Type: val as any });
+                              await updateProductionStaff(editingStaffId, { staff_type: val as any, Staff_Type: val as any });
                             } catch (err) {
                               console.error('Failed real-time staff type save', err);
                             }
@@ -4655,7 +4657,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   setNewStaffSkills(updatedSkills);
                                   if (editingStaffId) {
                                     try {
-                                      await updateStaff(editingStaffId, { Skill: updatedSkills as any });
+                                      await updateProductionStaff(editingStaffId, { Skill: updatedSkills as any });
                                     } catch (e) {
                                       console.error('Failed real-time skill save', e);
                                     }

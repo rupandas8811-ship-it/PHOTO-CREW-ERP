@@ -562,6 +562,7 @@ export const mapProductionStaffFromDb = (item: any): Staff => {
     department: item.department || 'Post-Production',
     status: item.status || 'Active',
     joining_date: item.joining_date || new Date().toISOString().split('T')[0],
+    Skill: Array.isArray(item.Skill) ? item.Skill : (typeof item.Skill === 'string' ? item.Skill.split(',').map((s: any) => s.trim()).filter(Boolean) : (Array.isArray(extra.Skill) ? extra.Skill : [])),
     notes: (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) ? (extra.notes || '') : item.notes
   };
 };
@@ -627,6 +628,14 @@ export const mapProductionStaffToDb = async (member: Staff | Partial<Staff>) => 
       dbRecord["'production_role_speciality"] = skillsVal;
     } else {
       extra.production_role_speciality = skillsVal;
+    }
+  }
+
+  if (member.Skill !== undefined) {
+    if (cols.includes('Skill')) {
+      dbRecord.Skill = member.Skill;
+    } else {
+      extra.Skill = member.Skill;
     }
   }
 

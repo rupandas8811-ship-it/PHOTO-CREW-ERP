@@ -126,7 +126,8 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
       experience: 'Professional Specialist',
       employee_id: formEmployeeId.trim(),
       city: formCity.trim() || 'N/A',
-      staff_type: formStaffType
+      staff_type: formStaffType,
+      Skill: [formSpeciality]
     };
 
     try {
