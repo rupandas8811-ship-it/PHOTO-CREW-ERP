@@ -1615,6 +1615,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     checkCategoryColumn();
   }, [packages]);
 
+  React.useEffect(() => {
+    const handleClose = () => {
+      setIsAddFormOpen(false);
+      setEditingPackage(null);
+      setViewingPkgDetails(null);
+      setShowStep2Popup(false);
+      setShowLostModal(false);
+      setShowEventForm(false);
+      setShowConfirmModal(false);
+      setShowFinalReportingModal(false);
+      setShowStep3Popup(false);
+    };
+    window.addEventListener('close-all-popups', handleClose);
+    return () => window.removeEventListener('close-all-popups', handleClose);
+  }, []);
+
   // Group active packages directly loaded from Supabase!
   const categoriesList = React.useMemo(() => {
     const dbCats = Array.from(new Set((packages || []).map((p) => p.category))).filter(Boolean) as string[];

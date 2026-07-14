@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useRole } from '../RoleContext';
 import { 
   DollarSign, 
@@ -40,6 +40,15 @@ export const PendingPaymentsReport: React.FC = () => {
   const [viewDetailsRecord, setViewDetailsRecord] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [updateSuccessMsg, setUpdateSuccessMsg] = useState('');
+
+  useEffect(() => {
+    const handleClose = () => {
+      setShowPaymentModal(false);
+      setShowDetailsModal(false);
+    };
+    window.addEventListener('close-all-popups', handleClose);
+    return () => window.removeEventListener('close-all-popups', handleClose);
+  }, []);
   
   // Modal level feedback states
   const [modalSuccessMsg, setModalSuccessMsg] = useState('');

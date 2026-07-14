@@ -219,6 +219,11 @@ const MainAppContent: React.FC = () => {
     refreshData();
   };
 
+  // Automatically dispatch close-all-popups event when any tab or sub-tab changes
+  useEffect(() => {
+    window.dispatchEvent(new Event('close-all-popups'));
+  }, [activeTab, activeSubTab, activeOpSubTab, activeSalesSubTab]);
+
   // Listen to ERP Notification Click Events for Direct, Deep Navigation
   useEffect(() => {
     const handleNotifClick = (e: Event) => {

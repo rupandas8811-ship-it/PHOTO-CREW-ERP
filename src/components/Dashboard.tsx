@@ -19,6 +19,14 @@ export const Dashboard: React.FC = () => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [kpiFilter, setKpiFilter] = useState<string>('All');
 
+  useEffect(() => {
+    const handleClose = () => {
+      setIsDetailModalOpen(false);
+    };
+    window.addEventListener('close-all-popups', handleClose);
+    return () => window.removeEventListener('close-all-popups', handleClose);
+  }, []);
+
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
       if (kpiFilter === 'All') return true;

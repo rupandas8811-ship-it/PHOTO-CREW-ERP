@@ -1947,6 +1947,21 @@ ${coordinatorName}`;
   }, [isCustomRoleModalOpen]);
 
   useEffect(() => {
+    const handleClose = () => {
+      setIsStaffModalOpen(false);
+      setIsCustomRoleModalOpen(false);
+      setIsDetailModalOpen(false);
+      setSelectedLeadProd(null);
+      setActiveWorkflowProd(null);
+      setWorkflowActionType(null);
+      setWhatsappShareModalOpen(false);
+      setAssignedEditorsModalProd(null);
+    };
+    window.addEventListener('close-all-popups', handleClose);
+    return () => window.removeEventListener('close-all-popups', handleClose);
+  }, []);
+
+  useEffect(() => {
     if (workflowActionType === 'assign_editor' && activeWorkflowProd) {
       setSelectedWfEditor(null);
       setWfTargetDeliveryDate('');

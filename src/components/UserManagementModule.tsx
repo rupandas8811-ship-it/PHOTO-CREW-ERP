@@ -14,6 +14,14 @@ export const UserManagementModule: React.FC = () => {
   const [isTesting, setIsTesting] = useState(false);
   const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
 
+  useEffect(() => {
+    const handleClose = () => {
+      setShowDiagnosticModal(false);
+    };
+    window.addEventListener('close-all-popups', handleClose);
+    return () => window.removeEventListener('close-all-popups', handleClose);
+  }, []);
+
   const runActiveDiagnostics = async () => {
     setIsTesting(true);
     if (!supabaseClient) {

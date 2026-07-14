@@ -525,7 +525,7 @@ export const getProductionStaffColumns = async (): Promise<string[]> => {
   } catch (err) {
     console.error('[RoleContext] Error detecting production_staff columns:', err);
   }
-  return ['staff_id', 'name', 'mobile', 'email', 'role', 'department', 'status', 'joining_date', 'notes', 'created_at', "'production_role_speciality"];
+  return ['staff_id', 'name', 'mobile', 'email', 'role', 'department', 'status', 'joining_date', 'notes', 'created_at', "'production_role_speciality", 'Staff_Type', 'staff_type', 'whatsapp_number', 'production_role_speciality', 'Skill', 'skill', 'city', 'experience', 'employee_id'];
 };
 
 export const mapProductionStaffFromDb = (item: any): Staff => {
@@ -534,9 +534,14 @@ export const mapProductionStaffFromDb = (item: any): Staff => {
     try { extra = JSON.parse(item.notes); } catch (e) {}
   }
   
+  let nestedExtra: any = {};
+  if (extra.notes && typeof extra.notes === 'string' && extra.notes.trim().startsWith('{') && extra.notes.trim().endsWith('}')) {
+    try { nestedExtra = JSON.parse(extra.notes); } catch (e) {}
+  }
+  
   const name = item.staff_name || item.name || '';
   const mobile = item.mobile_number || item.mobile || '';
-  const whatsapp_number = item.whatsapp_number || extra.whatsapp_number || item.mobile_number || item.mobile || '';
+  const whatsapp_number = item.whatsapp_number || nestedExtra.whatsapp_number || extra.whatsapp_number || item.mobile_number || item.mobile || '';
   
   let production_role_speciality = item.production_role_speciality || item["'production_role_speciality"] || extra.production_role_speciality || '';
   if (typeof production_role_speciality === 'string' && production_role_speciality.startsWith('[') && production_role_speciality.endsWith(']')) {
@@ -548,6 +553,17 @@ export const mapProductionStaffFromDb = (item: any): Staff => {
     } catch (e) {}
   }
   
+  // Prioritize explicit Freelancer over default In-House if both exist in different formats, or fallback to any specified type
+  const candidates = [
+    item.staff_type,
+    extra.staff_type,
+    nestedExtra.staff_type,
+    item.Staff_Type,
+    extra.Staff_Type,
+    nestedExtra.Staff_Type
+  ].filter(val => val === 'In-House' || val === 'Freelancer');
+  const resolvedStaffType = candidates.includes('Freelancer') ? 'Freelancer' : 'In-House';
+
   return {
     ...item,
     ...extra,
@@ -556,7 +572,7 @@ export const mapProductionStaffFromDb = (item: any): Staff => {
     mobile,
     whatsapp_number,
     production_role_speciality,
-    staff_type: item.Staff_Type || item.staff_type || extra.Staff_Type || extra.staff_type,
+    staff_type: resolvedStaffType,
     email: item.email || `${name.toLowerCase().replace(/\s+/g, '')}@photocrew.com`,
     role: item.role || 'Editor',
     department: item.department || 'Post-Production',
@@ -603,9 +619,11 @@ export const mapProductionStaffToDb = async (member: Staff | Partial<Staff>) => 
   if (member.staff_type !== undefined) {
     if (cols.includes('Staff_Type')) {
       dbRecord.Staff_Type = member.staff_type;
-    } else if (cols.includes('staff_type')) {
+    }
+    if (cols.includes('staff_type')) {
       dbRecord.staff_type = member.staff_type;
-    } else {
+    }
+    if (!cols.includes('Staff_Type') && !cols.includes('staff_type')) {
       extra.Staff_Type = member.staff_type;
     }
   }
@@ -613,9 +631,11 @@ export const mapProductionStaffToDb = async (member: Staff | Partial<Staff>) => 
   if ((member as any).Staff_Type !== undefined) {
     if (cols.includes('Staff_Type')) {
       dbRecord.Staff_Type = (member as any).Staff_Type;
-    } else if (cols.includes('staff_type')) {
+    }
+    if (cols.includes('staff_type')) {
       dbRecord.staff_type = (member as any).Staff_Type;
-    } else {
+    }
+    if (!cols.includes('Staff_Type') && !cols.includes('staff_type')) {
       extra.Staff_Type = (member as any).Staff_Type;
     }
   }
