@@ -2683,17 +2683,20 @@ export const OperationsLeads: React.FC = () => {
                                  const staffEvents: any[] = [];
                                  leads?.forEach(otherLead => {
                                    otherLead.events?.forEach(otherEv => {
-                                     // Skip current event we are scheduling
                                      if (otherEv.id === evId) return;
-
-                                     const assignedNames = otherEv.assigned_staff_names
-                                       ? otherEv.assigned_staff_names.split(',').map((s: string) => s.trim())
-                                       : [];
-                                     if (assignedNames.includes(staffName)) {
-                                       const otherOrder = orders.find(o => o.lead_id === otherLead.lead_id || o.order_id === otherLead.lead_id);
+                                     const otherOrder = orders.find(o => o.lead_id === otherLead.lead_id || o.order_id === otherLead.lead_id);
+                                     const orderIdToCheck = otherOrder?.order_id || otherLead.lead_id;
+                                     const hasSavedAssignment = staffAssignments?.some(sa => 
+                                       sa.staff_name.toLowerCase() === staffName.toLowerCase() &&
+                                       sa.assignment_status !== 'Cancelled' &&
+                                       sa.order_id === orderIdToCheck
+                                     );
+                                     if (hasSavedAssignment) {
                                        const isCompleted = otherOrder ? isCompletedEvent(otherOrder) : false;
-
-                                       if (!isCompleted && otherLead.status !== 'Lost Lead') {
+                                       const op = otherOrder ? operations?.find(o => o.order_id === otherOrder.order_id) : null;
+                                       const eventStatus = op?.event_status || 'Assigned';
+                                       const isEventActive = !['completed', 'event completed', 'cancelled'].includes(eventStatus.toLowerCase());
+                                       if (!isCompleted && otherLead.status !== 'Lost Lead' && isEventActive) {
                                          staffEvents.push({
                                            lead: otherLead,
                                            event: otherEv,
@@ -2704,7 +2707,6 @@ export const OperationsLeads: React.FC = () => {
                                      }
                                    });
                                  });
-
                                  // Sort chronologically by date
                                  staffEvents.sort((a, b) => {
                                    const dateA = new Date(a.dateValue).getTime();
@@ -3367,81 +3369,63 @@ export const OperationsLeads: React.FC = () => {
         // Collect all assignments for this staff member (using same logic as Staff Directory)
         const roster: Array<{ orderId: string; eventName: string; date: string; time: string; }> = [];
         
-        (leads || []).forEach((lead) => {
-          const order = (orders || []).find(o => o.lead_id === lead.lead_id);
-          const op = operations?.find(o => o.order_id === (order?.order_id || lead.lead_id));
-
-          // Determine booking/event status
-          const bookingStage = order?.current_stage || lead.status;
+        const staffSavedAssignments = (staffAssignments || []).filter(sa => 
+          sa.staff_name.toLowerCase() === busyRosterStaff.toLowerCase() &&
+          sa.assignment_status !== 'Cancelled'
+        );
+        
+        staffSavedAssignments.forEach(sa => {
+          const order = (orders || []).find(o => o.order_id === sa.order_id);
+          const lead = (leads || []).find(l => l.lead_id === (order?.lead_id || sa.order_id));
+          
+          if (!order && !lead) return;
+          
+          const op = operations?.find(o => o.order_id === sa.order_id);
+          const bookingStage = order?.current_stage || lead?.status || '';
           const eventStatus = op?.event_status || 'Assigned';
-
-          // Skip completed/cancelled bookings
+          
           const isCompletedOrCancelled = [
             'completed', 'event completed', 'raw footage received', 'event cancelled', 'closed', 'delivered', 'cancelled', 'lost lead'
           ].includes(bookingStage.toLowerCase()) || [
             'completed', 'event completed', 'cancelled'
           ].includes(eventStatus.toLowerCase());
-
-          if (isCompletedOrCancelled) {
-            return;
-          }
-
-          // Check 1: Specific sub-events in lead.events
-          let hasEventAssignment = false;
-          if (lead.events && lead.events.length > 0) {
+          
+          if (isCompletedOrCancelled) return;
+          
+          if (lead?.events && lead.events.length > 0) {
             lead.events.forEach((ev: any) => {
-              const assignedNames = ev.assigned_staff_names 
-                ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) 
-                : [];
-              
-              if (assignedNames.includes(busyRosterStaff.toLowerCase())) {
-                hasEventAssignment = true;
-                roster.push({
-                  orderId: order?.order_id || lead.lead_id,
-                  eventName: ev.event_type === 'Other' ? (ev.event_name || 'Other Event') : (ev.event_type || 'N/A'),
-                  date: ev.event_date || 'N/A',
-                  time: ev.reporting_time || ev.event_start_time || 'N/A'
-                });
-              }
-            });
-          }
-
-          // Check 2: General order/operation assignments if no specific sub-events were matched
-          if (!hasEventAssignment) {
-            const isAssignedInOp = op && (
-              op.photographer_assigned?.toLowerCase() === busyRosterStaff.toLowerCase() ||
-              op.videographer_assigned?.toLowerCase() === busyRosterStaff.toLowerCase() ||
-              op.drone_operator_assigned?.toLowerCase() === busyRosterStaff.toLowerCase() ||
-              op.assistant_assigned?.toLowerCase() === busyRosterStaff.toLowerCase()
-            );
-
-            const hasStaffAssignment = staffAssignments?.some(sa => 
-              sa.order_id === order?.order_id && 
-              sa.staff_name.toLowerCase() === busyRosterStaff.toLowerCase() &&
-              sa.assignment_status !== 'Cancelled'
-            );
-
-            if (isAssignedInOp || hasStaffAssignment) {
               roster.push({
                 orderId: order?.order_id || lead.lead_id,
-                eventName: lead.custom_event_name || order?.event_type || lead.event_type || 'N/A',
-                date: lead.event_date || order?.event_date || 'N/A',
-                time: lead.reporting_time || op?.reporting_time || 'N/A'
+                eventName: ev.event_type === 'Other' ? (ev.event_name || 'Other Event') : (ev.event_type || 'N/A'),
+                date: ev.event_date || 'N/A',
+                time: ev.reporting_time || ev.event_start_time || 'N/A'
               });
-            }
+            });
+          } else {
+            roster.push({
+              orderId: order?.order_id || lead?.lead_id || sa.order_id,
+              eventName: lead?.custom_event_name || order?.event_type || lead?.event_type || 'N/A',
+              date: lead?.event_date || order?.event_date || 'N/A',
+              time: lead?.reporting_time || op?.reporting_time || 'N/A'
+            });
           }
         });
-
+        
+        // Deduplicate
+        const uniqueRosterStr = Array.from(new Set(roster.map(r => JSON.stringify(r))));
+        roster.length = 0; uniqueRosterStr.map(s => roster.push(JSON.parse(s)));
         return createPortal(
           <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
               <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-900/50">
                 <div className="flex items-center gap-3">
-                  <span className="text-xl">📅</span>
+                  <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-sm font-bold text-zinc-300">
+                    {busyRosterStaff.charAt(0).toUpperCase()}
+                  </div>
                   <div>
-                    <h3 className="text-sm font-bold text-white font-mono tracking-tight uppercase flex items-center gap-2">
-                       {busyRosterStaff}
-                       <span className="text-[10px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full border border-red-500/30">ROSTER</span>
+                    <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block mb-0.5">Staff Member Assignments</span>
+                    <h3 className="text-sm font-bold text-white tracking-wider flex items-center gap-2">
+                      {busyRosterStaff}
                     </h3>
                   </div>
                 </div>

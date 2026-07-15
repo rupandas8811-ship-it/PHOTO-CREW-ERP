@@ -1,0 +1,39 @@
+import re
+
+with open("src/components/ProductionModule.tsx", "r") as f:
+    content = f.read()
+
+target_start = """                          {/* Dropdown status changer */}"""
+target_end = """                            </select>
+                          </div>"""
+
+start_idx = content.find(target_start)
+end_idx = content.find(target_end, start_idx) + len("""                            </select>
+                          </div>""")
+
+if start_idx == -1 or end_idx == -1:
+    print("Could not find manage status dropdown.")
+    exit(1)
+
+new_content = """                          {/* Dropdown status changer */}
+                          <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                              Update Status
+                            </label>
+                            <select
+                              value={selectedStage}
+                              onChange={(e) => setSelectedStage(e.target.value as EditingStatus)}
+                              className="w-full bg-zinc-900 border border-zinc-850 rounded-xl py-2.5 px-3 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono cursor-pointer"
+                            >
+                              <option value="Editor Assigned">Editor Assigned</option>
+                              <option value="Client Review Sent">Client Review</option>
+                              <option value="Completed">Project Completed</option>
+                              <option value="Project Cancelled">Project Cancelled</option>
+                            </select>
+                          </div>"""
+
+updated = content[:start_idx] + new_content + content[end_idx:]
+
+with open("src/components/ProductionModule.tsx", "w") as f:
+    f.write(updated)
+print("Updated manage status successfully")

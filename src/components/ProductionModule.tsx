@@ -3154,7 +3154,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               {displayStatus !== 'Raw Footage Received' && displayStatus !== 'Completed' && (
                                 <div className="w-full max-w-[160px]">
                                   <label className="block text-[8px] uppercase tracking-wider text-zinc-500 font-bold mb-1 text-left">
-                                    Change Status:
+                                    Update Status:
                                   </label>
                                   <select
                                     value={displayStatus}
@@ -3166,7 +3166,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                         const updates: any = {
                                           editing_status: val,
                                         };
-                                        if (val === 'Project Delivered') {
+                                        if (val === 'Project Delivered' || val === 'Completed') {
                                           updates.delivery_date = new Date().toISOString().split('T')[0];
                                         }
                                         await updateProduction(prod.production_id, updates);
@@ -3180,13 +3180,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     className="w-full text-zinc-100 bg-zinc-950 border border-zinc-800 hover:border-zinc-750 text-[10.5px] font-sans font-medium py-1 px-1.5 rounded focus:outline-none focus:ring-1 focus:ring-violet-500 cursor-pointer"
                                   >
                                     <option value={displayStatus} disabled>
-                                      {displayStatus === 'Client Review Sent' ? 'Client Review' : displayStatus}
+                                      {displayStatus === 'Client Review Sent' ? 'Client Review' : displayStatus === 'Completed' ? 'Project Completed' : displayStatus}
                                     </option>
-                                    {getDropdownOptions(displayStatus).map((opt) => (
-                                      <option key={opt} value={opt}>
-                                        {opt === 'Client Review Sent' ? 'Client Review' : (opt === 'Completed' ? 'Project Closed' : opt)}
-                                      </option>
-                                    ))}
+                                    <option value="Editor Assigned">Editor Assigned</option>
+                                    <option value="Client Review Sent">Client Review</option>
+                                    <option value="Completed">Project Completed</option>
+                                    <option value="Project Cancelled">Project Cancelled</option>
                                   </select>
                                 </div>
                               )}
@@ -7529,16 +7528,17 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           {/* Dropdown status changer */}
                           <div>
                             <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
-                              Select New Status
+                              Update Status
                             </label>
                             <select
                               value={selectedStage}
                               onChange={(e) => setSelectedStage(e.target.value as EditingStatus)}
                               className="w-full bg-zinc-900 border border-zinc-850 rounded-xl py-2.5 px-3 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono cursor-pointer"
                             >
-                              {getNextStatuses(activeWorkflowProd).map(stageOpt => (
-                                <option key={stageOpt} value={stageOpt}>{stageOpt}</option>
-                              ))}
+                              <option value="Editor Assigned">Editor Assigned</option>
+                              <option value="Client Review Sent">Client Review</option>
+                              <option value="Completed">Project Completed</option>
+                              <option value="Project Cancelled">Project Cancelled</option>
                             </select>
                           </div>
 
@@ -7837,7 +7837,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1 font-mono">
-                            Select New Status *
+                            Update Status *
                           </label>
                           <select
                             value={selectedStage}
@@ -7845,13 +7845,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             className="w-full bg-zinc-900 border border-zinc-850 rounded-lg py-1.5 px-2.5 text-[11px] text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono"
                             required
                           >
-                            <option value="">Select status...</option>
-                            <option value="Editing In Progress">Editing In Progress</option>
-                            <option value="Internal QC Review">Internal QC Review</option>
-                            <option value="Client Review Sent">Client Review Sent</option>
-                            <option value="Final Approval">Final Approval</option>
-                            <option value="Project Delivered">Project Delivered</option>
-                            <option value="Completed">Completed</option>
+                            <option value="" disabled>Select status...</option>
+                            <option value="Editor Assigned">Editor Assigned</option>
+                            <option value="Client Review Sent">Client Review</option>
+                            <option value="Completed">Project Completed</option>
+                            <option value="Project Cancelled">Project Cancelled</option>
                           </select>
                         </div>
                         <div>
