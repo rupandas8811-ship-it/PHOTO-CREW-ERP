@@ -1873,6 +1873,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [lostReason, setLostReason] = useState('Price too high');
   const [lostNotes, setLostNotes] = useState('');
   const [otherLostReason, setOtherLostReason] = useState('');
+  const [showCancelConfirmPopup, setShowCancelConfirmPopup] = useState(false);
   const [errorDetails, setErrorDetails] = useState<{
     title: string;
     reason: string;
@@ -4415,11 +4416,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             setIsSaving(false);
             return;
           }
-          if (!eventForm.event_name || eventForm.event_name.trim() === '') {
-            showToastMsg("Please enter Event Name.", "error");
-            setIsSaving(false);
-            return;
-          }
           if (!eventForm.event_shoot_type || eventForm.event_shoot_type === '') {
             showToastMsg("Please select Event Shoot Type.", "error");
             setIsSaving(false);
@@ -4919,6 +4915,47 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
   };
 
+  const handleCancelLead = async () => {
+    if (!createdLeadId) {
+      showToastMsg("No lead found to cancel.", "error");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const existingLead = leads.find(l => l.lead_id === createdLeadId);
+      const leadBudget = existingLead?.budget || 0;
+
+      const finalReason = "Cancelled";
+      const cancellationNotes = "Cancelled during Step 2 creation";
+
+      await updateLead(createdLeadId, {
+        status: 'Lost Lead',
+        remarks: `Lost Reason: ${finalReason}. Notes: ${cancellationNotes}`,
+        "Lost_Reason": finalReason,
+        "Lost_Notes": cancellationNotes
+      } as any);
+
+      await updateLeadFollowUp(
+        createdLeadId,
+        'Lost Lead',
+        finalReason,
+        '',
+        Number(leadBudget),
+        cancellationNotes
+      );
+
+      showToastMsg("Lead cancelled and marked as Lost successfully.", "success");
+      setShowCancelConfirmPopup(false);
+      resetForm();
+      setActiveTab('list');
+    } catch (err: any) {
+      console.error("Error cancelling lead:", err);
+      showToastMsg(`Failed to cancel lead: ${err.message || err}`, "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // On-change/blur handler for phone/email inputs to detect repeat customers
   const handleCheckExistingCustomer = (type: 'phone' | 'email', value: string) => {
     if (!value || value.length < 5) return;
@@ -5041,10 +5078,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const handleSaveEventForm = (isCrm: boolean = !!selectedLead, addAnother: boolean = false) => {
     if (!eventForm.event_type) {
       showValidationError("input_event_type", "Event Type is required.");
-      return;
-    }
-    if (!eventForm.event_name.trim()) {
-      showValidationError("input_event_name", "Event Name is required.");
       return;
     }
     if (!eventForm.event_shoot_type) {
@@ -5420,12 +5453,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   {/* Event Name */}
                   <div className="sm:col-span-2 text-left">
                     <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                      Event Name *
+                      Event Name
                     </label>
                     <input
                       id="input_event_name"
                       type="text"
-                      required
                       placeholder="e.g. Sangeet, Haldi, Reception"
                       value={eventForm.event_name}
                       onChange={(e) => setEventForm({ ...eventForm, event_name: e.target.value })}
@@ -5921,10 +5953,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       if (showEventForm || finalEventsList.length === 0) {
         if (!eventForm.event_type || eventForm.event_type === '') {
           showValidationError("input_event_type", "Please select Event Type.");
-          return;
-        }
-        if (!eventForm.event_name || eventForm.event_name.trim() === '') {
-          showValidationError("input_event_name", "Please enter Event Name.");
           return;
         }
         if (!eventForm.event_shoot_type || eventForm.event_shoot_type === '') {
@@ -6525,6 +6553,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             const filterLower = filterStatus.toLowerCase().trim();
             if (filterLower === 'customer review') {
               return statusLower === 'customer review' || statusLower === 'client review' || statusLower === 'client review sent';
+            }
+            if (filterLower === 'project completed') {
+              return statusLower === 'project completed' || statusLower === 'project closed' || statusLower === 'completed' || statusLower === 'closed' || statusLower === 'project delivered' || statusLower === 'delivered' || statusLower === 'approved' || statusLower === 'final approval' || statusLower === 'client approved';
             }
             if (filterLower === 'approved') {
               return statusLower === 'approved' || statusLower === 'client approved';
@@ -8467,23 +8498,34 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             {/* Sticky Footer */}
             <div className="flex justify-between items-center gap-3 border-t border-slate-800/80 py-2 px-4 sm:px-5 bg-slate-950/40 backdrop-blur-md shrink-0">
               {/* Back or Cancel */}
-              {wizardStep > 1 ? (
-                <button
-                  type="button"
-                  onClick={() => setWizardStep(wizardStep - 1)}
-                  className="px-4.5 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer border border-slate-850 hover:border-slate-700 transition-colors"
-                >
-                  ← Back Step
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => { resetForm(); setActiveTab('list'); }}
-                  className="px-4.5 py-2 text-xs font-semibold bg-slate-805 hover:bg-slate-800 text-slate-300 rounded-xl cursor-pointer border border-slate-800 hover:border-slate-700/50 transition-colors"
-                >
-                  Back
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {wizardStep > 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => setWizardStep(wizardStep - 1)}
+                    className="px-4.5 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer border border-slate-850 hover:border-slate-700 transition-colors"
+                  >
+                    ← Back Step
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { resetForm(); setActiveTab('list'); }}
+                    className="px-4.5 py-2 text-xs font-semibold bg-slate-805 hover:bg-slate-800 text-slate-300 rounded-xl cursor-pointer border border-slate-800 hover:border-slate-700/50 transition-colors"
+                  >
+                    Back
+                  </button>
+                )}
+                {wizardStep === 2 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCancelConfirmPopup(true)}
+                    className="px-4.5 py-2 text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white rounded-xl cursor-pointer border border-transparent transition-colors shadow-lg shadow-rose-600/15"
+                  >
+                    Lead Cancel
+                  </button>
+                )}
+              </div>
 
               {/* Next or Save */}
               {wizardStep < 3 ? (
@@ -8645,21 +8687,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100/90 font-sans cursor-pointer focus:outline-none focus:border-emerald-500"
               >
                 <option value="">All Stages</option>
-                <option value="Overdue">⚠️ Overdue Follow-ups</option>
                 
                 <optgroup label="Sales Statuses" className="bg-slate-950 text-emerald-400 font-bold">
-                  <option value="New Lead" className="text-white font-normal">New Lead</option>
-                  <option value="Contacted" className="text-white font-normal">Contacted</option>
-                  <option value="Follow Up" className="text-white font-normal">Follow-up</option>
+                  <option value="New Lead" className="text-white font-normal">Sales - New Lead</option>
+                  <option value="Lost Lead" className="text-white font-normal">Lost Lead</option>
+                  <option value="Follow Up" className="text-white font-normal">Followup</option>
+                  <option value="Overdue" className="text-white font-normal">Overdue Followup</option>
                   <option value="Quotation Sent" className="text-white font-normal">Quotation Sent</option>
                   <option value="Negotiation" className="text-white font-normal">Negotiation</option>
                   <option value="Order Confirmed" className="text-white font-normal">Order Confirmed</option>
-                  <option value="Lost Lead" className="text-white font-normal">Lost Lead</option>
                 </optgroup>
 
                 <optgroup label="Operations Statuses" className="bg-slate-950 text-amber-400 font-bold">
                   <option value="Event Scheduled" className="text-white font-normal">Event Scheduled</option>
-                  <option value="Event Completed" className="text-white font-normal">Event Completed</option>
                   <option value="Event Cancelled" className="text-white font-normal">Event Cancelled</option>
                   <option value="Raw Footage Received" className="text-white font-normal">Raw Footage Received</option>
                 </optgroup>
@@ -8667,15 +8707,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 <optgroup label="Production Statuses" className="bg-slate-950 text-indigo-400 font-bold">
                   <option value="New Project Received" className="text-white font-normal">New Project Received</option>
                   <option value="Editor Assigned" className="text-white font-normal">Editor Assigned</option>
-                  <option value="Editing Started" className="text-white font-normal">Editing Started</option>
-                  <option value="Editing In Progress" className="text-white font-normal">Editing In Progress</option>
                   <option value="Customer Review" className="text-white font-normal">Client Review</option>
-                  <option value="Revision Required" className="text-white font-normal">Revision Required</option>
-                  <option value="Approved" className="text-white font-normal">Client Approved</option>
-                  <option value="Final Approval" className="text-white font-normal">Final Approval</option>
-                  <option value="Project Delivered" className="text-white font-normal">Project Delivered</option>
-                  <option value="Project Closed" className="text-white font-normal">Project Closed</option>
-                  <option value="Project On Hold" className="text-white font-normal">Project On Hold</option>
+                  <option value="Project Completed" className="text-white font-normal">Project Completed</option>
                   <option value="Project Cancelled" className="text-white font-normal">Project Cancelled</option>
                 </optgroup>
               </select>
@@ -8788,7 +8821,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <td className="p-3.5 text-zinc-300 font-sans">
                             <EventDropdownCell 
                               type="name" 
-                              items={lead.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || ev.event_type || 'Other') : [lead.event_type === 'Other' ? (lead.custom_event_name || lead.custom_event_type || 'Other') : (lead.event_type || 'Other')]} 
+                              items={lead.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || '') : [lead.event_name || '']} 
                               events={lead.events}
                             />
                           </td>
@@ -9176,7 +9209,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         <input
                           type="text"
                           readOnly
-                          value={ev.event_name || 'N/A'}
+                          value={ev.event_name || ''}
                           className="w-full bg-slate-950/50 border border-slate-800 rounded-lg py-1.5 px-2 text-slate-300 font-mono text-[11px] cursor-not-allowed"
                         />
                       </div>
@@ -9497,6 +9530,47 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   <CheckSquare className="w-3.5 h-3.5" />
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lead Cancel Confirmation Modal */}
+      {showCancelConfirmPopup && (
+        <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-200">
+          <div id="lead_cancel_confirm_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-sm w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
+                <span>⚠️</span> Cancel Lead
+              </h4>
+              <button 
+                onClick={() => setShowCancelConfirmPopup(false)}
+                className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="text-sm text-slate-300 py-2 text-left">
+              Are you sure you want to cancel this lead?
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
+              <button
+                type="button"
+                onClick={() => setShowCancelConfirmPopup(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs font-semibold border-0"
+              >
+                No
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelLead}
+                disabled={isSaving}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-bold rounded-xl cursor-pointer shadow-lg text-xs border-0"
+              >
+                {isSaving ? 'Processing...' : 'Yes, Cancel Lead'}
+              </button>
             </div>
           </div>
         </div>

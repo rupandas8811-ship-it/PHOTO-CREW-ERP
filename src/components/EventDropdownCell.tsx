@@ -77,7 +77,7 @@ export const EventDropdownCell: React.FC<EventDropdownCellProps> = ({ type, item
         >
           {type === 'name' && events && events.length > 0 ? (
             events.map((ev, idx) => {
-              const name = ev.event_name || ev.event_type || 'Other';
+              const name = ev.event_name || '';
               const date = ev.event_date || '—';
               const time = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—';
               return (
