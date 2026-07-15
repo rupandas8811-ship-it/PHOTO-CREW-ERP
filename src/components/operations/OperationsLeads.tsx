@@ -797,6 +797,7 @@ export const OperationsLeads: React.FC = () => {
         if (statusFilter === 'Operations Assigned' && o.current_stage !== 'Operations Assigned') return false;
         if (statusFilter === 'Staff Assigned' && !isStaffAssigned) return false;
         if (statusFilter === 'Event Scheduled' && o.current_stage !== 'Event Scheduled') return false;
+        if (statusFilter === 'Event Cancelled' && o.current_stage !== 'Event Cancelled') return false;
         if (statusFilter === 'Event Completed') {
           return isCompletedEvent(o);
         }
@@ -1553,14 +1554,9 @@ export const OperationsLeads: React.FC = () => {
             >
               <option value="All">All Statuses</option>
               <option value="Order Confirmed">Order Confirmed</option>
-              <option value="Operations Assigned">Operations Assigned</option>
-              <option value="Staff Assigned">Staff Assigned</option>
               <option value="Event Scheduled">Event Scheduled</option>
-              <option value="Event Completed">Event Completed</option>
+              <option value="Event Cancelled">Event Cancelled</option>
               <option value="Raw Footage Received">Raw Footage Received</option>
-              <option value="Pending">Pending Events</option>
-              <option value="Raw Footage Pending">Raw Footage Pending</option>
-              <option value="Ready for Production">Ready for Production</option>
             </select>
           </div>
         </div>

@@ -4988,13 +4988,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         cancellationNotes
       );
 
-      showToastMsg("Lead cancelled and marked as Lost successfully.", "success");
+      showToastMsg("Lead marked as Lost successfully.", "success");
       setShowCancelConfirmPopup(false);
       resetForm();
       setActiveTab('list');
     } catch (err: any) {
-      console.error("Error cancelling lead:", err);
-      showToastMsg(`Failed to cancel lead: ${err.message || err}`, "error");
+      console.error("Error marking lead as Lost:", err);
+      showToastMsg(`Failed to mark lead as Lost: ${err.message || err}`, "error");
     } finally {
       setIsSaving(false);
     }
@@ -8560,13 +8560,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     Back
                   </button>
                 )}
-                {wizardStep === 2 && (
+                {wizardStep === 2 && (!createdLeadId || leads.find(l => l.lead_id === createdLeadId)?.status === 'New Lead') && (
                   <button
                     type="button"
                     onClick={() => setShowCancelConfirmPopup(true)}
                     className="px-4.5 py-2 text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white rounded-xl cursor-pointer border border-transparent transition-colors shadow-lg shadow-rose-600/15"
                   >
-                    Lead Cancel
+                    Lost Lead
                   </button>
                 )}
               </div>
@@ -9585,7 +9585,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           <div id="lead_cancel_confirm_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-sm w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
-                <span>⚠️</span> Cancel Lead
+                <span>⚠️</span> Mark Lead as Lost
               </h4>
               <button 
                 onClick={() => setShowCancelConfirmPopup(false)}
@@ -9596,7 +9596,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
 
             <div className="text-sm text-slate-300 py-2 text-left">
-              Are you sure you want to cancel this lead?
+              Are you sure you want to mark this lead as Lost?
             </div>
 
             <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
@@ -9613,7 +9613,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 disabled={isSaving}
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-bold rounded-xl cursor-pointer shadow-lg text-xs border-0"
               >
-                {isSaving ? 'Processing...' : 'Yes, Cancel Lead'}
+                {isSaving ? 'Processing...' : 'Yes, Mark as Lost'}
               </button>
             </div>
           </div>
