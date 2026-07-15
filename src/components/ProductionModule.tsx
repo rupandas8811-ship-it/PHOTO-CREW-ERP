@@ -2454,7 +2454,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   <option value="Raw Footage Received">Raw Footage Received</option>
                   <option value="Editor Assigned">Editor Assigned</option>
                   <option value="Client Review Sent">Client Review</option>
-                  <option value="Completed">Project Completed</option>
+                  <option value="Project Completed">Project Completed</option>
                   <option value="Project Cancelled">Project Cancelled</option>
                 </select>
               </div>
@@ -2708,15 +2708,16 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     
                                     setWorkflowActionType('assign_editor');
                                   }}
-                                  className="px-3 py-1.5 bg-purple-600 border border-purple-500 text-white hover:bg-purple-500 hover:border-purple-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer inline-flex items-center gap-1"
+                                  className="px-3 py-1.5 bg-purple-600 border border-purple-500 text-white hover:bg-purple-500 hover:border-purple-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  disabled={isProjectLocked(prod.editing_status)}
                                 >
                                   <span>👤</span> Assign Editor
                                 </button>
                                 {(() => {
                                   const isEditorAssigned = prod.editor_assigned && prod.editor_assigned !== 'Unassigned' && prod.editor_assigned.trim() !== '';
                                   const hasSavedAssignments = editorAssignments.some(a => a.production_id === prod.production_id);
-                                  const isStatusActive = prodStatus && !['delivered', 'project delivered', 'completed', 'project closed', 'cancelled', 'canceled', 'closed'].includes(prodStatus.toLowerCase()) && 
-                                                         prod.editing_status && !['delivered', 'project delivered', 'completed', 'project closed', 'cancelled', 'canceled', 'closed'].includes(prod.editing_status.toLowerCase());
+                                  const isStatusActive = prodStatus && !isProjectLocked(prodStatus) && 
+                                                         prod.editing_status && !isProjectLocked(prod.editing_status);
                                   
                                   if (isEditorAssigned && hasSavedAssignments && isStatusActive) {
                                     return (
@@ -2851,21 +2852,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const balanceDue = payment?.balance_due !== undefined ? payment.balance_due : (totalAmount - advanceReceived);
                       const payStatus = payment?.payment_status || 'Pending';
 
-                      const isFinished = displayStatus === 'Completed' || 
-                                         displayStatus === 'Project Delivered' || 
-                                         displayStatus === 'Project Closed' ||
-                                         displayStatus === 'Delivered' ||
-                                         displayStatus === 'Closed' ||
-                                         prod.production_status === 'Completed' ||
-                                         prod.production_status === 'Project Delivered' ||
-                                         prod.production_status === 'Project Closed' ||
-                                         prod.production_status === 'Delivered' ||
-                                         prod.production_status === 'Closed' ||
-                                         prod.editing_status === 'Completed' ||
-                                         prod.editing_status === 'Project Delivered' ||
-                                         prod.editing_status === 'Project Closed' ||
-                                         prod.editing_status === 'Delivered' ||
-                                         prod.editing_status === 'Closed';
+                      const isFinished = isProjectLocked(displayStatus) || isProjectLocked(prod.production_status) || isProjectLocked(prod.editing_status);
 
                       const isAssigned = getAssignedEditorsList(prod).length > 0 || (prod.editor_assigned && prod.editor_assigned !== 'Unassigned');
 
@@ -3144,7 +3131,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     
                                     setWorkflowActionType('assign_editor');
                                   }}
-                                  className="w-full max-w-[160px] px-3 py-1.5 bg-purple-600 border border-purple-500 text-white hover:bg-purple-500 hover:border-purple-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1"
+                                  className="w-full max-w-[160px] px-3 py-1.5 bg-purple-600 border border-purple-500 text-white hover:bg-purple-500 hover:border-purple-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  disabled={isProjectLocked(prod.editing_status)}
                                 >
                                   <span>👤</span> Assign Editor
                                 </button>
@@ -3179,12 +3167,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     disabled={isSaving}
                                     className="w-full text-zinc-100 bg-zinc-950 border border-zinc-800 hover:border-zinc-750 text-[10.5px] font-sans font-medium py-1 px-1.5 rounded focus:outline-none focus:ring-1 focus:ring-violet-500 cursor-pointer"
                                   >
-                                    <option value={displayStatus} disabled>
-                                      {displayStatus === 'Client Review Sent' ? 'Client Review' : displayStatus === 'Completed' ? 'Project Completed' : displayStatus}
-                                    </option>
+                                    
                                     <option value="Editor Assigned">Editor Assigned</option>
                                     <option value="Client Review Sent">Client Review</option>
-                                    <option value="Completed">Project Completed</option>
+                                    <option value="Project Completed">Project Completed</option>
                                     <option value="Project Cancelled">Project Cancelled</option>
                                   </select>
                                 </div>
@@ -3200,8 +3186,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               {(() => {
                                 const isEditorAssigned = prod.editor_assigned && prod.editor_assigned !== 'Unassigned' && prod.editor_assigned.trim() !== '';
                                 const hasSavedAssignments = editorAssignments.some(a => a.production_id === prod.production_id);
-                                const isStatusActive = displayStatus && !['delivered', 'project delivered', 'completed', 'project closed', 'cancelled', 'canceled', 'closed'].includes(displayStatus.toLowerCase()) && 
-                                                       prod.editing_status && !['delivered', 'project delivered', 'completed', 'project closed', 'cancelled', 'canceled', 'closed'].includes(prod.editing_status.toLowerCase());
+                                const isStatusActive = displayStatus && !isProjectLocked(displayStatus) && 
+                                                       prod.editing_status && !isProjectLocked(prod.editing_status);
                                 
                                 if (isEditorAssigned && hasSavedAssignments && isStatusActive) {
                                   return (
@@ -4151,9 +4137,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         const statusOptions = [
                           'Ready for Delivery',
                           'Sent to Client',
-                          'Delivered',
                           'Pending Approval',
-                          'Completed'
+                          'Project Completed'
                         ];
 
                         const handleStatusChange = (newStat: string) => {
@@ -4162,12 +4147,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             up = { editing_status: 'Final Approval', production_status: 'Approved' };
                           } else if (newStat === 'Sent to Client') {
                             up = { editing_status: 'Client Review Sent', production_status: 'Customer Review' };
-                          } else if (newStat === 'Delivered') {
-                            up = { editing_status: 'Project Delivered', production_status: 'Delivered', delivery_date: new Date().toISOString().split('T')[0] };
                           } else if (newStat === 'Pending Approval') {
                             up = { editing_status: 'Client Review Sent', production_status: 'Customer Review' };
-                          } else if (newStat === 'Completed') {
-                            up = { editing_status: 'Completed', production_status: 'Closed' };
+                          } else if (newStat === 'Project Completed') {
+                            up = { editing_status: 'Project Completed', production_status: 'Project Completed', delivery_date: new Date().toISOString().split('T')[0] };
                           }
                           updateProduction(prod.production_id, up);
                         };
@@ -4558,7 +4541,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             <option value="In Progress">In Progress</option>
                             <option value="Review Pending">Review Pending</option>
                             <option value="Revision">Revision</option>
-                            <option value="Completed">Completed</option>
+                            <option value="Project Completed">Project Completed</option>
                           </select>
 
                           {assign.status !== 'Completed' && (
@@ -5253,7 +5236,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   <option value="In Progress">In Progress</option>
                   <option value="Review Pending">Review Pending</option>
                   <option value="Revision">Revision</option>
-                  <option value="Completed">Completed</option>
+                  <option value="Project Completed">Project Completed</option>
                 </select>
               </div>
             </div>
@@ -5471,15 +5454,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 if (cur === 'Client Review Sent') nextStage = 'Final Approval';
                                 else if (cur === 'Revision Required') nextStage = 'Revision In Progress';
                                 else if (cur === 'Revision In Progress') nextStage = 'Final Approval';
-                                else if (cur === 'Final Approval') nextStage = 'Project Delivered';
-                                else if (cur === 'Project Delivered') nextStage = 'Completed';
+                                else if (cur === 'Final Approval') nextStage = 'Project Completed';
                                 else nextStage = cur;
                                 
-                                if (prod.editing_status !== 'Completed') {
+                                if (!isProjectLocked(prod.editing_status)) {
                                   updateProduction(prod.production_id, { editing_status: nextStage });
                                 }
                               }}
-                              disabled={prod.editing_status === 'Completed'}
+                              disabled={isProjectLocked(prod.editing_status)}
                               className="text-[9px] font-mono text-violet-400 hover:text-violet-300 font-bold flex items-center gap-1 uppercase"
                             >
                               <span>Next</span>
@@ -5800,6 +5782,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             <div className="p-5 space-y-4 text-xs font-sans text-left">
               {(() => {
                 const prodItem = production.find((p) => p.production_id === selectedProdId)!;
+                const currentCanEdit = canEdit && !isProjectLocked(prodItem.editing_status);
                 if (!prodItem) return null;
                 const rawFootageItem = rawFootage.find((rf) => rf.tracking_id === prodItem.tracking_id);
                 const linkedOrder = rawFootageItem ? orders.find((o) => o.order_id === rawFootageItem.order_id) : undefined;
@@ -5853,7 +5836,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           </div>
                         </div>
 
-                        {canEdit && (
+                        {currentCanEdit && (
                           <button
                             type="button"
                             onClick={() => {
@@ -5870,7 +5853,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                     {/* Updates Form */}
                     <form onSubmit={handleUpdate} className="space-y-4">
-                      <fieldset disabled={!canEdit} className="space-y-4">
+                      <fieldset disabled={!currentCanEdit} className="space-y-4">
                         
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left">
                           
@@ -5901,14 +5884,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               onChange={(e) => setStatus(e.target.value as EditingStatus)}
                               className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-4 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono font-black border-l-2 border-violet-500"
                             >
-                              {!['Editor Assigned', 'Client Review Sent', 'Completed', 'Project Cancelled', 'Cancelled'].includes(status) && (
-                                <option value={status} disabled>
-                                  {status === 'Raw Footage Received' ? 'Raw Footage Received' : status}
-                                </option>
-                              )}
+                              
                               <option value="Editor Assigned">Editor Assigned</option>
                               <option value="Client Review Sent">Client Review</option>
-                              <option value="Completed">Project Completed</option>
+                              <option value="Project Completed">Project Completed</option>
                               <option value="Project Cancelled">Project Cancelled</option>
                             </select>
                           </div>
@@ -6034,7 +6013,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       </fieldset>
 
                       {/* Form submit */}
-                      {canEdit && (
+                      {currentCanEdit && (
                         <div className="flex justify-end gap-2 border-t border-zinc-900 pt-4">
                           <button
                             type="button"
@@ -6054,7 +6033,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     </form>
 
                     {/* Mark Delivered Trigger Button */}
-                    {canEdit && (
+                    {currentCanEdit && (
                       <div className="border-t border-zinc-900 pt-5 space-y-3">
                         <div className="flex flex-col gap-1">
                           <h4 className="text-xs font-black text-white flex items-center gap-1 font-mono uppercase tracking-wider">
@@ -6069,17 +6048,17 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         <button
                           type="button"
                           id="btn_mark_delivered_mobile"
-                          disabled={prodItem.editing_status === 'Delivered'}
+                          disabled={isProjectLocked(prodItem.editing_status)}
                           onClick={handleMarkDelivered}
                           className={`w-full flex items-center justify-center gap-2 font-black uppercase tracking-wider py-3 px-4 rounded-xl shadow-lg text-[11px] transition-all cursor-pointer ${
-                            prodItem.editing_status === 'Delivered'
+                            isProjectLocked(prodItem.editing_status)
                               ? 'bg-zinc-900 text-zinc-500 border border-zinc-850 cursor-not-allowed shadow-none font-mono'
                               : 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-black font-black'
                           }`}
                         >
                           <CheckCircle2 className="w-4 h-4" />
                           <span>
-                            {prodItem.editing_status === 'Delivered' 
+                            {isProjectLocked(prodItem.editing_status) 
                               ? 'PROJECT DELIVERED & SHIPPED' 
                               : 'MARK DELIVERED TO CLIENT'}
                           </span>
@@ -6525,7 +6504,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             
                             <option value="Editor Assigned">Editor Assigned</option>
                             <option value="Client Review Sent">Client Review</option>
-                            <option value="Completed">Project Completed</option>
+                            <option value="Project Completed">Project Completed</option>
                             <option value="Project Cancelled">Project Cancelled</option>
                           </select>
                         </div>
@@ -7537,7 +7516,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             >
                               <option value="Editor Assigned">Editor Assigned</option>
                               <option value="Client Review Sent">Client Review</option>
-                              <option value="Completed">Project Completed</option>
+                              <option value="Project Completed">Project Completed</option>
                               <option value="Project Cancelled">Project Cancelled</option>
                             </select>
                           </div>
@@ -7848,7 +7827,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             <option value="" disabled>Select status...</option>
                             <option value="Editor Assigned">Editor Assigned</option>
                             <option value="Client Review Sent">Client Review</option>
-                            <option value="Completed">Project Completed</option>
+                            <option value="Project Completed">Project Completed</option>
                             <option value="Project Cancelled">Project Cancelled</option>
                           </select>
                         </div>
@@ -8980,3 +8959,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
     </div>
   );
 };
+const isProjectLocked = (status?: string): boolean => {
+  if (!status) return false;
+  const s = status.toLowerCase();
+  return ['project completed', 'completed', 'delivered', 'project delivered', 'project cancelled', 'cancelled', 'canceled', 'closed', 'project closed'].includes(s);
+};
+
+
