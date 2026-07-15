@@ -3364,27 +3364,72 @@ export const OperationsLeads: React.FC = () => {
 
       {/* Busy Staff Roster Popup */}
       {busyRosterStaff && (() => {
-        // Collect all assignments for this staff member
+        // Collect all assignments for this staff member (using same logic as Staff Directory)
         const roster: Array<{ orderId: string; eventName: string; date: string; time: string; }> = [];
         
-        orders.forEach(ord => {
-           if (!ord.lead_id) return;
-           const parentLead = leads.find(l => l.id === ord.lead_id);
-           if (!parentLead) return;
-           
-           (parentLead.events || []).forEach((ev: any) => {
-              if (ev.staff_allocations) {
-                 const isAssigned = ev.staff_allocations.some((sa: any) => sa.staff_name === busyRosterStaff);
-                 if (isAssigned) {
-                    roster.push({
-                      orderId: ord.order_id,
-                      eventName: ev.event_name || ev.event_type || 'Main Event',
-                      date: ev.event_date || ord.event_date || 'N/A',
-                      time: ev.reporting_time || ev.event_start_time || 'N/A'
-                    });
-                 }
+        (leads || []).forEach((lead) => {
+          const order = (orders || []).find(o => o.lead_id === lead.lead_id);
+          const op = operations?.find(o => o.order_id === (order?.order_id || lead.lead_id));
+
+          // Determine booking/event status
+          const bookingStage = order?.current_stage || lead.status;
+          const eventStatus = op?.event_status || 'Assigned';
+
+          // Skip completed/cancelled bookings
+          const isCompletedOrCancelled = [
+            'completed', 'event completed', 'raw footage received', 'event cancelled', 'closed', 'delivered', 'cancelled', 'lost lead'
+          ].includes(bookingStage.toLowerCase()) || [
+            'completed', 'event completed', 'cancelled'
+          ].includes(eventStatus.toLowerCase());
+
+          if (isCompletedOrCancelled) {
+            return;
+          }
+
+          // Check 1: Specific sub-events in lead.events
+          let hasEventAssignment = false;
+          if (lead.events && lead.events.length > 0) {
+            lead.events.forEach((ev: any) => {
+              const assignedNames = ev.assigned_staff_names 
+                ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) 
+                : [];
+              
+              if (assignedNames.includes(busyRosterStaff.toLowerCase())) {
+                hasEventAssignment = true;
+                roster.push({
+                  orderId: order?.order_id || lead.lead_id,
+                  eventName: ev.event_type === 'Other' ? (ev.event_name || 'Other Event') : (ev.event_type || 'N/A'),
+                  date: ev.event_date || 'N/A',
+                  time: ev.reporting_time || ev.event_start_time || 'N/A'
+                });
               }
-           });
+            });
+          }
+
+          // Check 2: General order/operation assignments if no specific sub-events were matched
+          if (!hasEventAssignment) {
+            const isAssignedInOp = op && (
+              op.photographer_assigned?.toLowerCase() === busyRosterStaff.toLowerCase() ||
+              op.videographer_assigned?.toLowerCase() === busyRosterStaff.toLowerCase() ||
+              op.drone_operator_assigned?.toLowerCase() === busyRosterStaff.toLowerCase() ||
+              op.assistant_assigned?.toLowerCase() === busyRosterStaff.toLowerCase()
+            );
+
+            const hasStaffAssignment = staffAssignments?.some(sa => 
+              sa.order_id === order?.order_id && 
+              sa.staff_name.toLowerCase() === busyRosterStaff.toLowerCase() &&
+              sa.assignment_status !== 'Cancelled'
+            );
+
+            if (isAssignedInOp || hasStaffAssignment) {
+              roster.push({
+                orderId: order?.order_id || lead.lead_id,
+                eventName: lead.custom_event_name || order?.event_type || lead.event_type || 'N/A',
+                date: lead.event_date || order?.event_date || 'N/A',
+                time: lead.reporting_time || op?.reporting_time || 'N/A'
+              });
+            }
+          }
         });
 
         return createPortal(
