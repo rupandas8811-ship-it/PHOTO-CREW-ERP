@@ -3485,7 +3485,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         editableInclusions,
         editableDeliverables,
         Number(quoteDiscount || 0),
-        0, // Extra charges removed
+        Number(quoteAdditional || 0),
         quoteServices
       );
       
@@ -3514,7 +3514,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         editableInclusions,
         editableDeliverables,
         Number(quoteDiscount || 0),
-        0, // Extra charges removed
+        Number(quoteAdditional || 0),
         quoteServices
       );
       
@@ -3551,7 +3551,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         editableInclusions,
         editableDeliverables,
         Number(quoteDiscount || 0),
-        0, // Extra charges removed
+        Number(quoteAdditional || 0),
         quoteServices
       );
       
