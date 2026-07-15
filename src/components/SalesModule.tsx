@@ -4916,19 +4916,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   };
 
   const handleCancelLead = async () => {
-    if (!createdLeadId) {
+    const targetLeadId = createdLeadId || selectedLead?.lead_id;
+    if (!targetLeadId) {
       showToastMsg("No lead found to cancel.", "error");
       return;
     }
     setIsSaving(true);
     try {
-      const existingLead = leads.find(l => l.lead_id === createdLeadId);
+      const existingLead = leads.find(l => l.lead_id === targetLeadId) || selectedLead;
       const leadBudget = existingLead?.budget || 0;
 
       const finalReason = "Cancelled";
-      const cancellationNotes = "Cancelled during Step 2 creation";
+      const cancellationNotes = createdLeadId ? "Cancelled during Step 2 creation" : "Cancelled during Operations configuration";
 
-      let finalEventsList = [...createEvents];
+      let finalEventsList = [...(createdLeadId ? createEvents : crmEvents)];
       if (finalEventsList.length === 0 && (eventForm.event_type || eventForm.event_name || eventForm.event_date || eventForm.event_location)) {
         finalEventsList.push({
           id: `EV-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -4946,7 +4947,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           event_end_date: eventForm.event_date || ''
         } as any);
       }
-
       const firstEvent = finalEventsList[0] || {};
       const payload: any = {
         status: 'Lost Lead',
@@ -4955,10 +4955,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         "Lost_Reason": finalReason,
         "Lost_Notes": cancellationNotes,
         
-        client_residence_address: createForm.client_residence_address || '',
-        city: createForm.city || '',
-        state: createForm.state || '',
-        pincode: createForm.pincode || '',
+        client_residence_address: createForm.client_residence_address || existingLead?.client_residence_address || '',
+        city: createForm.city || existingLead?.city || '',
+        state: createForm.state || existingLead?.state || '',
+        pincode: createForm.pincode || existingLead?.pincode || '',
         
         event_type: firstEvent.event_type || '',
         custom_event_name: firstEvent.event_name || '',
@@ -4977,10 +4977,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         events: finalEventsList
       };
 
-      await updateLead(createdLeadId, payload);
+      await updateLead(targetLeadId, payload);
 
       await updateLeadFollowUp(
-        createdLeadId,
+        targetLeadId,
         'Lost Lead',
         finalReason,
         step2FollowUpDate || '',
@@ -8560,7 +8560,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     Back
                   </button>
                 )}
-                {wizardStep === 2 && (
+                {wizardStep === 2 && (!createdLeadId || leads.find(l => l.lead_id === createdLeadId)?.status === 'New Lead') && (
                   <button
                     type="button"
                     onClick={() => setShowCancelConfirmPopup(true)}
@@ -10421,28 +10421,39 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
             {/* Footer Buttons: Sticky */}
             <div className="py-1 px-4 sm:px-5 border-t border-slate-850 flex items-center justify-between bg-slate-950/40 sticky bottom-0 z-10 shrink-0 backdrop-blur-sm">
-              {crmWizardStep > 1 ? (
-                <button
-                  type="button"
-                  onClick={() => setCrmWizardStep(crmWizardStep - 1)}
-                  className="px-3.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border border-slate-705 border-0"
-                >
-                  Back
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setSelectedLead(null)}
-                  className="px-3.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border border-slate-705 border-0"
-                >
-                  Back
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {crmWizardStep > 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => setCrmWizardStep(crmWizardStep - 1)}
+                    className="px-3.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border border-slate-705 border-0"
+                  >
+                    Back
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedLead(null)}
+                    className="px-3.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border border-slate-705 border-0"
+                  >
+                    Back
+                  </button>
+                )}
+                {crmWizardStep === 2 && selectedLead?.status === 'Order Confirmed' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCancelConfirmPopup(true)}
+                    className="px-3.5 py-1 text-xs font-mono font-bold uppercase bg-rose-600 hover:bg-rose-500 text-white rounded transition-all cursor-pointer border border-transparent shadow-lg shadow-rose-600/15"
+                  >
+                    Lost Lead
+                  </button>
+                )}
+              </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleSaveStep(crmWizardStep)}
+              <button
+                type="button"
+                onClick={() => handleSaveStep(crmWizardStep)}
                   disabled={isSaving || (crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === ''))}
                   className={`px-4 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 border-0 ${
                     crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')
