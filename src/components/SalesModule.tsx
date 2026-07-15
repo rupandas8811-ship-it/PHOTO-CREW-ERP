@@ -8560,7 +8560,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     Back
                   </button>
                 )}
-                {wizardStep === 2 && (!createdLeadId || leads.find(l => l.lead_id === createdLeadId)?.status === 'New Lead') && (
+                {wizardStep === 2 && (
                   <button
                     type="button"
                     onClick={() => setShowCancelConfirmPopup(true)}

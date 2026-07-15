@@ -109,7 +109,9 @@ export type EditingStatus =
   | 'Final Approval'
   | 'Project Delivered'
   | 'Project Closed'
-  | 'Completed';
+  | 'Completed'
+  | 'Project Cancelled'
+  | 'Cancelled';
 
 export type PaymentStatus = 'Pending' | 'Partially Paid' | 'Fully Paid';
 
