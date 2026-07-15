@@ -284,7 +284,7 @@ interface StaffSelectDropdownProps {
   allRowsForDeliverable: Array<{ id: string; staffType: string; staffId: string }>;
 }
 
-const StaffSelectDropdown = ({
+const StaffSelectDropdown = React.memo(({
   deliverable,
   rowId,
   staffType,
@@ -492,7 +492,7 @@ const StaffSelectDropdown = ({
       )}
     </div>
   );
-};
+});
 
 export interface ProductionModuleProps {
   activeSubTab: 'pipeline' | 'production_leads' | 'project_queue' | 'assignments' | 'tracker' | 'delivery' | 'resources' | 'analytics' | 'staff_performance' | 'overall_performance' | 'deliveries_desk' | 'staff_management' | 'notifications' | 'crew_roster' | 'staff_roster' | 'production_staff_directory' | 'production_role_specialities';
@@ -1607,8 +1607,7 @@ ${coordinatorName}`;
     lead: any;
     assignments: any[];
     rf: any;
-    message: string;
-    editorPhone: string;
+    editors: { name: string; phone: string; message: string; }[];
     selectedEventIndex: number;
   } | null>(null);
   const [isGeneratingEditorWhatsapp, setIsGeneratingEditorWhatsapp] = useState(false);
@@ -1645,11 +1644,7 @@ ${coordinatorName}`;
       const leadId = orderData?.lead_id || trackingId;
       const leadData = leadsData?.find(l => l.lead_id === leadId);
 
-      // Find primary editor & their phone number
-      const primaryEditor = prodData.editor_assigned || 'Unassigned';
       const activeStaffList = productionStaff || [];
-      const primaryStaff = activeStaffList.find(s => s.name === primaryEditor);
-      const editorPhone = primaryStaff ? (primaryStaff.whatsapp_number || primaryStaff.mobile || '') : '';
 
       // Events list
       const eventsList = leadData?.events || [];
@@ -1657,19 +1652,10 @@ ${coordinatorName}`;
 
       // Build fields for WhatsApp prefilled message
       const customerName = orderData?.customer_name || leadData?.customer_name || '—';
-      const orderId = orderData?.order_id || prodData?.tracking_id || '—';
+      const customerMobile = orderData?.customer_mobile || leadData?.mobile || '—';
+      const customerWhatsapp = orderData?.whatsapp_number || leadData?.whatsapp_number || '—';
       const eventName = selectedEvent?.event_name || orderData?.event_type || 'Event';
       const eventType = selectedEvent?.event_type || selectedEvent?.event_shoot_type || orderData?.event_type || 'Shoot Type';
-      const eventDate = selectedEvent?.event_date || orderData?.event_date || '—';
-
-      // Assigned deliverables assigned to primary editor (strictly filtered, case-insensitive, no fallback)
-      const displayDeliverables = (assignmentsData || [])
-        .filter(a => a.staff_name && a.staff_name.trim().toLowerCase() === primaryEditor.trim().toLowerCase())
-        .map(a => a.speciality)
-        .filter(Boolean);
-      const deliverableListText = displayDeliverables.length > 0
-        ? displayDeliverables.map(d => `• ${d}`).join('\n')
-        : 'None Assigned';
 
       // Raw footage drive link
       const driveLink = prodData?.raw_footage_location || rfItem?.server_path || '—';
@@ -1677,24 +1663,42 @@ ${coordinatorName}`;
       // Target Delivery date
       const targetDate = prodData?.target_delivery_date || prodData?.expected_delivery_date || '—';
 
-      const msg = `*PHOTOCREW STUDIO TASK ASSIGNMENT*
+      // Get unique editors assigned to this project
+      const assignedEditors = Array.from(new Set((assignmentsData || []).map((a: any) => a.staff_name).filter(Boolean)));
+      
+      const editors = assignedEditors.map((editorName: any) => {
+        const staff = activeStaffList.find(s => s.name === editorName);
+        const editorPhone = staff ? (staff.whatsapp_number || staff.mobile || '') : '';
+        
+        const displayDeliverables = (assignmentsData || [])
+          .filter((a: any) => a.staff_name && a.staff_name.trim().toLowerCase() === editorName.trim().toLowerCase())
+          .map((a: any) => a.speciality)
+          .filter(Boolean);
 
-*Customer Name:* ${customerName}
-*Order ID:* ${orderId}
+        const deliverableListText = displayDeliverables.length > 0
+          ? displayDeliverables.map((d: any) => `• ${d}`).join('\n')
+          : 'None Assigned';
 
-*Event Name:* ${eventName}
-*Event Type / Shoot Type:* ${eventType}
-*Event Date:* ${eventDate}
+        const msg = `*PHOTOCREW STUDIO TASK ASSIGNMENT*
 
-*Assigned Editor Name:* ${primaryEditor}
+*Customer Details:*
+• Name: ${customerName}
+• Mobile: ${customerMobile}
+• WhatsApp: ${customerWhatsapp}
 
-*Assigned Deliverables:*
+*Project Details:*
+• Event Type: ${eventType}
+• Event Name: ${eventName}
+• Raw Footage Drive Link: ${driveLink}
+• Target Delivery Date: ${targetDate}
+
+*Assignment Details:*
 ${deliverableListText}
 
-*Raw Footage Drive Link:* ${driveLink}
-*Target Delivery Date:* ${targetDate}
-
 _Please acknowledge receipt of this task assignment._`;
+
+        return { name: editorName, phone: editorPhone, message: msg };
+      });
 
       setEditorWhatsappData({
         prod: prodData,
@@ -1702,8 +1706,7 @@ _Please acknowledge receipt of this task assignment._`;
         lead: leadData,
         assignments: assignmentsData || [],
         rf: rfItem,
-        message: msg,
-        editorPhone,
+        editors: editors,
         selectedEventIndex: eventIndex,
       });
     } catch (err: any) {
@@ -1716,27 +1719,42 @@ _Please acknowledge receipt of this task assignment._`;
 
   const staffActiveAssignments = useMemo(() => {
     if (!rosterStaffName) return [];
-    return (editorAssignments || [])
-      .filter(a => a.staff_name && a.staff_name.toLowerCase() === rosterStaffName.toLowerCase() && a.status !== 'Completed')
-      .map(assign => {
-        const correlatedProj = (production || []).find(p => p.production_id === assign.production_id);
-        const trackingId = correlatedProj?.tracking_id;
-        const linkedOrder = (orders || []).find(o => o.order_id === trackingId || o.lead_id === trackingId);
-        const orderId = linkedOrder?.order_id || 'N/A';
-        
-        return {
-          staffName: assign.staff_name,
-          orderId: orderId,
-          assignedDate: assign.assigned_date || '—',
-          targetDeliveryDate: assign.target_finish_date || '—',
-        };
-      })
-      .sort((a, b) => {
-        if (a.assignedDate === '—') return 1;
-        if (b.assignedDate === '—') return -1;
-        return new Date(a.assignedDate).getTime() - new Date(b.assignedDate).getTime();
-      });
-  }, [rosterStaffName, editorAssignments, production, orders]);
+    const memberNameLower = rosterStaffName.toLowerCase();
+    
+    const staffProjects = (production || []).filter(p => {
+      const isPrimary = p.editor_assigned?.toLowerCase() === memberNameLower;
+      const isAssignedCrew = editorAssignments.some(a => 
+        a.production_id === p.production_id && a.staff_name?.toLowerCase() === memberNameLower
+      );
+      return isPrimary || isAssignedCrew;
+    });
+
+    const activeProjects = staffProjects.filter(p => 
+      !['Approved', 'Delivered', 'Final Approval', 'Project Delivered', 'Project Closed', 'Closed'].includes(p.editing_status)
+    );
+
+    return activeProjects.map(p => {
+      const trackingIdClean = p.tracking_id?.replace('PRD-', '');
+      const linkedOrder = (orders || []).find(o => o.order_id === p.tracking_id || o.lead_id === trackingIdClean);
+      const linkedLead = (leads || []).find(l => l.lead_id === p.tracking_id || l.lead_id === trackingIdClean);
+      const orderId = linkedOrder?.order_id || p.tracking_id || 'N/A';
+      
+      const assignmentRecord = editorAssignments.find(a => 
+        a.production_id === p.production_id && a.staff_name?.toLowerCase() === memberNameLower
+      );
+      
+      return {
+        staffName: rosterStaffName,
+        orderId: orderId,
+        assignedDate: assignmentRecord?.assigned_date || p.created_at?.split('T')[0] || '—',
+        targetDeliveryDate: p.target_delivery_date || '—',
+      };
+    }).sort((a, b) => {
+      if (a.assignedDate === '—') return 1;
+      if (b.assignedDate === '—') return -1;
+      return new Date(a.assignedDate).getTime() - new Date(b.assignedDate).getTime();
+    });
+  }, [rosterStaffName, editorAssignments, production, orders, leads]);
 
   // Simplified Add Staff Form states
   const [newStaffName, setNewStaffName] = useState('');
@@ -2849,15 +2867,21 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                          prod.editing_status === 'Delivered' ||
                                          prod.editing_status === 'Closed';
 
+                      const isAssigned = getAssignedEditorsList(prod).length > 0 || (prod.editor_assigned && prod.editor_assigned !== 'Unassigned');
+
                       let flagBg = 'text-green-400 bg-green-500/5 border-green-500/10';
                       let flagLabel = 'On Time';
-                      if (daysRem !== null) {
+                      
+                      if (!isAssigned) {
+                        flagBg = 'text-zinc-500 bg-zinc-900/30 border-zinc-800';
+                        flagLabel = 'Pending';
+                      } else if (daysRem !== null) {
                         if (daysRem < 0) {
                           if (isFinished) {
                             flagBg = 'text-zinc-500 bg-zinc-900/30 border-zinc-800';
                             flagLabel = 'Completed';
                           } else {
-                            flagBg = 'text-red-400 bg-red-500/5 border-red-500/10 animate-pulse';
+                            flagBg = 'text-red-400 bg-red-500/5 border-red-500/10 font-bold';
                             flagLabel = 'OVERDUE';
                           }
                         } else if (daysRem <= 3) {
@@ -3059,12 +3083,16 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                           {/* Remaining Days */}
                           <td className="p-4">
-                            {daysRem !== null ? (
+                            {!isAssigned ? (
                               <span className={`inline-flex px-2 py-0.5 rounded font-bold border font-mono ${flagBg}`}>
-                                {flagLabel === 'Completed' ? 'Completed' : `${daysRem} days (${flagLabel})`}
+                                Pending
+                              </span>
+                            ) : daysRem !== null ? (
+                              <span className={`inline-flex px-2 py-0.5 rounded font-bold border font-mono ${flagBg}`}>
+                                {flagLabel === 'Completed' ? 'Completed' : flagLabel === 'OVERDUE' ? `Overdue by ${Math.abs(daysRem)} Days` : `${daysRem} days (${flagLabel})`}
                               </span>
                             ) : (
-                              <span className="text-zinc-600 italic">Not set</span>
+                              <span className="text-zinc-600 italic text-[10px]">Not set</span>
                             )}
                           </td>
 
@@ -6723,37 +6751,21 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         const currentStatus = activeWorkflowProd.editing_status || '—';
 
                         return (
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 text-xs font-sans">
-                            <div className="space-y-1">
-                              <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Lead ID</span>
-                              <div className="text-zinc-200 font-semibold flex items-center bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-900 min-h-[38px]">{leadId}</div>
-                            </div>
-                            <div className="space-y-1">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-sans">
+                            <div className="space-y-1 lg:col-span-1">
                               <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Customer Name</span>
                               <div className="text-zinc-200 font-semibold flex items-center bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-900 min-h-[38px]">{customerName}</div>
                             </div>
-                            <div className="space-y-1">
+                            <div className="space-y-1 lg:col-span-1">
                               <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Event Name</span>
                               <div className="text-zinc-200 font-semibold flex items-center bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-900 min-h-[38px]">{eventName}</div>
                             </div>
-                            <div className="space-y-1">
+                            <div className="space-y-1 lg:col-span-1">
                               <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Event Type</span>
                               <div className="text-zinc-200 font-semibold flex items-center bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-900 min-h-[38px]">{eventType}</div>
                             </div>
-                            <div className="space-y-1">
-                              <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Event Shoot Type</span>
-                              <div className="text-zinc-200 font-semibold flex items-center bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-900 min-h-[38px]">{eventShootType}</div>
-                            </div>
-                            <div className="space-y-1 lg:col-span-2">
-                              <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Deliverables</span>
-                              <div className="text-zinc-200 font-semibold flex items-center bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-900 min-h-[38px] break-words">{deliverables}</div>
-                            </div>
-                            <div className="space-y-1 lg:col-span-1">
-                              <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Event Date</span>
-                              <div className="text-zinc-200 font-semibold flex items-center bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-900 min-h-[38px]">{eventDate}</div>
-                            </div>
-                            <div className="space-y-1 md:col-span-2 lg:col-span-2">
-                              <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Current Production Status</span>
+                            <div className="space-y-1 md:col-span-2 lg:col-span-1">
+                              <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Current Status</span>
                               <div className="text-violet-400 font-extrabold flex items-center bg-purple-950/20 px-3 py-2 rounded-xl border border-purple-900/30 font-mono min-h-[38px]">{currentStatus}</div>
                             </div>
                           </div>
@@ -8073,54 +8085,73 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     </div>
                   )}
 
-                  {/* Editor Contact details input */}
-                  <div className="bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl space-y-4 text-left">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="flex-1 space-y-1">
-                        <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">Primary Editor</span>
-                        <span className="text-xs font-bold text-zinc-200 block">{editorWhatsappData.prod?.editor_assigned || 'Unassigned'}</span>
+                  <div className="space-y-4">
+                    {editorWhatsappData.editors.map((ed, idx) => (
+                      <div key={idx} className="bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl space-y-4 text-left">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          <div className="flex-1 space-y-1">
+                            <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">Assigned Editor</span>
+                            <span className="text-xs font-bold text-zinc-200 block">{ed.name}</span>
+                          </div>
+                          <div className="md:w-72 space-y-1.5">
+                            <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
+                              WhatsApp Contact Number {!ed.phone.trim() && <span className="text-rose-500">(Required)</span>}
+                            </label>
+                            <input
+                              type="text"
+                              value={ed.phone}
+                              onChange={(e) => {
+                                const newPhone = e.target.value;
+                                setEditorWhatsappData(prev => {
+                                  if (!prev) return null;
+                                  const newEditors = [...prev.editors];
+                                  newEditors[idx] = { ...newEditors[idx], phone: newPhone };
+                                  return { ...prev, editors: newEditors };
+                                });
+                              }}
+                              placeholder="e.g. +65 8123 4567"
+                              className={`w-full bg-zinc-950 border text-xs text-zinc-200 rounded-xl px-3 py-2 font-mono focus:outline-none ${
+                                !ed.phone.trim()
+                                  ? 'border-rose-500/50 focus:border-rose-500' 
+                                  : 'border-zinc-900 hover:border-zinc-850 focus:border-emerald-500'
+                              }`}
+                            />
+                          </div>
+                        </div>
+                        {!ed.phone.trim() && (
+                          <p className="text-[10px] text-rose-400 font-mono">⚠️ No mobile number saved. Please enter number before sharing.</p>
+                        )}
+                        <div className="space-y-2 text-left pt-2 border-t border-zinc-900/50">
+                          <span className="text-[10px] text-emerald-400 font-black tracking-widest font-mono uppercase block">
+                            Message Preview
+                          </span>
+                          <pre className="text-xs text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed bg-zinc-900/60 p-4 rounded-xl border border-zinc-900 select-all overflow-x-auto max-h-[30vh]">
+                            {ed.message}
+                          </pre>
+                        </div>
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            disabled={!ed.phone.trim()}
+                            onClick={() => {
+                              const formattedPhone = formatSingaporeWhatsAppNumber(ed.phone);
+                              const encodedMsg = encodeURIComponent(ed.message);
+                              const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedMsg}`;
+                              window.open(whatsappUrl, '_blank');
+                            }}
+                            className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 border border-emerald-500 text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
+                          >
+                            💬 Share with {ed.name}
+                          </button>
+                        </div>
                       </div>
-
-                      <div className="md:w-72 space-y-1.5">
-                        <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
-                          WhatsApp Contact Number {!editorWhatsappData.editorPhone.trim() && <span className="text-rose-500">(Required)</span>}
-                        </label>
-                        <input
-                          type="text"
-                          value={editorWhatsappData.editorPhone}
-                          onChange={(e) => {
-                            setEditorWhatsappData(prev => prev ? { ...prev, editorPhone: e.target.value } : null);
-                          }}
-                          placeholder="e.g. +65 8123 4567"
-                          className={`w-full bg-zinc-950 border text-xs text-zinc-200 rounded-xl px-3 py-2 font-mono focus:outline-none ${
-                            !editorWhatsappData.editorPhone.trim()
-                              ? 'border-rose-500/50 focus:border-rose-500' 
-                              : 'border-zinc-900 hover:border-zinc-850 focus:border-emerald-500'
-                          }`}
-                        />
-                      </div>
-                    </div>
-
-                    {!editorWhatsappData.editorPhone.trim() && (
-                      <p className="text-[10px] text-rose-400 font-mono">⚠️ No mobile number saved. Please enter number before sharing.</p>
-                    )}
-                  </div>
-
-                  {/* Message Preview */}
-                  <div className="space-y-2 text-left">
-                    <span className="text-[10px] text-emerald-400 font-black tracking-widest font-mono uppercase block">
-                      Message Preview
-                    </span>
-                    <pre className="text-xs text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed bg-zinc-900/60 p-4 rounded-xl border border-zinc-900 select-all overflow-x-auto max-h-[30vh]">
-                      {editorWhatsappData.message}
-                    </pre>
+                    ))}
                   </div>
                 </>
               ) : null}
             </div>
-
             {/* Footer */}
-            <div className="p-4 border-t border-zinc-900 bg-[#0c0d10] flex justify-between gap-3">
+            <div className="p-4 border-t border-zinc-900 bg-[#0c0d10] flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => {
@@ -8130,24 +8161,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 }}
                 className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-zinc-400 hover:text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
               >
-                Cancel
-              </button>
-              
-              <button
-                type="button"
-                disabled={isGeneratingEditorWhatsapp || !editorWhatsappData || !editorWhatsappData.editorPhone.trim()}
-                onClick={() => {
-                  if (!editorWhatsappData) return;
-                  const formattedPhone = formatSingaporeWhatsAppNumber(editorWhatsappData.editorPhone);
-                  const encodedMsg = encodeURIComponent(editorWhatsappData.message);
-                  const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedMsg}`;
-                  window.open(whatsappUrl, '_blank');
-                  setEditorWhatsappModalOpen(false);
-                  setEditorWhatsappData(null);
-                }}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 border border-emerald-500 text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
-              >
-                💬 Share via WhatsApp
+                Close
               </button>
             </div>
           </div>
