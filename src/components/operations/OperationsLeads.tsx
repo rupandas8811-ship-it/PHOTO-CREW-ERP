@@ -456,39 +456,45 @@ export const OperationsLeads: React.FC = () => {
   }
 
   const isStaffBusyOnDate = (staffName: string, targetDate: string, currentOrderId?: string) => {
-    if (!targetDate) return false;
-    
-    return leads?.some(otherLead => {
-      if (otherLead.status === 'Lost Lead') return false;
-      
-      const otherOrder = orders.find(o => o.lead_id === otherLead.lead_id || o.order_id === otherLead.lead_id);
-      if (otherOrder && isCompletedEvent(otherOrder)) return false;
-      if (currentOrderId && otherOrder?.order_id === currentOrderId) return false;
-      
-      // Check events
-      if (otherLead.events && otherLead.events.length > 0) {
-        return otherLead.events.some(otherEv => {
-          const otherEvDate = otherEv.event_date;
-          if (otherEvDate === targetDate) {
-            const assignedNames = otherEv.assigned_staff_names
-              ? otherEv.assigned_staff_names.split(',').map((s: string) => s.trim())
-              : [];
-            return assignedNames.includes(staffName);
-          }
-          return false;
+    if (!targetDate || !staffName) return false;
+
+    // A staff member is ONLY busy if there is a successfully saved assignment record in staffAssignments
+    const activeAssignments = staffAssignments ? staffAssignments.filter(sa => 
+      sa.staff_name.toLowerCase() === staffName.toLowerCase() && 
+      sa.assignment_status !== 'Cancelled'
+    ) : [];
+
+    if (activeAssignments.length === 0) return false;
+
+    return activeAssignments.some(sa => {
+      // Ignore the current order being edited so they show as available for re-assignment
+      if (currentOrderId && sa.order_id === currentOrderId) return false;
+
+      const relatedOrder = orders.find(o => o.order_id === sa.order_id);
+      if (!relatedOrder) return false;
+
+      if (isCompletedEvent(relatedOrder)) return false;
+
+      const op = operations?.find(o => o.order_id === relatedOrder.order_id);
+      const eventStatus = op?.event_status || 'Assigned';
+      if (['completed', 'event completed', 'cancelled'].includes(eventStatus.toLowerCase())) return false;
+
+      const relatedLead = leads.find(l => l.lead_id === relatedOrder.lead_id);
+      if (!relatedLead || relatedLead.status === 'Lost Lead') return false;
+
+      // Check dates in relatedLead events
+      if (relatedLead.events && relatedLead.events.length > 0) {
+        return relatedLead.events.some((ev: any) => {
+          if (ev.event_date !== targetDate) return false;
+          const assignedNames = ev.assigned_staff_names
+            ? ev.assigned_staff_names.split(',').map((s: string) => s.trim().toLowerCase())
+            : [];
+          return assignedNames.includes(staffName.toLowerCase());
         });
       } else {
-        // Check default event
-        if (otherLead.event_date === targetDate) {
-          // Check if assigned
-          let assignmentsHistory = leadStaffAssignmentHistory ? leadStaffAssignmentHistory.filter(h => h.lead_id === otherLead.lead_id) : [];
-          if (assignmentsHistory.length === 0 && otherOrder) {
-            assignmentsHistory = leadStaffAssignmentHistory ? leadStaffAssignmentHistory.filter(h => h.order_id === otherOrder.order_id) : [];
-          }
-          return assignmentsHistory.some(h => h.assigned_staff?.trim() === staffName);
-        }
+        // Check default event date
+        return relatedLead.event_date === targetDate || relatedOrder.event_date === targetDate;
       }
-      return false;
     });
   };
 
