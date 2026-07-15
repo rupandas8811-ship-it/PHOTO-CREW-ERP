@@ -659,7 +659,9 @@ ${coordinatorName}`;
       'Project Closed',
       'Customer Review',
       'Approved',
-      'Payment Pending'
+      'Payment Pending',
+      'Project Completed',
+      'Project Cancelled'
     ];
 
     const mapped = (leadsData || []).filter(l => {
@@ -1067,7 +1069,7 @@ ${coordinatorName}`;
     if (status === 'Revision In Progress') return 'Revision In Progress';
     if (status === 'Approved' || status === 'Final Approval') return 'Final Approval';
     if (status === 'Delivered' || status === 'Project Delivered' || status === 'Payment Pending') return 'Project Delivered';
-    if (status === 'Closed' || status === 'Project Closed' || status === 'Completed') return 'Completed';
+    if (status === 'Closed' || status === 'Project Closed' || status === 'Completed' || status === 'Project Completed') return 'Completed';
     if (status === 'Project Cancelled' || status === 'Cancelled' || status === 'Canceled') return 'Project Cancelled';
     return status;
   };
@@ -1224,7 +1226,7 @@ ${coordinatorName}`;
   const isTotalProjectsCompleted = (prod: Production) => {
     const s = getProductionStatus(prod);
     const raw = prod.editing_status as string;
-    return s === 'Project Delivered' || s === 'Completed' || raw === 'Delivered' || raw === 'Project Delivered' || raw === 'Closed' || raw === 'Project Closed' || raw === 'Completed';
+    return s === 'Project Delivered' || s === 'Completed' || raw === 'Delivered' || raw === 'Project Delivered' || raw === 'Closed' || raw === 'Project Closed' || raw === 'Completed' || raw === 'Project Completed' || s === 'Project Completed' || raw === 'Project Cancelled' || s === 'Project Cancelled';
   };
 
   // Base list filtered by applied date range, customer name, and order ID (Supabase leads table data source)
@@ -2787,7 +2789,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       'Closed',
                       'Customer Review',
                       'Approved',
-                      'Payment Pending'
+                      'Payment Pending',
+                      'Project Completed',
+                      'Project Cancelled'
                     ];
 
                     const filteredLeads = filteredLeadsList.filter(prod => {
@@ -3164,7 +3168,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                         setIsSaving(false);
                                       }
                                     }}
-                                    disabled={isSaving}
+                                    disabled={isSaving || isProjectLocked(prod.editing_status)}
                                     className="w-full text-zinc-100 bg-zinc-950 border border-zinc-800 hover:border-zinc-750 text-[10.5px] font-sans font-medium py-1 px-1.5 rounded focus:outline-none focus:ring-1 focus:ring-violet-500 cursor-pointer"
                                   >
                                     
@@ -6770,6 +6774,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         </div>
                       )}
 
+                      <fieldset disabled={isProjectLocked(activeWorkflowProd?.editing_status)} className="space-y-4">
                       {/* Single Common Target Delivery Date at the top */}
                       <div id="wf-target-delivery-date-container" className={`p-3 bg-zinc-900/10 border rounded-xl transition-all flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${
                         validationAttempted && !wfTargetDeliveryDate
@@ -7024,6 +7029,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         </div>
                       )}
 
+                      </fieldset>
                       {/* Save & Assign Action Buttons */}
                       <div className="pt-2 flex items-center gap-3">
                         <button
