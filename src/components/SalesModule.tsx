@@ -4928,18 +4928,62 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const finalReason = "Cancelled";
       const cancellationNotes = "Cancelled during Step 2 creation";
 
-      await updateLead(createdLeadId, {
+      let finalEventsList = [...createEvents];
+      if (finalEventsList.length === 0 && (eventForm.event_type || eventForm.event_name || eventForm.event_date || eventForm.event_location)) {
+        finalEventsList.push({
+          id: `EV-${Math.floor(1000 + Math.random() * 9000)}`,
+          event_type: eventForm.event_type || '',
+          event_name: eventForm.event_name || '',
+          event_shoot_type: eventForm.event_shoot_type || '',
+          event_date: eventForm.event_date || '',
+          event_start_time: eventForm.event_start_time || '',
+          event_end_time: eventForm.event_end_time || '',
+          event_location: eventForm.event_location || '',
+          google_maps_link: eventForm.google_maps_link || '',
+          guest_pax: eventForm.guest_pax || '',
+          staff_pax: eventForm.staff_pax || '',
+          event_start_date: eventForm.event_date || '',
+          event_end_date: eventForm.event_date || ''
+        } as any);
+      }
+
+      const firstEvent = finalEventsList[0] || {};
+      const payload: any = {
         status: 'Lost Lead',
+        current_status: 'Lost Lead',
         remarks: `Lost Reason: ${finalReason}. Notes: ${cancellationNotes}`,
         "Lost_Reason": finalReason,
-        "Lost_Notes": cancellationNotes
-      } as any);
+        "Lost_Notes": cancellationNotes,
+        
+        client_residence_address: createForm.client_residence_address || '',
+        city: createForm.city || '',
+        state: createForm.state || '',
+        pincode: createForm.pincode || '',
+        
+        event_type: firstEvent.event_type || '',
+        custom_event_name: firstEvent.event_name || '',
+        event_date: firstEvent.event_date || '',
+        event_start_time: firstEvent.event_start_time || null,
+        event_end_time: firstEvent.event_end_time || null,
+        event_location: firstEvent.event_location || '',
+        google_maps_link: firstEvent.google_maps_link || '',
+        event_shoot_type: firstEvent.event_shoot_type || '',
+        guest_pax: firstEvent.guest_pax !== '' && firstEvent.guest_pax != null ? Number(firstEvent.guest_pax) : null,
+        staff_pax: firstEvent.staff_pax !== '' && firstEvent.staff_pax != null ? Number(firstEvent.staff_pax) : null,
+        
+        next_follow_up_date: step2FollowUpDate || null,
+        follow_up_notes: step2FollowUpNotes || null,
+        
+        events: finalEventsList
+      };
+
+      await updateLead(createdLeadId, payload);
 
       await updateLeadFollowUp(
         createdLeadId,
         'Lost Lead',
         finalReason,
-        '',
+        step2FollowUpDate || '',
         Number(leadBudget),
         cancellationNotes
       );
