@@ -315,7 +315,7 @@ const generateQuotationPDF = (
   };
 
     // NEW PREP FOR TEAM MEMBERS (INCLUSIONS) AND DELIVERABLES
-  const orderedEventInclusions: { eventName: string; shootType: string; members: string[] }[] = [];
+  const orderedEventInclusions: { eventName: string; members: string[] }[] = [];
   const orderedEventDeliverables: { eventName: string; pkgName: string; items: string[] }[] = [];
   let generalInclusions: string[] = [];
   const generalDeliverables: { pkgName: string; items: string[] }[] = [];
@@ -336,11 +336,9 @@ const generateQuotationPDF = (
         : (editableInclusions?.[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList);
 
       const eventName = event.event_name || event.event_type || 'Unnamed Event';
-      const eventShootType = event.event_shoot_type || event.shoot_type || lead.desired_event_shoot_type || lead.shoot_type || 'N/A';
 
       orderedEventInclusions.push({
         eventName,
-        shootType: eventShootType,
         members: (eventInclusions || []).filter(Boolean)
       });
 
@@ -388,11 +386,9 @@ const generateQuotationPDF = (
       lead.events.forEach((ev: any, idx: number) => {
         const wrapEvName = doc.splitTextToSize(`Event ${idx + 1}: ` + (ev.event_name || ev.event_type || 'Event'), 50);
         const wrapEvLoc = doc.splitTextToSize(ev.event_location || 'N/A', 50);
-        const wrapEvShoot = doc.splitTextToSize(ev.event_shoot_type || lead.desired_event_shoot_type || lead.shoot_type || 'N/A', 50);
         simRightY += (wrapEvName.length * cfg.textPadding); 
         simRightY += cfg.textPadding; // Event Date
         simRightY += (wrapEvLoc.length * cfg.textPadding); 
-        simRightY += (wrapEvShoot.length * cfg.textPadding); 
         if (idx < lead.events.length - 1) simRightY += 2;
       });
       simRightY += cfg.textPadding; // quotation date
@@ -400,8 +396,6 @@ const generateQuotationPDF = (
       simRightY += (wrapEventType.length * cfg.textPadding);
       simRightY += cfg.textPadding;
       simRightY += (wrapLocation.length * cfg.textPadding);
-      simRightY += cfg.textPadding;
-      simRightY += (wrapShootType.length * cfg.textPadding);
       simRightY += cfg.textPadding;
     }
 
@@ -715,11 +709,9 @@ const generateQuotationPDF = (
     lead.events.forEach((ev: any, idx: number) => {
       const wrapEvName = doc.splitTextToSize(`Event ${idx + 1}: ` + (ev.event_name || ev.event_type || 'Event'), 50);
       const wrapEvLoc = doc.splitTextToSize(ev.event_location || 'N/A', 50);
-      const wrapEvShoot = doc.splitTextToSize(ev.event_shoot_type || lead.desired_event_shoot_type || lead.shoot_type || 'N/A', 50);
       rightColYOffset += (wrapEvName.length * cfg.textPadding); 
       rightColYOffset += cfg.textPadding; // Event Date
       rightColYOffset += (wrapEvLoc.length * cfg.textPadding); 
-      rightColYOffset += (wrapEvShoot.length * cfg.textPadding); 
       if (idx < lead.events.length - 1) rightColYOffset += 2;
     });
     rightColYOffset += cfg.textPadding; // quotation date
@@ -727,8 +719,6 @@ const generateQuotationPDF = (
     rightColYOffset += (wrapEventType.length * cfg.textPadding);
     rightColYOffset += cfg.textPadding; 
     rightColYOffset += (wrapLocation.length * cfg.textPadding);
-    rightColYOffset += cfg.textPadding; 
-    rightColYOffset += (wrapShootType.length * cfg.textPadding);
     rightColYOffset += cfg.textPadding; 
   }
 
@@ -802,7 +792,6 @@ const generateQuotationPDF = (
       const rightLabels = [
         { label: 'Event Name',     val: doc.splitTextToSize(`Event ${idx + 1}: ` + (ev.event_name || ev.event_type || 'Event'), 50), isWrapped: true },
         { label: 'Event Date',     val: formatDate(ev.event_date) },
-        { label: 'Shoot Type',     val: doc.splitTextToSize(ev.event_shoot_type || lead.desired_event_shoot_type || lead.shoot_type || 'N/A', 50), isWrapped: true },
         { label: 'Location',       val: doc.splitTextToSize(ev.event_location || 'N/A', 50), isWrapped: true },
       ];
       if (idx === 0) {
@@ -1038,7 +1027,7 @@ const generateQuotationPDF = (
   };
 
     // 2. Team Members Included section
-  const drawTeamMembers = (eventName: string | null, shootType: string | null, members: string[]) => {
+  const drawTeamMembers = (eventName: string | null, members: string[]) => {
     if (members.length === 0) return;
     const mapped = members.map((m, i) => ({ id: String(i), name: m, qty: 1, price: 0 }));
     
@@ -1047,12 +1036,6 @@ const generateQuotationPDF = (
        doc.setFontSize(9.5);
        doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
        doc.text(`Event Name: ${eventName}`, 15, currentY);
-       currentY += 4.5;
-       
-       doc.setFont('helvetica', 'normal');
-       doc.setFontSize(8.5);
-       doc.setTextColor(100, 116, 139);
-       doc.text(`Shoot Type: ${shootType || 'N/A'}`, 15, currentY);
        currentY += 6;
        
        drawTable('TEAM MEMBERS INCLUDED', mapped);
@@ -1064,10 +1047,10 @@ const generateQuotationPDF = (
 
   if (hasEventsInclusions) {
     orderedEventInclusions.forEach((data) => {
-      drawTeamMembers(data.eventName, data.shootType, data.members);
+      drawTeamMembers(data.eventName, data.members);
     });
   } else if (generalInclusions.length > 0) {
-    drawTeamMembers(null, null, generalInclusions);
+    drawTeamMembers(null, generalInclusions);
   }
 
   // 3. Additional services table
@@ -3261,7 +3244,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     if (!leadObj.customer_name?.trim()) missing.push('Customer Name');
     if (!leadObj.mobile?.trim()) missing.push('Mobile Number');
     if (!leadObj.event_type?.trim()) missing.push('Event Type');
-    if (!leadObj.desired_event_shoot_type?.trim() && !leadObj.shoot_type?.trim()) missing.push('Desired Event Shoot Type');
     if (!leadObj.event_date?.trim()) missing.push('Event Date');
     if (!leadObj.event_location?.trim() && !leadObj.location?.trim()) missing.push('Event Location');
     if (activePkgs.length === 0) missing.push('At least one selected package');
@@ -4470,11 +4452,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         if (showEventForm || finalEventsList.length === 0) {
           if (!eventForm.event_type || eventForm.event_type === '') {
             showToastMsg("Please select Event Type.", "error");
-            setIsSaving(false);
-            return;
-          }
-          if (!eventForm.event_shoot_type || eventForm.event_shoot_type === '') {
-            showToastMsg("Please select Event Shoot Type.", "error");
             setIsSaving(false);
             return;
           }
@@ -6796,7 +6773,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             {/* Detailed Parameters */}
             <div className="border-t border-slate-800 pt-3.5 grid grid-cols-2 gap-3 text-[11px]">
               <div>
-                <span className="text-slate-500 block">Shoot Type</span>
+                <span className="text-slate-500 block">Event Type</span>
                 <strong className="text-slate-200 font-medium">{selectedLead.event_type === 'Other' ? (selectedLead.custom_event_name || selectedLead.custom_event_type || 'Other') : selectedLead.event_type}</strong>
               </div>
               <div>
@@ -7324,7 +7301,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className={reorderForm.event_type === 'Other' ? "sm:col-span-2 space-y-2" : ""}>
-                            <label className="block text-[11px] font-medium text-slate-400 mb-1">Event Shoot Type</label>
+                            <label className="block text-[11px] font-medium text-slate-400 mb-1">Event Type</label>
                             <select
                               value={reorderForm.event_type}
                               onChange={(e) => setReorderForm({ ...reorderForm, event_type: e.target.value })}
@@ -9829,7 +9806,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                            <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">2</span>
                            <span>Event Details</span>
                          </h3>
-                         <p className="text-[11px] text-zinc-400 mt-1">Configure event metadata, starting schedules, reporting times, shoot types, and lead origins.</p>
+                         <p className="text-[11px] text-zinc-400 mt-1">Configure event metadata, starting schedules, reporting times, and lead origins.</p>
                        </div>
                        
                        {renderEventDetailsSection(true)}
@@ -9969,9 +9946,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                         <div className="border-b border-slate-800/40 pb-2 mb-3">
                                           <div className="text-xs sm:text-sm font-bold text-slate-100 uppercase tracking-wider font-mono flex items-center justify-between mb-1">
                                             <span>Event Name: {event.event_name || event.event_type || 'Unnamed Event'}</span>
-                                          </div>
-                                          <div className="text-xs text-slate-400 font-medium">
-                                            Shoot Type: <span className="text-slate-300">{event.event_shoot_type || event.shoot_type || selectedLead.desired_event_shoot_type || selectedLead.shoot_type || 'N/A'}</span>
                                           </div>
                                         </div>
                                         <div>
