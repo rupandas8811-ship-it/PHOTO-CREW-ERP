@@ -110,7 +110,6 @@ export type EditingStatus =
   | 'Project Delivered'
   | 'Project Closed'
   | 'Completed'
-  | 'Project Completed'
   | 'Project Cancelled'
   | 'Cancelled';
 
@@ -182,8 +181,7 @@ export interface Lead {
   production_role?: string;
   delivery_target_date?: string;
   current_status?: string;
-  current_stage?: 'Sales' | 'Operations' | 'Production' | 'Completed'
-  | 'Project Completed';
+  current_stage?: 'Sales' | 'Operations' | 'Production' | 'Completed';
   whatsapp_number?: string;
   address?: string;
   city?: string;
@@ -266,8 +264,7 @@ export interface Order {
   quotation_amount: number;
   advance_received: number;
   balance_amount: number;
-  order_status: 'Confirmed' | 'Completed'
-  | 'Project Completed' | 'Delivered' | 'Paid' | 'Closed';
+  order_status: 'Confirmed' | 'Completed' | 'Delivered' | 'Paid' | 'Closed';
   current_stage: CurrentStage;
   sales_person: string;
   created_at: string;
@@ -323,8 +320,7 @@ export interface Operation {
   assistant_assigned: string;
   equipment_kit: string;
   reporting_time: string;
-  event_status: 'Assigned' | 'Completed'
-  | 'Project Completed' | 'Event Scheduled' | 'Event Completed' | 'Raw Footage Received' | string;
+  event_status: 'Assigned' | 'Completed' | 'Event Scheduled' | 'Event Completed' | 'Raw Footage Received' | string;
   remarks?: string;
   updated_by: string;
   Upload_Notes_Remarks?: string;
@@ -364,7 +360,7 @@ export interface Production {
   raw_footage_status?: string;
   target_delivery_date?: string;
   actual_delivery_date?: string;
-  production_status?: 'New Project' | 'Footage Received' | 'Editor Assigned' | 'Editing Started' | 'In Progress' | 'Customer Review' | 'Revision Required' | 'Approved' | 'Delivered' | 'Closed' | 'Project Completed' | 'Project Cancelled';
+  production_status?: 'New Project' | 'Footage Received' | 'Editor Assigned' | 'Editing Started' | 'In Progress' | 'Customer Review' | 'Revision Required' | 'Approved' | 'Delivered' | 'Closed';
   approval_status?: string;
   editing_progress?: string;
 }
@@ -437,8 +433,7 @@ export interface EditorAssignment {
   speciality: string;
   assigned_date: string;
   target_finish_date: string;
-  status: 'Assigned' | 'Editing Started' | 'In Progress' | 'Review Pending' | 'Revision' | 'Completed'
-  | 'Project Completed';
+  status: 'Assigned' | 'Editing Started' | 'In Progress' | 'Review Pending' | 'Revision' | 'Completed';
   created_at?: string;
 }
 
@@ -449,8 +444,7 @@ export interface StaffAssignment {
   staff_id: string;
   staff_name: string;
   assignment_date: string;
-  assignment_status: 'Assigned' | 'Completed'
-  | 'Project Completed' | 'Cancelled';
+  assignment_status: 'Assigned' | 'Completed' | 'Cancelled';
   whatsapp_sent_status?: string;
   updated_by?: string;
 }
