@@ -384,12 +384,26 @@ const generateQuotationPDF = (
     simLeftY += cfg.textPadding;
 
     let simRightY = 0;
-    simRightY += (wrapEventType.length * cfg.textPadding);
-    simRightY += cfg.textPadding;
-    simRightY += (wrapLocation.length * cfg.textPadding);
-    simRightY += cfg.textPadding;
-    simRightY += (wrapShootType.length * cfg.textPadding);
-    simRightY += cfg.textPadding;
+    if (lead.events && lead.events.length > 0) {
+      lead.events.forEach((ev: any, idx: number) => {
+        const wrapEvName = doc.splitTextToSize(`Event ${idx + 1}: ` + (ev.event_name || ev.event_type || 'Event'), 50);
+        const wrapEvLoc = doc.splitTextToSize(ev.event_location || 'N/A', 50);
+        const wrapEvShoot = doc.splitTextToSize(ev.event_shoot_type || lead.desired_event_shoot_type || lead.shoot_type || 'N/A', 50);
+        simRightY += (wrapEvName.length * cfg.textPadding); 
+        simRightY += cfg.textPadding; // Event Date
+        simRightY += (wrapEvLoc.length * cfg.textPadding); 
+        simRightY += (wrapEvShoot.length * cfg.textPadding); 
+        if (idx < lead.events.length - 1) simRightY += 2;
+      });
+      simRightY += cfg.textPadding; // quotation date
+    } else {
+      simRightY += (wrapEventType.length * cfg.textPadding);
+      simRightY += cfg.textPadding;
+      simRightY += (wrapLocation.length * cfg.textPadding);
+      simRightY += cfg.textPadding;
+      simRightY += (wrapShootType.length * cfg.textPadding);
+      simRightY += cfg.textPadding;
+    }
 
     const simBoxHeight = Math.max(simLeftY, simRightY) + cfg.boxPadding;
     simY += simBoxHeight + cfg.secSpacing;
@@ -697,12 +711,26 @@ const generateQuotationPDF = (
     leftColYOffset += cfg.textPadding;
   }
 
-  rightColYOffset += (wrapEventType.length * cfg.textPadding);
-  rightColYOffset += cfg.textPadding; 
-  rightColYOffset += (wrapLocation.length * cfg.textPadding);
-  rightColYOffset += cfg.textPadding; 
-  rightColYOffset += (wrapShootType.length * cfg.textPadding);
-  rightColYOffset += cfg.textPadding; 
+  if (lead.events && lead.events.length > 0) {
+    lead.events.forEach((ev: any, idx: number) => {
+      const wrapEvName = doc.splitTextToSize(`Event ${idx + 1}: ` + (ev.event_name || ev.event_type || 'Event'), 50);
+      const wrapEvLoc = doc.splitTextToSize(ev.event_location || 'N/A', 50);
+      const wrapEvShoot = doc.splitTextToSize(ev.event_shoot_type || lead.desired_event_shoot_type || lead.shoot_type || 'N/A', 50);
+      rightColYOffset += (wrapEvName.length * cfg.textPadding); 
+      rightColYOffset += cfg.textPadding; // Event Date
+      rightColYOffset += (wrapEvLoc.length * cfg.textPadding); 
+      rightColYOffset += (wrapEvShoot.length * cfg.textPadding); 
+      if (idx < lead.events.length - 1) rightColYOffset += 2;
+    });
+    rightColYOffset += cfg.textPadding; // quotation date
+  } else {
+    rightColYOffset += (wrapEventType.length * cfg.textPadding);
+    rightColYOffset += cfg.textPadding; 
+    rightColYOffset += (wrapLocation.length * cfg.textPadding);
+    rightColYOffset += cfg.textPadding; 
+    rightColYOffset += (wrapShootType.length * cfg.textPadding);
+    rightColYOffset += cfg.textPadding; 
+  }
 
   const boxHeight = Math.max(leftColYOffset, rightColYOffset) + cfg.boxPadding;
 
@@ -769,26 +797,55 @@ const generateQuotationPDF = (
   });
 
   let curRightY = clientY + 11.5;
-  const rightLabels = [
-    { label: 'Event Type',     val: wrapEventType, isWrapped: true },
-    { label: 'Event Date',     val: formattedEvDate },
-    { label: 'Event Location', val: wrapLocation, isWrapped: true },
-    { label: 'Quotation Date', val: quoteDateStr }
-  ];
+  if (lead.events && lead.events.length > 0) {
+    lead.events.forEach((ev: any, idx: number) => {
+      const rightLabels = [
+        { label: 'Event Name',     val: doc.splitTextToSize(`Event ${idx + 1}: ` + (ev.event_name || ev.event_type || 'Event'), 50), isWrapped: true },
+        { label: 'Event Date',     val: formatDate(ev.event_date) },
+        { label: 'Shoot Type',     val: doc.splitTextToSize(ev.event_shoot_type || lead.desired_event_shoot_type || lead.shoot_type || 'N/A', 50), isWrapped: true },
+        { label: 'Location',       val: doc.splitTextToSize(ev.event_location || 'N/A', 50), isWrapped: true },
+      ];
+      if (idx === 0) {
+        rightLabels.push({ label: 'Quote Date', val: quoteDateStr, isWrapped: false });
+      }
 
-  rightLabels.forEach((item) => {
-    doc.text(item.label, 110, curRightY);
-    doc.text(':', 131, curRightY);
-    if (item.isWrapped && Array.isArray(item.val)) {
-      item.val.forEach((line: string, i: number) => {
-        doc.text(line, 133, curRightY + (i * cfg.textPadding));
+      rightLabels.forEach((item) => {
+        doc.text(item.label, 110, curRightY);
+        doc.text(':', 132, curRightY); // adjusted for spacing
+        if (item.isWrapped && Array.isArray(item.val)) {
+          item.val.forEach((line: string, i: number) => {
+            doc.text(line, 134, curRightY + (i * cfg.textPadding));
+          });
+          curRightY += (item.val.length * cfg.textPadding);
+        } else {
+          doc.text(String(item.val), 134, curRightY);
+          curRightY += cfg.textPadding;
+        }
       });
-      curRightY += (item.val.length * cfg.textPadding);
-    } else {
-      doc.text(String(item.val), 133, curRightY);
-      curRightY += cfg.textPadding;
-    }
-  });
+      if (idx < lead.events.length - 1) curRightY += 2;
+    });
+  } else {
+    const rightLabels = [
+      { label: 'Event Type',     val: wrapEventType, isWrapped: true },
+      { label: 'Event Date',     val: formattedEvDate },
+      { label: 'Event Location', val: wrapLocation, isWrapped: true },
+      { label: 'Quotation Date', val: quoteDateStr }
+    ];
+
+    rightLabels.forEach((item) => {
+      doc.text(item.label, 110, curRightY);
+      doc.text(':', 131, curRightY);
+      if (item.isWrapped && Array.isArray(item.val)) {
+        item.val.forEach((line: string, i: number) => {
+          doc.text(line, 133, curRightY + (i * cfg.textPadding));
+        });
+        curRightY += (item.val.length * cfg.textPadding);
+      } else {
+        doc.text(String(item.val), 133, curRightY);
+        curRightY += cfg.textPadding;
+      }
+    });
+  }
 
   let currentY = clientY + boxHeight + cfg.secSpacing;
 
@@ -5124,10 +5181,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       showValidationError("input_event_type", "Event Type is required.");
       return;
     }
-    if (!eventForm.event_shoot_type) {
-      showValidationError("input_event_shoot_type", "Event Shoot Type is required.");
-      return;
-    }
     if (!eventForm.event_date) {
       showValidationError("input_event_date", "Event Date is required.");
       return;
@@ -5392,10 +5445,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     {!isCollapsed && (
                       <div className="p-4 bg-slate-900/50 text-xs text-slate-300 space-y-3">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-                          <div>
-                            <span className="text-slate-400">Shoot Type:</span>
-                            <span className="ml-1.5 font-semibold text-slate-200">{ev.event_shoot_type}</span>
-                          </div>
                           {ev.event_start_time && (
                             <div>
                               <span className="text-slate-400">Timings:</span>
@@ -5407,10 +5456,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <div>
                             <span className="text-slate-400">Guest Pax:</span>
                             <span className="ml-1.5 font-semibold text-slate-200">{ev.guest_pax}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400">Staff Pax:</span>
-                            <span className="ml-1.5 font-semibold text-slate-200">{ev.staff_pax}</span>
                           </div>
                         </div>
 
@@ -5506,20 +5551,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       value={eventForm.event_name}
                       onChange={(e) => setEventForm({ ...eventForm, event_name: e.target.value })}
                       className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-600 focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Event Shoot Type */}
-                  <div className="text-left">
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                      Event Shoot Type *
-                    </label>
-                    <MultiSelectDropdown
-                      id="input_event_shoot_type"
-                      selected={eventForm.event_shoot_type ? eventForm.event_shoot_type.split(',').map(s => s.trim()).filter(Boolean) : []}
-                      options={SHOOT_TYPES}
-                      onChange={(vals) => setEventForm({ ...eventForm, event_shoot_type: vals.join(', ') })}
-                      placeholder="Select Shoot Types"
                     />
                   </div>
 
@@ -5619,21 +5650,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       placeholder="e.g. 150"
                       value={eventForm.guest_pax}
                       onChange={(e) => setEventForm({ ...eventForm, guest_pax: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0) })}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono"
-                    />
-                  </div>
-
-                  {/* Staff Pax */}
-                  <div className="text-left">
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                      Staff Pax
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="e.g. 3"
-                      value={eventForm.staff_pax}
-                      onChange={(e) => setEventForm({ ...eventForm, staff_pax: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0) })}
                       className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono"
                     />
                   </div>
@@ -5997,10 +6013,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       if (showEventForm || finalEventsList.length === 0) {
         if (!eventForm.event_type || eventForm.event_type === '') {
           showValidationError("input_event_type", "Please select Event Type.");
-          return;
-        }
-        if (!eventForm.event_shoot_type || eventForm.event_shoot_type === '') {
-          showValidationError("input_event_shoot_type", "Please select Event Shoot Type.");
           return;
         }
         if (!eventForm.event_date || eventForm.event_date === '') {
