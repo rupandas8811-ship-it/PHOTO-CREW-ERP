@@ -8727,7 +8727,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 <option value="">All Stages</option>
                 
                 <optgroup label="Sales Statuses" className="bg-slate-950 text-emerald-400 font-bold">
-                  <option value="New Lead" className="text-white font-normal">Sales - New Lead</option>
+                  <option value="New Lead" className="text-white font-normal">New Lead</option>
                   <option value="Lost Lead" className="text-white font-normal">Lost Lead</option>
                   <option value="Follow Up" className="text-white font-normal">Followup</option>
                   <option value="Overdue" className="text-white font-normal">Overdue Followup</option>

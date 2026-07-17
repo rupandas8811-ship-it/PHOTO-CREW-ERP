@@ -5737,6 +5737,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (rawStatus === 'Follow-up' || rawStatus === 'Follow-Up') {
       return 'Follow Up';
     }
+    if (rawStatus === 'Sales - New Lead') {
+      return 'New Lead';
+    }
     return rawStatus;
   };
 
