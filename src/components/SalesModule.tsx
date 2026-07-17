@@ -10636,185 +10636,58 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
 
             <div className="space-y-4 relative z-10 text-slate-300">
-              {/* Profile Card Summary */}
-              <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800/80 space-y-3.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono text-amber-500 bg-slate-850 px-2 py-0.5 border border-slate-750 rounded font-black">
-                    {detectedCustomer.customer_id}
-                  </span>
-                  <span className="text-[9px] bg-slate-850 text-slate-400 px-2 py-0.5 rounded border border-slate-750 font-mono">
-                    Last Event: {detectedCustomer.lastEventDate || 'N/A'}
-                  </span>
-                </div>
-
-                <div className="space-y-1">
-                  <h4 className="text-sm font-black text-white">{detectedCustomer.customer_name}</h4>
-                  <div className="text-[10px] text-slate-400 font-mono flex items-center gap-x-3 gap-y-1 flex-wrap">
-                    <span>{detectedCustomer.email}</span>
-                    <span>•</span>
-                    <span>{formatIndianPhoneNumber(detectedCustomer.mobile)}</span>
-                  </div>
-                </div>
-
-                {/* Key Retention KPIs */}
-                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-800/50 text-xs text-left">
-                  <div>
-                    <span className="text-[10px] text-slate-500 block font-mono">PREVIOUS ORDERS</span>
-                    <strong className="text-slate-200 font-black font-mono">{detectedCustomer.totalOrders} Contracts</strong>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500 block font-mono">TOTAL REVENUE (CLV)</span>
-                    <strong className="text-emerald-455 font-black font-mono">{formatINR(detectedCustomer.totalRevenue)}</strong>
-                  </div>
-                </div>
-              </div>
-
-              {/* Packages badge roster */}
-              {detectedCustomer.previousPackages.length > 0 && (
-                <div className="space-y-1.5 text-left">
-                  <span className="text-[9px] text-slate-550 uppercase font-bold tracking-wider font-mono">PREVIOUS PACKAGES UNDERTAKINGS:</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {detectedCustomer.previousPackages.map((pkg: string, i: number) => (
-                      <span key={pkg + i} className="bg-slate-900 border border-slate-800 px-2 py-0.5 text-[9px] font-mono rounded text-slate-400">
-                        {pkg}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* REORDER MODE TOGGLE SEGMENT */}
-              {isQuickReorderView ? (
-                <div className="bg-slate-900 border border-indigo-500/25 p-3 rounded-xl space-y-3 animate-fade-in-up text-left">
-                  <span className="text-[9px] font-black text-indigo-400 tracking-widest font-mono block">CONFIGURE QUICK REORDER PACKAGE</span>
-                  
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div className={reorderForm.event_type === 'Other' ? "col-span-2 space-y-1.5" : ""}>
-                      <label className="text-[10px] text-slate-400 block mb-1">Shoot Category</label>
-                      <select
-                        value={reorderForm.event_type}
-                        onChange={(e) => setReorderForm({ ...reorderForm, event_type: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200"
-                      >
-                        {EVENT_TYPES.map(type => (
-                          <option key={type} value={type}>{type}</option>
-                        ))}
-                      </select>
-
-                      {reorderForm.event_type === 'Other' && (
-                        <div className="animate-fade-in-down mt-1.5">
-                          <label className="text-[9px] font-mono font-bold text-amber-500 block mb-1">
-                            Custom Event Type *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Specify custom event type"
-                            value={reorderForm.custom_event_name}
-                            onChange={(e) => setReorderForm({ ...reorderForm, custom_event_name: e.target.value })}
-                            className="w-full bg-slate-950 border border-amber-500/50 rounded px-2 py-1 text-slate-100 text-xs focus:outline-none text-white"
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] text-slate-400 block mb-1">Event Plan Date *</label>
-                      <input
-                        type="date"
-                        required
-                        value={reorderForm.event_date}
-                        onChange={(e) => setReorderForm({ ...reorderForm, event_date: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 font-mono"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] text-slate-400 block mb-1">Contract Amount (₹)</label>
-                      <input
-                        type="number"
-                        value={reorderForm.quotation_amount}
-                        onChange={(e) => setReorderForm({ ...reorderForm, quotation_amount: Number(e.target.value), advance_received: Math.round(Number(e.target.value)/3) })}
-                        className="w-full bg-slate-950 border border-slate-805 rounded px-2 py-1 text-slate-200 font-mono"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] text-slate-400 block mb-1">Advance Received (₹)</label>
-                      <input
-                        type="number"
-                        value={reorderForm.advance_received}
-                        onChange={(e) => setReorderForm({ ...reorderForm, advance_received: Number(e.target.value) })}
-                        className="w-full bg-slate-950 border border-slate-805 rounded px-2 py-1 text-slate-205 font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-2 border-t border-slate-800 pt-2 text-[11px]">
-                    <button 
-                      type="button" 
-                      onClick={() => setIsQuickReorderView(false)} 
-                      className="px-3 py-1 bg-slate-800 text-slate-400 rounded hover:text-slate-200 cursor-pointer"
-                    >
-                      Refuse
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => handleExecuteQuickReorder(detectedCustomer)} 
-                      className="px-3 py-1 bg-indigo-650 text-white rounded font-bold cursor-pointer"
-                    >
-                      Finalize Reorder Project
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-[11px] text-slate-500 italic text-left">
-                  Tip: Bypassing manual typing and booking a new event will keep the legacy events intact in client timeline record history.
-                </div>
-              )}
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-900 text-slate-400 font-mono text-[9px] uppercase">
+                    <th className="p-2 border border-slate-800">Customer Name</th>
+                    <th className="p-2 border border-slate-800">Phone Number</th>
+                    <th className="p-2 border border-slate-800">Lead Created Date</th>
+                    <th className="p-2 border border-slate-800">Current Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="bg-slate-950/40 text-slate-300">
+                    <td className="p-2 border border-slate-800 font-bold">{detectedCustomer.customer_name}</td>
+                    <td className="p-2 border border-slate-800 font-mono">{detectedCustomer.mobile}</td>
+                    <td className="p-2 border border-slate-800 font-mono">
+                      {detectedCustomer.leads && detectedCustomer.leads.length > 0 
+                        ? new Date(Math.max(...detectedCustomer.leads.map((l: any) => new Date(l.created_date || 0).getTime()))).toISOString().split('T')[0]
+                        : 'N/A'}
+                    </td>
+                    <td className="p-2 border border-slate-800">
+                      {detectedCustomer.leads && detectedCustomer.leads.length > 0
+                        ? getLeadCurrentStatus(detectedCustomer.leads.sort((a: any, b: any) => new Date(b.created_date || 0).getTime() - new Date(a.created_date || 0).getTime())[0])
+                        : 'N/A'}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
 
             {/* Action buttons */}
-            <div className="flex flex-col sm:flex-row justify-end gap-2 p-1 border-t border-slate-800">
-              {!isQuickReorderView && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // Autofill name and other details back to the createForm
-                      setCreateForm(prev => ({
-                        ...prev,
-                        customer_name: detectedCustomer.customer_name,
-                        email: detectedCustomer.email,
-                        alternate_mobile: detectedCustomer.alternate_mobile || '',
-                      }));
-                      setShowDetectionPopup(false);
-                      setDetectedCustomer(null);
-                    }}
-                    className="px-4 py-2 text-xs bg-slate-800 hover:bg-slate-755 text-slate-200 border border-slate-700 rounded-lg cursor-pointer transition-all font-bold"
-                  >
-                    Auto-Fill Contact Info
-                  </button>
+            <div className="flex flex-col sm:flex-row justify-end gap-2 p-1 border-t border-slate-800 mt-4 pt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDetectionPopup(false);
+                  setDetectedCustomer(null);
+                  setActiveTab('list');
+                }}
+                className="px-4 py-2 text-xs bg-slate-800 hover:bg-slate-755 text-slate-200 border border-slate-700 rounded-lg cursor-pointer transition-all font-bold"
+              >
+                Cancel
+              </button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsQuickReorderView(true);
-                      // Set default reorder date
-                      const tomorrowStr = new Date();
-                      tomorrowStr.setDate(tomorrowStr.getDate() + 30);
-                      setReorderForm(prev => ({
-                        ...prev,
-                        event_date: tomorrowStr.toISOString().split('T')[0]
-                      }));
-                    }}
-                    className="px-4 py-2 text-xs bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-505 hover:to-indigo-605 text-white rounded-lg shadow-md cursor-pointer transition-all font-bold flex items-center justify-center gap-1.5"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Quick Repeat Reorder</span>
-                  </button>
-                </>
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDetectionPopup(false);
+                  setDetectedCustomer(null);
+                }}
+                className="px-4 py-2 text-xs bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-505 hover:to-indigo-605 text-white rounded-lg shadow-md cursor-pointer transition-all font-bold"
+              >
+                Continue
+              </button>
             </div>
 
           </div>
