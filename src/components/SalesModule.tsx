@@ -10232,10 +10232,35 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Order Status</span>
                                   <strong className="text-emerald-400">Order Confirmed</strong>
                                 </div>
-                                <div>
-                                  <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Booking Date & Time</span>
-                                  <strong className="text-slate-200">{selectedLead?.booking_date || 'N/A'} {selectedLead?.booking_time ? `at ${selectedLead.booking_time}` : ''}</strong>
+                                
+                                <div className="col-span-1 sm:col-span-2 space-y-2 mb-2">
+                                  {crmEvents && crmEvents.length > 0 ? (
+                                    crmEvents.map((ev: any, idx: number) => (
+                                      <div key={ev.id} className="bg-slate-900/50 p-3 rounded-lg border border-slate-800 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                                        <div className="flex flex-col min-w-[150px]">
+                                          <span className="text-[10px] text-amber-500 font-black uppercase tracking-wider mb-0.5">Event {idx + 1}</span>
+                                          <span className="text-xs font-bold text-slate-200">{ev.event_name || ev.event_type || 'N/A'}</span>
+                                        </div>
+                                        <div className="flex gap-4">
+                                          <div>
+                                            <span className="block text-[9px] text-zinc-500 uppercase font-mono font-bold">Booking Date</span>
+                                            <strong className="text-slate-300 text-xs font-mono">{ev.event_date || 'N/A'}</strong>
+                                          </div>
+                                          <div>
+                                            <span className="block text-[9px] text-zinc-500 uppercase font-mono font-bold">Booking Time</span>
+                                            <strong className="text-slate-300 text-xs font-mono">{ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A'}</strong>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div>
+                                      <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Booking Date & Time</span>
+                                      <strong className="text-slate-200">{selectedLead?.booking_date || 'N/A'} {selectedLead?.booking_time ? `at ${selectedLead.booking_time}` : ''}</strong>
+                                    </div>
+                                  )}
                                 </div>
+
                                 <div>
                                   <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Final Package Amount</span>
                                   <strong className="text-amber-400 font-mono">₹{Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0).toLocaleString('en-IN')}</strong>
@@ -10251,7 +10276,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 <div>
                                   <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Transaction ID</span>
                                   <strong className="text-slate-200">
-                                    {payments?.find(p => p.order_id === (orders?.find(o => o.lead_id === selectedLead?.lead_id)?.order_id || selectedLead?.lead_id))?.transaction_id || selectedLead?.transaction_id || 'Nil'}
+                                    {(selectedLead?.payment_mode === 'Cash' || selectedLead?.payment_mode === 'Other') ? 'N/A' : (selectedLead?.transaction_id || payments?.find(p => p.order_id === (orders?.find(o => o.lead_id === selectedLead?.lead_id)?.order_id || selectedLead?.lead_id))?.transaction_id || 'N/A')}
                                   </strong>
                                 </div>
                                 <div className="col-span-1 sm:col-span-2">
