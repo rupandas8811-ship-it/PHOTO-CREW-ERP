@@ -4391,7 +4391,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           reference_source: wizardLeadData.reference_source,
           Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || '',
           remarks: updatedRemarks,
-          status: selectedLead.status || 'New Lead'
+          status: 'New Lead'
         });
 
         const newCompleted = Math.max(crmHighestStep, 1);
@@ -4556,99 +4556,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           };
         });
 
-        if (wizardLeadData.status === 'Order Confirmed') {
-          if (!wizardLeadData.confirmed_event_date) {
-             showToastMsg("Please provide Confirmed Event Date.", "error");
-             setIsSaving(false); return;
-          }
-          if (!wizardLeadData.final_amount || isNaN(wizardLeadData.final_amount)) {
-             showToastMsg("Please provide Final Amount.", "error");
-             setIsSaving(false); return;
-          }
-          
-          const pkgName = packages.find(p => p.package_id === wizardLeadData.selected_package_id)?.package_name || 'Selected Package';
-          
-          let masterOrderId = '';
-          try {
-             masterOrderId = await confirmOrder(
-               selectedLead.lead_id,
-               pkgName,
-               Number(wizardLeadData.final_amount),
-               Number(wizardLeadData.advance_received || 0),
-               wizardLeadData.confirmed_event_date,
-               wizardLeadData.confirmed_event_time,
-               'UPI',
-               wizardLeadData.notes || 'Order confirmed via CRM Wizard',
-               undefined,
-               undefined
-             );
-          } catch (err: any) {
-             console.error('confirmOrder error', err);
-             showToastMsg('Failed to confirm order: ' + err.message, 'error');
-             setIsSaving(false); return;
-          }
-
-          // Save to order_event_reporting
-          try {
-             if (supabaseClient) {
-               const finalAmt = Number(wizardLeadData.final_amount);
-               const advanceAmt = Number(wizardLeadData.advance_received || 0);
-               const pendingAmt = finalAmt - advanceAmt;
-               const paymentStatus = pendingAmt <= 0 ? 'Paid' : 'Pending';
-
-               for (const ev of crmEvents) {
-                 const payload = {
-                   order_id: masterOrderId,
-                   lead_id: selectedLead.lead_id,
-                   event_id: ev.id,
-                   event_name: ev.event_name || ev.event_type || 'Unknown Event',
-                   confirmed_event_date: wizardLeadData.confirmed_event_date,
-                   confirmed_event_time: wizardLeadData.confirmed_event_time,
-                   contract_final_amount: finalAmt,
-                   advance_payment_received: advanceAmt,
-                   reporting_date: ev.reporting_date || ev.event_date || wizardLeadData.confirmed_event_date,
-                   reporting_time: ev.reporting_time || wizardLeadData.confirmed_event_time,
-                   pending_amount: pendingAmt,
-                   payment_status: paymentStatus
-                 };
-
-                 const { data: existing, error: fetchErr } = await supabaseClient
-                   .from('order_event_reporting')
-                   .select('event_id')
-                   .eq('event_id', ev.id)
-                   .maybeSingle();
-
-                 if (fetchErr && fetchErr.code !== 'PGRST116') {
-                    throw fetchErr;
-                 }
-
-                 if (existing) {
-                   const { error: updErr } = await supabaseClient
-                     .from('order_event_reporting')
-                     .update(payload)
-                     .eq('event_id', ev.id);
-                   if (updErr) throw updErr;
-                 } else {
-                   const { error: insErr } = await supabaseClient
-                     .from('order_event_reporting')
-                     .insert(payload);
-                   if (insErr) throw insErr;
-                 }
-               }
-             }
-          } catch (err: any) {
-             const errMsg = `Failed to save Order Event Reporting.\nTable Name: order_event_reporting\nColumn Name: Multiple (Check schema)\nFailed Function: handleSaveStep -> UPSERT\nSQL Operation: INSERT/UPDATE\nExact Supabase Error: ${err.message || String(err)}\nSuggested Fix: Verify table schema 'order_event_reporting' exists with correct columns.`;
-             alert(errMsg);
-             setIsSaving(false);
-             return;
-          }
-          
-          showToastMsg("Order Confirmed and sent to Operations.", "success");
-          setSelectedLead(null);
-          setIsSaving(false);
-          return;
-        }
-
         showToastMsg(`CRM Changes Saved.`, "success");
         setShowStep3Popup(true);
         setStep3Option('negotiation');
@@ -4700,18 +4607,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
   };
 
-  const handleConfirmStep3Proceed = async () => {
+  const handleConfirmStep3ProceedDirect = async (action: 'negotiation' | 'quotation_send') => {
     if (!selectedLead) return;
     setIsSaving(true);
     try {
-      if (step3Option === 'negotiation') {
+      if (action === 'negotiation') {
         await updateLead(selectedLead.lead_id, {
           status: 'Negotiation' as CurrentStage
         });
         showToastMsg("Lead status updated to Negotiation.", "success");
         setShowStep3Popup(false);
         setSelectedLead(null);
-      } else if (step3Option === 'quotation_send') {
+      } else if (action === 'quotation_send') {
         await updateLead(selectedLead.lead_id, {
           status: 'Quotation Sent' as CurrentStage
         });
@@ -4805,9 +4712,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       const notesWithTag = appendCompletedStep(step2FollowUpNotes || 'Saved event details', 2);
 
-      // Determine target status: If the current status is New Lead or empty, update to Follow Up. Otherwise preserve advanced status.
-      const previousStatus = isCreateFlow ? 'New Lead' : (selectedLead ? getLeadCurrentStatus(selectedLead) : 'New Lead');
-      const targetStatus = (previousStatus === 'New Lead' || !previousStatus) ? 'Follow Up' : previousStatus;
+      // Automatically set the lead status to: Follow Up
+      const targetStatus = 'Follow Up';
 
       // Update lead follow up and preserve/update status
       await updateLeadFollowUp(
@@ -8582,17 +8488,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               ) : (
                 <button
                   type="button"
-                  onClick={(e) => {
-                    if (salesStatus === 'Order Confirmed') {
-                      handleOrderConfirmedSubmit(e);
-                    } else {
-                      handleStatusSave();
-                    }
-                  }}
+                  onClick={handleStatusSave}
                   disabled={isSaving}
                   className="px-5.5 py-2 text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl shadow-lg shadow-emerald-500/10 cursor-pointer border border-transparent transition-colors flex items-center gap-1.5"
                 >
-                  {isSaving ? 'Saving...' : salesStatus === 'Order Confirmed' ? '🎉 Confirm Order & Transition' : '✍️ Create Lead'}
+                  {isSaving ? 'Saving...' : 'Save & Proceed'}
                 </button>
               )}
             </div>
@@ -10511,17 +10411,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       {/* MODAL: Proceed Status Pop-up */}
       {showStep3Popup && (
         <div id="modal_step3_proceed_status" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-4 animate-fade-in text-left">
-          <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-indigo-500/30 rounded-2xl w-full max-w-md shadow-2xl relative p-6 space-y-5">
+          <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-indigo-500/30 rounded-2xl w-full max-w-sm shadow-2xl relative p-6 space-y-6">
             <div className="absolute top-0 left-12 w-48 h-48 bg-indigo-500/[0.03] rounded-full blur-[60px] pointer-events-none" />
 
             <div className="flex items-start justify-between border-b border-slate-800 pb-3 relative z-10">
               <div>
                 <h3 className="text-sm font-bold text-white tracking-widest font-mono flex items-center gap-1.5 animate-pulse">
-                  <span>STATUS</span>
+                  <span>Select Next Sales Stage</span>
                 </h3>
-                <p className="text-[11px] text-indigo-300 mt-0.5 font-sans">
-                  How would you like to proceed?
-                </p>
               </div>
               <button 
                 onClick={() => setShowStep3Popup(false)}
@@ -10531,54 +10428,21 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </button>
             </div>
 
-            <div className="space-y-4 relative z-10 text-slate-300">
-              <div className="space-y-3">
-                <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-800/80 bg-slate-950/20 hover:bg-slate-950/40 cursor-pointer transition-colors">
-                  <input
-                    type="radio"
-                    name="step3Option"
-                    value="negotiation"
-                    checked={step3Option === 'negotiation'}
-                    onChange={() => setStep3Option('negotiation')}
-                    className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-slate-750 bg-slate-900 cursor-pointer"
-                  />
-                  <div>
-                    <span className="text-sm font-bold text-white">Mark as Negotiation</span>
-                    <p className="text-[11px] text-zinc-400 mt-0.5 font-sans">Update lead status to Negotiation and return to Leads Directory.</p>
-                  </div>
-                </label>
-
-                <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-800/80 bg-slate-950/20 hover:bg-slate-950/40 cursor-pointer transition-colors">
-                  <input
-                    type="radio"
-                    name="step3Option"
-                    value="quotation_send"
-                    checked={step3Option === 'quotation_send'}
-                    onChange={() => setStep3Option('quotation_send')}
-                    className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-slate-750 bg-slate-900 cursor-pointer"
-                  />
-                  <div>
-                    <span className="text-sm font-bold text-white">Quotation Sent</span>
-                    <p className="text-[11px] text-zinc-400 mt-0.5 font-sans">Update lead status to Quotation Sent and return to Leads Directory.</p>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800/80 relative z-10">
+            <div className="space-y-3 relative z-10 text-slate-300">
               <button
-                onClick={() => setShowStep3Popup(false)}
-                className="px-4 py-1.5 rounded bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmStep3Proceed}
+                onClick={() => handleConfirmStep3ProceedDirect('quotation_send')}
                 disabled={isSaving}
-                className="px-4 py-1.5 rounded bg-indigo-650 hover:bg-indigo-600 text-white text-xs font-mono font-bold uppercase transition-all shadow-md flex items-center gap-1.5"
+                className="w-full px-4 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold transition-all shadow-md flex items-center justify-center gap-2 border border-indigo-500/30 cursor-pointer"
               >
-                {isSaving && <span className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>}
-                <span>Continue</span>
+                Quotation Sent
+              </button>
+              
+              <button
+                onClick={() => handleConfirmStep3ProceedDirect('negotiation')}
+                disabled={isSaving}
+                className="w-full px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold transition-all shadow-md flex items-center justify-center gap-2 border border-slate-700 cursor-pointer"
+              >
+                Negotiation
               </button>
             </div>
           </div>
