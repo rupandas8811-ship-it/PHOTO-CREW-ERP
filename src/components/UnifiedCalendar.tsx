@@ -342,30 +342,9 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
 
   // Filters Event list by role first
   const roleFilteredEvents = useMemo(() => {
-    if (role === 'production' || role === 'owner') {
-      const projectMap = new Map<string, CalendarEvent>();
-      
-      allEvents.forEach(ev => {
-        const projectId = ev.orderId || ev.id;
-        
-        // Use the proper Target Delivery Date
-        const targetDate = ev.targetDeliveryDate;
-        if (targetDate) {
-          if (!projectMap.has(projectId)) {
-             projectMap.set(projectId, {
-                ...ev,
-                id: `target-delivery-${projectId}`,
-                eventClass: 'Target Delivery',
-                date: targetDate, // Override the date to be Target Delivery Date
-             });
-          }
-        }
-      });
-      return Array.from(projectMap.values());
-    }
-
+    // Both Sales, Operations, Production, and Owner show exactly the same Order Confirmed not yet Delivered/Completed events
     return allEvents;
-  }, [allEvents, role]);
+  }, [allEvents]);
 
   // Inline filter by search, type, and classes
   const filteredEvents = useMemo(() => {
@@ -1652,80 +1631,32 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  {(role === 'production' || role === 'owner') ? (
-                    <tr className="border-b border-zinc-800 text-xs font-mono text-zinc-455 uppercase text-left whitespace-nowrap">
-                      <th className="p-3">Lead ID</th>
-                      <th className="p-3">Customer Name</th>
-                      <th className="p-3">Event Name</th>
-                      <th className="p-3">Event Type</th>
-                      <th className="p-3 text-pink-400">Target Delivery Date</th>
-                      <th className="p-3">Assigned Staff</th>
-                      <th className="p-3">Current Status</th>
-                      <th className="p-3">Action</th>
-                    </tr>
-                  ) : (
-                    <tr className="border-b border-zinc-800 text-xs font-mono text-zinc-455 uppercase text-left whitespace-nowrap">
-                      <th className="p-3">Lead ID</th>
-                      <th className="p-3">Client Name</th>
-                      <th className="p-3">Event Name</th>
-                      <th className="p-3">Event Type</th>
-                      <th className="p-3">Event Date</th>
-                      <th className="p-3">Event Start Time</th>
-                      <th className="p-3">Event End Time</th>
-                      <th className="p-3">Reporting Date</th>
-                      <th className="p-3">Reporting Time</th>
-                      <th className="p-3">Current Status</th>
-                      <th className="p-3">Action</th>
-                    </tr>
-                  )}
+                  <tr className="border-b border-zinc-800 text-xs font-mono text-zinc-455 uppercase text-left whitespace-nowrap">
+                    <th className="p-3">Lead ID</th>
+                    <th className="p-3">Client Name</th>
+                    <th className="p-3">Event Name</th>
+                    <th className="p-3">Event Type</th>
+                    <th className="p-3">Event Date</th>
+                    <th className="p-3">Event Start Time</th>
+                    <th className="p-3">Event End Time</th>
+                    <th className="p-3">Reporting Date</th>
+                    <th className="p-3">Reporting Time</th>
+                    <th className="p-3">Current Status</th>
+                    {(role === 'production' || role === 'owner') && (
+                      <>
+                        <th className="p-3 text-cyan-400">Production Status</th>
+                        <th className="p-3 text-pink-400">Target Delivery Date</th>
+                      </>
+                    )}
+                    <th className="p-3">Action</th>
+                  </tr>
                 </thead>
                 <tbody className="text-sm">
                   {filteredEvents.filter(e => e.date === popupDate).map(ev => {
                     const eventEndTimeStr = ev.raw?.event_end_time || 'N/A';
                     const reportingDateStr = ev.raw?.reporting_date || 'N/A';
                     const reportingTimeStr = ev.raw?.reporting_time || 'N/A';
-                    
-                    if (role === 'production' || role === 'owner') {
-                      const assigns = ev.raw?.assigns || [];
-                      const prodRecord = production?.find(p => p.tracking_id === ev.orderId || p.order_id === ev.orderId || (p as any).order_id === ev.orderId);
-                      
-                      const staffNames = assigns.map((a: any) => a.staff_name).filter(Boolean);
-                      if (prodRecord?.editor_assigned && prodRecord.editor_assigned !== 'Unassigned') {
-                        staffNames.push(prodRecord.editor_assigned);
-                      }
-                      
-                      const uniqueStaff = Array.from(new Set(staffNames));
-                      const assignedStaffText = uniqueStaff.length > 0 ? uniqueStaff.join(', ') : 'Unassigned';
-                      
-                      return (
-                        <tr key={ev.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/20">
-                          <td className="p-3 font-mono text-xs text-yellow-500">{ev.orderId}</td>
-                          <td className="p-3 text-white font-medium">{ev.customerName}</td>
-                          <td className="p-3 text-zinc-300">{ev.raw?.event_name || 'N/A'}</td>
-                          <td className="p-3 text-zinc-350">{ev.eventType}</td>
-                          <td className="p-3 text-pink-400 font-mono text-xs">{ev.date || 'N/A'}</td>
-                          <td className="p-3 text-zinc-350">{assignedStaffText}</td>
-                          <td className="p-3">
-                            <span className="px-2 py-1 rounded bg-zinc-800 text-xs text-zinc-300 border border-zinc-700 whitespace-nowrap">
-                              {ev.currentStage}
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            <button 
-                              onClick={() => {
-                                 window.dispatchEvent(new CustomEvent('calendar-action-click', { detail: { orderId: ev.orderId, role, leadId: ev.raw?.lead_id } }));
-                                 window.dispatchEvent(new CustomEvent('calendar-action-click-deferred', { detail: { orderId: ev.orderId, role, leadId: ev.raw?.lead_id } }));
-                                 setPopupDate(null);
-                              }}
-                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-bold text-xs cursor-pointer shadow whitespace-nowrap"
-                            >
-                              Details
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    }
-                    
+
                     return (
                       <tr key={ev.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/20">
                         <td className="p-3 font-mono text-xs text-yellow-500">{ev.orderId}</td>
@@ -1742,9 +1673,22 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                             {ev.currentStage}
                           </span>
                         </td>
+                        {(role === 'production' || role === 'owner') && (
+                          <>
+                            <td className="p-3">
+                              <span className="px-2 py-0.5 rounded bg-zinc-850 text-xs text-cyan-400 border border-cyan-500/20 whitespace-nowrap font-mono">
+                                {ev.productionStatus || 'New Project'}
+                              </span>
+                            </td>
+                            <td className="p-3 text-pink-400 font-mono text-xs">
+                              {ev.targetDeliveryDate || 'N/A'}
+                            </td>
+                          </>
+                        )}
                         <td className="p-3">
                           <button 
                             onClick={() => {
+                               // Dispatch custom event to trigger parent dashboards
                                window.dispatchEvent(new CustomEvent('calendar-action-click', { detail: { orderId: ev.orderId, role, leadId: ev.raw?.lead_id } }));
                                window.dispatchEvent(new CustomEvent('calendar-action-click-deferred', { detail: { orderId: ev.orderId, role, leadId: ev.raw?.lead_id } }));
                                setPopupDate(null);
@@ -1779,18 +1723,55 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
             <div className="overflow-x-auto max-h-[60vh] overflow-y-auto custom-scrollbar">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-zinc-800 text-xs font-mono text-zinc-455 uppercase text-left whitespace-nowrap">
-                    <th className="p-3">Role</th>
+                  <tr className="border-b border-zinc-700 text-xs font-mono text-zinc-400 bg-zinc-950/50 sticky top-0">
                     <th className="p-3">Staff Name</th>
+                    <th className="p-3">Staff Type</th>
+                    <th className="p-3">Department</th>
+                    <th className="p-3">Assigned Role</th>
+                    <th className="p-3">Assigned Deliverable(s)</th>
+                    <th className="p-3">Mobile Number</th>
+                    <th className="p-3">Current Status</th>
                   </tr>
                 </thead>
-                <tbody className="text-sm">
-                  {teamPopupEvent?.raw?.assigns?.map((a: any, idx: number) => (
-                    <tr key={idx} className="border-b border-zinc-800/50 hover:bg-zinc-800/20">
-                      <td className="p-3 text-zinc-350">{a.speciality || 'Staff'}</td>
-                      <td className="p-3 text-white">{a.staff_name}</td>
-                    </tr>
-                  ))}
+                <tbody className="text-sm text-zinc-200">
+                  {(() => {
+                    // Group assignments by staff_id or staff_name to merge deliverables
+                    const assigns = teamPopupEvent.raw.assigns || [];
+                    const grouped = {};
+                    assigns.forEach(a => {
+                      if (!grouped[a.staff_name]) {
+                        grouped[a.staff_name] = { ...a, all_deliverables: [a.deliverable_name].filter(Boolean) };
+                      } else {
+                        if (a.deliverable_name && !grouped[a.staff_name].all_deliverables.includes(a.deliverable_name)) {
+                          grouped[a.staff_name].all_deliverables.push(a.deliverable_name);
+                        }
+                      }
+                    });
+                    
+                    if (Object.values(grouped).length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={7} className="p-6 text-center text-zinc-500 italic">No staff assigned yet.</td>
+                        </tr>
+                      );
+                    }
+                    
+                    return Object.values(grouped).map((a: any, idx) => (
+                      <tr key={idx} className="border-b border-zinc-800/30 hover:bg-zinc-800/20">
+                        <td className="p-3 font-bold">{a.staff_name}</td>
+                        <td className="p-3 text-xs">{a.staff_type}</td>
+                        <td className="p-3 text-xs">{a.department}</td>
+                        <td className="p-3 text-xs">{a.staff_role}</td>
+                        <td className="p-3 text-xs">{a.all_deliverables.join(', ') || 'General Event'}</td>
+                        <td className="p-3 text-xs font-mono">{a.staff_mobile || 'N/A'}</td>
+                        <td className="p-3">
+                          <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[10px] border border-zinc-700">
+                            {a.assignment_status || 'Assigned'}
+                          </span>
+                        </td>
+                      </tr>
+                    ));
+                  })()}
                 </tbody>
               </table>
             </div>
