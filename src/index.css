@@ -498,3 +498,14 @@ table th *, table td * {
 .inner-cell-scroll:hover::-webkit-scrollbar-thumb {
   background-color: rgba(255, 255, 255, 0.3);
 }
+
+/* Fix for date and time picker icon visibility in dark theme */
+input[type="date"],
+input[type="time"] {
+  color-scheme: dark;
+}
+
+
+input[type="datetime-local"] {
+  color-scheme: dark;
+}
