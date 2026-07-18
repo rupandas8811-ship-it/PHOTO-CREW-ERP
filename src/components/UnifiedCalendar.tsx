@@ -25,7 +25,7 @@ import {
   ChevronUp
 } from 'lucide-react';
 import { formatINR, formatTime12Hour } from '../utils';
-import { EVENT_TYPES } from '../types';
+import { EVENT_TYPES, ACTIVE_STAGE_GROUPS } from '../types';
 
 interface UnifiedCalendarProps {
   role: 'sales' | 'operations' | 'production' | 'owner' | 'worker';
@@ -438,14 +438,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
     });
   }, [roleFilteredEvents, searchQuery, statusFilter, eventTypeFilter]);
 
-  // Unique Event Type tags for filtering dropdown
-  const uniqueEventTypes = useMemo(() => {
-    const list = new Set<string>(EVENT_TYPES);
-    roleFilteredEvents.forEach(e => {
-      if (e.eventType) list.add(e.eventType);
-    });
-    return ['All', ...Array.from(list)];
-  }, [roleFilteredEvents]);
+
 
   // Unique Event Class states for filters
   const uniqueEventClasses = [
@@ -1021,8 +1014,13 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="bg-zinc-950 border border-zinc-850 h-9 px-3 rounded-xl text-xs text-zinc-300 focus:outline-none focus:border-yellow-500 cursor-pointer w-full sm:w-auto"
             >
-              {uniqueEventClasses.map(cls => (
-                <option key={cls} value={cls}>{cls}</option>
+              <option value="All">All Stages</option>
+              {ACTIVE_STAGE_GROUPS.map((group, idx) => (
+                <optgroup key={idx} label={group.label} className={`bg-zinc-950 ${group.colorClass} font-bold`}>
+                  {group.options.map(opt => (
+                    <option key={opt.value} value={opt.value} className="text-white font-normal">{opt.label}</option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>
@@ -1035,7 +1033,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
               onChange={(e) => setEventTypeFilter(e.target.value)}
               className="bg-zinc-950 border border-zinc-850 h-9 px-3 rounded-xl text-xs text-zinc-300 focus:outline-none focus:border-yellow-500 cursor-pointer w-full sm:w-auto"
             >
-              {uniqueEventTypes.map(t => (
+              <option value="All">All Event Types</option>
+              {EVENT_TYPES.map(t => (
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>

@@ -4,6 +4,42 @@
 
 export type UserRole = 'Business Owner' | 'Sales Team' | 'Operations Team' | 'Production Team';
 
+
+export const ACTIVE_STAGE_GROUPS = [
+  {
+    label: "Sales Statuses",
+    colorClass: "text-emerald-400",
+    options: [
+      { value: "New Lead", label: "New Lead" },
+      { value: "Lost Lead", label: "Lost Lead" },
+      { value: "Follow Up", label: "Followup" },
+      { value: "Overdue", label: "Overdue Followup" },
+      { value: "Quotation Sent", label: "Quotation Sent" },
+      { value: "Negotiation", label: "Negotiation" },
+      { value: "Order Confirmed", label: "Order Confirmed" }
+    ]
+  },
+  {
+    label: "Operations Statuses",
+    colorClass: "text-amber-400",
+    options: [
+      { value: "Event Scheduled", label: "Event Scheduled" },
+      { value: "Event Cancelled", label: "Event Cancelled" },
+      { value: "Raw Footage Received", label: "Raw Footage Received" }
+    ]
+  },
+  {
+    label: "Production Statuses",
+    colorClass: "text-indigo-400",
+    options: [
+      { value: "New Project Received", label: "New Project Received" },
+      { value: "Editor Assigned", label: "Editor Assigned" },
+      { value: "Customer Review", label: "Client Review" },
+      { value: "Project Completed", label: "Project Completed" },
+      { value: "Project Cancelled", label: "Project Cancelled" }
+    ]
+  }
+];
 export const EVENT_TYPES = [
   'Weddings',
   'Hamarlok Weddings',

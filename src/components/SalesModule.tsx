@@ -5,7 +5,7 @@ import { supabaseClient } from '../supabaseClient';
 import { 
   Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye
 } from 'lucide-react';
-import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, LeadEvent } from '../types';
+import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIVE_STAGE_GROUPS, LeadEvent } from '../types';
 import { StatusText } from './ui/StatusText';
 import { EventDropdownCell } from './EventDropdownCell';
 import { MultiSelectDropdown } from './ui/MultiSelectDropdown';
@@ -8714,30 +8714,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100/90 font-sans cursor-pointer focus:outline-none focus:border-emerald-500"
               >
                 <option value="">All Stages</option>
-                
-                <optgroup label="Sales Statuses" className="bg-slate-950 text-emerald-400 font-bold">
-                  <option value="New Lead" className="text-white font-normal">New Lead</option>
-                  <option value="Lost Lead" className="text-white font-normal">Lost Lead</option>
-                  <option value="Follow Up" className="text-white font-normal">Followup</option>
-                  <option value="Overdue" className="text-white font-normal">Overdue Followup</option>
-                  <option value="Quotation Sent" className="text-white font-normal">Quotation Sent</option>
-                  <option value="Negotiation" className="text-white font-normal">Negotiation</option>
-                  <option value="Order Confirmed" className="text-white font-normal">Order Confirmed</option>
-                </optgroup>
-
-                <optgroup label="Operations Statuses" className="bg-slate-950 text-amber-400 font-bold">
-                  <option value="Event Scheduled" className="text-white font-normal">Event Scheduled</option>
-                  <option value="Event Cancelled" className="text-white font-normal">Event Cancelled</option>
-                  <option value="Raw Footage Received" className="text-white font-normal">Raw Footage Received</option>
-                </optgroup>
-
-                <optgroup label="Production Statuses" className="bg-slate-950 text-indigo-400 font-bold">
-                  <option value="New Project Received" className="text-white font-normal">New Project Received</option>
-                  <option value="Editor Assigned" className="text-white font-normal">Editor Assigned</option>
-                  <option value="Customer Review" className="text-white font-normal">Client Review</option>
-                  <option value="Project Completed" className="text-white font-normal">Project Completed</option>
-                  <option value="Project Cancelled" className="text-white font-normal">Project Cancelled</option>
-                </optgroup>
+                {ACTIVE_STAGE_GROUPS.map((group, idx) => (
+                  <optgroup key={idx} label={group.label} className={`bg-slate-950 ${group.colorClass} font-bold`}>
+                    {group.options.map(opt => (
+                      <option key={opt.value} value={opt.value} className="text-white font-normal">{opt.label}</option>
+                    ))}
+                  </optgroup>
+                ))}
               </select>
             </div>
 
