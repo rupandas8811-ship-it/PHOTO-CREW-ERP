@@ -384,6 +384,15 @@ export interface Payment {
   transaction_id?: string;
 }
 
+export interface CalendarMemo {
+  id: string;
+  memo_date: string;
+  title: string;
+  message: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface ActivityLog {
   log_id: string;
   user_name: string;

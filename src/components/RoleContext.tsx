@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
-import { User, Lead, LeadPackage, Order, Operation, RawFootage, Production, Payment, ActivityLog, UserRole, CurrentStage, EditingStatus, Staff, Notification, Equipment, Package, StaffAssignment, LeadStaffAssignmentHistory, LeadEquipmentHistory, ProductionSpeciality, EditorAssignment, PaymentStatus, EquipmentHandover, UnlockOverride, DEPARTMENT_STAGES, ROLE_DEPARTMENT_MAP, Department, LeadEvent } from '../types';
+import { User, Lead, LeadPackage, Order, Operation, RawFootage, Production, Payment, ActivityLog, UserRole, CurrentStage, EditingStatus, Staff, Notification, Equipment, Package, StaffAssignment, LeadStaffAssignmentHistory, LeadEquipmentHistory, ProductionSpeciality, EditorAssignment, PaymentStatus, EquipmentHandover, UnlockOverride, DEPARTMENT_STAGES, ROLE_DEPARTMENT_MAP, Department, LeadEvent, CalendarMemo } from '../types';
 import { INITIAL_USERS, INITIAL_LEADS, INITIAL_ORDERS, INITIAL_OPERATIONS, INITIAL_RAW_FOOTAGE, INITIAL_PRODUCTION, INITIAL_PAYMENTS, INITIAL_LOGS, INITIAL_EQUIPMENT } from '../data';
 
 import { supabaseClient, updateDiagnosticMetric } from '../supabaseClient';
@@ -178,6 +178,11 @@ interface RoleContextType {
   deleteProduction: (productionId: string) => Promise<boolean>;
   deleteStaffAssignment: (assignmentId: string) => Promise<boolean>;
   deleteRawFootage: (trackingId: string) => Promise<boolean>;
+  
+  calendarMemos: CalendarMemo[];
+  addCalendarMemo: (memo: Omit<CalendarMemo, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  updateCalendarMemo: (id: string, updates: Partial<CalendarMemo>) => Promise<void>;
+  deleteCalendarMemo: (id: string) => Promise<void>;
 }
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
@@ -774,6 +779,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [payments, setPayments] = useState<Payment[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [calendarMemos, setCalendarMemos] = useState<CalendarMemo[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [productionStaff, setProductionStaff] = useState<Staff[]>([]);
 
@@ -1818,7 +1824,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         supabaseClient.from('equipment_handovers').select('*').order('created_at', { ascending: false }),
         supabaseClient.from('production_specialties').select('*'),
         supabaseClient.from('editor_assignments').select('*'),
-        supabaseClient.from('production_staff').select('*')
+        supabaseClient.from('production_staff').select('*'),
+        supabaseClient.from('calendar_memos').select('*').order('created_at', { ascending: false })
       ]);
 
       const tables = [
@@ -1827,7 +1834,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'equipment', 'lead_packages', 'packages', 'staff_assignments', 
         'quotations', 'lead_status_history', 'lead_staff_assignment_history', 
         'lead_equipment_history', 'lead_events', 'equipment_handovers', 
-        'production_specialties', 'editor_assignments', 'production_staff'
+        'production_specialties', 'editor_assignments', 'production_staff', 'calendar_memos'
       ];
       
       let hasError = false;
@@ -1869,7 +1876,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         { data: dbHandovers },
         { data: dbSpecList },
         { data: dbAssignList },
-        { data: dbProdStaff }
+        { data: dbProdStaff },
+        { data: dbCalendarMemos }
       ] = results;
 
       if (dbUsers && dbUsers.length === 0) {
@@ -1956,6 +1964,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       if (dbLeadPackages) setLeadPackages(dbLeadPackages);
       if (dbPackages) setPackages(dbPackages.map(mapDbRecordToPackage));
+      if (dbCalendarMemos) setCalendarMemos(dbCalendarMemos);
       if (dbStaffAssignments) setStaffAssignments(dbStaffAssignments);
       
       if (dbQuotations) {
@@ -2135,7 +2144,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       { table: 'lead_status_history', key: 'id', setter: setStatusHistory },
       { table: 'lead_staff_assignment_history', key: 'id', setter: setLeadStaffAssignmentHistory },
       { table: 'lead_equipment_history', key: 'id', setter: setLeadEquipmentHistory },
-      { table: 'packages', key: 'package_id', setter: setPackages }
+      { table: 'packages', key: 'package_id', setter: setPackages },
+      { table: 'calendar_memos', key: 'id', setter: setCalendarMemos }
     ].map(({ table, key, setter }) => {
       return supabaseClient
         .channel(`rt-${table}`)
@@ -4776,6 +4786,40 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return res;
   };
 
+  const addCalendarMemo = async (memo: Omit<CalendarMemo, 'id' | 'created_at' | 'updated_at'>) => {
+    if (!supabaseClient) return;
+    const { data, error } = await supabaseClient.from('calendar_memos').insert([memo]).select().single();
+    if (error) {
+      console.error('Failed to add memo:', error);
+      throw error;
+    }
+    if (data) {
+      setCalendarMemos((prev) => [data, ...prev]);
+    }
+  };
+
+  const updateCalendarMemo = async (id: string, updates: Partial<CalendarMemo>) => {
+    if (!supabaseClient) return;
+    const { data, error } = await supabaseClient.from('calendar_memos').update(updates).eq('id', id).select().single();
+    if (error) {
+      console.error('Failed to update memo:', error);
+      throw error;
+    }
+    if (data) {
+      setCalendarMemos((prev) => prev.map((m) => m.id === id ? data : m));
+    }
+  };
+
+  const deleteCalendarMemo = async (id: string) => {
+    if (!supabaseClient) return;
+    const { error } = await supabaseClient.from('calendar_memos').delete().eq('id', id);
+    if (error) {
+      console.error('Failed to delete memo:', error);
+      throw error;
+    }
+    setCalendarMemos((prev) => prev.filter((m) => m.id !== id));
+  };
+
   const addPackage = async (pkg: Omit<Package, 'package_id'>) => {
     const package_id = `PKG-${(pkg.category || 'W').substring(0, 1).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`;
     const newPkg: Package = {
@@ -6306,6 +6350,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteNotification,
         deleteAllReadNotifications,
         archiveNotification,
+        calendarMemos,
+        addCalendarMemo,
+        updateCalendarMemo,
+        deleteCalendarMemo,
         leadPackages,
         packages,
         addPackage,

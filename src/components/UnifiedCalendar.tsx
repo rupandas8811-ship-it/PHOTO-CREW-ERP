@@ -20,7 +20,9 @@ import {
   Video, 
   FileText, 
   Check, 
-  HelpCircle
+  HelpCircle,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { formatINR, formatTime12Hour } from '../utils';
 import { EVENT_TYPES } from '../types';
@@ -93,6 +95,10 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
     rawFootage, 
     notifications, 
     addNotification,
+    calendarMemos,
+    addCalendarMemo,
+    updateCalendarMemo,
+    deleteCalendarMemo,
     logs,
     staffAssignments,
     isDataLoading
@@ -125,10 +131,19 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   
   // Memo form overlay state
   const [showAddMemo, setShowAddMemo] = useState(false);
+  const [editingMemoId, setEditingMemoId] = useState<string | null>(null);
   const [newMemoTitle, setNewMemoTitle] = useState('');
   const [newMemoMessage, setNewMemoMessage] = useState('');
   
   const [popupDate, setPopupDate] = useState<string | null>(null);
+  const [expandedLeads, setExpandedLeads] = useState<Set<string>>(new Set());
+
+  const toggleLeadExpand = (leadId: string) => {
+    const newSet = new Set(expandedLeads);
+    if (newSet.has(leadId)) newSet.delete(leadId);
+    else newSet.add(leadId);
+    setExpandedLeads(newSet);
+  };
   const [teamPopupEvent, setTeamPopupEvent] = useState<any>(null);
   
   const todayStr = systemTodayStr; // Anchor date for relative analysis
@@ -256,7 +271,10 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
         // - Status is NOT Cancelled
         // Remove the event automatically when status changes.
         const statusClean = (ld.status || ld.current_status || '').trim();
-        if (statusClean !== 'Order Confirmed') return;
+        const preOrderStatuses = ['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Lost Lead', 'Lost'];
+        const completedStatuses = ['Delivered', 'Project Completed', 'Completed', 'Event Cancelled', 'Closed', 'Project Closed', 'Approved', 'Project Delivered'];
+        if (preOrderStatuses.includes(statusClean)) return;
+        if (completedStatuses.includes(statusClean)) return;
 
         // 2. Fetch events from ld.events or fall back to lead-level event if no events are saved
         const eventsList = (ld.events && ld.events.length > 0) ? ld.events : [
@@ -320,6 +338,9 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
               event_type: evType,
               event_date: evDate,
               event_start_time: evStartTime,
+              event_end_time: ev.event_end_time || '',
+              reporting_date: ev.reporting_date || '',
+              reporting_time: ev.reporting_time || '',
               assignedTeamCount,
               assigns,
               targetDeliveryDate: targetDeliveryDate,
@@ -328,6 +349,29 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
           });
         });
       });
+
+      if (calendarMemos) {
+        calendarMemos.forEach((memo) => {
+          events.push({
+            id: memo.id,
+            sourceType: 'memo',
+            eventClass: 'Calendar Memo',
+            date: memo.memo_date,
+            customerName: memo.title,
+            mobile: '',
+            eventType: 'Memo',
+            eventTime: '',
+            eventLocation: '',
+            currentStage: 'Active',
+            notes: memo.message,
+            packageName: '',
+            totalAmount: 0,
+            orderId: memo.id,
+            targetDeliveryDate: '',
+            raw: { ...memo }
+          });
+        });
+      }
 
       return events;
     } catch (err: any) {
@@ -338,7 +382,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
       }
       return [];
     }
-  }, [leads, orders, production, staffAssignments]);
+  }, [leads, orders, production, staffAssignments, calendarMemos]);
 
   // Filters Event list by role first
   const roleFilteredEvents = useMemo(() => {
@@ -654,22 +698,22 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
     if (!newMemoTitle.trim() || !newMemoMessage.trim() || !selectedDate) return;
 
     try {
-      let recipientRole = 'All';
-      if (role === 'sales') recipientRole = 'Sales Team';
-      else if (role === 'operations') recipientRole = 'Operations Team';
-      else if (role === 'production') recipientRole = 'Production Team';
-
-      await addNotification({
-         title: newMemoTitle,
-         message: newMemoMessage,
-         project_id: selectedDate, // Store date string here
-         task_id: 'Calendar Memo',
-         notification_type: 'Calendar Memo',
-         recipient_role: recipientRole
-      });
+      if (editingMemoId && updateCalendarMemo) {
+        await updateCalendarMemo(editingMemoId, {
+          title: newMemoTitle,
+          message: newMemoMessage
+        });
+      } else if (addCalendarMemo) {
+        await addCalendarMemo({
+          memo_date: selectedDate,
+          title: newMemoTitle,
+          message: newMemoMessage
+        });
+      }
 
       setNewMemoTitle('');
       setNewMemoMessage('');
+      setEditingMemoId(null);
       setShowAddMemo(false);
     } catch (err) {
       console.error("Failed storing calendar memo:", err);
@@ -780,7 +824,12 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
           {selectedDate && (
             <button
               id="btn_add_memo"
-              onClick={() => setShowAddMemo(true)}
+              onClick={() => {
+                setEditingMemoId(null);
+                setNewMemoTitle('');
+                setNewMemoMessage('');
+                setShowAddMemo(true);
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500 hover:bg-yellow-450 border border-yellow-600 rounded-xl text-xs text-zinc-950 font-bold transition-all cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -1566,7 +1615,12 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
           <div className="bg-zinc-900 border border-zinc-800 w-full max-w-lg p-6 rounded-2xl space-y-4 shadow-2xl relative">
             <button
               id="close_dialog_add_memo"
-              onClick={() => setShowAddMemo(false)}
+              onClick={() => {
+                setShowAddMemo(false);
+                setEditingMemoId(null);
+                setNewMemoTitle('');
+                setNewMemoMessage('');
+              }}
               className="absolute right-4 top-4 p-1 hover:bg-zinc-850 rounded-lg text-zinc-400 hover:text-white transition"
             >
               <X className="w-5 h-5" />
@@ -1613,7 +1667,12 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                 <button
                   id="btn_cancel_memo"
                   type="button"
-                  onClick={() => setShowAddMemo(false)}
+                  onClick={() => {
+                    setShowAddMemo(false);
+                    setEditingMemoId(null);
+                    setNewMemoTitle('');
+                    setNewMemoMessage('');
+                  }}
                   className="px-4 py-2 bg-zinc-950 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 rounded-xl text-xs font-bold transition cursor-pointer"
                 >
                   Cancel
@@ -1680,83 +1739,180 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                   )}
                 </thead>
                 <tbody className="text-sm">
-                  {filteredEvents.filter(e => e.date === popupDate).map(ev => {
-                    const eventEndTimeStr = ev.raw?.event_end_time || 'N/A';
-                    const reportingDateStr = ev.raw?.reporting_date || 'N/A';
-                    const reportingTimeStr = ev.raw?.reporting_time || 'N/A';
-                    
-                    if (role === 'production' || role === 'owner') {
-                      const assigns = ev.raw?.assigns || [];
-                      const prodRecord = production?.find(p => p.tracking_id === ev.orderId || p.order_id === ev.orderId || (p as any).order_id === ev.orderId);
-                      
-                      const staffNames = assigns.map((a: any) => a.staff_name).filter(Boolean);
-                      if (prodRecord?.editor_assigned && prodRecord.editor_assigned !== 'Unassigned') {
-                        staffNames.push(prodRecord.editor_assigned);
-                      }
-                      
-                      const uniqueStaff = Array.from(new Set(staffNames));
-                      const assignedStaffText = uniqueStaff.length > 0 ? uniqueStaff.join(', ') : 'Unassigned';
-                      
-                      return (
-                        <tr key={ev.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/20">
-                          <td className="p-3 font-mono text-xs text-yellow-500">{ev.orderId}</td>
-                          <td className="p-3 text-white font-medium">{ev.customerName}</td>
-                          <td className="p-3 text-zinc-300">{ev.raw?.event_name || 'N/A'}</td>
-                          <td className="p-3 text-zinc-350">{ev.eventType}</td>
-                          <td className="p-3 text-pink-400 font-mono text-xs">{ev.date || 'N/A'}</td>
-                          <td className="p-3 text-zinc-350">{assignedStaffText}</td>
-                          <td className="p-3">
-                            <span className="px-2 py-1 rounded bg-zinc-800 text-xs text-zinc-300 border border-zinc-700 whitespace-nowrap">
-                              {ev.currentStage}
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            <button 
-                              onClick={() => {
-                                 window.dispatchEvent(new CustomEvent('calendar-action-click', { detail: { orderId: ev.orderId, role, leadId: ev.raw?.lead_id } }));
-                                 window.dispatchEvent(new CustomEvent('calendar-action-click-deferred', { detail: { orderId: ev.orderId, role, leadId: ev.raw?.lead_id } }));
-                                 setPopupDate(null);
-                              }}
-                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-bold text-xs cursor-pointer shadow whitespace-nowrap"
-                            >
-                              Details
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    }
-                    
+                  {(() => {
+                    const popupEvs = filteredEvents.filter(e => e.date === popupDate);
+                    const memos = popupEvs.filter(e => e.sourceType === 'memo');
+                    const regular = popupEvs.filter(e => e.sourceType !== 'memo');
+
+                    // Group by orderId
+                    const grouped = new Map<string, typeof regular>();
+                    regular.forEach(ev => {
+                      const key = ev.orderId || 'unknown';
+                      if (!grouped.has(key)) grouped.set(key, []);
+                      grouped.get(key)!.push(ev);
+                    });
+
                     return (
-                      <tr key={ev.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/20">
-                        <td className="p-3 font-mono text-xs text-yellow-500">{ev.orderId}</td>
-                        <td className="p-3 text-white font-medium">{ev.customerName}</td>
-                        <td className="p-3 text-zinc-300">{ev.raw?.event_name || 'N/A'}</td>
-                        <td className="p-3 text-zinc-350">{ev.eventType}</td>
-                        <td className="p-3 text-zinc-350 font-mono text-xs">{ev.date}</td>
-                        <td className="p-3 text-zinc-300 font-mono text-xs">{ev.eventTime}</td>
-                        <td className="p-3 text-zinc-300 font-mono text-xs">{eventEndTimeStr}</td>
-                        <td className="p-3 text-zinc-350 font-mono text-xs">{reportingDateStr}</td>
-                        <td className="p-3 text-zinc-350 font-mono text-xs">{reportingTimeStr}</td>
-                        <td className="p-3">
-                          <span className="px-2 py-1 rounded bg-zinc-800 text-xs text-zinc-300 border border-zinc-700 whitespace-nowrap">
-                            {ev.currentStage}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <button 
-                            onClick={() => {
-                               window.dispatchEvent(new CustomEvent('calendar-action-click', { detail: { orderId: ev.orderId, role, leadId: ev.raw?.lead_id } }));
-                               window.dispatchEvent(new CustomEvent('calendar-action-click-deferred', { detail: { orderId: ev.orderId, role, leadId: ev.raw?.lead_id } }));
-                               setPopupDate(null);
-                            }}
-                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-bold text-xs cursor-pointer shadow whitespace-nowrap"
-                          >
-                            Details
-                          </button>
-                        </td>
-                      </tr>
+                      <>
+                        {memos.map(ev => (
+                          <tr key={ev.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/20">
+                            <td className="p-3 font-mono text-xs text-fuchsia-500">MEMO</td>
+                            <td className="p-3 text-white font-medium">{ev.customerName}</td>
+                            <td className="p-3 text-zinc-300" colSpan={role === 'production' || role === 'owner' ? 4 : 7}>{ev.notes}</td>
+                            <td className="p-3">
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => {
+                                    setNewMemoTitle(ev.customerName);
+                                    setNewMemoMessage(ev.notes || '');
+                                    setEditingMemoId(ev.id);
+                                    setSelectedDate(ev.date);
+                                    setShowAddMemo(true);
+                                    setPopupDate(null);
+                                  }}
+                                  className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-500 text-zinc-950 rounded font-bold text-xs cursor-pointer shadow whitespace-nowrap"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    if (confirm('Delete this memo?')) {
+                                      if (deleteCalendarMemo) {
+                                        await deleteCalendarMemo(ev.id);
+                                      }
+                                    }
+                                  }}
+                                  className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded font-bold text-xs cursor-pointer shadow whitespace-nowrap"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        {Array.from(grouped.entries()).map(([orderId, evs]) => {
+                          const firstEv = evs[0];
+                          const isExpanded = expandedLeads.has(orderId);
+                          
+                          if (role === 'production' || role === 'owner') {
+                            const assigns = firstEv.raw?.assigns || [];
+                            const prodRecord = production?.find(p => p.tracking_id === orderId || p.order_id === orderId || (p as any).order_id === orderId);
+                            const staffNames = assigns.map((a: any) => a.staff_name).filter(Boolean);
+                            if (prodRecord?.editor_assigned && prodRecord.editor_assigned !== 'Unassigned') {
+                              staffNames.push(prodRecord.editor_assigned);
+                            }
+                            const uniqueStaff = Array.from(new Set(staffNames));
+                            const assignedStaffText = uniqueStaff.length > 0 ? uniqueStaff.join(', ') : 'Unassigned';
+                            
+                            return (
+                              <React.Fragment key={orderId}>
+                                <tr className="border-b border-zinc-800/50 hover:bg-zinc-800/20 bg-zinc-900/40">
+                                  <td className="p-3 font-mono text-xs text-yellow-500">{orderId}</td>
+                                  <td className="p-3 text-white font-medium">{firstEv.customerName}</td>
+                                  <td className="p-3 text-zinc-300">
+                                    <button onClick={() => toggleLeadExpand(orderId)} className="flex items-center gap-1 text-yellow-500 hover:text-yellow-400 font-medium cursor-pointer">
+                                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                      {evs.length} Event{evs.length !== 1 ? 's' : ''}
+                                    </button>
+                                  </td>
+                                  <td className="p-3 text-zinc-350"></td>
+                                  <td className="p-3 text-pink-400 font-mono text-xs"></td>
+                                  <td className="p-3 text-zinc-350">{assignedStaffText}</td>
+                                  <td className="p-3">
+                                    <span className="px-2 py-1 rounded bg-zinc-800 text-xs text-zinc-300 border border-zinc-700 whitespace-nowrap">
+                                      {firstEv.currentStage}
+                                    </span>
+                                  </td>
+                                  <td className="p-3">
+                                    <button 
+                                      onClick={() => {
+                                        window.dispatchEvent(new CustomEvent('calendar-action-click', { detail: { orderId: orderId, role, leadId: firstEv.raw?.lead_id } }));
+                                        window.dispatchEvent(new CustomEvent('calendar-action-click-deferred', { detail: { orderId: orderId, role, leadId: firstEv.raw?.lead_id } }));
+                                        setPopupDate(null);
+                                      }}
+                                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-bold text-xs cursor-pointer shadow whitespace-nowrap"
+                                    >
+                                      Details
+                                    </button>
+                                  </td>
+                                </tr>
+                                {isExpanded && evs.map((ev, idx) => (
+                                  <tr key={ev.id + idx} className="border-b border-zinc-800/50 bg-zinc-950/50">
+                                    <td className="p-3"></td>
+                                    <td className="p-3"></td>
+                                    <td className="p-3 text-zinc-300 pl-6 border-l-2 border-yellow-500/50">{ev.raw?.event_name || 'N/A'}</td>
+                                    <td className="p-3 text-zinc-350">{ev.eventType}</td>
+                                    <td className="p-3 text-pink-400 font-mono text-xs">{ev.date || 'N/A'}</td>
+                                    <td className="p-3"></td>
+                                    <td className="p-3"></td>
+                                    <td className="p-3"></td>
+                                  </tr>
+                                ))}
+                              </React.Fragment>
+                            );
+                          }
+                          
+                          return (
+                            <React.Fragment key={orderId}>
+                              <tr className="border-b border-zinc-800/50 hover:bg-zinc-800/20 bg-zinc-900/40">
+                                <td className="p-3 font-mono text-xs text-yellow-500">{orderId}</td>
+                                <td className="p-3 text-white font-medium">{firstEv.customerName}</td>
+                                <td className="p-3 text-zinc-300">
+                                  <button onClick={() => toggleLeadExpand(orderId)} className="flex items-center gap-1 text-yellow-500 hover:text-yellow-400 font-medium cursor-pointer">
+                                    {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                    {evs.length} Event{evs.length !== 1 ? 's' : ''}
+                                  </button>
+                                </td>
+                                <td className="p-3 text-zinc-350"></td>
+                                <td className="p-3 text-zinc-350 font-mono text-xs"></td>
+                                <td className="p-3 text-zinc-300 font-mono text-xs"></td>
+                                <td className="p-3 text-zinc-300 font-mono text-xs"></td>
+                                <td className="p-3 text-zinc-350 font-mono text-xs"></td>
+                                <td className="p-3 text-zinc-350 font-mono text-xs"></td>
+                                <td className="p-3">
+                                  <span className="px-2 py-1 rounded bg-zinc-800 text-xs text-zinc-300 border border-zinc-700 whitespace-nowrap">
+                                    {firstEv.currentStage}
+                                  </span>
+                                </td>
+                                <td className="p-3">
+                                  <button 
+                                    onClick={() => {
+                                      window.dispatchEvent(new CustomEvent('calendar-action-click', { detail: { orderId: orderId, role, leadId: firstEv.raw?.lead_id } }));
+                                      window.dispatchEvent(new CustomEvent('calendar-action-click-deferred', { detail: { orderId: orderId, role, leadId: firstEv.raw?.lead_id } }));
+                                      setPopupDate(null);
+                                    }}
+                                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-bold text-xs cursor-pointer shadow whitespace-nowrap"
+                                  >
+                                    Details
+                                  </button>
+                                </td>
+                              </tr>
+                              {isExpanded && evs.map((ev, idx) => {
+                                const eventEndTimeStr = ev.raw?.event_end_time || 'N/A';
+                                const reportingDateStr = ev.raw?.reporting_date || 'N/A';
+                                const reportingTimeStr = ev.raw?.reporting_time || 'N/A';
+                                return (
+                                  <tr key={ev.id + idx} className="border-b border-zinc-800/50 bg-zinc-950/50">
+                                    <td className="p-3"></td>
+                                    <td className="p-3"></td>
+                                    <td className="p-3 text-zinc-300 pl-6 border-l-2 border-yellow-500/50">{ev.raw?.event_name || 'N/A'}</td>
+                                    <td className="p-3 text-zinc-350">{ev.eventType}</td>
+                                    <td className="p-3 text-zinc-350 font-mono text-xs">{ev.date}</td>
+                                    <td className="p-3 text-zinc-300 font-mono text-xs">{ev.eventTime}</td>
+                                    <td className="p-3 text-zinc-300 font-mono text-xs">{eventEndTimeStr}</td>
+                                    <td className="p-3 text-zinc-350 font-mono text-xs">{reportingDateStr}</td>
+                                    <td className="p-3 text-zinc-350 font-mono text-xs">{reportingTimeStr}</td>
+                                    <td className="p-3"></td>
+                                    <td className="p-3"></td>
+                                  </tr>
+                                );
+                              })}
+                            </React.Fragment>
+                          );
+                        })}
+                      </>
                     );
-                  })}
+                  })()}
                 </tbody>
               </table>
             </div>
