@@ -43,7 +43,6 @@ export const ACTIVE_STAGE_GROUPS = [
 export const EVENT_TYPES = [
   'Weddings',
   'Hamarlok Weddings',
-  'Hindu/Malayali Weddings',
   'Engagement',
   'Pre Weddings',
   'Maternity',

@@ -315,7 +315,7 @@ const generateQuotationPDF = (
   };
 
     // NEW PREP FOR TEAM MEMBERS (INCLUSIONS) AND DELIVERABLES
-  const orderedEventInclusions: { eventName: string; members: string[] }[] = [];
+  const orderedEventInclusions: { eventName: string; eventDate: string; eventLocation: string; members: string[] }[] = [];
   const orderedEventDeliverables: { eventName: string; pkgName: string; items: string[] }[] = [];
   let generalInclusions: string[] = [];
   const generalDeliverables: { pkgName: string; items: string[] }[] = [];
@@ -339,6 +339,8 @@ const generateQuotationPDF = (
 
       orderedEventInclusions.push({
         eventName,
+        eventDate: event.event_date || "",
+        eventLocation: event.event_location || "N/A",
         members: (eventInclusions || []).filter(Boolean)
       });
 
@@ -705,24 +707,10 @@ const generateQuotationPDF = (
     leftColYOffset += cfg.textPadding;
   }
 
-  if (lead.events && lead.events.length > 0) {
-    lead.events.forEach((ev: any, idx: number) => {
-      const wrapEvName = doc.splitTextToSize(`Event ${idx + 1}: ` + (ev.event_name || ev.event_type || 'Event'), 50);
-      const wrapEvLoc = doc.splitTextToSize(ev.event_location || 'N/A', 50);
-      rightColYOffset += (wrapEvName.length * cfg.textPadding); 
-      rightColYOffset += cfg.textPadding; // Event Date
-      rightColYOffset += (wrapEvLoc.length * cfg.textPadding); 
-      if (idx < lead.events.length - 1) rightColYOffset += 2;
-    });
-    rightColYOffset += cfg.textPadding; // quotation date
-  } else {
-    rightColYOffset += (wrapEventType.length * cfg.textPadding);
-    rightColYOffset += cfg.textPadding; 
-    rightColYOffset += (wrapLocation.length * cfg.textPadding);
-    rightColYOffset += cfg.textPadding; 
-  }
+  // We add one more line for Quote Date to left column
+  leftColYOffset += cfg.textPadding;
 
-  const boxHeight = Math.max(leftColYOffset, rightColYOffset) + cfg.boxPadding;
+  const boxHeight = leftColYOffset + cfg.boxPadding;
 
   let formattedEvDate = 'N/A';
   if (lead.event_date) {
@@ -748,11 +736,6 @@ const generateQuotationPDF = (
   doc.setFontSize(8.5);
   doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
   doc.text('CUSTOMER DETAILS', 20, clientY + 6);
-  
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text('EVENT LOGISTICS', 110, clientY + 6);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
@@ -762,9 +745,9 @@ const generateQuotationPDF = (
   const leftLabels = [
     { label: 'Customer Name', val: wrapCustName, isWrapped: true },
     { label: 'Mobile Number', val: lead.mobile || 'N/A' },
-    { label: 'Email Address', val: wrapEmail, isWrapped: true }
+    { label: 'Email Address', val: wrapEmail, isWrapped: true },
+    { label: 'Quotation Date', val: quoteDateStr }
   ];
-
   if (lead.sales_staff_name) {
     leftLabels.push({ label: 'Sales Staff Name', val: doc.splitTextToSize(lead.sales_staff_name, 50), isWrapped: true });
   }
@@ -785,56 +768,6 @@ const generateQuotationPDF = (
       curLeftY += cfg.textPadding;
     }
   });
-
-  let curRightY = clientY + 11.5;
-  if (lead.events && lead.events.length > 0) {
-    lead.events.forEach((ev: any, idx: number) => {
-      const rightLabels = [
-        { label: 'Event Name',     val: doc.splitTextToSize(`Event ${idx + 1}: ` + (ev.event_name || ev.event_type || 'Event'), 50), isWrapped: true },
-        { label: 'Event Date',     val: formatDate(ev.event_date) },
-        { label: 'Location',       val: doc.splitTextToSize(ev.event_location || 'N/A', 50), isWrapped: true },
-      ];
-      if (idx === 0) {
-        rightLabels.push({ label: 'Quote Date', val: quoteDateStr, isWrapped: false });
-      }
-
-      rightLabels.forEach((item) => {
-        doc.text(item.label, 110, curRightY);
-        doc.text(':', 132, curRightY); // adjusted for spacing
-        if (item.isWrapped && Array.isArray(item.val)) {
-          item.val.forEach((line: string, i: number) => {
-            doc.text(line, 134, curRightY + (i * cfg.textPadding));
-          });
-          curRightY += (item.val.length * cfg.textPadding);
-        } else {
-          doc.text(String(item.val), 134, curRightY);
-          curRightY += cfg.textPadding;
-        }
-      });
-      if (idx < lead.events.length - 1) curRightY += 2;
-    });
-  } else {
-    const rightLabels = [
-      { label: 'Event Type',     val: wrapEventType, isWrapped: true },
-      { label: 'Event Date',     val: formattedEvDate },
-      { label: 'Event Location', val: wrapLocation, isWrapped: true },
-      { label: 'Quotation Date', val: quoteDateStr }
-    ];
-
-    rightLabels.forEach((item) => {
-      doc.text(item.label, 110, curRightY);
-      doc.text(':', 131, curRightY);
-      if (item.isWrapped && Array.isArray(item.val)) {
-        item.val.forEach((line: string, i: number) => {
-          doc.text(line, 133, curRightY + (i * cfg.textPadding));
-        });
-        curRightY += (item.val.length * cfg.textPadding);
-      } else {
-        doc.text(String(item.val), 133, curRightY);
-        curRightY += cfg.textPadding;
-      }
-    });
-  }
 
   let currentY = clientY + boxHeight + cfg.secSpacing;
 
@@ -1027,30 +960,77 @@ const generateQuotationPDF = (
   };
 
     // 2. Team Members Included section
-  const drawTeamMembers = (eventName: string | null, members: string[]) => {
+  const drawTeamMembers = (eventName: string | null, eventDate: string, eventLocation: string, members: string[]) => {
     if (members.length === 0) return;
     const mapped = members.map((m, i) => ({ id: String(i), name: m, qty: 1, price: 0 }));
     
     if (eventName) {
+       if (currentY + 30 > 250) {
+         currentY = createNewPage();
+       }
+
        doc.setFont('helvetica', 'bold');
        doc.setFontSize(9.5);
        doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
        doc.text(`Event Name: ${eventName}`, 15, currentY);
        currentY += 6;
        
+       // Draw Event Details Box
+       let formattedEvDate = 'N/A';
+       if (eventDate) {
+         try {
+           const parts = eventDate.split('-');
+           if (parts.length === 3) {
+             const localDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+             formattedEvDate = localDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+           } else {
+             formattedEvDate = new Date(eventDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+           }
+         } catch(e) {}
+       }
+       
+       const wrapLoc = doc.splitTextToSize(eventLocation, 100);
+       const boxHeight = 12 + (wrapLoc.length * cfg.textPadding);
+
+       doc.setFillColor(bgLightGrid[0], bgLightGrid[1], bgLightGrid[2]);
+       doc.roundedRect(15, currentY, 180, boxHeight, 1.5, 1.5, 'F');
+       doc.setDrawColor(226, 232, 240);
+       doc.setLineWidth(0.25);
+       doc.roundedRect(15, currentY, 180, boxHeight, 1.5, 1.5, 'D');
+
+       doc.setFont('helvetica', 'bold');
+       doc.setFontSize(8.5);
+       doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+       doc.text('EVENT DETAILS / EVENT LOGISTICS', 20, currentY + 6);
+       
+       doc.setFont('helvetica', 'normal');
+       doc.setFontSize(7.5);
+       doc.setTextColor(71, 85, 105);
+       
+       doc.text('Event Date', 20, currentY + 11.5);
+       doc.text(':', 41, currentY + 11.5);
+       doc.text(formattedEvDate, 43, currentY + 11.5);
+
+       doc.text('Location', 20, currentY + 11.5 + cfg.textPadding);
+       doc.text(':', 41, currentY + 11.5 + cfg.textPadding);
+       wrapLoc.forEach((line: string, i: number) => {
+         doc.text(line, 43, currentY + 11.5 + cfg.textPadding + (i * cfg.textPadding));
+       });
+
+       currentY += boxHeight + 6;
+
        drawTable('TEAM MEMBERS INCLUDED', mapped);
     } else {
        drawTable('TEAM MEMBERS INCLUDED', mapped);
     }
   };
 
-
   if (hasEventsInclusions) {
     orderedEventInclusions.forEach((data) => {
-      drawTeamMembers(data.eventName, data.members);
+      drawTeamMembers(data.eventName, data.eventDate, data.eventLocation, data.members);
     });
   } else if (generalInclusions.length > 0) {
-    drawTeamMembers(null, generalInclusions);
+    drawTeamMembers(null, "", "", generalInclusions);
   }
 
   // 3. Additional services table
