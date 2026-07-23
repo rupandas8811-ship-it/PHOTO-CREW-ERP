@@ -294,6 +294,26 @@ option, select option {
 }
 
 /* ==========================================
+   GLOBAL SMALL TEXT READABILITY BUMPS
+   Slightly increases small font sizes across the project for better readability
+   ========================================== */
+.text-\[8px\] {
+  font-size: 10px !important;
+}
+.text-\[9px\] {
+  font-size: 10.5px !important;
+}
+.text-\[10px\] {
+  font-size: 11.5px !important;
+}
+.text-\[11px\] {
+  font-size: 12.5px !important;
+}
+.text-xs {
+  font-size: 13.5px !important;
+}
+
+/* ==========================================
    VISIBILITY AND READABILITY IMPROVEMENTS FOR SMALL SCREENS
    Surgical overrides matching exact requirements on Mobile & Tablet
    ========================================== */
