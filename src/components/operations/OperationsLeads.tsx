@@ -185,6 +185,7 @@ export const OperationsLeads: React.FC = () => {
 
   // Search/Filter states
   const [searchTerm, setSearchTerm] = useState('');
+  const [isMobileFiltersExpanded, setIsMobileFiltersExpanded] = useState(false);
   const [dateFilter, setDateFilter] = useState<string>('All');
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
@@ -1521,8 +1522,28 @@ export const OperationsLeads: React.FC = () => {
       </div>
 
       {/* Search & Simplified Filters Bar */}
-      <div className="bg-zinc-950/40 p-4 rounded-2xl border border-zinc-850 space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+      <div className="bg-zinc-950/40 rounded-2xl border border-zinc-850">
+        {/* Mobile Toggle Button */}
+        <div 
+          className="md:hidden p-4 flex justify-between items-center cursor-pointer border-b border-zinc-800/50"
+          onClick={() => setIsMobileFiltersExpanded(!isMobileFiltersExpanded)}
+        >
+          <span className="text-xs font-bold text-zinc-300 flex items-center gap-2">📁 LEADS DIRECTORY</span>
+          <button className="text-[10px] uppercase font-mono font-bold text-zinc-400 hover:text-zinc-200 transition-colors">
+            {isMobileFiltersExpanded ? '▲ Hide Filters' : '▼ Show Filters'}
+          </button>
+        </div>
+
+        <div 
+          className={`grid transition-all duration-300 ease-in-out ${
+            isMobileFiltersExpanded 
+              ? 'grid-rows-[1fr] opacity-100' 
+              : 'grid-rows-[0fr] opacity-0 md:grid-rows-[1fr] md:opacity-100'
+          }`}
+        >
+          <div className="overflow-hidden">
+            <div className="p-4 pt-0 md:pt-4 space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
           {/* Search Box */}
           <div className="relative md:col-span-6 w-full">
             <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3.5" />
@@ -1600,6 +1621,9 @@ export const OperationsLeads: React.FC = () => {
             )}
           </div>
         )}
+            </div>
+          </div>
+        </div>
             {/* Main Board Table */}
       <div className="bg-zinc-900/40 border border-zinc-850 rounded-2xl overflow-x-auto shadow-xl">
         <table className="w-full text-left border-collapse min-w-[1240px]">

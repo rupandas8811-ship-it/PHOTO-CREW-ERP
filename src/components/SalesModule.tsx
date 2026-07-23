@@ -1961,6 +1961,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   // Filter States
   const [filterQuery, setFilterQuery] = useState('');
+  const [isMobileFiltersExpanded, setIsMobileFiltersExpanded] = useState(false);
   const [filterSource, setFilterSource] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterSalesPerson, setFilterSalesPerson] = useState('');
@@ -8642,13 +8643,34 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           </div>
 
           {/* Quick Filters Panel */}
-          <div className="bg-zinc-900/40 p-4 rounded-2xl border border-zinc-850 shadow-xl grid grid-cols-1 md:grid-cols-12 gap-3 items-end relative overflow-hidden">
+          <div className="bg-zinc-900/40 rounded-2xl border border-zinc-850 shadow-xl relative overflow-hidden">
             {/* Corner calibration tick marks */}
             <div className="absolute top-2 left-2 w-1.5 h-1.5 border-t border-l border-emerald-500/40" />
             <div className="absolute top-2 right-2 w-1.5 h-1.5 border-t border-r border-emerald-500/40" />
             <div className="absolute bottom-2 left-2 w-1.5 h-1.5 border-b border-l border-emerald-500/40" />
             <div className="absolute bottom-2 right-2 w-1.5 h-1.5 border-b border-r border-emerald-500/40" />
 
+            {/* Mobile Toggle Button */}
+            <div 
+              className="md:hidden p-4 flex justify-between items-center cursor-pointer border-b border-zinc-800/50"
+              onClick={() => setIsMobileFiltersExpanded(!isMobileFiltersExpanded)}
+            >
+              <span className="text-xs font-bold text-zinc-300 flex items-center gap-2">📁 LEADS DIRECTORY</span>
+              <button className="text-[10px] uppercase font-mono font-bold text-zinc-400 hover:text-zinc-200 transition-colors">
+                {isMobileFiltersExpanded ? '▲ Hide Filters' : '▼ Show Filters'}
+              </button>
+            </div>
+
+            {/* Filter Content */}
+            <div 
+              className={`grid transition-all duration-300 ease-in-out ${
+                isMobileFiltersExpanded 
+                  ? 'grid-rows-[1fr] opacity-100' 
+                  : 'grid-rows-[0fr] opacity-0 md:grid-rows-[1fr] md:opacity-100'
+              }`}
+            >
+              <div className="overflow-hidden">
+                <div className="p-4 pt-0 md:pt-4 grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
             {/* Search query */}
             <div className="md:col-span-3">
               <label className="block text-[10px] uppercase font-mono font-bold text-zinc-400 mb-1">
@@ -8759,6 +8781,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               >
                 Reset
               </button>
+            </div>
+                </div>
+              </div>
             </div>
           </div>
 

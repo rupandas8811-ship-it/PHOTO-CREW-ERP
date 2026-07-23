@@ -1,11 +1,14 @@
-      
-      const matchedOrder = orders.find(o => o.order_id === assigningOrderId);
-      
-      // Set status to Event Scheduled as requested
-      const targetStage: CurrentStage = 'Event Scheduled';
+            </div>
+          </div>
 
-      console.log("Saving assignment for order:", assigningOrderId, {
-        photographer,
-        videographer,
-        droneOp,
-        assistant,
+          {/* Quick Filters Panel */}
+          <div className="bg-zinc-900/40 p-4 rounded-2xl border border-zinc-850 shadow-xl grid grid-cols-1 md:grid-cols-12 gap-3 items-end relative overflow-hidden">
+            {/* Corner calibration tick marks */}
+            <div className="absolute top-2 left-2 w-1.5 h-1.5 border-t border-l border-emerald-500/40" />
+            <div className="absolute top-2 right-2 w-1.5 h-1.5 border-t border-r border-emerald-500/40" />
+            <div className="absolute bottom-2 left-2 w-1.5 h-1.5 border-b border-l border-emerald-500/40" />
+            <div className="absolute bottom-2 right-2 w-1.5 h-1.5 border-b border-r border-emerald-500/40" />
+
+            {/* Search query */}
+            <div className="md:col-span-3">
+              <label className="block text-[10px] uppercase font-mono font-bold text-zinc-400 mb-1">
