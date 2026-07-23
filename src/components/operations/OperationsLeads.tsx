@@ -1497,7 +1497,7 @@ export const OperationsLeads: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* 1. Results Summary Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
         {[
           { label: "New Orders Received", val: stats.newOrders, theme: 'purple' as CameraLensTheme, filterValue: 'New Orders', trendText: 'Fresh', chartPoints: [10, 18, 14, 25, 20, 31, 35] },
           { label: "Today's Events", val: stats.todaysEvents, theme: 'cyan' as CameraLensTheme, filterValue: "Today's Events", trendText: 'Live', chartPoints: [5, 9, 7, 14, 11, 16, 15] },

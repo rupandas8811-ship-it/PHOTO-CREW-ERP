@@ -275,7 +275,7 @@ export const UserManagementModule: React.FC = () => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-slate-850 p-4 rounded-xl border border-slate-800 shadow-sm flex items-center justify-between">
           <div>
             <span className="text-[10px] uppercase font-mono font-semibold text-slate-500">Personnel Index</span>

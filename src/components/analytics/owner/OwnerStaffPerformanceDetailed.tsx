@@ -398,7 +398,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <div onClick={() => handleStatClick(staffMetrics.flatMap(s => s.tasksList), 'Total Assigned Tasks')} className="cursor-pointer transition-transform hover:scale-[1.02]">
             <CameraLensStatsCard
             label="Total Assigned"

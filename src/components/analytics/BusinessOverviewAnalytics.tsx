@@ -307,7 +307,7 @@ export const BusinessOverviewAnalytics: React.FC = () => {
             <h3 className="text-xs font-black uppercase tracking-wider text-zinc-300 font-mono">Payment Analytics</h3>
           </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <CameraLensStatsCard
               label="Fully Settled"
               val={fullyPaidEvents}

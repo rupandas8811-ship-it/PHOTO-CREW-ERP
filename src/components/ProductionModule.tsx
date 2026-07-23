@@ -2300,7 +2300,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         <div className="space-y-6 animate-fade-in text-zinc-100">
           
           {/* Dashboard Widgets specific to Production Leads */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <CameraLensStatsCard
               label="New Projects Received"
               val={countNewProjects}

@@ -347,7 +347,7 @@ export const Dashboard: React.FC = () => {
               <span>Leads Analytics</span>
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-1 gap-4">
               
               {/* Total Leads */}
               <div className="bg-[#07070a]/80 border border-zinc-850/60 hover:border-zinc-800 p-4 rounded-xl flex items-center justify-between transition-all">
@@ -383,7 +383,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Grid: 11 Primary Metrics in Elegant Bento Style */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {(() => {
           const kpiCards = [
             {
@@ -549,7 +549,7 @@ export const Dashboard: React.FC = () => {
             </div>
 
             {/* Metric Blocks */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
               <div className="bg-zinc-950/40 p-4 rounded-xl border border-zinc-900/60 hover:border-zinc-850 transition-all duration-300 space-y-1">
                 <span className="text-[9px] font-mono tracking-widest text-zinc-500 uppercase">New Customers</span>
                 <div className="text-xl font-black text-white">{newCustomers.length}</div>
