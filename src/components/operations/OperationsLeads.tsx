@@ -422,7 +422,13 @@ export const OperationsLeads: React.FC = () => {
       const initialMsgs: Record<string, string> = {};
       const initialSelected: Record<string, boolean> = {};
       whatsappShareModalData.staffNames.forEach(name => {
-        initialMsgs[name] = generateWhatsAppMessageForStaff(whatsappShareModalData.order, name);
+        initialMsgs[name] = generateWhatsAppMessageForStaff(
+          whatsappShareModalData.order, 
+          name,
+          whatsappShareModalData.eventAllocations,
+          whatsappShareModalData.lead,
+          whatsappShareModalData.finalAssignments
+        );
         initialSelected[name] = true;
       });
       setEditedMessages(initialMsgs);
@@ -596,12 +602,8 @@ export const OperationsLeads: React.FC = () => {
     const clientContact = ord.mobile || (lead ? lead.mobile : 'N/A');
     const customerAddress = lead?.client_residence_address || lead?.address || 'N/A';
     
-    const mapsLink = lead?.google_maps_link || '';
-    const locOutput = mapsLink ? mapsLink : customerAddress;
-
     let text = `Customer Name: ${clientName}\n`;
-    text += `Phone Number: ${clientContact}\n`;
-    text += `Location: ${locOutput}\n\n`;
+    text += `Phone Number: ${clientContact}\n\n`;
 
     let assignedEvents: any[] = [];
     if (modalEventAllocations && lead?.events && lead.events.length > 0) {
@@ -640,6 +642,8 @@ export const OperationsLeads: React.FC = () => {
        const reportingDate = ord.Reporting_date || lead?.Reporting_date || ord.event_date || 'N/A';
        const reportingTime = ord.reporting_time || lead?.reporting_time || '8:00 AM';
        
+       const evLoc = lead?.google_maps_link || ord.event_location || 'N/A';
+
        let assignedRoles = ['Crew'];
        if (finalAssignments) {
           assignedRoles = Array.from(new Set(finalAssignments.filter(a => a.staff_name === staffName).map(a => a.staff_role)));
@@ -657,9 +661,11 @@ export const OperationsLeads: React.FC = () => {
 
        text += `Event Name: ${eventName}\n`;
        text += `Event Type: ${eventType}\n`;
+       text += `Location: ${evLoc}\n\n`;
        text += `Reporting Date: ${reportingDate}\n`;
        text += `Reporting Time: ${reportingTime}\n`;
        text += `Task: ${assignedRoles.join(', ')}\n`;
+       
        // When no assignedEvents but finalAssignments exist
        if (finalAssignments) {
           const myAssignments = finalAssignments.filter(a => a.staff_name === staffName);
@@ -679,6 +685,8 @@ export const OperationsLeads: React.FC = () => {
           const reportingDate = ev.reporting_date || ev.alloc?.reporting_date || ord.Reporting_date || lead?.Reporting_date || ev.event_date || 'N/A';
           const reportingTime = ev.reporting_time || ev.alloc?.reporting_time || ord.reporting_time || lead?.reporting_time || '8:00 AM';
           
+          const evLoc = ev.google_maps_link || ev.event_location || 'N/A';
+
           let assignedRoles = ev.roles || ['Crew'];
           assignedRoles = Array.from(new Set(assignedRoles));
 
@@ -686,9 +694,34 @@ export const OperationsLeads: React.FC = () => {
           
           text += `Event Name: ${eventName}\n`;
           text += `Event Type: ${eventType}\n`;
+          text += `Location: ${evLoc}\n\n`;
           text += `Reporting Date: ${reportingDate}\n`;
           text += `Reporting Time: ${reportingTime}\n`;
           text += `Task: ${assignedRoles.join(', ')}\n`;
+
+          // Handle equipment for multi-events if present in modalEventAllocations or finalAssignments
+          // We will fetch it from finalAssignments if available for this specific event
+          if (finalAssignments) {
+              const myAssignments = finalAssignments.filter(a => a.staff_name === staffName && a.event_id === ev.id);
+              const myEq = myAssignments.flatMap(a => a.equipment || []);
+              const uniqueEq = Array.from(new Set(myEq));
+              if (uniqueEq.length > 0) {
+                  text += `\nAssigned Equipment:\n`;
+                  uniqueEq.forEach(eq => {
+                      text += `- ${eq}\n`;
+                  });
+              }
+          } else if (ev.alloc && ev.alloc.staff) {
+              const myAllocStaff = ev.alloc.staff.filter((s: any) => s.staff_name === staffName);
+              const myEq = myAllocStaff.flatMap((s: any) => s.equipment || []);
+              const uniqueEq = Array.from(new Set(myEq));
+              if (uniqueEq.length > 0) {
+                  text += `\nAssigned Equipment:\n`;
+                  uniqueEq.forEach(eq => {
+                      text += `- ${eq}\n`;
+                  });
+              }
+          }
        });
     }
 
@@ -1211,7 +1244,7 @@ export const OperationsLeads: React.FC = () => {
       setIsSaving(true);
 
       // Collect ALL assigned staff across all events into activeAssignments so they are recorded correctly
-      const allAssignedStaff: { staff_role: string; staff_id: string; staff_name: string }[] = [];
+      const allAssignedStaff: { staff_role: string; staff_id: string; staff_name: string; equipment?: string[] }[] = [];
       Object.values(eventAllocations).forEach((alloc: any) => {
         if (alloc.staff && alloc.staff.length > 0) {
           alloc.staff.forEach((st: any) => {
@@ -2276,10 +2309,10 @@ export const OperationsLeads: React.FC = () => {
                                             const currentStaffType = assignedStaff.staff_type || 'In-House';
                                             
                                             return (
-                                              <div key={`row_${rowIdx}`} className="flex flex-col gap-2 bg-zinc-950/40 p-2 rounded-lg border border-zinc-900">
-                                                <div key={`row_${rowIdx}`} className="flex items-center gap-2">
+                                              <div key={`row_${rowIdx}`} className="flex flex-col gap-1.5 bg-zinc-950/40 p-2 rounded-lg border border-zinc-900">
+                                                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                                                 {/* Staff Type Select */}
-                                                <div className="w-32 shrink-0">
+                                                <div className="w-full sm:w-28 shrink-0">
                                                   <select
                                                     value={currentStaffType}
                                                     onChange={(e) => {
@@ -2323,7 +2356,7 @@ export const OperationsLeads: React.FC = () => {
                                                 </div>
 
                                                 {/* Staff Name Select */}
-                                                <div className="flex-1 min-w-[200px] flex items-center gap-2">
+                                                <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-2">
                                                   <select
                                                     value={assignedStaff.staff_name || ''}
                                                     onChange={(e) => {
@@ -2403,28 +2436,25 @@ export const OperationsLeads: React.FC = () => {
                                                       );
                                                     })()}
                                                   </select>
-
-                                                  {assignedStaff.staff_name && (
-                                                    isStaffBusyOnDate(assignedStaff.staff_name, ev.event_date || '', activeOrderInstance?.order_id || '') ? (
-                                                      <button 
-                                                        type="button" 
-                                                        onClick={() => setBusyRosterStaff(assignedStaff.staff_name)} 
-                                                        className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-mono uppercase border border-red-500/20 cursor-pointer hover:bg-red-500/20 transition-colors shrink-0"
-                                                      >
-                                                        🔴 Busy
-                                                      </button>
-                                                    ) : (
-                                                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono uppercase border border-emerald-500/20 shrink-0">
-                                                        🟢 Available
-                                                      </span>
-                                                    )
-                                                  )}
-                                                </div>
-
-                                                {/* Remove Row Button */}
-                                                <div className="w-6 shrink-0 flex justify-center">
-                                                  <button
-                                                    type="button"
+                                                  <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto shrink-0 mt-1 sm:mt-0">
+                                                    {assignedStaff.staff_name && (
+                                                      isStaffBusyOnDate(assignedStaff.staff_name, ev.event_date || '', activeOrderInstance?.order_id || '') ? (
+                                                        <button
+                                                           type="button"
+                                                           onClick={() => setBusyRosterStaff(assignedStaff.staff_name)}
+                                                           className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-mono uppercase border border-red-500/20 cursor-pointer hover:bg-red-500/20 transition-colors shrink-0"
+                                                        >
+                                                          🔴 Busy
+                                                        </button>
+                                                      ) : (
+                                                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono uppercase border border-emerald-500/20 shrink-0">
+                                                          🟢 Available
+                                                        </span>
+                                                      )
+                                                    )}
+                                                    {/* Remove Row Button */}
+                                                    <button
+                                                      type="button"
                                                     onClick={() => {
                                                       setEventAllocations((prev: any) => {
                                                         const existingAlloc = prev[evId] || { staff: [] };
@@ -2462,11 +2492,12 @@ export const OperationsLeads: React.FC = () => {
                                                         };
                                                       });
                                                     }}
-                                                    className="text-zinc-600 hover:text-rose-400 transition-colors p-1 cursor-pointer text-xs font-bold"
+                                                    className="text-zinc-600 hover:text-rose-400 transition-colors p-1 cursor-pointer text-xs font-bold shrink-0 ml-auto sm:ml-0"
                                                     title="Remove staff assignment row"
                                                   >
                                                     ✕
                                                   </button>
+                                                  </div>
                                                 </div>
                                               </div>
                                               {/* Assigned Equipment Section for Individual Staff */}
@@ -2484,15 +2515,18 @@ export const OperationsLeads: React.FC = () => {
                                                 });
                       
                                                 return (
-                                                  <div className="pl-32 space-y-3 pt-2">
+                                                  <div className="flex flex-col sm:flex-row sm:items-start gap-2 mt-1 pt-2 border-t border-zinc-900/50">
                                                     
-                                                    {/* Selected equipment tags */}
-                                                    <div className="flex flex-wrap gap-1.5 min-h-[38px] p-2 bg-zinc-950 rounded-xl border border-zinc-900">
-                                                      {selectedEquipmentNames.length > 0 ? (
-                                                        selectedEquipmentNames.map((eqName: string, idx: number) => (
-                                                          <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-mono font-medium rounded-lg border border-amber-500/20 transition-all">
-                                                            <span>⚙️ {eqName}</span>
-                                                            <button
+                                                    <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider pt-1 shrink-0 sm:w-28 hidden sm:block">Equipment</div>
+                                                    
+                                                    <div className="flex flex-col flex-1 gap-2 min-w-0 w-full">
+                                                      {/* Selected equipment tags */}
+                                                      {selectedEquipmentNames.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                          {selectedEquipmentNames.map((eqName: string, idx: number) => (
+                                                            <span key={idx} className="inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[10px] sm:text-[11px] font-mono font-medium rounded border border-amber-500/20 transition-all">
+                                                              <span className="truncate max-w-[120px] sm:max-w-[200px]">⚙️ {eqName}</span>
+                                                              <button
                                                               type="button"
                                                               onClick={() => {
                                                                 setEventAllocations((prev: any) => {
@@ -2519,45 +2553,41 @@ export const OperationsLeads: React.FC = () => {
                                                               ✕
                                                             </button>
                                                           </span>
-                                                        ))
-                                                      ) : (
-                                                        <span className="text-[10.5px] text-zinc-500 italic px-1.5 py-1 self-center">
-                                                          No equipment assigned yet. Select gear from the inventory search list below.
-                                                        </span>
+                                                        ))}
+                                                        </div>
                                                       )}
-                                                    </div>
-                      
-                                                    {/* Search & Select input dropdown */}
-                                                    <div className="relative">
-                                                      <div className="flex gap-2">
-                                                        <input
-                                                          type="text"
-                                                          placeholder="🔍 Search and add equipment (e.g. Sony A7IV)..."
-                                                          value={searchQuery}
-                                                          onFocus={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: true }))}
-                                                          onChange={(e) => setEquipmentSearchQueryByEvent(prev => ({ ...prev, [eqKey]: e.target.value }))}
-                                                          className="w-full bg-zinc-900 border border-zinc-800 focus:border-amber-500/50 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-zinc-100 placeholder-zinc-500"
-                                                        />
-                                                        {isDropdownOpen ? (
-                                                          <button
-                                                            type="button"
-                                                            onClick={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: false }))}
-                                                            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 text-xs font-mono font-bold rounded-lg border border-zinc-750 transition-colors cursor-pointer"
-                                                          >
-                                                            Close
-                                                          </button>
-                                                        ) : (
-                                                          <button
-                                                            type="button"
-                                                            onClick={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: true }))}
-                                                            className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 text-zinc-400 text-xs font-mono font-bold rounded-lg border border-zinc-800 transition-colors cursor-pointer"
-                                                          >
-                                                            Browse
-                                                          </button>
-                                                        )}
-                                                      </div>
-                                                      {isDropdownOpen && (
-                                                        <div className="absolute left-0 right-0 mt-1 bg-zinc-900 border border-zinc-850 rounded-xl shadow-2xl max-h-60 overflow-y-auto z-40 scrollbar-thin divide-y divide-zinc-850/60">
+                                                      
+                                                      {/* Search & Select input dropdown */}
+                                                      <div className="relative">
+                                                        <div className="flex gap-1.5">
+                                                          <input
+                                                            type="text"
+                                                            placeholder={selectedEquipmentNames.length === 0 ? "Search to assign equipment..." : "Search equipment..."}
+                                                            value={searchQuery}
+                                                            onFocus={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: true }))}
+                                                            onChange={(e) => setEquipmentSearchQueryByEvent(prev => ({ ...prev, [eqKey]: e.target.value }))}
+                                                            className="flex-1 min-w-0 bg-zinc-900/50 border border-zinc-800 focus:border-amber-500/50 focus:outline-none rounded py-1 px-2 text-[11px] sm:text-xs text-zinc-100 placeholder-zinc-500 h-7"
+                                                          />
+                                                          {isDropdownOpen ? (
+                                                            <button
+                                                              type="button"
+                                                              onClick={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: false }))}
+                                                              className="px-2 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 text-[11px] sm:text-xs font-mono font-bold rounded border border-zinc-750 transition-colors cursor-pointer shrink-0 h-7"
+                                                            >
+                                                              Close
+                                                            </button>
+                                                          ) : (
+                                                            <button
+                                                              type="button"
+                                                              onClick={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: true }))}
+                                                              className="px-2 bg-zinc-900 hover:bg-zinc-850 text-zinc-400 text-[11px] sm:text-xs font-mono font-bold rounded border border-zinc-800 transition-colors cursor-pointer shrink-0 h-7"
+                                                            >
+                                                              Browse
+                                                            </button>
+                                                          )}
+                                                        </div>
+                                                        {isDropdownOpen && (
+                                                          <div className="absolute left-0 right-0 mt-1 bg-zinc-900 border border-zinc-800 rounded shadow-xl max-h-48 overflow-y-auto z-40 scrollbar-thin divide-y divide-zinc-800/60">
                                                           {filteredEquipment.length > 0 ? (
                                                             filteredEquipment.map((eq) => {
                                                               const isAlreadySelected = selectedEquipmentNames.includes(eq.equipment_name);
@@ -2617,6 +2647,7 @@ export const OperationsLeads: React.FC = () => {
                                                         </div>
                                                       )}
                                                     </div>
+                                                  </div>
                                                   </div>
                                                 );
                                               })()}
