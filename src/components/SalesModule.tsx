@@ -3954,7 +3954,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const evWithStaff = lead.events.find(e => e.assigned_staff_names);
       if (evWithStaff) {
         evtStaffName = evWithStaff.assigned_staff_names || '';
-        evtStaffMobile = evWithStaff.assigned_staff_mobiles || '';
+        evtStaffMobile = (evWithStaff.assigned_staff_mobiles || '').split(' || EQUIPMENT:')[0];
       }
     }
     setSalesStaffName(lead.sales_staff_name || evtStaffName || '');
@@ -4325,7 +4325,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const updatedEvents = crmEvents.map(ev => ({
         ...ev,
         assigned_staff_names: salesStaffName,
-        assigned_staff_mobiles: salesStaffMobile
+        assigned_staff_mobiles: ev.assigned_staff_mobiles && ev.assigned_staff_mobiles.includes(' || EQUIPMENT:') ? salesStaffMobile + ' || EQUIPMENT:' + ev.assigned_staff_mobiles.split(' || EQUIPMENT:')[1] : salesStaffMobile
       }));
 
       await updateLead(selectedLead.lead_id, {
@@ -4528,7 +4528,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         const updatedEvents = crmEvents.map(ev => ({
           ...ev,
           assigned_staff_names: salesStaffName,
-          assigned_staff_mobiles: salesStaffMobile
+          assigned_staff_mobiles: ev.assigned_staff_mobiles && ev.assigned_staff_mobiles.includes(' || EQUIPMENT:') ? salesStaffMobile + ' || EQUIPMENT:' + ev.assigned_staff_mobiles.split(' || EQUIPMENT:')[1] : salesStaffMobile
         }));
 
         await updateLead(selectedLead.lead_id, {

@@ -235,7 +235,17 @@ export const OperationsStaffManagement: React.FC = () => {
             // Resolve equipment assigned to this event or staff
             let equipmentAssigned = 'None';
             const mobilesRaw = ev.assigned_staff_mobiles || '';
-            if (mobilesRaw.includes(' || EQUIPMENT: ')) {
+            if (mobilesRaw.includes(' || EQUIPMENT: JSON:')) {
+               try {
+                  const parts = mobilesRaw.split(' || EQUIPMENT: JSON:');
+                  const staffEqs = JSON.parse(parts[1]);
+                  const names = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
+                  const idx = names.indexOf(staffName.toLowerCase());
+                  if (idx !== -1 && staffEqs[idx] && staffEqs[idx].length > 0) {
+                      equipmentAssigned = staffEqs[idx].join(', ');
+                  }
+               } catch(e) {}
+            } else if (mobilesRaw.includes(' || EQUIPMENT: ')) {
               const parts = mobilesRaw.split(' || EQUIPMENT: ');
               equipmentAssigned = parts[1] || 'None';
             } else if (op?.equipment_kit) {
