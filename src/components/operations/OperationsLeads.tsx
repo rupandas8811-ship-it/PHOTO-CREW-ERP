@@ -1203,9 +1203,35 @@ export const OperationsLeads: React.FC = () => {
             }
           }
 
+          // NEW: Validate duplicate equipment per event
+          const allocStaffForEq = eventAllocations[evId]?.staff || [];
+          const equipmentCounts: Record<string, number> = {};
+          allocStaffForEq.forEach((s: any) => {
+             (s.equipment || []).forEach((eq: string) => {
+                equipmentCounts[eq] = (equipmentCounts[eq] || 0) + 1;
+             });
+          });
+          const duplicates = Object.keys(equipmentCounts).filter(eq => equipmentCounts[eq] > 1);
+          if (duplicates.length > 0) {
+              setValidationAttempted(true);
+              setAssignValidationError(`This equipment is already assigned to another staff member for this event: ${duplicates.join(', ')}`);
+              
+              setCollapsedAssignEvents(prev => ({ ...prev, [evId]: false }));
+              
+              setTimeout(() => {
+                const el = document.getElementById(`assign-event-${evId}`);
+                if (el) {
+                   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                   el.classList.add('ring-2', 'ring-red-500', 'ring-offset-2', 'ring-offset-zinc-950');
+                   setTimeout(() => el.classList.remove('ring-2', 'ring-red-500', 'ring-offset-2', 'ring-offset-zinc-950'), 3000);
+                }
+              }, 100);
+              return;
+          }
+
           // Validate equipment assigned for this event
-          const allocEquipment = eventAllocations[evId]?.equipment || [];
-          if (allocEquipment.length === 0) {
+          const eventHasEquipment = allocStaffForEq.some((s: any) => s.equipment && s.equipment.length > 0);
+          if (!eventHasEquipment) {
               setValidationAttempted(true);
               setAssignValidationError(`Please assign at least one Equipment item for every Event.`);
               
@@ -2507,7 +2533,14 @@ export const OperationsLeads: React.FC = () => {
                                                 const isDropdownOpen = !!isEquipmentDropdownOpenByEvent[eqKey];
                                                 const selectedEquipmentNames = assignedStaff.equipment || [];
                                                 
+                                                const allOtherSelectedEquipments = allocStaff
+                                                  .filter((s: any) => s !== assignedStaff)
+                                                  .flatMap((s: any) => s.equipment || []);
+
                                                 const filteredEquipment = (equipment || []).filter(eq => {
+                                                  if (allOtherSelectedEquipments.includes(eq.equipment_name)) {
+                                                    return false;
+                                                  }
                                                   const q = searchQuery.toLowerCase();
                                                   return eq.equipment_name.toLowerCase().includes(q) ||
                                                          (eq.category || '').toLowerCase().includes(q) ||
