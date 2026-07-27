@@ -240,7 +240,7 @@ const generateQuotationPDF = (
   };
 
   // Pre-split fields to calculate wrap height accurately
-  const wrapCustName = doc.splitTextToSize(lead.customer_name || 'N/A', 50);
+  const wrapCustName = doc.splitTextToSize(lead.customer_name || '', 50);
   const wrapEmail = doc.splitTextToSize(lead.email || 'Not Provided', 50);
   const displayEventType = lead.event_type === 'Other' ? (lead.custom_event_name || lead.custom_event_type || 'Other') : (lead.event_type || 'N/A');
   const wrapEventType = doc.splitTextToSize(displayEventType, 50);
@@ -1469,7 +1469,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return [
         l.lead_id,
         ord?.order_id || 'N/A',
-        l.customer_name,
+        l.customer_name === 'Inbound Prospect' ? '' : l.customer_name,
         l.mobile,
         l.event_type,
         l.event_date || 'N/A',
@@ -1500,7 +1500,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return [
         l.lead_id,
         ord?.order_id || 'N/A',
-        l.customer_name,
+        l.customer_name === 'Inbound Prospect' ? '' : l.customer_name,
         l.mobile,
         l.event_type,
         l.event_date || 'N/A',
@@ -1534,7 +1534,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         <tr>
           <td>${l.lead_id}</td>
           <td>${ord?.order_id || 'N/A'}</td>
-          <td>${l.customer_name}</td>
+          <td>${l.customer_name === 'Inbound Prospect' ? '' : l.customer_name}</td>
           <td>${l.mobile}</td>
           <td>${l.event_type}</td>
           <td>${l.event_date || 'N/A'}</td>
@@ -3296,8 +3296,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         quotation_id: qId,
         quotation_number: quotNum,
         lead_id: leadId,
-        customer_id: leadObj.customer_name || 'Customer',
-        customer_name: leadObj.customer_name || 'Customer',
+        customer_id: leadObj.customer_name || '',
+        customer_name: leadObj.customer_name || '',
         order_id: '',
         package_name: activePkgs.map(p => p.package_name).join(' + '),
         package_price: basePkgSum,
@@ -3587,7 +3587,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const rawPhone = leadObj.whatsapp_number || leadObj.mobile || '';
       const phoneStr = typeof rawPhone === 'string' ? rawPhone : String(rawPhone);
       
-      const safeCustomerName = String(leadObj.customer_name || 'Client');
+      const safeCustomerName = String(leadObj.customer_name || '');
       const safeEventLocation = String(leadObj.event_location || leadObj.location || 'N/A');
 
       let eventDetailsStr = '';
@@ -3651,7 +3651,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
       const email = leadObj.email || '';
       
-      const safeCustomerName = String(leadObj.customer_name || 'Client');
+      const safeCustomerName = String(leadObj.customer_name || '');
       const safeEventType = String(leadObj.event_type || 'Event');
 
       const subject = `Photocrew Pictures - Custom Quotation Details`;
@@ -4396,7 +4396,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         }
         const updatedRemarks = appendCompletedStep(selectedLead.remarks || wizardLeadData.remarks, 1);
         await updateLead(selectedLead.lead_id, {
-          customer_name: wizardLeadData.customer_name || 'Inbound Prospect',
+          customer_name: wizardLeadData.customer_name || '',
           mobile: wizardLeadData.mobile,
           whatsapp_number: wizardLeadData.whatsapp_number,
           email: wizardLeadData.email,
@@ -5820,7 +5820,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         let finalId = createdLeadId;
         if (!createdLeadId) {
           const newId = await addLead({
-            customer_name: createForm.customer_name || 'Inbound Prospect',
+            customer_name: createForm.customer_name || '',
             mobile: createForm.mobile,
             alternate_mobile: (createForm.alternate_mobile && createForm.alternate_mobile.trim() !== '' && createForm.alternate_mobile.trim() !== '+91') ? createForm.alternate_mobile : undefined,
             email: createForm.email,
@@ -5855,7 +5855,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           console.log(`Created lead with ID: ${newId}`);
         } else {
           await updateLead(createdLeadId, {
-            customer_name: createForm.customer_name || 'Inbound Prospect',
+            customer_name: createForm.customer_name || '',
             mobile: createForm.mobile,
             alternate_mobile: (createForm.alternate_mobile && createForm.alternate_mobile.trim() !== '' && createForm.alternate_mobile.trim() !== '+91') ? createForm.alternate_mobile : undefined,
             email: createForm.email,
@@ -5884,7 +5884,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
         const newLeadObj: Lead = {
           lead_id: finalId,
-          customer_name: createForm.customer_name || 'Inbound Prospect',
+          customer_name: createForm.customer_name || '',
           mobile: createForm.mobile,
           alternate_mobile: (createForm.alternate_mobile && createForm.alternate_mobile.trim() !== '' && createForm.alternate_mobile.trim() !== '+91') ? createForm.alternate_mobile : undefined,
           email: createForm.email,
@@ -8830,7 +8830,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             {linkedOrder ? linkedOrder.order_id : 'N/A'}
                           </td>
                           <td className="p-3.5 font-bold text-white">
-                            {lead.customer_name}
+                            {lead.customer_name === 'Inbound Prospect' ? '' : lead.customer_name}
                           </td>
                           <td className="p-3.5 font-mono text-zinc-400">
                             {formatIndianPhoneNumber(lead.mobile)}
