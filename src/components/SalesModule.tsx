@@ -4180,8 +4180,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       payment_mode: 'UPI',
     });
     setConfirmForm({
-      package_name: lead.event_type + ' Premium Package',
-      quotation_amount: 0,
+      package_name: packages?.find((p) => String(p.package_id) === String(lead.Select_Package_Option))?.package_name || lead.Select_Package_Option || '',
+      quotation_amount: Number(lead.Final_Quotation_Amount) || Number((lead as any).final_amount) || 0,
       advance_received: 0,
       event_date: lead.event_date || '',
       event_time: lead.event_time || '',
@@ -6261,11 +6261,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         return;
       }
 
+      const packageName = packages?.find(p => String(p.package_id) === String(selectedLead.Select_Package_Option))?.package_name || selectedLead.Select_Package_Option || '';
+
       try {
         setIsSaving(true);
         await confirmOrder(
           selectedLead.lead_id,
-          selectedLead.event_type + ' Premium Package',
+          packageName,
           Number(followUpForm.quotation_amount),
           Number(followUpForm.advance_received),
           followUpForm.event_date,
@@ -6296,7 +6298,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           insertPayload: {
             order_status: 'Confirmed',
             current_stage: 'Order Confirmed',
-            package_name: selectedLead.event_type + ' Premium Package',
+            package_name: packageName,
             quotation_amount: Number(followUpForm.quotation_amount),
             advance_received: Number(followUpForm.advance_received),
           },
@@ -6825,7 +6827,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     setConfirmForm({
                       ...confirmForm,
                       package_name: packages?.find((p) => String(p.package_id) === String(selectedLead.Select_Package_Option))?.package_name || selectedLead.Select_Package_Option || '',
-                      quotation_amount: Number(selectedLead.Final_Quotation_Amount) || Number(selectedLead.final_amount) || 0,
+                      quotation_amount: Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_amount) || 0,
                       advance_received: 0,
                       event_date: selectedLead.event_date || today,
                       event_time: selectedLead.event_time || ''
@@ -8980,7 +8982,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                             setConfirmForm({
                                               ...confirmForm,
                                               package_name: packages?.find((p) => String(p.package_id) === String(lead.Select_Package_Option))?.package_name || lead.Select_Package_Option || '',
-                                              quotation_amount: Number(lead.Final_Quotation_Amount) || Number(lead.final_amount) || 0,
+                                              quotation_amount: Number(lead.Final_Quotation_Amount) || Number((lead as any).final_amount) || 0,
                                               advance_received: 0,
                                               event_date: lead.event_date || today,
                                               event_time: lead.event_time || ''
