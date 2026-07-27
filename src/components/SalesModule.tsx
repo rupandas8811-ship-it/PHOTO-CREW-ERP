@@ -6824,7 +6824,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     const today = new Date().toISOString().split('T')[0];
                     setConfirmForm({
                       ...confirmForm,
-                      package_name: selectedLead.Select_Package_Option || '',
+                      package_name: packages?.find((p) => String(p.package_id) === String(selectedLead.Select_Package_Option))?.package_name || selectedLead.Select_Package_Option || '',
                       quotation_amount: Number(selectedLead.Final_Quotation_Amount) || Number(selectedLead.final_amount) || 0,
                       advance_received: 0,
                       event_date: selectedLead.event_date || today,
@@ -8979,7 +8979,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                             const today = new Date().toISOString().split('T')[0];
                                             setConfirmForm({
                                               ...confirmForm,
-                                              package_name: lead.Select_Package_Option || '',
+                                              package_name: packages?.find((p) => String(p.package_id) === String(lead.Select_Package_Option))?.package_name || lead.Select_Package_Option || '',
                                               quotation_amount: Number(lead.Final_Quotation_Amount) || Number(lead.final_amount) || 0,
                                               advance_received: 0,
                                               event_date: lead.event_date || today,

@@ -119,12 +119,11 @@ export const PendingPaymentsReport: React.FC = () => {
       const payment = order ? payments.find(p => p.order_id === order.order_id) : null;
       
       const finalPackageAmount = order ? order.quotation_amount : lead.budget;
-      const advanceReceived = order ? order.advance_received : 0;
+      const advanceReceived = order ? (Number(order.advance_received) || 0) : 0;
       
-      const totalPaidAmount = payment ? ((payment.advance_received || 0) + (payment.final_payment_received || 0)) : advanceReceived;
+      const totalPaidAmount = payment ? ((Number(payment.advance_received) || 0) + (Number(payment.final_payment_received) || 0) + (Number(payment.additional_received) || 0)) : advanceReceived;
       
-      // Use payments table for balance if available, otherwise fallback to order balance
-      const remainingAmount = payment ? payment.balance_due : (order ? order.balance_amount : finalPackageAmount - advanceReceived);
+      const remainingAmount = finalPackageAmount - totalPaidAmount;
       const rawPaymentStatus = payment ? payment.payment_status : (advanceReceived > 0 ? 'Partially Paid' : 'Pending');
       
       // Standardize status labels
@@ -170,18 +169,20 @@ export const PendingPaymentsReport: React.FC = () => {
         lastUpdatedDate: lead.updated_at || lead.created_date,
       };
     }).filter(rec => {
-      // REQUIREMENT: Only display customers whose order has already been confirmed or in post-sales stages
-      // Exclude leads still in the Sales process
+      // 1. Order has reached Order Confirmed or later stage
       const isConfirmedOrder = rec.order && (rec.order.order_status === 'Confirmed' || rec.order.status === 'Confirmed');
       const isPostSalesStage = ['Operations', 'Production', 'Completed'].includes(rec.currentStage);
+      const isOrderConfirmedStatus = rec.currentProjectStatus === 'Order Confirmed' || rec.currentProjectStatus === 'Confirmed';
       
-      if (!isConfirmedOrder && !isPostSalesStage) return false;
+      if (!isConfirmedOrder && !isPostSalesStage && !isOrderConfirmedStatus) return false;
 
-      // Double check exclusions
-      const explicitExclusions = ['New Lead', 'Contacted', 'Follow-up', 'Follow Up', 'Quotation Sent', 'Negotiation', 'Lost', 'Cancelled', 'Lost Lead'];
+      // 3 & 4. Exclude Cancelled and Lost
+      const explicitExclusions = ['Lost', 'Cancelled', 'Lost Lead', 'New Lead', 'Contacted', 'Follow-up', 'Follow Up', 'Quotation Sent', 'Negotiation'];
       if (explicitExclusions.includes(rec.currentProjectStatus)) return false;
 
-      // REQUIREMENT: Keep all confirmed/post-sales leads visible so users can always view the payment history.
+      // 2. Pending Amount > 0
+      if (rec.remainingAmount <= 0) return false;
+
       return true;
     });
   }, [leads, orders, payments]);
@@ -194,9 +195,9 @@ export const PendingPaymentsReport: React.FC = () => {
     const lead = leads.find(l => l.lead_id === paymentModalRecord.lead.lead_id) || paymentModalRecord.lead;
     
     const finalPackageAmount = order ? order.quotation_amount : lead.budget;
-    const advanceReceived = order ? order.advance_received : 0;
-    const totalPaidAmount = payment ? ((payment.advance_received || 0) + (payment.final_payment_received || 0)) : advanceReceived;
-    const remainingAmount = payment ? payment.balance_due : (order ? order.balance_amount : finalPackageAmount - advanceReceived);
+    const advanceReceived = order ? (Number(order.advance_received) || 0) : 0;
+    const totalPaidAmount = payment ? ((Number(payment.advance_received) || 0) + (Number(payment.final_payment_received) || 0) + (Number(payment.additional_received) || 0)) : advanceReceived;
+    const remainingAmount = finalPackageAmount - totalPaidAmount;
     
     return {
       finalPackageAmount,
@@ -1141,8 +1142,8 @@ export const PendingPaymentsReport: React.FC = () => {
         const paymentObj = order ? payments.find(p => p.order_id === order.order_id) : null;
         
         const finalQuotation = order ? order.quotation_amount : viewDetailsRecord.finalPackageAmount;
-        const totalPaid = paymentObj ? ((paymentObj.advance_received || 0) + (paymentObj.final_payment_received || 0)) : viewDetailsRecord.totalPaidAmount;
-        const remaining = paymentObj ? paymentObj.balance_due : (order ? order.balance_amount : (finalQuotation - totalPaid));
+        const totalPaid = paymentObj ? ((Number(paymentObj.advance_received) || 0) + (Number(paymentObj.final_payment_received) || 0) + (Number(paymentObj.additional_received) || 0)) : viewDetailsRecord.totalPaidAmount;
+        const remaining = finalQuotation - totalPaid;
         
         let statusText = 'Pending Payment';
         let statusColor = 'text-rose-400 bg-rose-500/10 border-rose-500/20';
