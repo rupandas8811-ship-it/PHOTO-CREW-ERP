@@ -587,11 +587,17 @@ export const OperationsLeads: React.FC = () => {
     
     const clientName = ord.customer_name;
     const clientContact = ord.mobile || (lead ? lead.mobile : 'N/A');
-    const clientWhatsapp = lead?.whatsapp_number || ord.whatsapp_number || 'Not Available';
-    const orderId = ord.order_id;
+    const customerAddress = lead?.client_residence_address || lead?.address || 'N/A';
+    
+    const mapsLink = lead?.google_maps_link || '';
+    const locOutput = mapsLink ? mapsLink : customerAddress;
+
+    let text = `Customer Name: ${clientName}\n`;
+    text += `Phone Number: ${clientContact}\n`;
+    text += `Location: ${locOutput}\n\n`;
 
     let assignedEvents: any[] = [];
-    if (modalEventAllocations && lead?.events) {
+    if (modalEventAllocations && lead?.events && lead.events.length > 0) {
        Object.keys(modalEventAllocations).forEach(evId => {
          const alloc = modalEventAllocations[evId];
          if (alloc.staff && alloc.staff.some((s: any) => s.staff_name === staffName)) {
@@ -602,7 +608,7 @@ export const OperationsLeads: React.FC = () => {
             }
          }
        });
-    } else if (lead?.events) {
+    } else if (lead?.events && lead.events.length > 0) {
        assignedEvents = lead.events.filter((ev: any) => {
          const names = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
          return names.includes(staffName.toLowerCase());
@@ -617,27 +623,15 @@ export const OperationsLeads: React.FC = () => {
                  fallbackRoles = Array.from(new Set(history.map((h: any) => h.assigned_role || h.assigned_roles)));
              }
          }
-         return { ...ev, roles: fallbackRoles }; 
-       });
+         return { ...ev, roles: fallbackRoles };
+        });
     }
-
-    const matchedStaff = finalAssignments || (staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id) : []);
-    const globalAssignedStaff = matchedStaff.map(sa => `${sa.staff_name} (${sa.staff_role})`).join(', ') || 'None';
-
-    const op = operations?.find(o => o.order_id === ord.order_id);
-    const globalAssignedEquipment = op?.equipment_kit || 'None';
-
-    let text = `Hey ${staffName}! You've been assigned for ${clientName}.\n\n`;
-    text += `Order ID: ${orderId}\n`;
 
     if (assignedEvents.length === 0) {
        const eventName = ord.custom_event_name || lead?.custom_event_name || ord.event_type || 'N/A';
-       const eventType = ord.shoot_type || lead?.shoot_type || ord.event_type || 'N/A';
-       const eventDate = ord.event_date || 'N/A';
-       const eventTime = ord.event_time || 'N/A';
-       const location = lead?.event_location || ord.event_location || 'N/A';
-       const reportingDate = ord.Reporting_date || lead?.Reporting_date || 'Not Assigned';
-       const reportingTime = ord.reporting_time || lead?.reporting_time || 'Not Assigned';
+       const eventType = ord.event_type || 'N/A';
+       const reportingDate = ord.Reporting_date || lead?.Reporting_date || ord.event_date || 'N/A';
+       const reportingTime = ord.reporting_time || lead?.reporting_time || '8:00 AM';
        
        let assignedRoles = ['Crew'];
        if (finalAssignments) {
@@ -655,54 +649,31 @@ export const OperationsLeads: React.FC = () => {
        }
 
        text += `Event Name: ${eventName}\n`;
-       text += `Event Type/Shoot Type: ${eventType}\n`;
-       text += `Event Date: ${eventDate}\n`;
-       text += `Event Time: ${eventTime}\n`;
+       text += `Event Type: ${eventType}\n`;
        text += `Reporting Date: ${reportingDate}\n`;
        text += `Reporting Time: ${reportingTime}\n`;
-       text += `Assigned Staff Name(s): ${globalAssignedStaff}\n`;
-       text += `Assigned Equipment: ${globalAssignedEquipment}\n`;
-       text += `Role: ${assignedRoles.join(', ')}\n\n`;
-       text += `Location:\n${location}\n\n`;
+       text += `Task: ${assignedRoles.join(', ')}\n`;
     } else {
        assignedEvents.forEach((ev, index) => {
           const eventName = ev.event_name || (ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A'));
-          const eventType = ev.event_shoot_type || ev.event_type || 'N/A';
-          const eventDate = ev.event_date || 'N/A';
-          const eventTime = ev.event_start_time || ev.reporting_time || (ev.alloc?.reporting_time) || 'N/A';
-          const reportingDate = ev.reporting_date || ev.alloc?.reporting_date || ord.Reporting_date || lead?.Reporting_date || 'Not Assigned';
-          const reportingTime = ev.reporting_time || ev.alloc?.reporting_time || ord.reporting_time || lead?.reporting_time || 'Not Assigned';
-          const location = ev.event_location || lead?.event_location || 'N/A';
+          const eventType = ev.event_type || 'N/A';
+          const reportingDate = ev.reporting_date || ev.alloc?.reporting_date || ord.Reporting_date || lead?.Reporting_date || ev.event_date || 'N/A';
+          const reportingTime = ev.reporting_time || ev.alloc?.reporting_time || ord.reporting_time || lead?.reporting_time || '8:00 AM';
           
-          const eventStaff = ev.assigned_staff_names || (ev.alloc?.staff ? ev.alloc.staff.map((s: any) => `${s.staff_name} (${s.staff_role})`).join(', ') : '');
-          const eventStaffList = eventStaff || globalAssignedStaff;
-
-          const eventEquipment = ev.alloc?.equipment ? ev.alloc.equipment.join(', ') : '';
-          const eventEquipmentList = eventEquipment || globalAssignedEquipment;
-
           let assignedRoles = ev.roles || ['Crew'];
           assignedRoles = Array.from(new Set(assignedRoles));
 
           if (index > 0) text += `\n---\n\n`;
+          
           text += `Event Name: ${eventName}\n`;
-          text += `Event Type/Shoot Type: ${eventType}\n`;
-          text += `Event Date: ${eventDate}\n`;
-          text += `Event Time: ${eventTime}\n`;
+          text += `Event Type: ${eventType}\n`;
           text += `Reporting Date: ${reportingDate}\n`;
           text += `Reporting Time: ${reportingTime}\n`;
-          text += `Assigned Staff Name(s): ${eventStaffList}\n`;
-          text += `Assigned Equipment: ${eventEquipmentList}\n`;
-          text += `Role: ${assignedRoles.join(', ')}\n\n`;
-          text += `Location:\n${location}\n\n`;
+          text += `Task: ${assignedRoles.join(', ')}\n`;
        });
     }
 
-    text += `Client Contact:\n`;
-    text += `📞 ${clientContact}\n`;
-    text += `💬 ${clientWhatsapp}\n\n`;
-    text += `Shoot us a quick ‘Confirmed’ if everything looks good on your end.`;
-
-    return text;
+    return text.trim();
   };
 
   // Filter orders to show confirmed ones for Operations
@@ -816,9 +787,10 @@ export const OperationsLeads: React.FC = () => {
         }
         if (statusFilter === "Today's Events") {
           const todayStr = new Date().toISOString().split('T')[0];
-          const hasTodayEvent = (!o.events || o.events.length === 0) 
-            ? o.event_date === todayStr
-            : o.events.some(e => e.event_date === todayStr);
+          const lead = leads.find(l => l.lead_id === o.lead_id);
+          const hasTodayEvent = (lead && lead.events && lead.events.length > 0) 
+            ? lead.events.some((e: any) => e.event_date === todayStr)
+            : o.event_date === todayStr;
           if (!hasTodayEvent) return false;
         }
         if (statusFilter === 'Scheduled Events' && o.current_stage !== 'Event Scheduled') return false;
@@ -1443,10 +1415,15 @@ export const OperationsLeads: React.FC = () => {
       o.current_stage === 'Order Confirmed' || o.current_stage === 'New Order Received'
     ).length;
     
-    const todaysEvents = operationsOrders.filter(o => {
-      if (!o.events || o.events.length === 0) return o.event_date === todayStr;
-      return o.events.some(e => e.event_date === todayStr);
-    }).length;
+    let todaysEvents = 0;
+    operationsOrders.forEach(o => {
+      const lead = leads.find(l => l.lead_id === o.lead_id);
+      if (lead && lead.events && lead.events.length > 0) {
+        todaysEvents += lead.events.filter((e: any) => e.event_date === todayStr).length;
+      } else {
+        if (o.event_date === todayStr) todaysEvents += 1;
+      }
+    });
 
     const scheduled = operationsOrders.filter(o => o.current_stage === 'Event Scheduled').length;
     
@@ -1464,7 +1441,7 @@ export const OperationsLeads: React.FC = () => {
       pendingAssignments,
       completed
     };
-  }, [operationsOrders, rawFootage, operations, staffAssignments]);
+  }, [operationsOrders, rawFootage, operations, staffAssignments, leads]);
 
   const availableGearOptions = useMemo(() => {
     if (!equipment) return [];
@@ -1864,7 +1841,7 @@ export const OperationsLeads: React.FC = () => {
                           actionItems.push({
                             label: 'View Details',
                             onClick: () => {
-                              setProjectDossierId(ord.order_id);
+                              startAssigning(ord);
                               setActiveMenuOrderId(null);
                             }
                           });
@@ -2358,9 +2335,11 @@ export const OperationsLeads: React.FC = () => {
                                                         return normType(sType) === normType(currentStaffType);
                                                       });
                                                       
+                                                      const allStaffInEvent = allocStaff.map((s: any) => s.staff_name).filter(Boolean);
+                                                      
                                                       const availableStaff = filteredStaff.filter(s => 
-                                                        s.name === assignedStaff.staff_name ||
-                                                        !assignedToRole.some((ast: any) => ast.staff_name === s.name)
+                                                        s.name === assignedStaff.staff_name || 
+                                                        !allStaffInEvent.includes(s.name)
                                                       );
                                                       
                                                       if (availableStaff.length === 0) {
@@ -3578,7 +3557,18 @@ export const OperationsLeads: React.FC = () => {
 
                 {/* Assigned Team */}
                 <div>
-                  <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Assigned Team</h4>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Assigned Team</h4>
+                    <button
+                      onClick={() => {
+                        setProjectDossierId(null);
+                        startAssigning(ord);
+                      }}
+                      className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-lg text-[10px] font-bold cursor-pointer transition-colors flex items-center gap-1.5"
+                    >
+                      ✏️ Edit Assignment
+                    </button>
+                  </div>
                   <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50">
                      <div className="mb-4 pb-4 border-b border-zinc-800/50">
                         <span className="block text-[10px] text-zinc-500 font-mono mb-2 uppercase tracking-wider">Team Member Included</span>

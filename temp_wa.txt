@@ -1,0 +1,141 @@
+    
+    return staffDetailsList;
+  };
+
+  // Helper to generate personalized WhatsApp message for a staff member
+  const generateWhatsAppMessageForStaff = (ord: Order, staffName: string, modalEventAllocations?: any, modalLead?: any, finalAssignments?: any[]) => {
+    const lead = modalLead || leads.find(l => l.lead_id === ord.lead_id);
+    
+    const clientName = ord.customer_name;
+    const clientContact = ord.mobile || (lead ? lead.mobile : 'N/A');
+    const customerAddress = lead?.client_residence_address || lead?.address || 'N/A';
+    
+    // Fallbacks for maps link
+    const mapsLink = lead?.google_maps_link || ord.google_maps_link || '';
+
+    let text = `Hi ${staffName},\n\n`;
+    text += `You have been assigned to the following event.\n\n`;
+    text += `Customer: ${clientName}\n`;
+    text += `Customer Phone: ${clientContact}\n\n`;
+
+    let assignedEvents: any[] = [];
+    if (modalEventAllocations && lead?.events && lead.events.length > 0) {
+       Object.keys(modalEventAllocations).forEach(evId => {
+         const alloc = modalEventAllocations[evId];
+         if (alloc.staff && alloc.staff.some((s: any) => s.staff_name === staffName)) {
+            const matchedEv = lead.events.find((e: any) => e.id === evId);
+            if (matchedEv) {
+               const roles = alloc.staff.filter((s: any) => s.staff_name === staffName).map((s: any) => s.staff_role);
+               assignedEvents.push({ ...matchedEv, alloc, roles });
+            }
+         }
+       });
+    } else if (lead?.events && lead.events.length > 0) {
+       assignedEvents = lead.events.filter((ev: any) => {
+         const names = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
+         return names.includes(staffName.toLowerCase());
+       }).map((ev: any) => {
+         let fallbackRoles = ['Crew'];
+         const myAssignments = staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id && sa.staff_name === staffName) : [];
+         if (myAssignments.length > 0) {
+            fallbackRoles = Array.from(new Set(myAssignments.map(sa => sa.staff_role)));
+         } else {
+             const history = leadStaffAssignmentHistory?.filter((h: any) => h.order_id === ord.order_id && h.assigned_staff === staffName);
+             if (history && history.length > 0) {
+                 fallbackRoles = Array.from(new Set(history.map((h: any) => h.assigned_role || h.assigned_roles)));
+             }
+         }
+         return { ...ev, roles: fallbackRoles };
+        });
+    }
+
+    if (assignedEvents.length === 0) {
+       const eventName = ord.custom_event_name || lead?.custom_event_name || ord.event_type || 'N/A';
+       const eventDate = ord.event_date || 'N/A';
+       const location = lead?.event_location || ord.event_location || 'N/A';
+       const locOutput = mapsLink ? `${location}\n${mapsLink}` : location;
+       const reportingDate = ord.Reporting_date || lead?.Reporting_date || ord.event_date || 'N/A';
+       const reportingTime = ord.reporting_time || lead?.reporting_time || '8:00 AM';
+       
+       const guestPax = lead?.total_pax || 'N/A';
+       const staffPax = lead?.Staff_pax || 'N/A';
+
+       let assignedRoles = ['Crew'];
+       if (finalAssignments) {
+          assignedRoles = Array.from(new Set(finalAssignments.filter(a => a.staff_name === staffName).map(a => a.staff_role)));
+       } else {
+          const myAssignments = staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id && sa.staff_name === staffName) : [];
+          if (myAssignments.length > 0) {
+             assignedRoles = Array.from(new Set(myAssignments.map(sa => sa.staff_role)));
+          } else {
+             const history = leadStaffAssignmentHistory?.filter((h: any) => h.order_id === ord.order_id && h.assigned_staff === staffName);
+             if (history && history.length > 0) {
+                 assignedRoles = Array.from(new Set(history.map((h: any) => h.assigned_role || h.assigned_roles)));
+             }
+          }
+       }
+
+       text += `Event: ${eventName}\n`;
+       text += `Event Date: ${eventDate}\n\n`;
+       text += `Reporting Date: ${reportingDate}\n`;
+       text += `Reporting Time: ${reportingTime}\n\n`;
+       text += `Customer Address: ${customerAddress}\n`;
+       text += `Event Location: ${locOutput}\n\n`;
+       text += `Guest Pax: ${guestPax}\n`;
+       text += `Staff Pax: ${staffPax}\n\n`;
+       text += `Your Assigned Task:\n`;
+       text += `${assignedRoles.join(', ')}\n`;
+    } else {
+       assignedEvents.forEach((ev, index) => {
+          const eventName = ev.event_name || (ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A'));
+          const eventDate = ev.event_date || 'N/A';
+          const reportingDate = ev.reporting_date || ev.alloc?.reporting_date || ord.Reporting_date || lead?.Reporting_date || ev.event_date || 'N/A';
+          const reportingTime = ev.reporting_time || ev.alloc?.reporting_time || ord.reporting_time || lead?.reporting_time || '8:00 AM';
+          
+          const evMapsLink = ev.google_maps_link || mapsLink;
+          const location = ev.event_location || lead?.event_location || 'N/A';
+          const locOutput = evMapsLink ? `${location}\n${evMapsLink}` : location;
+
+          const guestPax = ev.guest_pax || lead?.total_pax || 'N/A';
+          const staffPax = ev.staff_pax || lead?.Staff_pax || 'N/A';
+          
+          let assignedRoles = ev.roles || ['Crew'];
+          assignedRoles = Array.from(new Set(assignedRoles));
+
+          if (index > 0) text += `\n---\n\n`;
+          text += `Event: ${eventName}\n`;
+          text += `Event Date: ${eventDate}\n\n`;
+          text += `Reporting Date: ${reportingDate}\n`;
+          text += `Reporting Time: ${reportingTime}\n\n`;
+          text += `Customer Address: ${customerAddress}\n`;
+          text += `Event Location: ${locOutput}\n\n`;
+          text += `Guest Pax: ${guestPax}\n`;
+          text += `Staff Pax: ${staffPax}\n\n`;
+          text += `Your Assigned Task:\n`;
+          text += `${assignedRoles.join(', ')}\n`;
+       });
+    }
+
+    text += `\nPlease check the event details and be available at the reporting time.`;
+    return text;
+  };
+
+  // Filter orders to show confirmed ones for Operations
+  const allowedStages = ['Order Confirmed', 'New Order Received', 'Operations Assigned', 'Event Scheduled', 'Staff Assigned', 'Event Completed', 'Raw Footage Received', 'Event Cancelled'];
+  const operationsOrders = orders.filter(o => {
+    return allowedStages.includes(o.current_stage);
+  });
+
+  // Unique staff lists for individual filters
+  const photographersList = useMemo(() => {
+    return staff ? Array.from(new Set(staff.filter(s => s.role.toLowerCase().includes('photo')).map(s => s.name))) : [];
+  }, [staff]);
+
+  const videographersList = useMemo(() => {
+    return staff ? Array.from(new Set(staff.filter(s => s.role.toLowerCase().includes('video')).map(s => s.name))) : [];
+  }, [staff]);
+
+  const droneOperatorsList = useMemo(() => {
+    return staff ? Array.from(new Set(staff.filter(s => s.role.toLowerCase().includes('drone') || s.role.toLowerCase().includes('aerial')).map(s => s.name))) : [];
+  }, [staff]);
+
