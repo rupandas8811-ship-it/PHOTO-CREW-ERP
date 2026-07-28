@@ -1770,7 +1770,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                     <th className="p-3.5">Event Name</th>
                     <th className="p-3.5">Event Date</th>
                     <th className="p-3.5">Event Time</th>
-                    <th className="p-3.5">Current Stage</th>
+                    {/* Current Stage hidden as requested */}
+                    {false && <th className="p-3.5">Current Stage</th>}
                     <th className="p-3.5">Current Status</th>
                     <th className="p-3.5 text-right pr-5 w-[120px] min-w-[120px]">Action</th>
                   </tr>
@@ -1790,7 +1791,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                     if (leadsToShow.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={10} className="p-8 text-center text-zinc-500 font-mono">No specific lead data found.</td>
+                          <td colSpan={9} className="p-8 text-center text-zinc-500 font-mono">No specific lead data found.</td>
                         </tr>
                       );
                     }
@@ -1829,6 +1830,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                               <div key={idx} className="py-0.5">{ev.event_start_time || '—'}</div>
                             )) : '—'}
                           </td>
+                          {/* Current Stage td hidden as requested */}
+                          {false && (
                           <td className="p-3.5">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
                               currentStage === 'Sales' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
@@ -1839,6 +1842,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                               {currentStage}
                             </span>
                           </td>
+                          )}
                           <td className="p-3.5">
                              <span className="font-bold text-[11px] text-zinc-300">{leadStatus}</span>
                           </td>

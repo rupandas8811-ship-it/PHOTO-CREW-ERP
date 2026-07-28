@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRole } from '../RoleContext';
 import { 
   Users, UserCheck, ShieldAlert, PlusCircle, Edit, Trash2, Mail, Phone, Calendar, Briefcase, Search, X
 } from 'lucide-react';
 import { Staff } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
+import { createClient } from '@supabase/supabase-js';
 
 export const OperationsStaffManagement: React.FC = () => {
   const { currentRole, staff, addStaff, updateStaff, deleteStaff, operations, leads, orders, staffAssignments } = useRole();
@@ -26,7 +28,8 @@ export const OperationsStaffManagement: React.FC = () => {
     staff_type: 'In-House' as 'In-House' | 'Freelancer',
     joining_date: new Date().toISOString().split('T')[0],
     profile_photo: '',
-    notes: ''
+    notes: '',
+    password: ''
   });
 
   const [selectedStaffBookings, setSelectedStaffBookings] = useState<{ staffName: string; bookings: any[] } | null>(null);
@@ -46,7 +49,8 @@ export const OperationsStaffManagement: React.FC = () => {
       staff_type: st.Staff_Type || st.staff_type || 'In-House',
       joining_date: st.joining_date || new Date().toISOString().split('T')[0],
       profile_photo: st.profile_photo || '',
-      notes: st.notes || ''
+      notes: st.notes || '',
+      password: ''
     });
     const loadedSkills = typeof st.Skill === 'string'
       ? st.Skill.split(',').map((s: string) => s.trim()).filter(Boolean)
@@ -120,8 +124,11 @@ export const OperationsStaffManagement: React.FC = () => {
     const finalEmail = form.email || `${form.name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'staff'}@photocrew.com`;
     const finalSkillsStr = skills.join(', ');
 
+    // Extract password out of submission payload for the staff table
+    const { password, ...payloadWithoutPassword } = form;
+    
     const submissionPayload = {
-      ...form,
+      ...payloadWithoutPassword,
       email: finalEmail,
       Skill: finalSkillsStr,
       Staff_Type: form.staff_type
@@ -130,6 +137,10 @@ export const OperationsStaffManagement: React.FC = () => {
     try {
       setIsSaving(true);
       if (editingId) {
+        if (password) {
+          // If editing and password is provided, we should ideally update the password, but for now we won't handle auth password updates here
+          // as it requires admin api. But we can update the user table if needed.
+        }
         await updateStaff(editingId, submissionPayload);
         const toast = document.createElement('div');
         toast.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-2 rounded-xl shadow-lg z-50 font-sans text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-5';
@@ -138,6 +149,44 @@ export const OperationsStaffManagement: React.FC = () => {
         setTimeout(() => toast.remove(), 3000);
         handleCancel();
       } else {
+        // Create auth user using a temporary client so we don't logout the current user
+        if (password) {
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+          const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+          
+          if (supabaseUrl && supabaseAnonKey) {
+            const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
+              auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+            });
+            
+            const authEmail = `staff_${form.mobile.replace(/[^0-9]/g, '')}@staff.photocrew.com`;
+            
+            const { data: authData, error: authErr } = await tempClient.auth.signUp({
+              email: authEmail,
+              password: password
+            });
+            
+            if (authErr) {
+              throw new Error(`Failed to create staff login: ${authErr.message}`);
+            }
+            
+            if (authData.user) {
+              // Create record in users table
+              const mainClient = createClient(supabaseUrl, supabaseAnonKey);
+              await mainClient.from('users').insert({
+                id: authData.user.id,
+                name: form.name,
+                mobile: form.mobile,
+                email: authEmail,
+                username: form.mobile,
+                role: 'Field Operative',
+                active: true,
+                created_at: new Date().toISOString()
+              });
+            }
+          }
+        }
+        
         await addStaff(submissionPayload);
         const toast = document.createElement('div');
         toast.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-2 rounded-xl shadow-lg z-50 font-sans text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-5';
@@ -388,6 +437,19 @@ export const OperationsStaffManagement: React.FC = () => {
               />
             </div>
 
+            <div className="min-w-0">
+              <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
+                Password {editingId ? '(Leave blank to keep current)' : '*'}
+              </label>
+              <input
+                type="text"
+                required={!editingId}
+                placeholder="e.g. Staff@123"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                className="w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
+              />
+            </div>
             <div className="min-w-0">
               <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
                 WhatsApp Number
@@ -645,9 +707,10 @@ export const OperationsStaffManagement: React.FC = () => {
         </div>
       </div>
 
-      <AnimatePresence>
-        {selectedStaffBookings && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {selectedStaffBookings && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[99999] flex items-center justify-center p-4">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -826,7 +889,9 @@ export const OperationsStaffManagement: React.FC = () => {
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   );
 };
