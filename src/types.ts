@@ -2,7 +2,7 @@
  * Photo Crew ERP Type Declarations
  */
 
-export type UserRole = 'Business Owner' | 'Sales Team' | 'Operations Team' | 'Production Team' | 'Operation Staff' | 'Production Staff';
+export type UserRole = 'Business Owner' | 'Sales Team' | 'Operations Team' | 'Production Team' | 'Operation Staff';
 
 
 export const ACTIVE_STAGE_GROUPS = [
@@ -98,8 +98,7 @@ export const ROLE_DEPARTMENT_MAP: Record<UserRole, Department[]> = {
   'Sales Team': ['Sales'],
   'Operations Team': ['Operations'],
   'Production Team': ['Production', 'Editor', 'Dispatch'],
-  'Operation Staff': [],
-  'Production Staff': []
+  'Operation Staff': []
 };
 
 export type CurrentStage =
@@ -134,7 +133,22 @@ export type CurrentStage =
   | 'Event Cancelled'
   | 'Closed';
 
-export type EditingStatus = 'Raw Footage Received' | 'Editor Assigned' | 'Editing Started' | 'Editing In Progress' | 'Internal QC Review' | 'Client Review Sent' | 'Revision Required' | 'Revision In Progress' | 'Final Approval' | 'Project Delivered' | 'Editing Complete' | 'Client Review' | 'Project Completed' | 'Completed';
+export type EditingStatus =
+  | 'Raw Footage Received'
+  | 'Editor Assigned'
+  | 'Editing Started'
+  | 'Editing In Progress'
+  | 'Internal QC Review'
+  | 'Client Review Sent'
+  | 'Revision Required'
+  | 'Revision In Progress'
+  | 'Final Approval'
+  | 'Project Delivered'
+  | 'Project Closed'
+  | 'Completed'
+  | 'Project Completed'
+  | 'Project Cancelled'
+  | 'Cancelled';
 
 export type PaymentStatus = 'Pending' | 'Partially Paid' | 'Fully Paid';
 
@@ -468,7 +482,8 @@ export interface EditorAssignment {
   speciality: string;
   assigned_date: string;
   target_finish_date: string;
-  status: 'Assigned' | 'Editing Started' | 'Client Review' | 'Editing Complete' | 'In Progress' | 'Review Pending' | 'Revision' | 'Completed' | 'Project Completed';
+  status: 'Assigned' | 'Editing Started' | 'In Progress' | 'Review Pending' | 'Revision' | 'Completed'
+  | 'Project Completed';
   created_at?: string;
 }
 

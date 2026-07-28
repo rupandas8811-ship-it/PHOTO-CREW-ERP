@@ -2552,7 +2552,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: msg };
       }
 
-      const validRoles = ['Business Owner', 'Sales Team', 'Operations Team', 'Production Team', 'Operation Staff', 'Production Staff'];
+      const validRoles = ['Business Owner', 'Sales Team', 'Operations Team', 'Production Team', 'Operation Staff'];
       if (!validRoles.includes(dbUser.role)) {
         const msg = 'You do not have permission to access this page.';
         logAttempt('Failed', msg, dbUser.id);
@@ -5340,15 +5340,15 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const prodId = assignment.production_id;
           const allTasks = currentAssignments.filter(t => t.production_id === prodId);
           
-          const completedTasks = allTasks.filter(t => t.status === 'Completed' || t.status === 'Editing Complete').length;
+          const completedTasks = allTasks.filter(t => t.status === 'Completed').length;
           const totalTasks = allTasks.length;
           const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
           
           let nextEditingStatus: EditingStatus = 'Editing Started';
           if (completedTasks === totalTasks && totalTasks > 0) {
-            nextEditingStatus = 'Editing Complete';
-          } else if (status === 'Review Pending' || status === 'Client Review') {
-            nextEditingStatus = 'Client Review';
+            nextEditingStatus = 'Internal QC Review';
+          } else if (status === 'Review Pending') {
+            nextEditingStatus = 'Internal QC Review';
           } else if (status === 'Revision') {
             nextEditingStatus = 'Revision Required';
           } else if (status === 'In Progress' || status === 'Editing Started') {

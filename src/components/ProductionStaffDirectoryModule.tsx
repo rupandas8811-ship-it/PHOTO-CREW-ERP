@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { useRole } from './RoleContext';
-import { supabaseClient } from '../supabaseClient';
 import { Staff, Production } from '../types';
 import { 
   Users, UserPlus, Phone, Mail, Award, Clock, FileText, ToggleLeft, ToggleRight, Trash2, ShieldAlert,
@@ -38,7 +37,6 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
   // Staff Form state fields
   const [formName, setFormName] = useState('');
   const [formMobile, setFormMobile] = useState('');
-  const [formPassword, setFormPassword] = useState('');
   const [formWhatsapp, setFormWhatsapp] = useState('');
   const [formEmail, setFormEmail] = useState('');
   const [formEmployeeId, setFormEmployeeId] = useState('');
@@ -62,8 +60,6 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     setEditingStaff(null);
     setFormName('');
     setFormMobile('');
-    setFormPassword('');
-    setFormPassword('');
     setFormWhatsapp('');
     setFormEmail('');
     
@@ -139,35 +135,6 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     try {
       if (editingStaff) {
         // Edit Mode
-        // Look up corresponding user in users table by email
-        const userRes = await fetch('/api/db/select', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ table: 'users', select: 'id', matchColumn: 'email', matchValue: editingStaff.email })
-        });
-        const userData = await userRes.json();
-        const userId = userData.data?.[0]?.id;
-        
-        if (userId) {
-            const updateAuthRes = await fetch('/api/auth/update-user', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                 auth_id: userId, 
-                 email: formEmail.trim(),
-                 password: formPassword.trim() || undefined,
-                 name: formName.trim(),
-                 role: 'production staff',
-                 active: formStatus === 'Active'
-              })
-            });
-            const updateAuthData = await updateAuthRes.json();
-            if (!updateAuthData.success) {
-                console.error("Auth update error:", updateAuthData.error);
-                // Non-fatal, just continue mapping staff record
-            }
-        }
-        
         const res = await updateStaff(editingStaff.staff_id, {
           ...payload,
           ...{ employee_id: formEmployeeId.trim(), city: formCity.trim() || 'N/A' } as any
@@ -175,30 +142,6 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
         showToast('success', '✅ Production staff saved successfully.');
       } else {
         // New Staff Mode
-        // 1. Create auth user
-        if (formPassword.trim()) {
-            const authRes = await fetch('/api/auth/create-user', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                email: formEmail.trim(),
-                password: formPassword.trim(),
-                name: formName.trim(),
-                role: 'production staff',
-                active: formStatus === 'Active'
-              })
-            });
-            
-            const authData = await authRes.json();
-            if (!authData.success) {
-               throw new Error(authData.error);
-            }
-        } else {
-            alert('Password is required for new staff to enable login.');
-            setIsSaving(false);
-            return;
-        }
-
         const res = await addStaff({
           ...payload,
           ...{ employee_id: formEmployeeId.trim(), city: formCity.trim() || 'N/A' } as any
