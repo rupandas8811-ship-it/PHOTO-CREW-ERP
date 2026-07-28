@@ -56,7 +56,7 @@ export const LoginScreen: React.FC = () => {
     setRealtimeTest('untested');
     setDiagnosticFailMsg('');
 
-    const url = import.meta.env.VITE_SUPABASE_URL || 'https://plrtavqnsbqopvqtwezb.supabase.co';
+    const url = import.meta.env.VITE_SUPABASE_URL || 'https://aqifyxsimhqayfjwzzwj.supabase.co';
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_Qdmf44q1ASJboY1_AZoOVQ_YfYrWvcB';
 
     try {
@@ -399,7 +399,7 @@ export const LoginScreen: React.FC = () => {
               {/* Field 1: Email Or Username */}
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-1.5 font-mono flex items-center justify-between">
-                  <span>OPERATIVE USERNAME OR EMAIL</span>
+                  <span>OPERATIVE USERNAME, EMAIL, OR MOBILE</span>
                   <span className="text-[9px] text-zinc-550 font-normal">REQUIRED</span>
                 </label>
                 <div className="relative">
@@ -407,7 +407,7 @@ export const LoginScreen: React.FC = () => {
                   <input
                     type="text"
                     required
-                    placeholder="Enter email or username index key..."
+                    placeholder="Enter mobile number, username, or email..."
                     value={emailOrUsername}
                     onChange={(e) => setEmailOrUsername(e.target.value)}
                     disabled={isLoading}

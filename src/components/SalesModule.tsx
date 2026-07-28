@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useRole, mapUserFieldsFromDb } from './RoleContext';
+import { useRole, mapUserFieldsFromDb, INITIAL_PACKAGES } from './RoleContext';
 import { supabaseClient } from '../supabaseClient';
 import { 
   Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye
@@ -4193,7 +4193,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const handlePackageChange = (packageId: string) => {
     setIsPackageSelectedAndSaved(true);
     setIsPackageDetailsSaved(true);
-    const pkg = packages.find((p) => String(p.package_id) === String(packageId));
+    const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
+    const pkg = availablePkgs.find((p) => String(p.package_id) === String(packageId));
     if (pkg) {
       setWizardLeadData((prev) => ({
         ...prev,
@@ -9817,21 +9818,39 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                            <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Select Package Option *</label>
                            <select
                              id="select_package_option"
-                             value={wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || ''}
+                             value={wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option || (selectedLead as any)?.selected_package_id || (leadPackages?.find(lp => lp.lead_id === selectedLead?.lead_id)?.package_id) || (quotations?.find(q => q.lead_id === selectedLead?.lead_id)?.package_id) || ''}
                              disabled={isLeadLocked}
                              onChange={(e) => handlePackageChange(e.target.value)}
                              className={`w-full bg-slate-955 border focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer ${
-                               !(wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id) || (wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id).trim() === ''
+                               !(wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option)
                                  ? 'border-rose-500/40 focus:border-rose-500 text-rose-200'
                                  : 'border-slate-800 focus:border-indigo-500 text-white'
                              }`}
                            >
                              <option value="">── Choose configuration package ──</option>
-                             {packages.filter(p => p.status === 'Active').map((pkg) => (
-                               <option key={pkg.package_id} value={pkg.package_id}>
-                                 {pkg.package_name} (₹{Number(pkg.price).toLocaleString('en-IN')})
-                               </option>
-                             ))}
+                             {(() => {
+                               const currentPkgId = wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option || (selectedLead as any)?.selected_package_id || (leadPackages?.find(lp => lp.lead_id === selectedLead?.lead_id)?.package_id) || (quotations?.find(q => q.lead_id === selectedLead?.lead_id)?.package_id) || '';
+                               const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
+                               const activePkgs = availablePkgs.filter(p => !p.status || p.status.toLowerCase() === 'active');
+                               if (currentPkgId && !activePkgs.some(p => String(p.package_id) === String(currentPkgId))) {
+                                 const matched = availablePkgs.find(p => String(p.package_id) === String(currentPkgId));
+                                 if (matched) {
+                                   activePkgs.unshift(matched);
+                                 } else {
+                                   activePkgs.unshift({
+                                     package_id: currentPkgId,
+                                     package_name: `Package ${currentPkgId} (Legacy)`,
+                                     price: wizardLeadData.package_cost || selectedLead?.Final_Quotation_Amount || 0,
+                                     status: 'Active'
+                                   } as any);
+                                 }
+                               }
+                               return activePkgs.map((pkg) => (
+                                 <option key={pkg.package_id} value={pkg.package_id}>
+                                   {pkg.package_name} (₹{Number(pkg.price).toLocaleString('en-IN')})
+                                 </option>
+                               ));
+                             })()}
                            </select>
                            {!(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option) && (
                              <p className="text-rose-450 font-bold text-xs mt-1 font-mono animate-pulse flex items-center gap-1.5">
@@ -9841,7 +9860,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                          </div>
  
                          {(() => {
-                           const selectedPkg = packages.find(p => String(p.package_id) === String(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option));
+                           const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
+                           const currentPkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option; let selectedPkg = availablePkgs.find(p => String(p.package_id) === String(currentPkgId)); if (!selectedPkg && currentPkgId) { selectedPkg = { package_id: currentPkgId, package_name: `Package ${currentPkgId} (Legacy)`, price: wizardLeadData.package_cost || 0, deliverables: wizardLeadData.deliverables || "", status: "Active" } as any; }
                            if (!selectedPkg) return null;
 
                           const selectedPkgId = selectedPkg.package_id;
