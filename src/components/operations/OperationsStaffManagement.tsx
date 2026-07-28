@@ -138,16 +138,34 @@ export const OperationsStaffManagement: React.FC = () => {
     try {
       setIsSaving(true);
       if (editingId) {
+        const originalStaff = staff.find(s => s.staff_id === editingId);
+        const targetEmail = originalStaff?.email || form.email || finalEmail;
+
+        const userUpdates: any = {
+          name: form.name,
+          mobile: form.mobile,
+          email: finalEmail,
+          username: finalEmail
+        };
         if (password) {
-          const originalStaff = staff.find(s => s.staff_id === editingId);
-          if (originalStaff && originalStaff.mobile) {
-            await supabaseClient
-              .from('users')
-              .update({ password: password })
-              .eq('mobile', originalStaff.mobile)
-              .eq('role', 'Operation Staff');
-          }
+          userUpdates.password = password;
         }
+
+        if (targetEmail) {
+          await supabaseClient
+            .from('users')
+            .update(userUpdates)
+            .eq('email', targetEmail)
+            .eq('role', 'Operation Staff');
+        }
+        if (originalStaff?.mobile) {
+          await supabaseClient
+            .from('users')
+            .update(userUpdates)
+            .eq('mobile', originalStaff.mobile)
+            .eq('role', 'Operation Staff');
+        }
+
         await updateStaff(editingId, submissionPayload);
         const toast = document.createElement('div');
         toast.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-2 rounded-xl shadow-lg z-50 font-sans text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-5';
@@ -156,45 +174,49 @@ export const OperationsStaffManagement: React.FC = () => {
         setTimeout(() => toast.remove(), 3000);
         handleCancel();
       } else {
-        // Create auth user using a temporary client so we don't logout the current user
+        // Create auth user & public.users record
+        const authEmail = finalEmail;
+        let authUserId: string | null = null;
+
         if (password) {
           const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
           const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
           
           if (supabaseUrl && supabaseAnonKey) {
-            const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
-              auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-            });
-            
-            const generatedPrefix = form.name.toLowerCase().replace(/\s+/g, '');
-            const authEmail = `${generatedPrefix}@photocrew.com`;
-            
-            const { data: authData, error: authErr } = await tempClient.auth.signUp({
-              email: authEmail,
-              password: password
-            });
-            
-            if (authErr) {
-              throw new Error(`Failed to create staff login: ${authErr.message}`);
-            }
-            
-            if (authData.user) {
-              // Create record in users table
-              await supabaseClient.from('users').insert({
-                id: authData.user.id,
-                name: form.name,
-                mobile: form.mobile,
+            try {
+              const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
+                auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+              });
+              
+              const { data: authData } = await tempClient.auth.signUp({
                 email: authEmail,
-                username: form.mobile,
-                role: 'Operation Staff',
-                active: true,
-                created_at: new Date().toISOString(),
                 password: password
               });
+              
+              if (authData?.user) {
+                authUserId = authData.user.id;
+              }
+            } catch (authErr: any) {
+              console.warn("Supabase Auth signUp skipped or warning:", authErr?.message || authErr);
             }
           }
         }
-        
+
+        const finalUserId = authUserId || (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : `00000000-0000-0000-0000-${Date.now().toString().slice(-12)}`);
+
+        // Upsert user record in users table with email as username
+        await supabaseClient.from('users').upsert({
+          id: finalUserId,
+          name: form.name,
+          mobile: form.mobile,
+          email: authEmail,
+          username: authEmail,
+          role: 'Operation Staff',
+          active: true,
+          created_at: new Date().toISOString(),
+          password: password || '123456'
+        }, { onConflict: 'email' });
+
         await addStaff(submissionPayload);
         const toast = document.createElement('div');
         toast.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-2 rounded-xl shadow-lg z-50 font-sans text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-5';

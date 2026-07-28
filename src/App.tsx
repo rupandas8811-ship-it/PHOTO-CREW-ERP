@@ -113,6 +113,10 @@ const MainAppContent: React.FC = () => {
       return ['production', 'staff_management', 'notifications'].includes(tab);
     }
 
+    if (currentRole === 'Operation Staff') {
+      return ['staff_dashboard', 'notifications'].includes(tab);
+    }
+
     return false;
   };
 
