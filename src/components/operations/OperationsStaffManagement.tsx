@@ -7,6 +7,7 @@ import {
 import { Staff } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { createClient } from '@supabase/supabase-js';
+import { supabaseClient } from '../../supabaseClient';
 
 export const OperationsStaffManagement: React.FC = () => {
   const { currentRole, staff, addStaff, updateStaff, deleteStaff, operations, leads, orders, staffAssignments } = useRole();
@@ -138,8 +139,14 @@ export const OperationsStaffManagement: React.FC = () => {
       setIsSaving(true);
       if (editingId) {
         if (password) {
-          // If editing and password is provided, we should ideally update the password, but for now we won't handle auth password updates here
-          // as it requires admin api. But we can update the user table if needed.
+          const originalStaff = staff.find(s => s.staff_id === editingId);
+          if (originalStaff && originalStaff.mobile) {
+            await supabaseClient
+              .from('users')
+              .update({ password: password })
+              .eq('mobile', originalStaff.mobile)
+              .eq('role', 'Operation Staff');
+          }
         }
         await updateStaff(editingId, submissionPayload);
         const toast = document.createElement('div');
@@ -173,8 +180,7 @@ export const OperationsStaffManagement: React.FC = () => {
             
             if (authData.user) {
               // Create record in users table
-              const mainClient = createClient(supabaseUrl, supabaseAnonKey);
-              await mainClient.from('users').insert({
+              await supabaseClient.from('users').insert({
                 id: authData.user.id,
                 name: form.name,
                 mobile: form.mobile,
@@ -182,7 +188,8 @@ export const OperationsStaffManagement: React.FC = () => {
                 username: form.mobile,
                 role: 'Operation Staff',
                 active: true,
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
+                password: password
               });
             }
           }
