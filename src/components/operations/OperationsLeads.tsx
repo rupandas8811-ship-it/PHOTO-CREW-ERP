@@ -450,55 +450,17 @@ export const OperationsLeads: React.FC = () => {
   interface AssignedStaffDetails {
     staff_name: string;
     staff_role: string;
-    assigned_task: string;
     staff_type: 'In-House' | 'Freelancer';
     mobile: string;
     event_name: string;
-    event_id?: string;
     event_date: string;
     reporting_date: string;
     reporting_time: string;
     status: 'Available' | 'Busy';
-    staff_status: string;
     google_maps_link?: string;
     assigned_equipment?: string[];
     event_time?: string;
   }
-
-  const getStaffTaskStatus = (orderId: string, eventId: string | undefined, eventIndex: number, staffName: string, ord: Order): string => {
-    if (!staffName) return 'Pending';
-    const nameLower = staffName.trim().toLowerCase();
-    
-    try {
-      const saved = localStorage.getItem('staff_event_statuses_v2');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const keysToTry = [
-          `${orderId}_${eventId || 'ev'}_${nameLower}`,
-          `${orderId}_${eventIndex}_${nameLower}`,
-          `${orderId}_gen_${nameLower}`,
-          `${orderId}_${nameLower}`
-        ];
-        for (const k of keysToTry) {
-          if (parsed[k]) return parsed[k];
-        }
-      }
-    } catch (e) {
-      console.error('Error reading staff_event_statuses_v2:', e);
-    }
-
-    const sa = staffAssignments?.find(s => s.order_id === orderId && s.staff_name?.toLowerCase() === nameLower);
-    if (sa && sa.assignment_status && !['Assigned', 'Unassigned'].includes(sa.assignment_status)) {
-      return sa.assignment_status;
-    }
-
-    const op = getOpDetails(orderId);
-    if (op?.event_status && !['Assigned', 'Event Scheduled', 'Operations Assigned'].includes(op.event_status)) {
-      return op.event_status;
-    }
-
-    return 'Pending';
-  };
 
   const isStaffBusyOnDate = (staffName: string, targetDate: string, currentOrderId?: string) => {
     if (!targetDate || !staffName) return false;
@@ -544,61 +506,53 @@ export const OperationsLeads: React.FC = () => {
   };
 
   const getAssignedStaffDetailsForOrder = (ord: Order): AssignedStaffDetails[] => {
-    const lead = leads.find(l => l.lead_id === ord.lead_id);
-    const hasExistingAssignments = staffAssignments?.some(sa => sa.order_id === ord.order_id);
-    const hasEventsAssignments = lead?.events?.some((ev: any) => ev.assigned_staff_names && ev.assigned_staff_names.trim());
-
-    if (!hasExistingAssignments && !hasEventsAssignments) {
+    const hasExisting = staffAssignments?.some(sa => sa.order_id === ord.order_id);
+    if (!hasExisting) {
       return [];
     }
-
+    const lead = leads.find(l => l.lead_id === ord.lead_id);
     const staffDetailsList: AssignedStaffDetails[] = [];
+    
+    // Find order level op details for default equipment / times
     const op = getOpDetails(ord.order_id);
-
+    
     if (lead?.events && lead.events.length > 0) {
-      lead.events.forEach((ev: any, evIdx: number) => {
-        if (ev.assigned_staff_names && ev.assigned_staff_names.trim()) {
+      lead.events.forEach(ev => {
+        if (ev.assigned_staff_names) {
           const names = ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean);
           
           let assignedEquipment: string[] = [];
           let staffEquipments: string[][] = [];
           let mobilesRaw = ev.assigned_staff_mobiles || '';
           if (mobilesRaw.includes(' || EQUIPMENT: JSON:')) {
-            const parts = mobilesRaw.split(' || EQUIPMENT: JSON:');
-            try {
-              staffEquipments = JSON.parse(parts[1]);
-            } catch(e) {}
-            assignedEquipment = Array.from(new Set(staffEquipments.flat()));
+             const parts = mobilesRaw.split(' || EQUIPMENT: JSON:');
+             try {
+                staffEquipments = JSON.parse(parts[1]);
+             } catch(e) {}
+             assignedEquipment = Array.from(new Set(staffEquipments.flat()));
           } else if (mobilesRaw.includes(' || EQUIPMENT: ')) {
             const parts = mobilesRaw.split(' || EQUIPMENT: ');
             assignedEquipment = parts[1] ? parts[1].split(',').map((s: string) => s.trim()).filter(Boolean) : [];
           }
-
-          const cleanMobilesRaw = mobilesRaw.split(' || EQUIPMENT:')[0] || '';
-          const mobilesList = cleanMobilesRaw.split(',').map((m: string) => m.trim()).filter(Boolean);
-
-          names.forEach((name, nameIdx) => {
-            const st = staff?.find(s => s.name?.toLowerCase() === name.toLowerCase());
-            const saMatch = staffAssignments?.find(sa => sa.order_id === ord.order_id && sa.staff_name?.toLowerCase() === name.toLowerCase());
-            const historyMatch = leadStaffAssignmentHistory?.find(h => (h.order_id === ord.order_id || h.lead_id === ord.lead_id) && h.assigned_staff?.toLowerCase().includes(name.toLowerCase()));
-
-            const assignedTask = saMatch?.staff_role || historyMatch?.assigned_role || st?.role || 'Staff';
-            const mobileNum = mobilesList[nameIdx] || st?.mobile || '';
-            const staffTaskStatus = getStaffTaskStatus(ord.order_id, ev.id, evIdx, name, ord);
-
+          
+          names.forEach(name => {
+            const st = staff?.find(s => s.name === name);
+            
+            // Determine their assigned role
+            // Look up in staff_assignments
+            const saMatch = staffAssignments?.find(sa => sa.order_id === ord.order_id && sa.staff_name === name);
+            const assignedRole = saMatch?.staff_role || st?.role || 'Staff';
+            
             staffDetailsList.push({
               staff_name: name,
-              staff_role: assignedTask,
-              assigned_task: assignedTask,
+              staff_role: assignedRole,
               staff_type: st?.staff_type || 'In-House',
-              mobile: mobileNum,
+              mobile: st?.mobile || '',
               event_name: ev.event_name || ord.event_type || 'Event',
-              event_id: ev.id,
               event_date: ev.event_date || ord.event_date || '',
               reporting_date: ev.reporting_date || lead.Reporting_date || ev.event_date || '',
               reporting_time: ev.reporting_time || ord.reporting_time || op?.reporting_time || '',
               status: isStaffBusyOnDate(name, ev.event_date || ord.event_date || '', ord.order_id) ? 'Busy' : 'Available',
-              staff_status: staffTaskStatus,
               google_maps_link: ev.google_maps_link || lead.google_maps_link || '',
               assigned_equipment: assignedEquipment,
               event_time: ev.event_start_time || ord.event_time || ''
@@ -607,19 +561,21 @@ export const OperationsLeads: React.FC = () => {
         }
       });
     } else {
+      // Treat order/lead as a single event
+      // Find all assigned staff from staffAssignments
       const orderAssignments = staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id) : [];
+      
       if (orderAssignments.length > 0) {
-        orderAssignments.forEach((sa, saIdx) => {
+        orderAssignments.forEach(sa => {
           const name = sa.staff_name;
-          const st = staff?.find(s => s.name?.toLowerCase() === name.toLowerCase());
+          const st = staff?.find(s => s.name === name);
+          
+          // Find assigned equipment from op
           const assignedEquipment = op?.equipment_kit ? op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
-          const assignedTask = sa.staff_role || st?.role || 'Staff';
-          const staffTaskStatus = getStaffTaskStatus(ord.order_id, undefined, saIdx, name, ord);
-
+          
           staffDetailsList.push({
             staff_name: name,
-            staff_role: assignedTask,
-            assigned_task: assignedTask,
+            staff_role: sa.staff_role || st?.role || 'Staff',
             staff_type: st?.staff_type || 'In-House',
             mobile: st?.mobile || '',
             event_name: ord.event_type || 'Main Event',
@@ -627,7 +583,6 @@ export const OperationsLeads: React.FC = () => {
             reporting_date: ord.Reporting_date || lead?.Reporting_date || ord.event_date || '',
             reporting_time: ord.reporting_time || op?.reporting_time || '',
             status: isStaffBusyOnDate(name, ord.event_date || '', ord.order_id) ? 'Busy' : 'Available',
-            staff_status: staffTaskStatus,
             google_maps_link: lead?.google_maps_link || '',
             assigned_equipment: assignedEquipment,
             event_time: ord.event_time || ''
@@ -635,83 +590,9 @@ export const OperationsLeads: React.FC = () => {
         });
       }
     }
-
+    
     return staffDetailsList;
   };
-
-  const checkAndUpdateAllOrdersStage = async () => {
-    if (!orders || orders.length === 0) return;
-
-    for (const ord of orders) {
-      const staffDetails = getAssignedStaffDetailsForOrder(ord);
-      if (staffDetails.length === 0) continue;
-
-      const lead = leads.find(l => l.lead_id === ord.lead_id);
-      const currentStage = lead ? getLeadCurrentStatus(lead) : (ord.current_stage || 'Operations Assigned');
-
-      const completedOrLaterStages = [
-        'Event Completed',
-        'Raw Footage Received',
-        'Editor Assigned',
-        'Editing Started',
-        'Editing In Progress',
-        'Internal QC Review',
-        'Client Review Sent',
-        'Revision Required',
-        'Revision In Progress',
-        'Final Approval',
-        'Project Delivered',
-        'Project Closed',
-        'Customer Review',
-        'Approved'
-      ];
-      if (completedOrLaterStages.includes(currentStage)) continue;
-
-      const normalizedStatuses = staffDetails.map(sd => {
-        const s = (sd.staff_status || '').toLowerCase();
-        if (s.includes('complete') || s === 'completed') return 'Completed';
-        if (s.includes('start') || s.includes('progress') || s.includes('started')) return 'In Progress';
-        return 'Pending';
-      });
-
-      const allCompleted = normalizedStatuses.length > 0 && normalizedStatuses.every(s => s === 'Completed');
-      const allStartedOrCompleted = normalizedStatuses.length > 0 && normalizedStatuses.every(s => s === 'In Progress' || s === 'Completed');
-
-      if (allCompleted) {
-        if (currentStage !== 'Event Completed') {
-          try {
-            await markEventCompleted(ord.order_id, '');
-          } catch (err) {
-            console.error(`Auto-stage error for ${ord.order_id}:`, err);
-          }
-        }
-      } else if (allStartedOrCompleted) {
-        if (['Operations Assigned', 'Staff Assigned', 'Order Confirmed'].includes(currentStage)) {
-          try {
-            await updateOrderStage(ord.order_id, 'Event Scheduled');
-          } catch (err) {
-            console.error(`Auto-stage error for ${ord.order_id}:`, err);
-          }
-        }
-      }
-    }
-  };
-
-  useEffect(() => {
-    checkAndUpdateAllOrdersStage();
-
-    const handleStatusChange = () => {
-      checkAndUpdateAllOrdersStage();
-    };
-
-    window.addEventListener('staff_status_updated', handleStatusChange);
-    window.addEventListener('storage', handleStatusChange);
-
-    return () => {
-      window.removeEventListener('staff_status_updated', handleStatusChange);
-      window.removeEventListener('storage', handleStatusChange);
-    };
-  }, [orders, leads, staffAssignments, operations]);
 
   // Helper to generate personalized WhatsApp message for a staff member
   const generateWhatsAppMessageForStaff = (ord: Order, staffName: string, modalEventAllocations?: any, modalLead?: any, finalAssignments?: any[]) => {
@@ -1093,7 +974,48 @@ export const OperationsLeads: React.FC = () => {
         const includedRoles = eventRoles?.length > 0 ? eventRoles : [];
 
         const hasExisting = staffAssignments?.some(sa => sa.order_id === order.order_id);
-        const existingNames = (hasExisting && ev.assigned_staff_names) ? ev.assigned_staff_names.split(',').map((n: string) => n.trim()) : [];
+        if (hasExisting && ev.assigned_staff_names) {
+          const names = ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean);
+          names.forEach((name: string, i: number) => {
+            const st = staff?.find(s => s.name === name);
+            const saMatch = staffAssignments?.find(sa => sa.order_id === order.order_id && sa.staff_name === name);
+            const assignedRole = saMatch?.staff_role || includedRoles[i] || (st ? st.role : 'Staff');
+            const stType = saMatch?.staff_type || st?.staff_type || (st as any)?.Staff_Type || 'In-House';
+            const cleanType = (stType === 'Freelancer' || stType === 'freelancer') ? 'Freelancer' : 'In-House';
+            
+            if (st) {
+               staffList.push({
+                 staff_role: assignedRole,
+                 staff_id: st.staff_id,
+                 staff_name: st.name,
+                 mobile: st.mobile,
+                 staff_type: cleanType
+               });
+            } else {
+               staffList.push({
+                 staff_role: assignedRole,
+                 staff_id: 'MOCK-' + Math.random().toString(36).substr(2, 4),
+                 staff_name: name,
+                 mobile: '',
+                 staff_type: cleanType
+               });
+            }
+          });
+        }
+
+        // For any role in includedRoles that doesn't have an assignment yet, add at least 1 empty row
+        includedRoles.forEach((roleStr: string) => {
+          const roleStaff = staffList.filter((s: any) => s.staff_role === roleStr);
+          if (roleStaff.length === 0) {
+            staffList.push({
+              staff_role: roleStr,
+              staff_id: '',
+              staff_name: '',
+              mobile: '',
+              staff_type: 'In-House'
+            });
+          }
+        });
 
         let assignedEquipment: string[] = [];
         let mobilesRaw = ev.assigned_staff_mobiles || '';
@@ -1111,39 +1033,19 @@ export const OperationsLeads: React.FC = () => {
           assignedEquipment = parts[1] ? parts[1].split(',').map((s: string) => s.trim()).filter(Boolean) : [];
         }
         
-        const cleanMobilesRaw = mobilesRaw.split(' || EQUIPMENT:')[0] || '';
-        const mobilesList = cleanMobilesRaw.split(',').map((m: string) => m.trim());
-
-        // Construct exactly 1 dedicated slot per role in includedRoles using roleIdx
-        includedRoles.forEach((roleStr: string, roleIdx: number) => {
-          const assignedName = existingNames[roleIdx] || '';
-          if (assignedName) {
-            const st = staff?.find(s => s.name?.toLowerCase() === assignedName.toLowerCase());
-            const saMatch = staffAssignments?.find(sa => sa.order_id === order.order_id && sa.staff_name?.toLowerCase() === assignedName.toLowerCase());
-            const stType = saMatch?.staff_type || st?.staff_type || (st as any)?.Staff_Type || 'In-House';
-            const cleanType = (stType === 'Freelancer' || stType === 'freelancer') ? 'Freelancer' : 'In-House';
-
-            staffList.push({
-              role_index: roleIdx,
-              staff_role: roleStr,
-              staff_id: st?.staff_id || ('MOCK-' + Math.random().toString(36).substr(2, 4)),
-              staff_name: assignedName,
-              mobile: st?.mobile || mobilesList[roleIdx] || '',
-              staff_type: cleanType,
-              equipment: staffEquipments[roleIdx] || (roleIdx === 0 ? assignedEquipment : [])
-            });
-          } else {
-            staffList.push({
-              role_index: roleIdx,
-              staff_role: roleStr,
-              staff_id: '',
-              staff_name: '',
-              mobile: '',
-              staff_type: 'In-House',
-              equipment: []
-            });
-          }
-        });
+        // Now distribute equipment to staffList
+        if (staffList.length > 0) {
+           if (staffEquipments.length > 0) {
+              staffList.forEach((st, i) => {
+                 st.equipment = staffEquipments[i] || [];
+              });
+           } else if (assignedEquipment.length > 0) {
+              // fallback for old data: assign all event equipments to the first staff just so it's not lost?
+              // Or maybe don't assign it, or assign to all.
+              // Let's just assign all to first staff to not lose data.
+              staffList[0].equipment = assignedEquipment;
+           }
+        }
 
         initialAllocations[evId] = {
            reporting_date: targetLead.Reporting_date || ev.event_date || '',
@@ -2410,9 +2312,8 @@ export const OperationsLeads: React.FC = () => {
                                   </tr>
                                 )}
                                 {includedRoles.map((roleStr, roleIdx) => {
-                                  const assignedStaff = allocStaff.find((s: any) => s.role_index === roleIdx) || allocStaff[roleIdx] || { role_index: roleIdx, staff_role: roleStr, staff_name: '', staff_id: '', mobile: '', staff_type: 'In-House', equipment: [] };
-                                  const isEmpty = !assignedStaff.staff_name || assignedStaff.staff_name.trim() === '';
-                                  const currentStaffType = assignedStaff.staff_type || 'In-House';
+                                  const assignedToRole = allocStaff.filter((s: any) => s.staff_role === roleStr);
+                                  const isEmpty = assignedToRole.filter((s: any) => s.staff_name && s.staff_name.trim() !== '').length === 0;
 
                                   return (
                                     <tr 
@@ -2439,7 +2340,11 @@ export const OperationsLeads: React.FC = () => {
                                       {/* Right Column: Multi-staff assignments */}
                                       <td className="px-3.5 py-1.5">
                                         <div className="space-y-2">
-                                          <div className="flex flex-col gap-1.5 bg-zinc-950/40 p-2 rounded-lg border border-zinc-900">
+                                          {assignedToRole.map((assignedStaff: any, rowIdx: number) => {
+                                            const currentStaffType = assignedStaff.staff_type || 'In-House';
+                                            
+                                            return (
+                                              <div key={`row_${rowIdx}`} className="flex flex-col gap-1.5 bg-zinc-950/40 p-2 rounded-lg border border-zinc-900">
                                                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                                                 {/* Staff Type Select */}
                                                 <div className="w-full sm:w-28 shrink-0">
@@ -2451,17 +2356,20 @@ export const OperationsLeads: React.FC = () => {
                                                       setEventAllocations((prev: any) => {
                                                         const existingAlloc = prev[evId] || { staff: [] };
                                                         
-                                                        const updatedStaff = existingAlloc.staff.map((s: any, idx: number) => {
-                                                          const isTarget = s.role_index !== undefined ? s.role_index === roleIdx : idx === roleIdx;
-                                                          if (isTarget) {
-                                                            return {
-                                                              ...s,
-                                                              role_index: roleIdx,
-                                                              staff_type: newType,
-                                                              staff_name: '',
-                                                              staff_id: '',
-                                                              mobile: ''
-                                                            };
+                                                        let targetIdx = 0;
+                                                        const updatedStaff = existingAlloc.staff.map((s: any) => {
+                                                          if (s.staff_role === roleStr) {
+                                                            if (targetIdx === rowIdx) {
+                                                              targetIdx++;
+                                                              return {
+                                                                ...s,
+                                                                staff_type: newType,
+                                                                staff_name: '',
+                                                                staff_id: '',
+                                                                mobile: ''
+                                                              };
+                                                            }
+                                                            targetIdx++;
                                                           }
                                                           return s;
                                                         });
@@ -2494,16 +2402,19 @@ export const OperationsLeads: React.FC = () => {
                                                       setEventAllocations((prev: any) => {
                                                         const existingAlloc = prev[evId] || { staff: [] };
                                                         
-                                                        const updatedStaff = existingAlloc.staff.map((s: any, idx: number) => {
-                                                          const isTarget = s.role_index !== undefined ? s.role_index === roleIdx : idx === roleIdx;
-                                                          if (isTarget) {
-                                                            return {
-                                                              ...s,
-                                                              role_index: roleIdx,
-                                                              staff_name: selectedName,
-                                                              staff_id: staffId,
-                                                              mobile: memberInfo?.mobile || ''
-                                                            };
+                                                        let targetIdx = 0;
+                                                        const updatedStaff = existingAlloc.staff.map((s: any) => {
+                                                          if (s.staff_role === roleStr) {
+                                                            if (targetIdx === rowIdx) {
+                                                              targetIdx++;
+                                                              return {
+                                                                ...s,
+                                                                staff_name: selectedName,
+                                                                staff_id: staffId,
+                                                                mobile: memberInfo?.mobile || ''
+                                                              };
+                                                            }
+                                                            targetIdx++;
                                                           }
                                                           return s;
                                                         });
@@ -2534,21 +2445,12 @@ export const OperationsLeads: React.FC = () => {
                                                         return normType(sType) === normType(currentStaffType);
                                                       });
                                                       
-                                                      // Staff names assigned to OTHER slots in this same event (evId)
-                                                      const assignedInOtherSlots = allocStaff
-                                                        .filter((s: any, idx: number) => {
-                                                          const isOther = s.role_index !== undefined ? s.role_index !== roleIdx : idx !== roleIdx;
-                                                          return isOther && s.staff_name && s.staff_name.trim() !== '';
-                                                        })
-                                                        .map((s: any) => s.staff_name.trim().toLowerCase());
-
-                                                      const currentAssignedNameLower = (assignedStaff.staff_name || '').trim().toLowerCase();
-
-                                                      const availableStaff = filteredStaff.filter(s => {
-                                                        const nameLower = (s.name || '').trim().toLowerCase();
-                                                        if (nameLower === currentAssignedNameLower) return true;
-                                                        return !assignedInOtherSlots.includes(nameLower);
-                                                      });
+                                                      const allStaffInEvent = allocStaff.map((s: any) => s.staff_name).filter(Boolean);
+                                                      
+                                                      const availableStaff = filteredStaff.filter(s => 
+                                                        s.name === assignedStaff.staff_name || 
+                                                        !allStaffInEvent.includes(s.name)
+                                                      );
                                                       
                                                       if (availableStaff.length === 0) {
                                                         return <option value="" disabled>No staff available.</option>;
@@ -2592,20 +2494,29 @@ export const OperationsLeads: React.FC = () => {
                                                       setEventAllocations((prev: any) => {
                                                         const existingAlloc = prev[evId] || { staff: [] };
                                                         
-                                                        const updatedStaff = existingAlloc.staff.map((s: any, idx: number) => {
-                                                          const isTarget = s.role_index !== undefined ? s.role_index === roleIdx : idx === roleIdx;
-                                                          if (isTarget) {
-                                                            return {
-                                                              ...s,
-                                                              role_index: roleIdx,
-                                                              staff_name: '',
-                                                              staff_id: '',
-                                                              mobile: '',
-                                                              equipment: []
-                                                            };
+                                                        let targetIdx = 0;
+                                                        let updatedStaff = existingAlloc.staff.filter((s: any) => {
+                                                          if (s.staff_role === roleStr) {
+                                                            if (targetIdx === rowIdx) {
+                                                              targetIdx++;
+                                                              return false;
+                                                            }
+                                                            targetIdx++;
                                                           }
-                                                          return s;
+                                                          return true;
                                                         });
+                                                        
+                                                        // Ensure at least one row remains
+                                                        const roleStaffRemaining = updatedStaff.filter((s: any) => s.staff_role === roleStr);
+                                                        if (roleStaffRemaining.length === 0) {
+                                                          updatedStaff.push({
+                                                            staff_role: roleStr,
+                                                            staff_id: '',
+                                                            staff_name: '',
+                                                            mobile: '',
+                                                            staff_type: 'In-House'
+                                                          });
+                                                        }
                                                         
                                                         return {
                                                           ...prev,
@@ -2626,15 +2537,13 @@ export const OperationsLeads: React.FC = () => {
                                               </div>
                                               {/* Assigned Equipment Section for Individual Staff */}
                                               {(() => {
-                                                const eqKey = `${evId}-${roleIdx}`;
+                                                const eqKey = `${evId}-${roleIdx}-${rowIdx}`;
                                                 const searchQuery = equipmentSearchQueryByEvent[eqKey] || '';
                                                 const isDropdownOpen = !!isEquipmentDropdownOpenByEvent[eqKey];
                                                 const selectedEquipmentNames = assignedStaff.equipment || [];
                                                 
                                                 const allOtherSelectedEquipments = allocStaff
-                                                  .filter((s: any, idx: number) => {
-                                                    return s.role_index !== undefined ? s.role_index !== roleIdx : idx !== roleIdx;
-                                                  })
+                                                  .filter((s: any) => s !== assignedStaff)
                                                   .flatMap((s: any) => s.equipment || []);
 
                                                 const filteredEquipment = (equipment || []).filter(eq => {
@@ -2664,13 +2573,17 @@ export const OperationsLeads: React.FC = () => {
                                                               onClick={() => {
                                                                 setEventAllocations((prev: any) => {
                                                                   const existingAlloc = prev[evId] || { staff: [] };
-                                                                  const updatedStaff = existingAlloc.staff.map((s: any, idx: number) => {
-                                                                    const isTarget = s.role_index !== undefined ? s.role_index === roleIdx : idx === roleIdx;
-                                                                    if (isTarget) {
-                                                                      return {
-                                                                        ...s,
-                                                                        equipment: (s.equipment || []).filter((name: string) => name !== eqName)
-                                                                      };
+                                                                  let targetIdx = 0;
+                                                                  const updatedStaff = existingAlloc.staff.map((s: any) => {
+                                                                    if (s.staff_role === roleStr) {
+                                                                      if (targetIdx === rowIdx) {
+                                                                        targetIdx++;
+                                                                        return {
+                                                                          ...s,
+                                                                          equipment: (s.equipment || []).filter((name: string) => name !== eqName)
+                                                                        };
+                                                                      }
+                                                                      targetIdx++;
                                                                     }
                                                                     return s;
                                                                   });
@@ -2726,16 +2639,20 @@ export const OperationsLeads: React.FC = () => {
                                                                   onClick={() => {
                                                                     setEventAllocations((prev: any) => {
                                                                       const existingAlloc = prev[evId] || { staff: [] };
-                                                                      const updatedStaff = existingAlloc.staff.map((s: any, idx: number) => {
-                                                                        const isTarget = s.role_index !== undefined ? s.role_index === roleIdx : idx === roleIdx;
-                                                                        if (isTarget) {
-                                                                          const currentEq = s.equipment || [];
-                                                                          return {
-                                                                            ...s,
-                                                                            equipment: isAlreadySelected 
-                                                                              ? currentEq.filter((name: string) => name !== eq.equipment_name)
-                                                                              : [...currentEq, eq.equipment_name]
-                                                                          };
+                                                                      let targetIdx = 0;
+                                                                      const updatedStaff = existingAlloc.staff.map((s: any) => {
+                                                                        if (s.staff_role === roleStr) {
+                                                                          if (targetIdx === rowIdx) {
+                                                                            targetIdx++;
+                                                                            const currentEq = s.equipment || [];
+                                                                            return {
+                                                                              ...s,
+                                                                              equipment: isAlreadySelected 
+                                                                                ? currentEq.filter((name: string) => name !== eq.equipment_name)
+                                                                                : [...currentEq, eq.equipment_name]
+                                                                            };
+                                                                          }
+                                                                          targetIdx++;
                                                                         }
                                                                         return s;
                                                                       });
@@ -2777,20 +2694,53 @@ export const OperationsLeads: React.FC = () => {
                                                 );
                                               })()}
                                             </div>
+                                            );
+                                          })}
 
-                                              {/* Validation message if missing */}
-                                              {validationAttempted && isEmpty && (
-                                                <div className="pt-0.5">
-                                                  <span className="text-[10px] text-rose-500 font-mono italic">
-                                                    ⚠️ Required: Assign at least one staff
-                                                  </span>
-                                                </div>
-                                              )}
+                                          {/* Add Staff Button */}
+                                          <div className="pt-1">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setEventAllocations((prev: any) => {
+                                                  const existingAlloc = prev[evId] || { staff: [] };
+                                                  return {
+                                                    ...prev,
+                                                    [evId]: {
+                                                      ...existingAlloc,
+                                                      staff: [
+                                                        ...existingAlloc.staff,
+                                                        {
+                                                          staff_role: roleStr,
+                                                          staff_id: '',
+                                                          staff_name: '',
+                                                          mobile: '',
+                                                          staff_type: 'In-House'
+                                                        }
+                                                      ]
+                                                    }
+                                                  };
+                                                });
+                                              }}
+                                              className="inline-flex items-center gap-1 text-[11px] font-sans font-bold text-amber-500 hover:text-amber-400 cursor-pointer transition-colors bg-amber-500/5 hover:bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20"
+                                            >
+                                              + Add Staff
+                                            </button>
+                                          </div>
+
+                                          {/* Validation message if missing */}
+                                          {validationAttempted && isEmpty && (
+                                            <div className="pt-0.5">
+                                              <span className="text-[10px] text-rose-500 font-mono italic">
+                                                ⚠️ Required: Assign at least one staff
+                                              </span>
                                             </div>
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                             </table>
                           </div>
@@ -3443,62 +3393,49 @@ export const OperationsLeads: React.FC = () => {
                           )}
                         </div>
 
-                        <div className="overflow-x-auto rounded-xl border border-zinc-800/80 bg-zinc-900/60 mt-2">
-                          <table className="w-full text-left border-collapse">
-                            <thead>
-                              <tr className="bg-zinc-950/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
-                                <th className="py-2.5 px-3.5 font-bold">Staff Name</th>
-                                <th className="py-2.5 px-3.5 font-bold">Mobile Number</th>
-                                <th className="py-2.5 px-3.5 font-bold">Assigned Task</th>
-                                <th className="py-2.5 px-3.5 font-bold text-right">Staff Status</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-zinc-800/60 text-xs">
-                              {members.map((member, mIdx) => {
-                                const normStatus = (member.staff_status || 'Pending').toLowerCase();
-                                let statusBadge = (
-                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold text-[11px]">
-                                    <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
-                                    Pending
+                        <div className="space-y-2">
+                          {members.map((member, mIdx) => (
+                            <div key={mIdx} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-zinc-900/40 rounded-xl border border-zinc-800/40 hover:border-zinc-700/60 transition-all gap-2">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs font-bold text-white">{member.staff_name}</span>
+                                  <span className="text-[10px] font-mono bg-zinc-800 text-zinc-300 px-1.5 py-0.5 rounded border border-zinc-700">
+                                    {member.staff_role}
                                   </span>
-                                );
-                                if (normStatus.includes('complete') || normStatus === 'completed') {
-                                  statusBadge = (
-                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold text-[11px]">
-                                      <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
-                                      Completed
+                                  <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full ${
+                                    member.staff_type === 'In-House' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
+                                  }`}>
+                                    {member.staff_type}
+                                  </span>
+                                </div>
+                                
+                                <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-400 font-mono">
+                                  {member.mobile && (
+                                    <span className="flex items-center gap-1">
+                                      📱 {member.mobile}
                                     </span>
-                                  );
-                                } else if (normStatus.includes('start') || normStatus.includes('progress') || normStatus.includes('started')) {
-                                  statusBadge = (
-                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold text-[11px]">
-                                      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
-                                      In Progress
+                                  )}
+                                  {member.reporting_time && (
+                                    <span className="flex items-center gap-1">
+                                      ⏰ Report: {member.reporting_time}
                                     </span>
-                                  );
-                                }
+                                  )}
+                                </div>
+                              </div>
 
-                                return (
-                                  <tr key={mIdx} className="hover:bg-zinc-800/30 transition-colors">
-                                    <td className="py-3 px-3.5 font-bold text-white font-sans">
-                                      {member.staff_name}
-                                    </td>
-                                    <td className="py-3 px-3.5 font-mono text-zinc-300">
-                                      {member.mobile || '—'}
-                                    </td>
-                                    <td className="py-3 px-3.5 font-sans">
-                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-bold text-xs">
-                                        {member.assigned_task || member.staff_role}
-                                      </span>
-                                    </td>
-                                    <td className="py-3 px-3.5 text-right font-mono">
-                                      {statusBadge}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
+                              <div className="flex items-center gap-2 self-end sm:self-auto">
+                                {member.status === 'Busy' ? (
+                                  <span className="text-[9.5px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" /> Busy
+                                  </span>
+                                ) : (
+                                  <span className="text-[9.5px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" /> Available
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     );
