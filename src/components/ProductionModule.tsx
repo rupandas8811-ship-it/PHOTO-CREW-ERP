@@ -1077,29 +1077,18 @@ ${coordinatorName}`;
   const getAssignedEditorsList = (prod: Production) => {
     const fromAssignments = (editorAssignments || []).filter(a => a.production_id === prod.production_id);
     if (fromAssignments.length > 0) {
-      const grouped = new Map<string, any>();
-      fromAssignments.forEach(a => {
-        if (!grouped.has(a.staff_name)) {
-          const staffRec = (productionStaff || []).find(s => s.staff_id === a.staff_id || s.name === a.staff_name);
-          grouped.set(a.staff_name, {
-            name: a.staff_name,
-            deliverables: [a.speciality].filter(Boolean),
-            role: staffRec?.role || staffRec?.production_role_speciality || 'Editor',
-            mobile: staffRec?.mobile || 'N/A',
-            type: staffRec?.staff_type || (staffRec as any)?.Staff_Type || 'In-House',
-            status: staffRec?.status || 'Active'
-          });
-        } else {
-          const existing = grouped.get(a.staff_name);
-          if (a.speciality && !existing.deliverables.includes(a.speciality)) {
-             existing.deliverables.push(a.speciality);
-          }
-        }
+      return fromAssignments.map(a => {
+        const staffRec = (productionStaff || []).find(s => s.staff_id === a.staff_id || s.name === a.staff_name);
+        return {
+          name: a.staff_name,
+          deliverables: [a.speciality].filter(Boolean),
+          deliverable: a.speciality || 'Assigned',
+          role: staffRec?.role || staffRec?.production_role_speciality || 'Editor',
+          mobile: staffRec?.mobile || 'N/A',
+          type: staffRec?.staff_type || (staffRec as any)?.Staff_Type || 'In-House',
+          status: a.status || 'Editor Assigned'
+        };
       });
-      return Array.from(grouped.values()).map(item => ({
-         ...item,
-         deliverable: item.deliverables.join(', ')
-      }));
     }
     const staffStr = prod.assigned_staff || prod.editor_assigned;
     if (staffStr && staffStr !== 'Unassigned') {
@@ -2455,7 +2444,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   <option value="All">All Statuses</option>
                   <option value="Raw Footage Received">Raw Footage Received</option>
                   <option value="Editor Assigned">Editor Assigned</option>
-                  <option value="Client Review Sent">Client Review</option>
+                  <option value="Editing Started">Editing Started</option>
+                  <option value="Client Review">Client Review</option>
+                  <option value="Client Review Sent">Client Review Sent</option>
+                  <option value="Editing Complete">Editing Complete</option>
                   <option value="Project Completed">Project Completed</option>
                   <option value="Project Cancelled">Project Cancelled</option>
                 </select>
@@ -7963,9 +7955,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         <td className="p-3 font-mono text-zinc-400">{editor.mobile}</td>
                         <td className="p-3">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium ${
-                            editor.status === 'Active'
-                              ? 'bg-green-500/10 text-green-400 border border-green-500/20'
-                              : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                            editor.status === 'Completed' || editor.status === 'Editing Complete'
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : editor.status === 'Client Review' || editor.status === 'Review Pending'
+                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                              : editor.status === 'Editing Started' || editor.status === 'In Progress'
+                              ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                              : 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20'
                           }`}>
                             {editor.status}
                           </span>

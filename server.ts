@@ -305,6 +305,95 @@ async function startServer() {
   });
 
 
+  app.post('/api/auth/create-user', async (req, res) => {
+    const { email, password, name, role, active = true } = req.body;
+    try {
+      const db = getServerSupabase();
+      if (!db.auth.admin) {
+        return res.status(400).json({ success: false, error: 'Service Role Key not configured on server' });
+      }
+      
+      console.log(`[Server Auth] Creating user ${email} with role ${role}`);
+      
+      const { data, error } = await db.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { name, role }
+      });
+
+      if (error) {
+        console.error(`[Server Auth Create Error]`, error);
+        return res.status(400).json({ success: false, error: error.message });
+      }
+
+      const authUser = data.user;
+      
+      const userRecord = {
+        id: authUser.id, // Primary key
+        name,
+        email,
+        role,
+        active,
+        created_at: new Date().toISOString()
+      };
+      
+      const { data: dbData, error: dbError } = await db.from('users').upsert(userRecord).select();
+      
+      if (dbError) {
+        console.error(`[Server Auth DB Upsert Error]`, dbError);
+        return res.status(400).json({ success: false, error: dbError.message });
+      }
+
+      res.json({ success: true, data: { user: authUser, record: dbData?.[0] } });
+    } catch (err: any) {
+      console.error(`[Server Auth Create Exception]`, err);
+      res.status(500).json({ success: false, error: err.message || String(err) });
+    }
+  });
+
+  app.post('/api/auth/update-user', async (req, res) => {
+    const { auth_id, email, password, name, role, active } = req.body;
+    try {
+      const db = getServerSupabase();
+      if (!db.auth.admin) {
+        return res.status(400).json({ success: false, error: 'Service Role Key not configured' });
+      }
+      
+      const updates: any = {};
+      if (password) updates.password = password;
+      if (email) updates.email = email;
+      if (name || role) updates.user_metadata = { name, role };
+      
+      if (Object.keys(updates).length > 0) {
+          const { error } = await db.auth.admin.updateUserById(auth_id, updates);
+          if (error) {
+              console.error(`[Server Auth Update Error]`, error);
+              return res.status(400).json({ success: false, error: error.message });
+          }
+      }
+      
+      // Update users table
+      const userUpdates: any = { updated_at: new Date().toISOString() };
+      if (name) userUpdates.name = name;
+      if (email) userUpdates.email = email;
+      if (role) userUpdates.role = role;
+      if (active !== undefined) userUpdates.active = active;
+      
+      const { data: dbData, error: dbError } = await db.from('users').update(userUpdates).eq('id', auth_id).select();
+      
+      if (dbError) {
+         console.error(`[Server Auth DB Update Error]`, dbError);
+         return res.status(400).json({ success: false, error: dbError.message });
+      }
+      
+      res.json({ success: true, data: { record: dbData?.[0] } });
+    } catch (err: any) {
+      console.error(`[Server Auth Update Exception]`, err);
+      res.status(500).json({ success: false, error: err.message || String(err) });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');

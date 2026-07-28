@@ -2552,7 +2552,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: msg };
       }
 
-      const validRoles = ['Business Owner', 'Sales Team', 'Operations Team', 'Production Team', 'Operation Staff'];
+      const validRoles = ['Business Owner', 'Sales Team', 'Operations Team', 'Production Team', 'Operation Staff', 'Production Staff'];
       if (!validRoles.includes(dbUser.role)) {
         const msg = 'You do not have permission to access this page.';
         logAttempt('Failed', msg, dbUser.id);
@@ -3763,31 +3763,43 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (assignments.length > 0) { // STEP 5: UPDATE LEAD STATUS
-      const statusHist = {
-        lead_id: leadId,
-        order_id: orderId,
-        old_status: targetLead.current_status || 'Order Confirmed',
-        new_status: 'Event Scheduled',
-        changed_by: changedBy,
-        changed_by_role: changedByRole,
-        remarks: `Assigned: ${assignments.map(a => `${a.staff_role} (${a.staff_name})`).join(', ')}`,
-        created_at: timestamp
-      };
-      await pushInsert('lead_status_history', statusHist);
+        const currentStage = targetLead.current_status || targetLead.status || 'Order Confirmed';
+        const preventDowngradeStages = [
+          'Event Started', 'Event Completed', 'Raw Footage Received',
+          'Editor Assigned', 'Editing Started', 'Editing In Progress',
+          'Internal QC Review', 'Client Review Sent', 'Internal Review',
+          'Client Review', 'Revision Required', 'Revision In Progress',
+          'Revision', 'Final Approval', 'Ready for Delivery',
+          'Delivered', 'Completed', 'Closed', 'Project Closed', 'Project Delivered'
+        ];
 
-      const resLead = await pushUpdate('leads', 'lead_id', leadId, { 
-        current_status: 'Event Scheduled', 
-        status: 'Event Scheduled',
-        updated_by: changedBy
-      });
-      if (!resLead.success) throw new Error(`Error updating lead status:\n\n${resLead.error}`);
+        if (!preventDowngradeStages.includes(currentStage)) {
+          const statusHist = {
+            lead_id: leadId,
+            order_id: orderId,
+            old_status: currentStage,
+            new_status: 'Event Scheduled',
+            changed_by: changedBy,
+            changed_by_role: changedByRole,
+            remarks: `Assigned: ${assignments.map(a => `${a.staff_role} (${a.staff_name})`).join(', ')}`,
+            created_at: timestamp
+          };
+          await pushInsert('lead_status_history', statusHist);
 
-      const resOrder = await pushUpdate('orders', 'order_id', orderId, { 
-        current_stage: 'Event Scheduled', 
-        updated_by: changedBy
-      });
-      if (!resOrder.success) throw new Error(`Error updating order stage:\n\n${resOrder.error}`);
-    }
+          const resLead = await pushUpdate('leads', 'lead_id', leadId, { 
+            current_status: 'Event Scheduled', 
+            status: 'Event Scheduled',
+            updated_by: changedBy
+          });
+          if (!resLead.success) throw new Error(`Error updating lead status:\n\n${resLead.error}`);
+
+          const resOrder = await pushUpdate('orders', 'order_id', orderId, { 
+            current_stage: 'Event Scheduled', 
+            updated_by: changedBy
+          });
+          if (!resOrder.success) throw new Error(`Error updating order stage:\n\n${resOrder.error}`);
+        }
+      }
 
     } // STEP 6: REFRESH DASHBOARD
     
@@ -5340,26 +5352,34 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const prodId = assignment.production_id;
           const allTasks = currentAssignments.filter(t => t.production_id === prodId);
           
-          const completedTasks = allTasks.filter(t => t.status === 'Completed').length;
+          const completedTasks = allTasks.filter(t => t.status === 'Completed' || t.status === 'Editing Complete').length;
           const totalTasks = allTasks.length;
           const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
           
-          let nextEditingStatus: EditingStatus = 'Editing Started';
-          if (completedTasks === totalTasks && totalTasks > 0) {
-            nextEditingStatus = 'Internal QC Review';
-          } else if (status === 'Review Pending') {
-            nextEditingStatus = 'Internal QC Review';
-          } else if (status === 'Revision') {
-            nextEditingStatus = 'Revision Required';
-          } else if (status === 'In Progress' || status === 'Editing Started') {
-            nextEditingStatus = 'Editing In Progress';
+          const allEditingStarted = totalTasks > 0 && allTasks.every(t => t.status === 'In Progress' || t.status === 'Editing Started');
+          const allClientReview = totalTasks > 0 && allTasks.every(t => t.status === 'Review Pending' || t.status === 'Client Review');
+          const allEditingComplete = totalTasks > 0 && allTasks.every(t => t.status === 'Completed' || t.status === 'Editing Complete');
+          
+          let nextEditingStatus: EditingStatus | undefined = undefined;
+          
+          if (allEditingStarted) {
+            nextEditingStatus = 'Editing Started';
+          } else if (allClientReview) {
+            nextEditingStatus = 'Client Review';
+          } else if (allEditingComplete) {
+            nextEditingStatus = 'Editing Complete';
           }
           
-          updateProduction(prodId, {
-            editing_status: nextEditingStatus,
+          const updates: Partial<Omit<Production, 'production_id' | 'tracking_id'>> = {
             editing_progress: `${progressPercent}%`,
             remarks: `Task updated: ${assignment.staff_name} (${assignment.speciality}) marked status to ${status}. Total Project Tasks Progress: ${progressPercent}%.`
-          });
+          };
+          
+          if (nextEditingStatus) {
+            updates.editing_status = nextEditingStatus;
+          }
+          
+          updateProduction(prodId, updates);
         }
         return currentAssignments;
       });
@@ -5883,24 +5903,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const getLeadCurrentStatus = (lead: Lead): string => {
-    let rawStatus = 'New Lead';
-    if (statusHistory && statusHistory.length > 0) {
-      const historyForLead = statusHistory.filter((h: any) => h.lead_id === lead.lead_id);
-      if (historyForLead.length > 0) {
-        const sorted = [...historyForLead].sort((a: any, b: any) => 
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-        if (sorted[0]?.new_status) {
-          rawStatus = sorted[0].new_status;
-        } else {
-          rawStatus = lead.current_status || lead.status || 'New Lead';
-        }
-      } else {
-        rawStatus = lead.current_status || lead.status || 'New Lead';
-      }
-    } else {
-      rawStatus = lead.current_status || lead.status || 'New Lead';
-    }
+    let rawStatus = lead.current_status || lead.status || 'New Lead';
 
     if (rawStatus === 'Follow-up' || rawStatus === 'Follow-Up') {
       return 'Follow Up';
@@ -5915,7 +5918,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const status = getLeadCurrentStatus(lead);
     
     const salesStatuses = ['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation'];
-    const opsStatuses = ['Order Confirmed', 'Operations Assigned', 'Staff Assigned', 'Event Scheduled', 'Event Completed'];
+    const opsStatuses = ['Order Confirmed', 'Operations Assigned', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Completed', 'Event Cancelled'];
     const prodStatuses = ['Raw Footage Received', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Client Review Sent', 'Internal Review', 'Client Review', 'Revision Required', 'Revision In Progress', 'Revision', 'Final Approval', 'Ready for Delivery'];
     
     if (status === 'Delivered' || status === 'Completed' || status === 'Closed' || status === 'Project Closed' || status === 'Project Delivered') return 'Completed';

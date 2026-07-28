@@ -2,7 +2,7 @@
  * Photo Crew ERP Type Declarations
  */
 
-export type UserRole = 'Business Owner' | 'Sales Team' | 'Operations Team' | 'Production Team' | 'Operation Staff';
+export type UserRole = 'Business Owner' | 'Sales Team' | 'Operations Team' | 'Production Team' | 'Operation Staff' | 'Production Staff';
 
 
 export const ACTIVE_STAGE_GROUPS = [
@@ -24,6 +24,8 @@ export const ACTIVE_STAGE_GROUPS = [
     colorClass: "text-amber-400",
     options: [
       { value: "Event Scheduled", label: "Event Scheduled" },
+      { value: "Event Started", label: "Event Started" },
+      { value: "Event Completed", label: "Event Completed" },
       { value: "Event Cancelled", label: "Event Cancelled" },
       { value: "Raw Footage Received", label: "Raw Footage Received" }
     ]
@@ -34,6 +36,9 @@ export const ACTIVE_STAGE_GROUPS = [
     options: [
       { value: "New Project Received", label: "New Project Received" },
       { value: "Editor Assigned", label: "Editor Assigned" },
+      { value: "Editing Started", label: "Editing Started" },
+      { value: "Client Review", label: "Client Review" },
+      { value: "Editing Complete", label: "Editing Complete" },
       { value: "Customer Review", label: "Client Review" },
       { value: "Project Completed", label: "Project Completed" },
       { value: "Project Cancelled", label: "Project Cancelled" }
@@ -87,7 +92,7 @@ export type Department = 'Sales' | 'Operations' | 'Production' | 'Editor' | 'Dis
 
 export const DEPARTMENT_STAGES: Record<Department, CurrentStage[]> = {
   Sales: ['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Order Confirmed', 'Lost Lead'],
-  Operations: ['Operations Assigned', 'Staff Assigned', 'Event Scheduled', 'Event Completed'],
+  Operations: ['Operations Assigned', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Completed', 'Event Cancelled'],
   Production: ['Raw Footage Received'],
   Editor: ['Editing Started', 'Customer Review', 'Revision Required', 'Approved'],
   Dispatch: ['Delivered', 'Payment Pending', 'Closed']
@@ -98,7 +103,8 @@ export const ROLE_DEPARTMENT_MAP: Record<UserRole, Department[]> = {
   'Sales Team': ['Sales'],
   'Operations Team': ['Operations'],
   'Production Team': ['Production', 'Editor', 'Dispatch'],
-  'Operation Staff': []
+  'Operation Staff': [],
+  'Production Staff': []
 };
 
 export type CurrentStage =
@@ -114,6 +120,7 @@ export type CurrentStage =
   | 'Operations Assigned'
   | 'Event Scheduled'
   | 'Staff Assigned'
+  | 'Event Started'
   | 'Event Completed'
   | 'Raw Footage Received'
   | 'Editor Assigned'
@@ -133,22 +140,7 @@ export type CurrentStage =
   | 'Event Cancelled'
   | 'Closed';
 
-export type EditingStatus =
-  | 'Raw Footage Received'
-  | 'Editor Assigned'
-  | 'Editing Started'
-  | 'Editing In Progress'
-  | 'Internal QC Review'
-  | 'Client Review Sent'
-  | 'Revision Required'
-  | 'Revision In Progress'
-  | 'Final Approval'
-  | 'Project Delivered'
-  | 'Project Closed'
-  | 'Completed'
-  | 'Project Completed'
-  | 'Project Cancelled'
-  | 'Cancelled';
+export type EditingStatus = 'Raw Footage Received' | 'Editor Assigned' | 'Editing Started' | 'Editing In Progress' | 'Internal QC Review' | 'Client Review Sent' | 'Revision Required' | 'Revision In Progress' | 'Final Approval' | 'Project Delivered' | 'Editing Complete' | 'Client Review' | 'Project Completed' | 'Completed';
 
 export type PaymentStatus = 'Pending' | 'Partially Paid' | 'Fully Paid';
 
@@ -482,8 +474,7 @@ export interface EditorAssignment {
   speciality: string;
   assigned_date: string;
   target_finish_date: string;
-  status: 'Assigned' | 'Editing Started' | 'In Progress' | 'Review Pending' | 'Revision' | 'Completed'
-  | 'Project Completed';
+  status: 'Assigned' | 'Editing Started' | 'Client Review' | 'Editing Complete' | 'In Progress' | 'Review Pending' | 'Revision' | 'Completed' | 'Project Completed';
   created_at?: string;
 }
 
