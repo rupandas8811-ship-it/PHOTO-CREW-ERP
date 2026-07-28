@@ -24,6 +24,8 @@ export const ACTIVE_STAGE_GROUPS = [
     colorClass: "text-amber-400",
     options: [
       { value: "Event Scheduled", label: "Event Scheduled" },
+      { value: "Event Started", label: "Event Started" },
+      { value: "Event Completed", label: "Event Completed" },
       { value: "Event Cancelled", label: "Event Cancelled" },
       { value: "Raw Footage Received", label: "Raw Footage Received" }
     ]
@@ -34,6 +36,9 @@ export const ACTIVE_STAGE_GROUPS = [
     options: [
       { value: "New Project Received", label: "New Project Received" },
       { value: "Editor Assigned", label: "Editor Assigned" },
+      { value: "Editing Started", label: "Editing Started" },
+      { value: "Client Review", label: "Client Review" },
+      { value: "Editing Complete", label: "Editing Complete" },
       { value: "Customer Review", label: "Client Review" },
       { value: "Project Completed", label: "Project Completed" },
       { value: "Project Cancelled", label: "Project Cancelled" }

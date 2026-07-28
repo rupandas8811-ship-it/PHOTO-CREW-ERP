@@ -303,6 +303,7 @@ export const StaffModule: React.FC = () => {
               customerName: lead.customer_name || order?.customer_name || 'N/A',
               customerMobile: lead.mobile || order?.mobile || 'N/A',
               customerWhatsapp: lead.whatsapp_number || lead.mobile || order?.whatsapp_number || order?.mobile || 'N/A',
+              customerAddress: lead.address || lead.client_residence_address || lead.city || 'N/A',
               shootType: ev.event_shoot_type || lead.shoot_type || 'N/A',
               assignedRole: assignedRole,
               eventDate: ev.event_date || lead.event_date || 'N/A',
@@ -312,6 +313,7 @@ export const StaffModule: React.FC = () => {
               reportingTime: ev.reporting_time || lead.reporting_time || 'N/A',
               venue: ev.event_location || lead.event_location || 'N/A',
               googleMapsLink: ev.google_maps_link || lead.google_maps_link || 'N/A',
+              guestPax: ev.guest_pax || (lead as any).guest_pax || 'N/A',
               equipmentItems: assignedEqItems,
               taskStatus: currentStaffStatus,
               coordinator: op?.operations_coordinator || 'Unassigned'
@@ -376,6 +378,7 @@ export const StaffModule: React.FC = () => {
             customerName: lead.customer_name || order?.customer_name || 'N/A',
             customerMobile: lead.mobile || order?.mobile || 'N/A',
             customerWhatsapp: lead.whatsapp_number || lead.mobile || order?.whatsapp_number || order?.mobile || 'N/A',
+            customerAddress: lead.address || lead.client_residence_address || lead.city || 'N/A',
             shootType: lead.shoot_type || 'N/A',
             assignedRole: assignedRole,
             eventDate: lead.event_date || 'N/A',
@@ -385,6 +388,7 @@ export const StaffModule: React.FC = () => {
             reportingTime: lead.reporting_time || 'N/A',
             venue: lead.event_location || 'N/A',
             googleMapsLink: lead.google_maps_link || 'N/A',
+            guestPax: (lead as any).guest_pax || 'N/A',
             equipmentItems: assignedEqItems,
             taskStatus: currentStaffStatus,
             coordinator: op?.operations_coordinator || 'Unassigned'
@@ -484,7 +488,9 @@ export const StaffModule: React.FC = () => {
               asset_id: p.assetId,
               proof_type: stage,
               staff_name: staffName,
-              photo_url: p.photoUrl
+              photo_url: p.photoUrl,
+              event_id: booking.eventId,
+              event_name: booking.eventName
             })
           });
         } catch (dbErr) {
@@ -946,7 +952,7 @@ export const StaffModule: React.FC = () => {
                 <div>
                   <span className="text-[10px] font-mono uppercase text-zinc-500 block mb-1">WhatsApp Contact</span>
                   <a
-                    href={`https://wa.me/91${selectedBookingDetails.customerWhatsapp.replace(/\D/g, '')}`}
+                    href={selectedBookingDetails.customerWhatsapp ? `https://wa.me/91${selectedBookingDetails.customerWhatsapp.replace(/\D/g, '')}` : '#'}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 text-emerald-400 hover:text-emerald-300 font-bold"
@@ -954,6 +960,10 @@ export const StaffModule: React.FC = () => {
                     <MessageSquare className="w-4 h-4" />
                     Chat on WhatsApp ↗
                   </a>
+                </div>
+                <div className="md:col-span-2">
+                  <span className="text-[10px] font-mono uppercase text-zinc-500 block mb-1">Customer Address</span>
+                  <div className="text-zinc-300 text-sm">{selectedBookingDetails.customerAddress}</div>
                 </div>
               </div>
 
@@ -965,9 +975,15 @@ export const StaffModule: React.FC = () => {
                     <Calendar className="w-4 h-4 text-amber-500" />
                     {selectedBookingDetails.eventDate}
                   </div>
-                  <div className="flex items-center gap-2 text-zinc-300 text-xs mt-2">
-                    <Clock className="w-3.5 h-3.5 text-zinc-400" />
-                    Reporting: {selectedBookingDetails.reportingTime} | Event: {selectedBookingDetails.eventStartTime}
+                  <div className="flex flex-col gap-1 text-zinc-300 text-xs mt-2">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-3.5 h-3.5 text-zinc-400" />
+                      Reporting: {selectedBookingDetails.reportingDate !== 'N/A' && selectedBookingDetails.reportingDate !== selectedBookingDetails.eventDate ? `${selectedBookingDetails.reportingDate} ` : ''}{selectedBookingDetails.reportingTime}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-3.5 h-3.5 text-zinc-400" />
+                      Event: {selectedBookingDetails.eventStartTime} {selectedBookingDetails.eventEndTime !== 'N/A' ? `- ${selectedBookingDetails.eventEndTime}` : ''}
+                    </div>
                   </div>
                 </div>
 
@@ -987,23 +1003,42 @@ export const StaffModule: React.FC = () => {
                       Open in Google Maps ↗
                     </a>
                   )}
+                  <div className="mt-3 pt-3 border-t border-zinc-800/60 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-[9px] font-mono uppercase text-zinc-500 block">Event Type</span>
+                      <span className="font-semibold text-zinc-300">{selectedBookingDetails.shootType}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-mono uppercase text-zinc-500 block">Guest Pax</span>
+                      <span className="font-semibold text-zinc-300">{selectedBookingDetails.guestPax}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
               {/* Assigned Task & Equipment */}
               <div className="bg-zinc-800/30 border border-zinc-800 rounded-2xl p-4 space-y-4">
-                <div>
-                  <span className="text-[10px] font-mono uppercase text-zinc-500 block mb-1">Assigned Task / Role</span>
-                  <span className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-bold">
-                    <Briefcase className="w-4 h-4" />
-                    {selectedBookingDetails.assignedRole}
-                  </span>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-mono uppercase text-zinc-500 block mb-1">Assigned Task / Role</span>
+                    <span className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-bold">
+                      <Briefcase className="w-4 h-4" />
+                      {selectedBookingDetails.assignedRole}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] font-mono uppercase text-zinc-500 block mb-1">Current Staff Status</span>
+                    <span className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold">
+                      <Clock className="w-4 h-4" />
+                      {selectedBookingDetails.taskStatus}
+                    </span>
+                  </div>
                 </div>
 
                 <div>
                   <span className="text-[10px] font-mono uppercase text-zinc-500 block mb-2">Assigned Equipment (Your Gear)</span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {selectedBookingDetails.equipmentItems.map((item: any, idx: number) => (
+                    {(selectedBookingDetails.equipmentItems || []).map((item: any, idx: number) => (
                       <div key={idx} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
                           <Camera className="w-4 h-4" />

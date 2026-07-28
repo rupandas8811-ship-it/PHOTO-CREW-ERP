@@ -5344,22 +5344,30 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const totalTasks = allTasks.length;
           const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
           
-          let nextEditingStatus: EditingStatus = 'Editing Started';
-          if (completedTasks === totalTasks && totalTasks > 0) {
-            nextEditingStatus = 'Editing Complete';
-          } else if (status === 'Review Pending' || status === 'Client Review') {
+          const allEditingStarted = totalTasks > 0 && allTasks.every(t => t.status === 'In Progress' || t.status === 'Editing Started');
+          const allClientReview = totalTasks > 0 && allTasks.every(t => t.status === 'Review Pending' || t.status === 'Client Review');
+          const allEditingComplete = totalTasks > 0 && allTasks.every(t => t.status === 'Completed' || t.status === 'Editing Complete');
+          
+          let nextEditingStatus: EditingStatus | undefined = undefined;
+          
+          if (allEditingStarted) {
+            nextEditingStatus = 'Editing Started';
+          } else if (allClientReview) {
             nextEditingStatus = 'Client Review';
-          } else if (status === 'Revision') {
-            nextEditingStatus = 'Revision Required';
-          } else if (status === 'In Progress' || status === 'Editing Started') {
-            nextEditingStatus = 'Editing In Progress';
+          } else if (allEditingComplete) {
+            nextEditingStatus = 'Editing Complete';
           }
           
-          updateProduction(prodId, {
-            editing_status: nextEditingStatus,
+          const updates: Partial<Omit<Production, 'production_id' | 'tracking_id'>> = {
             editing_progress: `${progressPercent}%`,
             remarks: `Task updated: ${assignment.staff_name} (${assignment.speciality}) marked status to ${status}. Total Project Tasks Progress: ${progressPercent}%.`
-          });
+          };
+          
+          if (nextEditingStatus) {
+            updates.editing_status = nextEditingStatus;
+          }
+          
+          updateProduction(prodId, updates);
         }
         return currentAssignments;
       });
