@@ -2534,17 +2534,13 @@ export const OperationsLeads: React.FC = () => {
                                                         return normType(sType) === normType(currentStaffType);
                                                       });
                                                       
-                                                      // Staff names assigned to ANY OTHER slot across ALL events for this Order
-                                                      const assignedInOtherSlots = Object.entries(eventAllocations).flatMap(([otherEvId, alloc]: [string, any]) => {
-                                                        const otherStaff = alloc?.staff || [];
-                                                        return otherStaff.filter((s: any, idx: number) => {
-                                                          if (otherEvId === evId) {
-                                                            const isOther = s.role_index !== undefined ? s.role_index !== roleIdx : idx !== roleIdx;
-                                                            return isOther && s.staff_name && s.staff_name.trim() !== '';
-                                                          }
-                                                          return s.staff_name && s.staff_name.trim() !== '';
-                                                        }).map((s: any) => s.staff_name.trim().toLowerCase());
-                                                      });
+                                                      // Staff names assigned to OTHER slots in this same event (evId)
+                                                      const assignedInOtherSlots = allocStaff
+                                                        .filter((s: any, idx: number) => {
+                                                          const isOther = s.role_index !== undefined ? s.role_index !== roleIdx : idx !== roleIdx;
+                                                          return isOther && s.staff_name && s.staff_name.trim() !== '';
+                                                        })
+                                                        .map((s: any) => s.staff_name.trim().toLowerCase());
 
                                                       const currentAssignedNameLower = (assignedStaff.staff_name || '').trim().toLowerCase();
 

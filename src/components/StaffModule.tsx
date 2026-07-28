@@ -85,7 +85,7 @@ interface EventProofData {
 }
 
 export const StaffModule: React.FC = () => {
-  const { currentUser, staff, leads, orders, operations, staffAssignments, equipment, leadEquipmentHistory, addLeadEquipmentHistory, refreshData } = useRole();
+  const { currentUser, staff, leads, orders, operations, staffAssignments, equipment, addLeadEquipmentHistory, refreshData } = useRole();
 
   // Resolve staff member
   const staffMember = staff.find(s => 
@@ -116,78 +116,6 @@ export const StaffModule: React.FC = () => {
       return {};
     }
   });
-
-  // Load saved statuses & verification photo proofs from Supabase (leadEquipmentHistory & staffAssignments)
-  useEffect(() => {
-    if (!staffName) return;
-
-    // 1. Restore staff task status from staffAssignments
-    if (staffAssignments && staffAssignments.length > 0) {
-      setStaffStatuses(prev => {
-        const restored = { ...prev };
-        staffAssignments.forEach(sa => {
-          if (sa.staff_name && sa.staff_name.toLowerCase() === staffName.toLowerCase()) {
-            const statusVal = (sa as any).task_status || sa.assignment_status;
-            if (statusVal && statusVal !== 'Assigned') {
-              const key = `${sa.order_id}_gen_${staffName.toLowerCase()}`;
-              restored[key] = statusVal;
-            }
-          }
-        });
-        return restored;
-      });
-    }
-
-    // 2. Restore equipment verification photo proofs from leadEquipmentHistory
-    if (leadEquipmentHistory && leadEquipmentHistory.length > 0) {
-      setStaffProofs(prev => {
-        const restored = { ...prev };
-        leadEquipmentHistory.forEach(leh => {
-          if (
-            leh.returned_by &&
-            leh.returned_by.toLowerCase() === staffName.toLowerCase() &&
-            (leh.equipment_status === 'Event Start' || leh.equipment_status === 'Event Complete')
-          ) {
-            const key = `${leh.order_id}_gen_${staffName.toLowerCase()}`;
-            let photoUrl = (leh as any).photo_url || '';
-            let assetId = (leh as any).asset_id || '';
-
-            if (!photoUrl && leh.remarks) {
-              try {
-                const parsed = JSON.parse(leh.remarks);
-                photoUrl = parsed.photo_url || photoUrl;
-                assetId = parsed.asset_id || assetId;
-              } catch (e) {}
-            }
-
-            if (photoUrl) {
-              const stage = leh.equipment_status as 'Event Start' | 'Event Complete';
-              const proofField = stage === 'Event Start' ? 'startProofs' : 'completeProofs';
-              const existing = restored[key] || {};
-              const proofArr = existing[proofField] ? [...existing[proofField]!] : [];
-
-              const proofItem: EquipmentProofItem = {
-                equipmentName: leh.equipment_name,
-                assetId: assetId || `EQ-${leh.equipment_name}`,
-                photoUrl: photoUrl,
-                capturedAt: leh.returned_at || new Date().toISOString()
-              };
-
-              if (!proofArr.some(p => p.equipmentName === proofItem.equipmentName)) {
-                proofArr.push(proofItem);
-              }
-
-              restored[key] = {
-                ...existing,
-                [proofField]: proofArr
-              };
-            }
-          }
-        });
-        return restored;
-      });
-    }
-  }, [leadEquipmentHistory, staffAssignments, staffName]);
 
   // Modal states
   const [selectedBookingDetails, setSelectedBookingDetails] = useState<any | null>(null);
@@ -492,7 +420,7 @@ export const StaffModule: React.FC = () => {
         }
       }
 
-      // Sync status to operations table and staff_assignments table
+      // Sync status to operations table if needed
       try {
         if (supabaseClient && booking.orderId) {
           await supabaseClient
@@ -502,19 +430,9 @@ export const StaffModule: React.FC = () => {
               remarks: `Updated by ${staffName} to ${nextStatus}`
             })
             .eq('order_id', booking.orderId);
-
-          await supabaseClient
-            .from('staff_assignments')
-            .update({
-              assignment_status: nextStatus,
-              task_status: nextStatus,
-              updated_by: staffName
-            })
-            .eq('order_id', booking.orderId)
-            .ilike('staff_name', staffName);
         }
       } catch (opErr) {
-        console.warn('Syncing operation/staff status notice:', opErr);
+        console.warn('Syncing operation status notice:', opErr);
       }
 
       refreshData();
