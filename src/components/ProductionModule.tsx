@@ -2444,10 +2444,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   <option value="All">All Statuses</option>
                   <option value="Raw Footage Received">Raw Footage Received</option>
                   <option value="Editor Assigned">Editor Assigned</option>
-                  <option value="Editing Started">Editing Started</option>
-                  <option value="Client Review">Client Review</option>
-                  <option value="Client Review Sent">Client Review Sent</option>
-                  <option value="Editing Complete">Editing Complete</option>
+                  <option value="Client Review Sent">Client Review</option>
                   <option value="Project Completed">Project Completed</option>
                   <option value="Project Cancelled">Project Cancelled</option>
                 </select>

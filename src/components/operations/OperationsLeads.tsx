@@ -948,8 +948,9 @@ export const OperationsLeads: React.FC = () => {
         if (statusFilter === 'Staff Assigned' && !isStaffAssigned) return false;
         if (statusFilter === 'Event Scheduled' && o.current_stage !== 'Event Scheduled') return false;
         if (statusFilter === 'Event Cancelled' && o.current_stage !== 'Event Cancelled') return false;
-        if (statusFilter === 'Event Started' && o.current_stage !== 'Event Started') return false;
-        if (statusFilter === 'Event Completed' && o.current_stage !== 'Event Completed') return false;
+        if (statusFilter === 'Event Completed') {
+          return isCompletedEvent(o);
+        }
         if (statusFilter === 'Raw Footage Received' && o.current_stage !== 'Raw Footage Received') return false;
 
         // Custom stats click metrics
@@ -1757,8 +1758,6 @@ export const OperationsLeads: React.FC = () => {
               <option value="All">All Statuses</option>
               <option value="Order Confirmed">Order Confirmed</option>
               <option value="Event Scheduled">Event Scheduled</option>
-              <option value="Event Started">Event Started</option>
-              <option value="Event Completed">Event Completed</option>
               <option value="Event Cancelled">Event Cancelled</option>
               <option value="Raw Footage Received">Raw Footage Received</option>
             </select>
