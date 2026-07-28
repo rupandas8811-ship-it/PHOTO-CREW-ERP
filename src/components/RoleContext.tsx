@@ -2065,7 +2065,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (dbLeadPackages) setLeadPackages(dbLeadPackages);
       
       let finalPackagesData = dbPackages || [];
-      if (!finalPackagesData || finalPackagesData.length === 0) {
+      if (!finalPackagesData || finalPackagesData.length < 10) {
         try {
           const proxyRes = await fetch('/api/db/select', {
             method: 'POST',
@@ -2074,7 +2074,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
           if (proxyRes.ok) {
             const proxyJson = await proxyRes.json();
-            if (proxyJson.success && Array.isArray(proxyJson.data) && proxyJson.data.length > 0) {
+            if (proxyJson.success && Array.isArray(proxyJson.data) && proxyJson.data.length > finalPackagesData.length) {
               finalPackagesData = proxyJson.data;
             }
           }
