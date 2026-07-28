@@ -282,7 +282,7 @@ const MainAppContent: React.FC = () => {
           setActiveTab('operations');
         } else if (currentRole === 'Production Team') {
           setActiveTab('production');
-        } else if (currentRole === 'Field Operative') {
+        } else if (currentRole === 'Operation Staff') {
           setActiveTab('staff_dashboard');
         }
       }
@@ -316,7 +316,7 @@ const MainAppContent: React.FC = () => {
         if (!['production_leads', 'production_calendar', 'crew_roster', 'staff_roster'].includes(activeSubTab)) {
           setActiveSubTab('production_leads');
         }
-      } else if (currentRole === 'Field Operative') {
+      } else if (currentRole === 'Operation Staff') {
         if (activeTab !== 'staff_dashboard') {
           setActiveTab('staff_dashboard');
         }
@@ -360,7 +360,7 @@ const MainAppContent: React.FC = () => {
         </button>
       </div>
 
-      {currentRole === 'Field Operative' ? (
+      {currentRole === 'Operation Staff' ? (
         <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 rounded-2xl border border-zinc-850 p-4 space-y-4 shadow-xl relative animate-in fade-in duration-300">
           <div className="flex items-center justify-between pb-1 border-b border-zinc-850">
             <h3 className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-zinc-400 font-mono flex items-center gap-1.5">
@@ -861,7 +861,7 @@ const MainAppContent: React.FC = () => {
                     {activeTab === 'notifications' && <NotificationsModule />}
                     {activeTab === 'payments' && (currentRole === 'Business Owner' || currentRole === 'Sales Team') && <PaymentsModule />}
                     {activeTab === 'search' && currentRole === 'Business Owner' && <OrderSearch />}
-                    {activeTab === 'staff_dashboard' && currentRole === 'Field Operative' && <StaffModule />}
+                    {activeTab === 'staff_dashboard' && currentRole === 'Operation Staff' && <StaffModule />}
                     {activeTab === 'users' && currentRole === 'Business Owner' && <UserManagementModule />}
                     {activeTab === 'diagnostics' && currentRole === 'Business Owner' && <DatabaseHealthModule />}
                   </>

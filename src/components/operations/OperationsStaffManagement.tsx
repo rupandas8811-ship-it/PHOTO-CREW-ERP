@@ -159,7 +159,8 @@ export const OperationsStaffManagement: React.FC = () => {
               auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
             });
             
-            const authEmail = `staff_${form.mobile.replace(/[^0-9]/g, '')}@staff.photocrew.com`;
+            const generatedPrefix = form.name.toLowerCase().replace(/\s+/g, '');
+            const authEmail = `${generatedPrefix}@photocrew.com`;
             
             const { data: authData, error: authErr } = await tempClient.auth.signUp({
               email: authEmail,
@@ -179,7 +180,7 @@ export const OperationsStaffManagement: React.FC = () => {
                 mobile: form.mobile,
                 email: authEmail,
                 username: form.mobile,
-                role: 'Field Operative',
+                role: 'Operation Staff',
                 active: true,
                 created_at: new Date().toISOString()
               });
@@ -404,7 +405,7 @@ export const OperationsStaffManagement: React.FC = () => {
       <div className="lg:col-span-4 flex flex-col bg-zinc-900/40 border border-zinc-850 rounded-2xl p-5 shadow-xl space-y-4 overflow-hidden h-full">
         <h3 className="text-xs font-mono font-black uppercase text-zinc-300 flex items-center gap-1.5 border-b border-zinc-850 pb-2.5">
           <PlusCircle className="w-4 h-4 text-amber-500" />
-          <span>{editingId ? 'Edit Operative Profile' : 'Onboard Field Operative'}</span>
+          <span>{editingId ? 'Edit Operative Profile' : 'Onboard Operation Staff'}</span>
         </h3>
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs flex-1 flex flex-col">

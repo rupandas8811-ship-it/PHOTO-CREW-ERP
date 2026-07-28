@@ -2,7 +2,7 @@
  * Photo Crew ERP Type Declarations
  */
 
-export type UserRole = 'Business Owner' | 'Sales Team' | 'Operations Team' | 'Production Team' | 'Field Operative';
+export type UserRole = 'Business Owner' | 'Sales Team' | 'Operations Team' | 'Production Team' | 'Operation Staff';
 
 
 export const ACTIVE_STAGE_GROUPS = [
@@ -98,7 +98,7 @@ export const ROLE_DEPARTMENT_MAP: Record<UserRole, Department[]> = {
   'Sales Team': ['Sales'],
   'Operations Team': ['Operations'],
   'Production Team': ['Production', 'Editor', 'Dispatch'],
-  'Field Operative': []
+  'Operation Staff': []
 };
 
 export type CurrentStage =
