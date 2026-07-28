@@ -2462,6 +2462,52 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
   };
 
+  const getCleanSalesStaffName = (rawName?: string | null, leadObj?: Lead | null): string => {
+    let candidate = (rawName || '').trim();
+
+    if (!candidate && leadObj) {
+      if (leadObj.sales_staff_name && leadObj.sales_staff_name.trim()) {
+        candidate = leadObj.sales_staff_name.trim();
+      } else if (leadObj.sales_person && !['Sales', 'Sales Team', 'Admin', 'Admin User'].includes(leadObj.sales_person.trim())) {
+        candidate = leadObj.sales_person.trim();
+      }
+    }
+
+    if (!candidate) return '';
+
+    // If candidate contains comma-separated names, extract only the actual Sales Person
+    if (candidate.includes(',')) {
+      if (leadObj?.sales_person && !['Sales', 'Sales Team', 'Admin', 'Admin User'].includes(leadObj.sales_person.trim())) {
+        const sp = leadObj.sales_person.trim().toLowerCase();
+        const parts = candidate.split(',').map(s => s.trim());
+        const match = parts.find(p => p.toLowerCase() === sp || p.toLowerCase().includes(sp) || sp.includes(p.toLowerCase()));
+        if (match) return match;
+      }
+      return candidate.split(',')[0].trim();
+    }
+
+    return candidate;
+  };
+
+  const getCleanSalesStaffMobile = (rawMobile?: string | null, leadObj?: Lead | null): string => {
+    let candidate = (rawMobile || '').trim();
+
+    if (!candidate && leadObj && leadObj.sales_staff_mobile && leadObj.sales_staff_mobile.trim()) {
+      candidate = leadObj.sales_staff_mobile.trim();
+    }
+
+    if (!candidate) return '';
+
+    if (candidate.includes('||')) {
+      candidate = candidate.split('||')[0].trim();
+    }
+    if (candidate.includes(',')) {
+      candidate = candidate.split(',')[0].trim();
+    }
+
+    return candidate;
+  };
+
   const [salesStaffName, setSalesStaffName] = useState<string>('');
   const [salesStaffMobile, setSalesStaffMobile] = useState<string>('');
   const [quoteDiscount, setQuoteDiscount] = useState<number | ''>('');
@@ -3947,18 +3993,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     // Explicitly reset on new lead selection
     setEditableInclusions({});
     setEditableDeliverables({});
-    // Extract staff info from events if not directly on lead
-    let evtStaffName = '';
-    let evtStaffMobile = '';
-    if (lead.events && lead.events.length > 0) {
-      const evWithStaff = lead.events.find(e => e.assigned_staff_names);
-      if (evWithStaff) {
-        evtStaffName = evWithStaff.assigned_staff_names || '';
-        evtStaffMobile = (evWithStaff.assigned_staff_mobiles || '').split(' || EQUIPMENT:')[0];
-      }
-    }
-    setSalesStaffName(lead.sales_staff_name || evtStaffName || '');
-    setSalesStaffMobile(lead.sales_staff_mobile || evtStaffMobile || '');
+    // Clean and set Sales Executive Details (isolated from Operations/Production staff on events)
+    const initialSalesStaffName = getCleanSalesStaffName(lead.sales_staff_name, lead);
+    const initialSalesStaffMobile = getCleanSalesStaffMobile(lead.sales_staff_mobile, lead);
+    setSalesStaffName(initialSalesStaffName);
+    setSalesStaffMobile(initialSalesStaffMobile);
 
     const activePackages = (leadPackages || []).filter(lp => lp.lead_id === lead.lead_id);
     const primaryLP = activePackages[0];
@@ -4018,8 +4057,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setQuoteAdditional(lead.Additional_Services_Cost ?? latestQuote?.additional_services_cost ?? 0);
     if (latestQuote) {
       setActiveQuoteNum(latestQuote.quotation_number || '');
-      setSalesStaffName(latestQuote.sales_staff_name || lead.sales_staff_name || evtStaffName || '');
-      setSalesStaffMobile(latestQuote.sales_staff_mobile || lead.sales_staff_mobile || evtStaffMobile || '');
+      const quoteSalesName = getCleanSalesStaffName(latestQuote.sales_staff_name || lead.sales_staff_name, lead);
+      const quoteSalesMobile = getCleanSalesStaffMobile(latestQuote.sales_staff_mobile || lead.sales_staff_mobile, lead);
+      setSalesStaffName(quoteSalesName);
+      setSalesStaffMobile(quoteSalesMobile);
     }
 
     const matchedPkgId = latestQuote?.package_id || primaryLP?.package_id || lead.Select_Package_Option || '';
@@ -4325,8 +4366,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       
       const updatedEvents = crmEvents.map(ev => ({
         ...ev,
-        assigned_staff_names: salesStaffName,
-        assigned_staff_mobiles: ev.assigned_staff_mobiles && ev.assigned_staff_mobiles.includes(' || EQUIPMENT:') ? salesStaffMobile + ' || EQUIPMENT:' + ev.assigned_staff_mobiles.split(' || EQUIPMENT:')[1] : salesStaffMobile
+        assigned_staff_names: ev.assigned_staff_names || '',
+        assigned_staff_mobiles: ev.assigned_staff_mobiles || ''
       }));
 
       await updateLead(selectedLead.lead_id, {
@@ -4336,6 +4377,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         notes_special_customizations: wizardLeadData.notes,
         remarks: updatedRemarks,
         Select_Package_Option: pkgId,
+        sales_staff_name: salesStaffName,
+        sales_staff_mobile: salesStaffMobile,
         Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
         Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
         Final_Quotation_Amount: Math.max(0, Number(wizardLeadData.package_cost) + Number(quoteAdditional || 0) - Number(quoteDiscount || 0)),
@@ -4528,8 +4571,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         
         const updatedEvents = crmEvents.map(ev => ({
           ...ev,
-          assigned_staff_names: salesStaffName,
-          assigned_staff_mobiles: ev.assigned_staff_mobiles && ev.assigned_staff_mobiles.includes(' || EQUIPMENT:') ? salesStaffMobile + ' || EQUIPMENT:' + ev.assigned_staff_mobiles.split(' || EQUIPMENT:')[1] : salesStaffMobile
+          assigned_staff_names: ev.assigned_staff_names || '',
+          assigned_staff_mobiles: ev.assigned_staff_mobiles || ''
         }));
 
         await updateLead(selectedLead.lead_id, {
@@ -4543,6 +4586,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           city: wizardLeadData.city,
           state: wizardLeadData.state,
           pincode: wizardLeadData.pincode,
+          sales_staff_name: salesStaffName,
+          sales_staff_mobile: salesStaffMobile,
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
           Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
           Final_Quotation_Amount: Math.max(0, Number(wizardLeadData.package_cost) + Number(quoteAdditional || 0) - Number(quoteDiscount || 0)),

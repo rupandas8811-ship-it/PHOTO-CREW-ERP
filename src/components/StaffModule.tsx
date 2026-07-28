@@ -394,6 +394,9 @@ export const StaffModule: React.FC = () => {
       };
       setStaffStatuses(nextStatuses);
       localStorage.setItem('staff_event_statuses_v2', JSON.stringify(nextStatuses));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('staff_status_updated'));
+      }
 
       // Save records into Supabase lead_equipment_history table for durability
       for (const p of newProofs) {
