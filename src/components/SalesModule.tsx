@@ -9818,21 +9818,30 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                            <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Select Package Option *</label>
                            <select
                              id="select_package_option"
-                             value={wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || ''}
+                             value={wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option || (selectedLead as any)?.selected_package_id || (leadPackages?.find(lp => lp.lead_id === selectedLead?.lead_id)?.package_id) || (quotations?.find(q => q.lead_id === selectedLead?.lead_id)?.package_id) || ''}
                              disabled={isLeadLocked}
                              onChange={(e) => handlePackageChange(e.target.value)}
                              className={`w-full bg-slate-955 border focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer ${
-                               !(wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id) || (wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id).trim() === ''
+                               !(wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option)
                                  ? 'border-rose-500/40 focus:border-rose-500 text-rose-200'
                                  : 'border-slate-800 focus:border-indigo-500 text-white'
                              }`}
                            >
                              <option value="">── Choose configuration package ──</option>
-                             {((packages && packages.length > 0) ? packages.filter(p => !p.status || p.status.toLowerCase() === 'active') : INITIAL_PACKAGES).map((pkg) => (
-                               <option key={pkg.package_id} value={pkg.package_id}>
-                                 {pkg.package_name} (₹{Number(pkg.price).toLocaleString('en-IN')})
-                               </option>
-                             ))}
+                             {(() => {
+                               const currentPkgId = wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option || (selectedLead as any)?.selected_package_id || (leadPackages?.find(lp => lp.lead_id === selectedLead?.lead_id)?.package_id) || (quotations?.find(q => q.lead_id === selectedLead?.lead_id)?.package_id) || '';
+                               const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
+                               const activePkgs = availablePkgs.filter(p => !p.status || p.status.toLowerCase() === 'active');
+                               if (currentPkgId && !activePkgs.some(p => String(p.package_id) === String(currentPkgId))) {
+                                 const matched = availablePkgs.find(p => String(p.package_id) === String(currentPkgId));
+                                 if (matched) activePkgs.unshift(matched);
+                               }
+                               return activePkgs.map((pkg) => (
+                                 <option key={pkg.package_id} value={pkg.package_id}>
+                                   {pkg.package_name} (₹{Number(pkg.price).toLocaleString('en-IN')})
+                                 </option>
+                               ));
+                             })()}
                            </select>
                            {!(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option) && (
                              <p className="text-rose-450 font-bold text-xs mt-1 font-mono animate-pulse flex items-center gap-1.5">

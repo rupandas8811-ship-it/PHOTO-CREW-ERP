@@ -264,6 +264,29 @@ async function startServer() {
     }
   });
 
+  app.post('/api/db/select', async (req, res) => {
+    const { table, select = '*', orderColumn, ascending = false, matchColumn, matchValue } = req.body;
+    try {
+      const db = getServerSupabase();
+      let query = db.from(table).select(select);
+      if (matchColumn && matchValue !== undefined) {
+        query = query.eq(matchColumn, matchValue);
+      }
+      if (orderColumn) {
+        query = query.order(orderColumn, { ascending });
+      }
+      const { data, error } = await query;
+      if (error) {
+        console.error(`[Server DB Select Error] ${table}`, error);
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      res.json({ success: true, data });
+    } catch (err: any) {
+      console.error(`[Server DB Select Exception] ${table}`, err);
+      res.status(500).json({ success: false, error: err.message || String(err) });
+    }
+  });
+
   app.post('/api/db/delete', async (req, res) => {
     const { table, matchColumn, matchValue } = req.body;
     try {

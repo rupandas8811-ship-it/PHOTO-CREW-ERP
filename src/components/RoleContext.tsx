@@ -2063,8 +2063,28 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setEquipment(dbEquipment.map((item: any) => ({ ...item, equipment_id: mapFromDbEquipmentId(item.equipment_id), equipment_type: item.Equipment_Category || item.equipment_type || 'Camera', status: item.Equipment_Status || item.status || 'Active' })));
       }
       if (dbLeadPackages) setLeadPackages(dbLeadPackages);
-      if (dbPackages && dbPackages.length > 0) {
-        setPackages(dbPackages.map(mapDbRecordToPackage));
+      
+      let finalPackagesData = dbPackages || [];
+      if (!finalPackagesData || finalPackagesData.length === 0) {
+        try {
+          const proxyRes = await fetch('/api/db/select', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ table: 'packages' })
+          });
+          if (proxyRes.ok) {
+            const proxyJson = await proxyRes.json();
+            if (proxyJson.success && Array.isArray(proxyJson.data) && proxyJson.data.length > 0) {
+              finalPackagesData = proxyJson.data;
+            }
+          }
+        } catch (e) {
+          console.warn('[RoleContext] Proxy fetch packages fallback error:', e);
+        }
+      }
+
+      if (finalPackagesData && finalPackagesData.length > 0) {
+        setPackages(finalPackagesData.map(mapDbRecordToPackage));
       } else if (INITIAL_PACKAGES && INITIAL_PACKAGES.length > 0) {
         console.log('[RoleContext] No packages found in DB, auto-seeding initial packages...');
         const seededPkgs: Package[] = [];
