@@ -9834,7 +9834,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                const activePkgs = availablePkgs.filter(p => !p.status || p.status.toLowerCase() === 'active');
                                if (currentPkgId && !activePkgs.some(p => String(p.package_id) === String(currentPkgId))) {
                                  const matched = availablePkgs.find(p => String(p.package_id) === String(currentPkgId));
-                                 if (matched) activePkgs.unshift(matched);
+                                 if (matched) {
+                                   activePkgs.unshift(matched);
+                                 } else {
+                                   activePkgs.unshift({
+                                     package_id: currentPkgId,
+                                     package_name: `Package ${currentPkgId} (Legacy)`,
+                                     price: wizardLeadData.package_cost || selectedLead?.Final_Quotation_Amount || 0,
+                                     status: 'Active'
+                                   } as any);
+                                 }
                                }
                                return activePkgs.map((pkg) => (
                                  <option key={pkg.package_id} value={pkg.package_id}>
@@ -9852,7 +9861,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
  
                          {(() => {
                            const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
-                           const selectedPkg = availablePkgs.find(p => String(p.package_id) === String(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option));
+                           const currentPkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option; let selectedPkg = availablePkgs.find(p => String(p.package_id) === String(currentPkgId)); if (!selectedPkg && currentPkgId) { selectedPkg = { package_id: currentPkgId, package_name: `Package ${currentPkgId} (Legacy)`, price: wizardLeadData.package_cost || 0, deliverables: wizardLeadData.deliverables || "", status: "Active" } as any; }
                            if (!selectedPkg) return null;
 
                           const selectedPkgId = selectedPkg.package_id;
