@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useRole, mapUserFieldsFromDb } from './RoleContext';
+import { useRole, mapUserFieldsFromDb, INITIAL_PACKAGES } from './RoleContext';
 import { supabaseClient } from '../supabaseClient';
 import { 
   Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye
@@ -4193,7 +4193,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const handlePackageChange = (packageId: string) => {
     setIsPackageSelectedAndSaved(true);
     setIsPackageDetailsSaved(true);
-    const pkg = packages.find((p) => String(p.package_id) === String(packageId));
+    const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
+    const pkg = availablePkgs.find((p) => String(p.package_id) === String(packageId));
     if (pkg) {
       setWizardLeadData((prev) => ({
         ...prev,
@@ -9827,7 +9828,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                              }`}
                            >
                              <option value="">── Choose configuration package ──</option>
-                             {packages.filter(p => p.status === 'Active').map((pkg) => (
+                             {((packages && packages.length > 0) ? packages.filter(p => !p.status || p.status.toLowerCase() === 'active') : INITIAL_PACKAGES).map((pkg) => (
                                <option key={pkg.package_id} value={pkg.package_id}>
                                  {pkg.package_name} (₹{Number(pkg.price).toLocaleString('en-IN')})
                                </option>
@@ -9841,7 +9842,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                          </div>
  
                          {(() => {
-                           const selectedPkg = packages.find(p => String(p.package_id) === String(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option));
+                           const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
+                           const selectedPkg = availablePkgs.find(p => String(p.package_id) === String(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option));
                            if (!selectedPkg) return null;
 
                           const selectedPkgId = selectedPkg.package_id;

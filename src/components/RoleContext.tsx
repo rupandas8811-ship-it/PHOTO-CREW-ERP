@@ -381,7 +381,7 @@ const saveNotificationToSupabase = async (notif: Notification) => {
   }
 };
 
-const INITIAL_PACKAGES: Package[] = [
+export const INITIAL_PACKAGES: Package[] = [
   // Wedding Packages
   { 
     package_id: 'PKG_WED_01', 
@@ -392,8 +392,100 @@ const INITIAL_PACKAGES: Package[] = [
     deliverables: '1 Traditional Photographer, 1 Traditional Videographer, Standard Album, Full HD Output Video',
     team_members: '2 Crew Members',
     seasonal_offer: 'Complimentary Wedding Teaser (1 min)'
+  },
+  {
+    package_id: 'PKG_WED_02',
+    package_name: 'Wedding - Silver',
+    category: 'Weddings',
+    price: 129999,
+    status: 'Active',
+    deliverables: '2 Candid Photographers, 1 Traditional Photographer, 1 Cinematographer, Premium Photobook, 4K Teaser & Highlight Reel',
+    team_members: '4 Crew Members',
+    seasonal_offer: 'Complimentary Pre-Wedding Shoot'
+  },
+  {
+    package_id: 'PKG_WED_03',
+    package_name: 'Wedding - Gold',
+    category: 'Weddings',
+    price: 189999,
+    status: 'Active',
+    deliverables: '2 Candid Photographers, 2 Traditional Photographers, 2 Cinematographers, Drone Coverage, 2 Luxury Canvera Albums, 4K Full Film',
+    team_members: '6 Crew Members',
+    seasonal_offer: 'Complimentary Drone & Reel Bundle'
+  },
+  {
+    package_id: 'PKG_PRE_01',
+    package_name: 'Pre-Wedding - Standard',
+    category: 'Pre Weddings',
+    price: 35000,
+    status: 'Active',
+    deliverables: '1 Candid Photographer, 1 Cinematographer, 15 Retouched Images, 2-Min Music Video',
+    team_members: '2 Crew Members',
+    seasonal_offer: 'Free Reel Editing'
+  },
+  {
+    package_id: 'PKG_ENG_01',
+    package_name: 'Engagement - Delight',
+    category: 'Engagement',
+    price: 45000,
+    status: 'Active',
+    deliverables: '1 Traditional Photographer, 1 Candid Photographer, 1 Traditional Videographer, Album (30 pages)',
+    team_members: '3 Crew Members',
+    seasonal_offer: 'Reel Highlight Included'
+  },
+  {
+    package_id: 'PKG_MAT_01',
+    package_name: 'Maternity - Bliss',
+    category: 'Maternity',
+    price: 25000,
+    status: 'Active',
+    deliverables: '1 Portrait Photographer, 20 Edited High-Res Photos, Mini Album',
+    team_members: '1 Crew Member',
+    seasonal_offer: 'Free Prop Usage'
+  },
+  {
+    package_id: 'PKG_BTH_01',
+    package_name: 'Birthday - Joy',
+    category: 'Birthday',
+    price: 20000,
+    status: 'Active',
+    deliverables: '1 Event Photographer, 1 Traditional Videographer, All Raw Softcopies, Edited Video',
+    team_members: '2 Crew Members',
+    seasonal_offer: 'Free Photo Frame'
+  },
+  {
+    package_id: 'PKG_CORP_01',
+    package_name: 'Corporate Event - Professional',
+    category: 'Corporate Events',
+    price: 60000,
+    status: 'Active',
+    deliverables: '2 Event Photographers, 1 Videographer, Event Summary Video, Web Gallery',
+    team_members: '3 Crew Members',
+    seasonal_offer: 'Same-day Highlight Photos'
   }
 ];
+
+export const mapPackageToDbPayload = (pkg: Partial<Package> & { package_id: string; package_name: string; price: number }) => {
+  const extraData = {
+    category: pkg.category || 'Weddings',
+    deliverables: pkg.deliverables || '',
+    team_members: pkg.team_members || '',
+    seasonal_offer: pkg.seasonal_offer || '',
+    terms_conditions: pkg.terms_conditions || '',
+    event_type: pkg.event_type || '',
+    duration: pkg.duration || '',
+    package_includes: pkg.package_includes || ''
+  };
+
+  return {
+    package_id: pkg.package_id,
+    name: pkg.package_name,
+    description: JSON.stringify(extraData),
+    price: pkg.price,
+    status: pkg.status || 'Active',
+    created_at: pkg.created_at || new Date().toISOString()
+  };
+};
 
 export const mapDbRecordToPackage = (record: any): Package => {
   let category = 'Weddings'; // Default fallback
@@ -405,7 +497,7 @@ export const mapDbRecordToPackage = (record: any): Package => {
   let duration = '';
   let package_includes = '';
 
-  if (record.description && record.description.trim().startsWith('{') && record.description.trim().endsWith('}')) {
+  if (record.description && typeof record.description === 'string' && record.description.trim().startsWith('{') && record.description.trim().endsWith('}')) {
     try {
       const parsed = JSON.parse(record.description);
       category = parsed.category || category;
@@ -423,9 +515,9 @@ export const mapDbRecordToPackage = (record: any): Package => {
 
   return {
     package_id: record.package_id,
-    package_name: record.name || '',
-    category,
-    price: record.price || 0,
+    package_name: record.name || record.package_name || '',
+    category: record.category || category,
+    price: record.price !== undefined && record.price !== null ? Number(record.price) : 0,
     status: record.status || 'Active',
     deliverables,
     team_members,
@@ -1787,7 +1879,15 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (INITIAL_PRODUCTION?.length > 0) await supabaseClient.from('production').upsert(INITIAL_PRODUCTION);
       if (INITIAL_PAYMENTS?.length > 0) await supabaseClient.from('payments').upsert(INITIAL_PAYMENTS);
       try { if (INITIAL_LOGS?.length > 0) await supabaseClient.from('activity_logs').upsert(INITIAL_LOGS); } catch (e) {}
-      try { if (INITIAL_PACKAGES?.length > 0) await supabaseClient.from('packages').upsert(INITIAL_PACKAGES); } catch (e) {}
+      try {
+        if (INITIAL_PACKAGES?.length > 0) {
+          for (const pkg of INITIAL_PACKAGES) {
+            await pushUpsert('packages', mapPackageToDbPayload(pkg));
+          }
+        }
+      } catch (e) {
+        console.warn('Initial package seeding warning:', e);
+      }
 
       console.log('Database initial seeding completed successfully.');
     } catch (err: any) {
@@ -1963,7 +2063,18 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setEquipment(dbEquipment.map((item: any) => ({ ...item, equipment_id: mapFromDbEquipmentId(item.equipment_id), equipment_type: item.Equipment_Category || item.equipment_type || 'Camera', status: item.Equipment_Status || item.status || 'Active' })));
       }
       if (dbLeadPackages) setLeadPackages(dbLeadPackages);
-      if (dbPackages) setPackages(dbPackages.map(mapDbRecordToPackage));
+      if (dbPackages && dbPackages.length > 0) {
+        setPackages(dbPackages.map(mapDbRecordToPackage));
+      } else if (INITIAL_PACKAGES && INITIAL_PACKAGES.length > 0) {
+        console.log('[RoleContext] No packages found in DB, auto-seeding initial packages...');
+        const seededPkgs: Package[] = [];
+        for (const pkg of INITIAL_PACKAGES) {
+          const payload = mapPackageToDbPayload(pkg);
+          await pushUpsert('packages', payload);
+          seededPkgs.push(pkg);
+        }
+        setPackages(seededPkgs);
+      }
       if (dbCalendarMemos) setCalendarMemos(dbCalendarMemos);
       if (dbStaffAssignments) setStaffAssignments(dbStaffAssignments);
       
