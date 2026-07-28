@@ -1093,48 +1093,7 @@ export const OperationsLeads: React.FC = () => {
         const includedRoles = eventRoles?.length > 0 ? eventRoles : [];
 
         const hasExisting = staffAssignments?.some(sa => sa.order_id === order.order_id);
-        if (hasExisting && ev.assigned_staff_names) {
-          const names = ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean);
-          names.forEach((name: string, i: number) => {
-            const st = staff?.find(s => s.name === name);
-            const saMatch = staffAssignments?.find(sa => sa.order_id === order.order_id && sa.staff_name === name);
-            const assignedRole = saMatch?.staff_role || includedRoles[i] || (st ? st.role : 'Staff');
-            const stType = saMatch?.staff_type || st?.staff_type || (st as any)?.Staff_Type || 'In-House';
-            const cleanType = (stType === 'Freelancer' || stType === 'freelancer') ? 'Freelancer' : 'In-House';
-            
-            if (st) {
-               staffList.push({
-                 staff_role: assignedRole,
-                 staff_id: st.staff_id,
-                 staff_name: st.name,
-                 mobile: st.mobile,
-                 staff_type: cleanType
-               });
-            } else {
-               staffList.push({
-                 staff_role: assignedRole,
-                 staff_id: 'MOCK-' + Math.random().toString(36).substr(2, 4),
-                 staff_name: name,
-                 mobile: '',
-                 staff_type: cleanType
-               });
-            }
-          });
-        }
-
-        // For any role in includedRoles that doesn't have an assignment yet, add at least 1 empty row
-        includedRoles.forEach((roleStr: string) => {
-          const roleStaff = staffList.filter((s: any) => s.staff_role === roleStr);
-          if (roleStaff.length === 0) {
-            staffList.push({
-              staff_role: roleStr,
-              staff_id: '',
-              staff_name: '',
-              mobile: '',
-              staff_type: 'In-House'
-            });
-          }
-        });
+        const existingNames = (hasExisting && ev.assigned_staff_names) ? ev.assigned_staff_names.split(',').map((n: string) => n.trim()) : [];
 
         let assignedEquipment: string[] = [];
         let mobilesRaw = ev.assigned_staff_mobiles || '';
@@ -1152,19 +1111,39 @@ export const OperationsLeads: React.FC = () => {
           assignedEquipment = parts[1] ? parts[1].split(',').map((s: string) => s.trim()).filter(Boolean) : [];
         }
         
-        // Now distribute equipment to staffList
-        if (staffList.length > 0) {
-           if (staffEquipments.length > 0) {
-              staffList.forEach((st, i) => {
-                 st.equipment = staffEquipments[i] || [];
-              });
-           } else if (assignedEquipment.length > 0) {
-              // fallback for old data: assign all event equipments to the first staff just so it's not lost?
-              // Or maybe don't assign it, or assign to all.
-              // Let's just assign all to first staff to not lose data.
-              staffList[0].equipment = assignedEquipment;
-           }
-        }
+        const cleanMobilesRaw = mobilesRaw.split(' || EQUIPMENT:')[0] || '';
+        const mobilesList = cleanMobilesRaw.split(',').map((m: string) => m.trim());
+
+        // Construct exactly 1 dedicated slot per role in includedRoles using roleIdx
+        includedRoles.forEach((roleStr: string, roleIdx: number) => {
+          const assignedName = existingNames[roleIdx] || '';
+          if (assignedName) {
+            const st = staff?.find(s => s.name?.toLowerCase() === assignedName.toLowerCase());
+            const saMatch = staffAssignments?.find(sa => sa.order_id === order.order_id && sa.staff_name?.toLowerCase() === assignedName.toLowerCase());
+            const stType = saMatch?.staff_type || st?.staff_type || (st as any)?.Staff_Type || 'In-House';
+            const cleanType = (stType === 'Freelancer' || stType === 'freelancer') ? 'Freelancer' : 'In-House';
+
+            staffList.push({
+              role_index: roleIdx,
+              staff_role: roleStr,
+              staff_id: st?.staff_id || ('MOCK-' + Math.random().toString(36).substr(2, 4)),
+              staff_name: assignedName,
+              mobile: st?.mobile || mobilesList[roleIdx] || '',
+              staff_type: cleanType,
+              equipment: staffEquipments[roleIdx] || (roleIdx === 0 ? assignedEquipment : [])
+            });
+          } else {
+            staffList.push({
+              role_index: roleIdx,
+              staff_role: roleStr,
+              staff_id: '',
+              staff_name: '',
+              mobile: '',
+              staff_type: 'In-House',
+              equipment: []
+            });
+          }
+        });
 
         initialAllocations[evId] = {
            reporting_date: targetLead.Reporting_date || ev.event_date || '',
@@ -2431,8 +2410,9 @@ export const OperationsLeads: React.FC = () => {
                                   </tr>
                                 )}
                                 {includedRoles.map((roleStr, roleIdx) => {
-                                  const assignedToRole = allocStaff.filter((s: any) => s.staff_role === roleStr);
-                                  const isEmpty = assignedToRole.filter((s: any) => s.staff_name && s.staff_name.trim() !== '').length === 0;
+                                  const assignedStaff = allocStaff.find((s: any) => s.role_index === roleIdx) || allocStaff[roleIdx] || { role_index: roleIdx, staff_role: roleStr, staff_name: '', staff_id: '', mobile: '', staff_type: 'In-House', equipment: [] };
+                                  const isEmpty = !assignedStaff.staff_name || assignedStaff.staff_name.trim() === '';
+                                  const currentStaffType = assignedStaff.staff_type || 'In-House';
 
                                   return (
                                     <tr 
@@ -2459,11 +2439,7 @@ export const OperationsLeads: React.FC = () => {
                                       {/* Right Column: Multi-staff assignments */}
                                       <td className="px-3.5 py-1.5">
                                         <div className="space-y-2">
-                                          {assignedToRole.map((assignedStaff: any, rowIdx: number) => {
-                                            const currentStaffType = assignedStaff.staff_type || 'In-House';
-                                            
-                                            return (
-                                              <div key={`row_${rowIdx}`} className="flex flex-col gap-1.5 bg-zinc-950/40 p-2 rounded-lg border border-zinc-900">
+                                          <div className="flex flex-col gap-1.5 bg-zinc-950/40 p-2 rounded-lg border border-zinc-900">
                                                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                                                 {/* Staff Type Select */}
                                                 <div className="w-full sm:w-28 shrink-0">
@@ -2475,20 +2451,17 @@ export const OperationsLeads: React.FC = () => {
                                                       setEventAllocations((prev: any) => {
                                                         const existingAlloc = prev[evId] || { staff: [] };
                                                         
-                                                        let targetIdx = 0;
-                                                        const updatedStaff = existingAlloc.staff.map((s: any) => {
-                                                          if (s.staff_role === roleStr) {
-                                                            if (targetIdx === rowIdx) {
-                                                              targetIdx++;
-                                                              return {
-                                                                ...s,
-                                                                staff_type: newType,
-                                                                staff_name: '',
-                                                                staff_id: '',
-                                                                mobile: ''
-                                                              };
-                                                            }
-                                                            targetIdx++;
+                                                        const updatedStaff = existingAlloc.staff.map((s: any, idx: number) => {
+                                                          const isTarget = s.role_index !== undefined ? s.role_index === roleIdx : idx === roleIdx;
+                                                          if (isTarget) {
+                                                            return {
+                                                              ...s,
+                                                              role_index: roleIdx,
+                                                              staff_type: newType,
+                                                              staff_name: '',
+                                                              staff_id: '',
+                                                              mobile: ''
+                                                            };
                                                           }
                                                           return s;
                                                         });
@@ -2521,19 +2494,16 @@ export const OperationsLeads: React.FC = () => {
                                                       setEventAllocations((prev: any) => {
                                                         const existingAlloc = prev[evId] || { staff: [] };
                                                         
-                                                        let targetIdx = 0;
-                                                        const updatedStaff = existingAlloc.staff.map((s: any) => {
-                                                          if (s.staff_role === roleStr) {
-                                                            if (targetIdx === rowIdx) {
-                                                              targetIdx++;
-                                                              return {
-                                                                ...s,
-                                                                staff_name: selectedName,
-                                                                staff_id: staffId,
-                                                                mobile: memberInfo?.mobile || ''
-                                                              };
-                                                            }
-                                                            targetIdx++;
+                                                        const updatedStaff = existingAlloc.staff.map((s: any, idx: number) => {
+                                                          const isTarget = s.role_index !== undefined ? s.role_index === roleIdx : idx === roleIdx;
+                                                          if (isTarget) {
+                                                            return {
+                                                              ...s,
+                                                              role_index: roleIdx,
+                                                              staff_name: selectedName,
+                                                              staff_id: staffId,
+                                                              mobile: memberInfo?.mobile || ''
+                                                            };
                                                           }
                                                           return s;
                                                         });
@@ -2564,12 +2534,21 @@ export const OperationsLeads: React.FC = () => {
                                                         return normType(sType) === normType(currentStaffType);
                                                       });
                                                       
-                                                      const allStaffInEvent = allocStaff.map((s: any) => s.staff_name).filter(Boolean);
-                                                      
-                                                      const availableStaff = filteredStaff.filter(s => 
-                                                        s.name === assignedStaff.staff_name || 
-                                                        !allStaffInEvent.includes(s.name)
-                                                      );
+                                                      // Staff names assigned to OTHER slots in this same event (evId)
+                                                      const assignedInOtherSlots = allocStaff
+                                                        .filter((s: any, idx: number) => {
+                                                          const isOther = s.role_index !== undefined ? s.role_index !== roleIdx : idx !== roleIdx;
+                                                          return isOther && s.staff_name && s.staff_name.trim() !== '';
+                                                        })
+                                                        .map((s: any) => s.staff_name.trim().toLowerCase());
+
+                                                      const currentAssignedNameLower = (assignedStaff.staff_name || '').trim().toLowerCase();
+
+                                                      const availableStaff = filteredStaff.filter(s => {
+                                                        const nameLower = (s.name || '').trim().toLowerCase();
+                                                        if (nameLower === currentAssignedNameLower) return true;
+                                                        return !assignedInOtherSlots.includes(nameLower);
+                                                      });
                                                       
                                                       if (availableStaff.length === 0) {
                                                         return <option value="" disabled>No staff available.</option>;
@@ -2613,29 +2592,20 @@ export const OperationsLeads: React.FC = () => {
                                                       setEventAllocations((prev: any) => {
                                                         const existingAlloc = prev[evId] || { staff: [] };
                                                         
-                                                        let targetIdx = 0;
-                                                        let updatedStaff = existingAlloc.staff.filter((s: any) => {
-                                                          if (s.staff_role === roleStr) {
-                                                            if (targetIdx === rowIdx) {
-                                                              targetIdx++;
-                                                              return false;
-                                                            }
-                                                            targetIdx++;
+                                                        const updatedStaff = existingAlloc.staff.map((s: any, idx: number) => {
+                                                          const isTarget = s.role_index !== undefined ? s.role_index === roleIdx : idx === roleIdx;
+                                                          if (isTarget) {
+                                                            return {
+                                                              ...s,
+                                                              role_index: roleIdx,
+                                                              staff_name: '',
+                                                              staff_id: '',
+                                                              mobile: '',
+                                                              equipment: []
+                                                            };
                                                           }
-                                                          return true;
+                                                          return s;
                                                         });
-                                                        
-                                                        // Ensure at least one row remains
-                                                        const roleStaffRemaining = updatedStaff.filter((s: any) => s.staff_role === roleStr);
-                                                        if (roleStaffRemaining.length === 0) {
-                                                          updatedStaff.push({
-                                                            staff_role: roleStr,
-                                                            staff_id: '',
-                                                            staff_name: '',
-                                                            mobile: '',
-                                                            staff_type: 'In-House'
-                                                          });
-                                                        }
                                                         
                                                         return {
                                                           ...prev,
@@ -2656,13 +2626,15 @@ export const OperationsLeads: React.FC = () => {
                                               </div>
                                               {/* Assigned Equipment Section for Individual Staff */}
                                               {(() => {
-                                                const eqKey = `${evId}-${roleIdx}-${rowIdx}`;
+                                                const eqKey = `${evId}-${roleIdx}`;
                                                 const searchQuery = equipmentSearchQueryByEvent[eqKey] || '';
                                                 const isDropdownOpen = !!isEquipmentDropdownOpenByEvent[eqKey];
                                                 const selectedEquipmentNames = assignedStaff.equipment || [];
                                                 
                                                 const allOtherSelectedEquipments = allocStaff
-                                                  .filter((s: any) => s !== assignedStaff)
+                                                  .filter((s: any, idx: number) => {
+                                                    return s.role_index !== undefined ? s.role_index !== roleIdx : idx !== roleIdx;
+                                                  })
                                                   .flatMap((s: any) => s.equipment || []);
 
                                                 const filteredEquipment = (equipment || []).filter(eq => {
@@ -2692,17 +2664,13 @@ export const OperationsLeads: React.FC = () => {
                                                               onClick={() => {
                                                                 setEventAllocations((prev: any) => {
                                                                   const existingAlloc = prev[evId] || { staff: [] };
-                                                                  let targetIdx = 0;
-                                                                  const updatedStaff = existingAlloc.staff.map((s: any) => {
-                                                                    if (s.staff_role === roleStr) {
-                                                                      if (targetIdx === rowIdx) {
-                                                                        targetIdx++;
-                                                                        return {
-                                                                          ...s,
-                                                                          equipment: (s.equipment || []).filter((name: string) => name !== eqName)
-                                                                        };
-                                                                      }
-                                                                      targetIdx++;
+                                                                  const updatedStaff = existingAlloc.staff.map((s: any, idx: number) => {
+                                                                    const isTarget = s.role_index !== undefined ? s.role_index === roleIdx : idx === roleIdx;
+                                                                    if (isTarget) {
+                                                                      return {
+                                                                        ...s,
+                                                                        equipment: (s.equipment || []).filter((name: string) => name !== eqName)
+                                                                      };
                                                                     }
                                                                     return s;
                                                                   });
@@ -2758,20 +2726,16 @@ export const OperationsLeads: React.FC = () => {
                                                                   onClick={() => {
                                                                     setEventAllocations((prev: any) => {
                                                                       const existingAlloc = prev[evId] || { staff: [] };
-                                                                      let targetIdx = 0;
-                                                                      const updatedStaff = existingAlloc.staff.map((s: any) => {
-                                                                        if (s.staff_role === roleStr) {
-                                                                          if (targetIdx === rowIdx) {
-                                                                            targetIdx++;
-                                                                            const currentEq = s.equipment || [];
-                                                                            return {
-                                                                              ...s,
-                                                                              equipment: isAlreadySelected 
-                                                                                ? currentEq.filter((name: string) => name !== eq.equipment_name)
-                                                                                : [...currentEq, eq.equipment_name]
-                                                                            };
-                                                                          }
-                                                                          targetIdx++;
+                                                                      const updatedStaff = existingAlloc.staff.map((s: any, idx: number) => {
+                                                                        const isTarget = s.role_index !== undefined ? s.role_index === roleIdx : idx === roleIdx;
+                                                                        if (isTarget) {
+                                                                          const currentEq = s.equipment || [];
+                                                                          return {
+                                                                            ...s,
+                                                                            equipment: isAlreadySelected 
+                                                                              ? currentEq.filter((name: string) => name !== eq.equipment_name)
+                                                                              : [...currentEq, eq.equipment_name]
+                                                                          };
                                                                         }
                                                                         return s;
                                                                       });
@@ -2813,53 +2777,20 @@ export const OperationsLeads: React.FC = () => {
                                                 );
                                               })()}
                                             </div>
-                                            );
-                                          })}
 
-                                          {/* Add Staff Button */}
-                                          <div className="pt-1">
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                setEventAllocations((prev: any) => {
-                                                  const existingAlloc = prev[evId] || { staff: [] };
-                                                  return {
-                                                    ...prev,
-                                                    [evId]: {
-                                                      ...existingAlloc,
-                                                      staff: [
-                                                        ...existingAlloc.staff,
-                                                        {
-                                                          staff_role: roleStr,
-                                                          staff_id: '',
-                                                          staff_name: '',
-                                                          mobile: '',
-                                                          staff_type: 'In-House'
-                                                        }
-                                                      ]
-                                                    }
-                                                  };
-                                                });
-                                              }}
-                                              className="inline-flex items-center gap-1 text-[11px] font-sans font-bold text-amber-500 hover:text-amber-400 cursor-pointer transition-colors bg-amber-500/5 hover:bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20"
-                                            >
-                                              + Add Staff
-                                            </button>
-                                          </div>
-
-                                          {/* Validation message if missing */}
-                                          {validationAttempted && isEmpty && (
-                                            <div className="pt-0.5">
-                                              <span className="text-[10px] text-rose-500 font-mono italic">
-                                                ⚠️ Required: Assign at least one staff
-                                              </span>
+                                              {/* Validation message if missing */}
+                                              {validationAttempted && isEmpty && (
+                                                <div className="pt-0.5">
+                                                  <span className="text-[10px] text-rose-500 font-mono italic">
+                                                    ⚠️ Required: Assign at least one staff
+                                                  </span>
+                                                </div>
+                                              )}
                                             </div>
-                                          )}
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
                               </tbody>
                             </table>
                           </div>
