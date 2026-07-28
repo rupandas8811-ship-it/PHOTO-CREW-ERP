@@ -84,7 +84,7 @@ interface EventProofData {
   completeProofs?: EquipmentProofItem[];
 }
 
-export const StaffModule: React.FC = () => {
+export const ProductionStaffModule: React.FC = () => {
   const { currentUser, staff, leads, orders, operations, staffAssignments, equipment, leadEquipmentHistory, addLeadEquipmentHistory, refreshData } = useRole();
 
   // Resolve staff member

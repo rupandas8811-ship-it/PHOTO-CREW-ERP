@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useRole } from './RoleContext';
+import { supabaseClient } from '../supabaseClient';
 import { Staff, Production } from '../types';
 import { 
   Users, UserPlus, Phone, Mail, Award, Clock, FileText, ToggleLeft, ToggleRight, Trash2, ShieldAlert,
@@ -37,6 +38,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
   // Staff Form state fields
   const [formName, setFormName] = useState('');
   const [formMobile, setFormMobile] = useState('');
+  const [formPassword, setFormPassword] = useState('');
   const [formWhatsapp, setFormWhatsapp] = useState('');
   const [formEmail, setFormEmail] = useState('');
   const [formEmployeeId, setFormEmployeeId] = useState('');
@@ -60,6 +62,8 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     setEditingStaff(null);
     setFormName('');
     setFormMobile('');
+    setFormPassword('');
+    setFormPassword('');
     setFormWhatsapp('');
     setFormEmail('');
     
