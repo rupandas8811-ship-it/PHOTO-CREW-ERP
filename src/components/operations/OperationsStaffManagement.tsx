@@ -6,8 +6,6 @@ import {
 } from 'lucide-react';
 import { Staff } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { createClient } from '@supabase/supabase-js';
-import { supabaseClient } from '../../supabaseClient';
 
 export const OperationsStaffManagement: React.FC = () => {
   const { currentRole, staff, addStaff, updateStaff, deleteStaff, operations, leads, orders, staffAssignments } = useRole();
@@ -29,8 +27,7 @@ export const OperationsStaffManagement: React.FC = () => {
     staff_type: 'In-House' as 'In-House' | 'Freelancer',
     joining_date: new Date().toISOString().split('T')[0],
     profile_photo: '',
-    notes: '',
-    password: ''
+    notes: ''
   });
 
   const [selectedStaffBookings, setSelectedStaffBookings] = useState<{ staffName: string; bookings: any[] } | null>(null);
@@ -50,8 +47,7 @@ export const OperationsStaffManagement: React.FC = () => {
       staff_type: st.Staff_Type || st.staff_type || 'In-House',
       joining_date: st.joining_date || new Date().toISOString().split('T')[0],
       profile_photo: st.profile_photo || '',
-      notes: st.notes || '',
-      password: ''
+      notes: st.notes || ''
     });
     const loadedSkills = typeof st.Skill === 'string'
       ? st.Skill.split(',').map((s: string) => s.trim()).filter(Boolean)
@@ -125,11 +121,8 @@ export const OperationsStaffManagement: React.FC = () => {
     const finalEmail = form.email || `${form.name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'staff'}@photocrew.com`;
     const finalSkillsStr = skills.join(', ');
 
-    // Extract password out of submission payload for the staff table
-    const { password, ...payloadWithoutPassword } = form;
-    
     const submissionPayload = {
-      ...payloadWithoutPassword,
+      ...form,
       email: finalEmail,
       Skill: finalSkillsStr,
       Staff_Type: form.staff_type
@@ -138,34 +131,6 @@ export const OperationsStaffManagement: React.FC = () => {
     try {
       setIsSaving(true);
       if (editingId) {
-        const originalStaff = staff.find(s => s.staff_id === editingId);
-        const targetEmail = originalStaff?.email || form.email || finalEmail;
-
-        const userUpdates: any = {
-          name: form.name,
-          mobile: form.mobile,
-          email: finalEmail,
-          username: finalEmail
-        };
-        if (password) {
-          userUpdates.password = password;
-        }
-
-        if (targetEmail) {
-          await supabaseClient
-            .from('users')
-            .update(userUpdates)
-            .eq('email', targetEmail)
-            .eq('role', 'Operation Staff');
-        }
-        if (originalStaff?.mobile) {
-          await supabaseClient
-            .from('users')
-            .update(userUpdates)
-            .eq('mobile', originalStaff.mobile)
-            .eq('role', 'Operation Staff');
-        }
-
         await updateStaff(editingId, submissionPayload);
         const toast = document.createElement('div');
         toast.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-2 rounded-xl shadow-lg z-50 font-sans text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-5';
@@ -174,49 +139,6 @@ export const OperationsStaffManagement: React.FC = () => {
         setTimeout(() => toast.remove(), 3000);
         handleCancel();
       } else {
-        // Create auth user & public.users record
-        const authEmail = finalEmail;
-        let authUserId: string | null = null;
-
-        if (password) {
-          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-          const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-          
-          if (supabaseUrl && supabaseAnonKey) {
-            try {
-              const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
-                auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-              });
-              
-              const { data: authData } = await tempClient.auth.signUp({
-                email: authEmail,
-                password: password
-              });
-              
-              if (authData?.user) {
-                authUserId = authData.user.id;
-              }
-            } catch (authErr: any) {
-              console.warn("Supabase Auth signUp skipped or warning:", authErr?.message || authErr);
-            }
-          }
-        }
-
-        const finalUserId = authUserId || (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : `00000000-0000-0000-0000-${Date.now().toString().slice(-12)}`);
-
-        // Upsert user record in users table with email as username
-        await supabaseClient.from('users').upsert({
-          id: finalUserId,
-          name: form.name,
-          mobile: form.mobile,
-          email: authEmail,
-          username: authEmail,
-          role: 'Operation Staff',
-          active: true,
-          created_at: new Date().toISOString(),
-          password: password || '123456'
-        }, { onConflict: 'email' });
-
         await addStaff(submissionPayload);
         const toast = document.createElement('div');
         toast.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-2 rounded-xl shadow-lg z-50 font-sans text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-5';
@@ -434,7 +356,7 @@ export const OperationsStaffManagement: React.FC = () => {
       <div className="lg:col-span-4 flex flex-col bg-zinc-900/40 border border-zinc-850 rounded-2xl p-5 shadow-xl space-y-4 overflow-hidden h-full">
         <h3 className="text-xs font-mono font-black uppercase text-zinc-300 flex items-center gap-1.5 border-b border-zinc-850 pb-2.5">
           <PlusCircle className="w-4 h-4 text-amber-500" />
-          <span>{editingId ? 'Edit Operative Profile' : 'Onboard Operation Staff'}</span>
+          <span>{editingId ? 'Edit Operative Profile' : 'Onboard Field Operative'}</span>
         </h3>
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs flex-1 flex flex-col">
@@ -467,19 +389,6 @@ export const OperationsStaffManagement: React.FC = () => {
               />
             </div>
 
-            <div className="min-w-0">
-              <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
-                Password {editingId ? '(Leave blank to keep current)' : '*'}
-              </label>
-              <input
-                type="text"
-                required={!editingId}
-                placeholder="e.g. Staff@123"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className="w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
-              />
-            </div>
             <div className="min-w-0">
               <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
                 WhatsApp Number

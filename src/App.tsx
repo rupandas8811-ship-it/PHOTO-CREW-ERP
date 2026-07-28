@@ -8,7 +8,6 @@ import { ProductionAnalytics } from './components/analytics/ProductionAnalytics'
 import { BusinessOverviewAnalytics } from './components/analytics/BusinessOverviewAnalytics';
 import { SalesModule } from './components/SalesModule';
 import { OperationsModule } from './components/OperationsModule';
-import { StaffModule } from './components/StaffModule';
 import { ProductionModule } from './components/ProductionModule';
 import { StaffManagementModule } from './components/StaffManagementModule';
 import { PaymentsModule } from './components/PaymentsModule';
@@ -111,10 +110,6 @@ const MainAppContent: React.FC = () => {
     if (currentRole === 'Production Team') {
       // Production users can only access Production (leads, roster, performance, and analytics)
       return ['production', 'staff_management', 'notifications'].includes(tab);
-    }
-
-    if (currentRole === 'Operation Staff') {
-      return ['staff_dashboard', 'notifications'].includes(tab);
     }
 
     return false;
@@ -286,8 +281,6 @@ const MainAppContent: React.FC = () => {
           setActiveTab('operations');
         } else if (currentRole === 'Production Team') {
           setActiveTab('production');
-        } else if (currentRole === 'Operation Staff') {
-          setActiveTab('staff_dashboard');
         }
       }
       prevUserRef.current = currentUser;
@@ -319,10 +312,6 @@ const MainAppContent: React.FC = () => {
         }
         if (!['production_leads', 'production_calendar', 'crew_roster', 'staff_roster'].includes(activeSubTab)) {
           setActiveSubTab('production_leads');
-        }
-      } else if (currentRole === 'Operation Staff') {
-        if (activeTab !== 'staff_dashboard') {
-          setActiveTab('staff_dashboard');
         }
       }
     } else {
@@ -364,33 +353,7 @@ const MainAppContent: React.FC = () => {
         </button>
       </div>
 
-      {currentRole === 'Operation Staff' ? (
-        <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 rounded-2xl border border-zinc-850 p-4 space-y-4 shadow-xl relative animate-in fade-in duration-300">
-          <div className="flex items-center justify-between pb-1 border-b border-zinc-850">
-            <h3 className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-zinc-400 font-mono flex items-center gap-1.5">
-              <Briefcase className="w-3.5 h-3.5 text-amber-500" />
-              <span>STAFF TERMINAL</span>
-            </h3>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-          </div>
-          <nav className="space-y-1.5">
-            <button
-              onClick={() => handleTabSelect('staff_dashboard')}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-bold rounded-xl transition-all duration-200 text-left border cursor-pointer ${
-                activeTab === 'staff_dashboard'
-                  ? 'bg-gradient-to-r from-zinc-800 to-zinc-900 text-white border-zinc-700 font-bold shadow-md'
-                  : 'text-zinc-400 bg-transparent border-transparent hover:bg-zinc-900/50 hover:text-white hover:border-zinc-800'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Calendar className="w-4 h-4 flex-shrink-0 text-amber-500" />
-                <span className="tracking-wide">My Bookings</span>
-              </div>
-              <ChevronRightIcon active={activeTab === 'staff_dashboard'} />
-            </button>
-          </nav>
-        </div>
-      ) : activeTab === 'operations' || currentRole === 'Operations Team' ? (
+      {activeTab === 'operations' || currentRole === 'Operations Team' ? (
         <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 rounded-2xl border border-zinc-850 p-4 space-y-4 shadow-xl relative animate-in fade-in duration-300">
           {/* Corner calibration tick marks */}
           <div className="absolute top-2 left-2 w-1 h-1 bg-amber-500/50" />
@@ -865,7 +828,6 @@ const MainAppContent: React.FC = () => {
                     {activeTab === 'notifications' && <NotificationsModule />}
                     {activeTab === 'payments' && (currentRole === 'Business Owner' || currentRole === 'Sales Team') && <PaymentsModule />}
                     {activeTab === 'search' && currentRole === 'Business Owner' && <OrderSearch />}
-                    {activeTab === 'staff_dashboard' && currentRole === 'Operation Staff' && <StaffModule />}
                     {activeTab === 'users' && currentRole === 'Business Owner' && <UserManagementModule />}
                     {activeTab === 'diagnostics' && currentRole === 'Business Owner' && <DatabaseHealthModule />}
                   </>
