@@ -2090,9 +2090,12 @@ export const OperationsLeads: React.FC = () => {
                 
                 {/* 1. Customer Information */}
                 <div className="bg-zinc-950/45 border border-zinc-850 p-4 rounded-2xl space-y-3 relative overflow-hidden">
+                  {/* CUSTOMER label hidden as requested */}
+                  {false && (
                   <div className="absolute top-0 right-0 p-3 text-[10px] text-zinc-655 select-none">
                     👤 CUSTOMER
                   </div>
+                  )}
                   <h4 className="text-[11px] font-mono font-bold uppercase text-amber-500 tracking-wider">
                     Customer Information
                   </h4>
@@ -2237,12 +2240,15 @@ export const OperationsLeads: React.FC = () => {
                               {ev.event_start_time || 'N/A'} {ev.event_end_time ? `- ${ev.event_end_time}` : ''}
                             </span>
                           </div>
+                          {/* Shoot Type Hidden as requested */}
+                          {false && (
                           <div>
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Shoot Type</span>
                             <span className="text-zinc-350 font-medium uppercase text-[11px] block">
                               {ev.event_shoot_type || 'N/A'}
                             </span>
                           </div>
+                          )}
                           <div>
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Reporting Date</span>
                             <span className="text-zinc-200 text-[11px] font-mono block">{allocation.reporting_date || ev.reporting_date || ev.event_date || 'N/A'}</span>
@@ -2255,10 +2261,13 @@ export const OperationsLeads: React.FC = () => {
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Guest Pax</span>
                             <span className="text-zinc-200 text-[11px] font-mono block">{ev.guest_pax || 'N/A'}</span>
                           </div>
+                          {/* Staff Pax Hidden as requested */}
+                          {false && (
                           <div>
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Staff Pax</span>
                             <span className="text-zinc-200 text-[11px] font-mono block">{ev.staff_pax || 'N/A'}</span>
                           </div>
+                          )}
                           <div className="col-span-1 sm:col-span-2 lg:col-span-4">
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Venue / Location</span>
                             <span className="text-zinc-200 text-[11px] font-sans block leading-tight">
@@ -2738,8 +2747,8 @@ export const OperationsLeads: React.FC = () => {
                         </div>
 
 
-                        {/* Staff Schedule Card */}
-                        {(() => {
+                        {/* Staff Schedule Card (Hidden as requested) */}
+                        {false && (() => {
                            const staffNamesToCheck: string[] = [];
                            
                            // Check all dropdowns for this event
@@ -2865,8 +2874,8 @@ export const OperationsLeads: React.FC = () => {
                         
                       </div>
                       
-                      {/* 4. WhatsApp Sharing */}
-                      {allocStaff.length > 0 && (
+                      {/* 4. WhatsApp Sharing (Hidden as requested) */}
+                      {false && allocStaff.length > 0 && (
                         <div className="pt-3 mt-4 border-t border-zinc-800">
                           <button
                             type="button"
