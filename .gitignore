@@ -1,5 +1,6 @@
 node_modules/
 build/
+dist/
 coverage/
 .DS_Store
 *.log
@@ -12,7 +13,8 @@ check_db*.mjs
 inspect-*.ts
 query-*.ts
 *.sql
-!dist/**
+*.cjs
+*.mjs
 !revert.mjs
 !download_icons.mjs
 !server.ts
