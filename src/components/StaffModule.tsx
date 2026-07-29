@@ -457,12 +457,47 @@ export const StaffModule: React.FC = () => {
     try {
       setIsSubmitting(true);
       const timestamp = new Date().toISOString();
-      const newProofs: EquipmentProofItem[] = reqItems.map(item => ({
-        equipmentName: item.name,
-        assetId: item.assetId,
-        photoUrl: modalPhotos[item.name],
-        capturedAt: timestamp
-      }));
+      // Ensure upload to Supabase
+      const uploadedProofs: EquipmentProofItem[] = [];
+      for (const item of reqItems) {
+        let finalUrl = modalPhotos[item.name];
+        
+        // If it's a base64 data URL, upload it to Supabase
+        if (finalUrl && finalUrl.startsWith('data:image')) {
+          try {
+            const res = await fetch(finalUrl);
+            const blob = await res.blob();
+            const fileName = `proofs/${booking.orderId}_${stage.replace(/\s+/g, '_')}_${Date.now()}.jpg`;
+            
+            const { data, error } = await supabaseClient.storage.from('img').upload(fileName, blob, {
+              contentType: 'image/jpeg',
+              upsert: true
+            });
+            
+            if (error) {
+              console.error("Storage upload error:", error);
+              throw error;
+            }
+            
+            const { data: { publicUrl } } = supabaseClient.storage.from('img').getPublicUrl(data.path);
+            finalUrl = publicUrl;
+          } catch (uploadErr: any) {
+             console.error("Error uploading to Supabase:", uploadErr);
+             showToast(`❌ Failed to upload photo: ${uploadErr.message || "Unknown error"}`);
+             setIsSubmitting(false);
+             return; // Do NOT continue or mark as complete
+          }
+        }
+        
+        uploadedProofs.push({
+          equipmentName: item.name,
+          assetId: item.assetId,
+          photoUrl: finalUrl,
+          capturedAt: timestamp
+        });
+      }
+
+      const newProofs: EquipmentProofItem[] = uploadedProofs;
 
       // Update local proof storage
       const existingProofs = staffProofs[booking.key] || {};
@@ -523,7 +558,12 @@ export const StaffModule: React.FC = () => {
               photo_url: p.photoUrl,
               event_id: booking.eventId,
               event_name: booking.eventName
-            })
+            }),
+            photo_url: p.photoUrl,
+            event_id: booking.eventId,
+            event_name: booking.eventName,
+            asset_id: p.assetId,
+            proof_type: stage
           });
         } catch (dbErr) {
           console.warn('Error saving to lead_equipment_history:', dbErr);
@@ -1224,15 +1264,13 @@ export const StaffModule: React.FC = () => {
 
               {/* Equipment Items list with photo inputs */}
               <div className="space-y-4">
-                {(photoModalData.stage === 'Event Start' 
-                  ? [
-                      { name: 'Equipment Taken Image', assetId: 'Verification' },
-                      { name: 'Event Start Image', assetId: 'Verification' }
-                    ]
-                  : [
-                      { name: 'Equipment Handover Image', assetId: 'Verification' },
-                      { name: 'Event End Image', assetId: 'Verification' }
-                    ]
+                {(photoModalData.stage === 'Equipment Received' 
+                  ? [{ name: 'Equipment Received Photo', assetId: 'Verification' }]
+                  : photoModalData.stage === 'Event Start'
+                  ? [{ name: 'Event Start Photo', assetId: 'Verification' }]
+                  : photoModalData.stage === 'Equipment Handover'
+                  ? [{ name: 'Equipment Handover Photo', assetId: 'Verification' }]
+                  : []
                 ).map((item: any, idx: number) => {
                   const currentPhoto = modalPhotos[item.name];
 
@@ -1265,8 +1303,8 @@ export const StaffModule: React.FC = () => {
                             <input
                               type="file"
                               accept="image/*"
-                              capture="environment"
-                              onChange={(e) => handlePhotoCapture(item.name, e)}
+                              
+                              onClick={(e) => { (e.target as HTMLInputElement).value = ''; }} onChange={(e) => handlePhotoCapture(item.name, e)}
                               className="hidden"
                             />
                           </label>
@@ -1283,8 +1321,8 @@ export const StaffModule: React.FC = () => {
                           <input
                             type="file"
                             accept="image/*"
-                            capture="environment"
-                            onChange={(e) => handlePhotoCapture(item.name, e)}
+                            
+                            onClick={(e) => { (e.target as HTMLInputElement).value = ''; }} onChange={(e) => handlePhotoCapture(item.name, e)}
                             className="hidden"
                           />
                         </label>

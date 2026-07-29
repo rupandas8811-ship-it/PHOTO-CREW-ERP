@@ -201,6 +201,11 @@ export interface Lead {
   sales_person: string;
   status: CurrentStage;
   remarks?: string;
+  photo_url?: string;
+  event_id?: string;
+  event_name?: string;
+  asset_id?: string;
+  proof_type?: string;
   events?: LeadEvent[];
   created_by: string;
   updated_by?: string;
@@ -485,9 +490,10 @@ export interface StaffAssignment {
   staff_id: string;
   staff_name: string;
   assignment_date: string;
-  assignment_status: 'Assigned' | 'Completed'
+  assignment_status: 'Assigned' | 'Completed' | 'Event Started' | 'Event Completed'
   | 'Project Completed' | 'Cancelled';
   whatsapp_sent_status?: string;
+  task_status?: string;
   updated_by?: string;
 }
 

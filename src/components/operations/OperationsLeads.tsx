@@ -2964,7 +2964,7 @@ export const OperationsLeads: React.FC = () => {
                   <td className="py-3 text-center">
                     {selectedEquipmentStatus.eqReceived ? (() => {
                       try {
-                        const url = JSON.parse(selectedEquipmentStatus.eqReceived.remarks).photo_url;
+                        const url = selectedEquipmentStatus.eqReceived.photo_url || JSON.parse(selectedEquipmentStatus.eqReceived.remarks).photo_url;
                         return url ? (
                            <button onClick={() => window.open(url, '_blank')} className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-xs rounded text-indigo-400 border border-zinc-700 transition-colors cursor-pointer">View Image</button>
                         ) : <span className="text-zinc-600 italic">No Image</span>;
@@ -2980,7 +2980,7 @@ export const OperationsLeads: React.FC = () => {
                   <td className="py-3 text-center">
                     {selectedEquipmentStatus.eqHandover ? (() => {
                       try {
-                        const url = JSON.parse(selectedEquipmentStatus.eqHandover.remarks).photo_url;
+                        const url = selectedEquipmentStatus.eqHandover.photo_url || JSON.parse(selectedEquipmentStatus.eqHandover.remarks).photo_url;
                         return url ? (
                            <button onClick={() => window.open(url, '_blank')} className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-xs rounded text-indigo-400 border border-zinc-700 transition-colors cursor-pointer">View Image</button>
                         ) : <span className="text-zinc-600 italic">No Image</span>;
@@ -3501,12 +3501,15 @@ export const OperationsLeads: React.FC = () => {
                                     if (h.order_id !== ord.order_id) return false;
                                     if (h.equipment_status !== stage) return false;
                                     if (h.returned_by?.toLowerCase() !== member.staff_name.toLowerCase()) return false;
-                                    if (!h.remarks) return false;
-                                    try {
-                                      const parsed = JSON.parse(h.remarks);
-                                      if (parsed.event_name && parsed.event_name !== evName && evName !== 'Main Event' && parsed.event_name !== 'Main Event') return false;
-                                      return true;
-                                    } catch (e) { return true; }
+                                    if (h.event_name && h.event_name !== evName && evName !== 'Main Event' && h.event_name !== 'Main Event') return false;
+                                    
+                                    if (!h.event_name && h.remarks) {
+                                      try {
+                                        const parsed = JSON.parse(h.remarks);
+                                        if (parsed.event_name && parsed.event_name !== evName && evName !== 'Main Event' && parsed.event_name !== 'Main Event') return false;
+                                      } catch (e) { }
+                                    }
+                                    return true;
                                   });
                                 };
 
@@ -3519,7 +3522,9 @@ export const OperationsLeads: React.FC = () => {
                                 else if (eqReceived) equipmentStatusText = 'Equipment Received';
 
                                 const getPhotoUrl = (record: any) => {
-                                  if (!record || !record.remarks) return null;
+                                  if (!record) return null;
+                                  if (record.photo_url) return record.photo_url;
+                                  if (!record.remarks) return null;
                                   try {
                                     return JSON.parse(record.remarks).photo_url;
                                   } catch (e) { return null; }
