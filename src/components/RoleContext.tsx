@@ -1927,16 +1927,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             evts = deserializeLeadEvents(l.notes_special_customizations).events || [];
           }
           let finalStatus = l.current_status || l.status || 'New Lead';
-          if (dbStatusHistory) {
-             const h = dbStatusHistory.filter((sh: any) => sh.lead_id === l.lead_id);
-             if (h.length > 0) {
-               // Safe sort just in case created_at is missing
-               const sorted = [...h].sort((a: any,b: any) => (new Date(b.created_at || 0).getTime()) - (new Date(a.created_at || 0).getTime()));
-               if (sorted[0]?.new_status) {
-                 finalStatus = sorted[0].new_status;
-               }
-             }
-          }
           if (finalStatus === 'Follow-up' || finalStatus === 'Follow-Up') {
             finalStatus = 'Follow Up';
           }
