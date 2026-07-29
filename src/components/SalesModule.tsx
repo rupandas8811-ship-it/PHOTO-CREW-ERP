@@ -4011,7 +4011,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     // Detect highest completed step
     const localSavedStep = localStorage.getItem(`crm_last_step_${lead.lead_id}`);
     let completedStep = 0;
-    if (localSavedStep) {
+    
+    // Explicit override for New Lead status to strictly enforce step 2 routing
+    const isNewLeadStatus = lead.status === 'New Lead' || lead.current_status === 'New Lead';
+
+    if (isNewLeadStatus) {
+      completedStep = 1; // Enforce step 1 completed for New Lead
+    } else if (localSavedStep) {
       completedStep = parseInt(localSavedStep, 10);
     } else {
       // Parse from remarks tag [CRM_COMPLETED_STEP: X]

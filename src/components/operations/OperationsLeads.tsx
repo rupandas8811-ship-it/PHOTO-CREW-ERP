@@ -194,6 +194,7 @@ export const OperationsLeads: React.FC = () => {
 
   // Track which order's action dropdown is open
   const [activeMenuOrderId, setActiveMenuOrderId] = useState<string | null>(null);
+  const [selectedEquipmentStatus, setSelectedEquipmentStatus] = useState<{ staffName: string, eqReceived: any, eqHandover: any } | null>(null);
   const [activeMenuItems, setActiveMenuItems] = useState<{ label: string; onClick: () => void }[]>([]);
   const [menuCoords, setMenuCoords] = useState<{ x: number, y: number, openUpward: boolean }>({ x: 0, y: 0, openUpward: false });
 
@@ -1909,6 +1910,13 @@ export const OperationsLeads: React.FC = () => {
                                   setIsSaving(false);
                                 }
                               } else if (newStatus === 'Raw Footage Received') {
+                                const staffAssignmentsForOrder = staffAssignments?.filter(sa => sa.order_id === ord.order_id && sa.assignment_status !== 'Cancelled') || [];
+                                const allCompleted = staffAssignmentsForOrder.length > 0 && staffAssignmentsForOrder.every(sa => sa.assignment_status === 'Event Completed' || (sa as any).task_status === 'Event Completed');
+                                if (!allCompleted) {
+                                  alert('Operation staff have not completed the event yet.');
+                                  e.target.value = '';
+                                  return;
+                                }
                                 setReceivingFootageOrderId(ord.order_id);
                                 const existingRf = rawFootage?.find(f => f.order_id === ord.order_id);
                                 const op = getOpDetails(ord.order_id);
@@ -1998,6 +2006,12 @@ export const OperationsLeads: React.FC = () => {
                             actionItems.push({
                               label: 'Update Raw Footage',
                               onClick: () => {
+                                const staffAssignmentsForOrder = staffAssignments?.filter(sa => sa.order_id === ord.order_id && sa.assignment_status !== 'Cancelled') || [];
+                                const allCompleted = staffAssignmentsForOrder.length > 0 && staffAssignmentsForOrder.every(sa => sa.assignment_status === 'Event Completed' || (sa as any).task_status === 'Event Completed');
+                                if (!allCompleted) {
+                                  alert('Operation staff have not completed the event yet.');
+                                  return;
+                                }
                                 setReceivingFootageOrderId(ord.order_id);
                                 const existingRf = rawFootage?.find(f => f.order_id === ord.order_id);
                                 const op = getOpDetails(ord.order_id);
@@ -2927,6 +2941,71 @@ export const OperationsLeads: React.FC = () => {
         </div>
       )}
 
+
+      {/* Equipment Status Modal */}
+      {selectedEquipmentStatus && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-805 rounded-2xl w-full max-w-lg shadow-2xl relative p-5">
+            <h3 className="text-sm font-bold text-indigo-400 font-mono uppercase mb-4">
+              Equipment Status - {selectedEquipmentStatus.staffName}
+            </h3>
+            
+            <table className="w-full text-left text-sm mb-4">
+              <thead>
+                <tr className="border-b border-zinc-800 text-zinc-400">
+                  <th className="py-2">Verification</th>
+                  <th className="py-2 text-center">Image</th>
+                  <th className="py-2 text-right">Date & Time</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/50">
+                <tr>
+                  <td className="py-3 text-white font-bold text-xs">Equipment Received</td>
+                  <td className="py-3 text-center">
+                    {selectedEquipmentStatus.eqReceived ? (() => {
+                      try {
+                        const url = JSON.parse(selectedEquipmentStatus.eqReceived.remarks).photo_url;
+                        return url ? (
+                           <button onClick={() => window.open(url, '_blank')} className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-xs rounded text-indigo-400 border border-zinc-700 transition-colors cursor-pointer">View Image</button>
+                        ) : <span className="text-zinc-600 italic">No Image</span>;
+                      } catch(e) { return null; }
+                    })() : <span className="text-zinc-600 italic text-[10px]">Pending/Empty</span>}
+                  </td>
+                  <td className="py-3 text-right font-mono text-xs text-zinc-400">
+                    {selectedEquipmentStatus.eqReceived?.returned_at ? new Date(selectedEquipmentStatus.eqReceived.returned_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '-'}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-3 text-white font-bold text-xs">Equipment Handover</td>
+                  <td className="py-3 text-center">
+                    {selectedEquipmentStatus.eqHandover ? (() => {
+                      try {
+                        const url = JSON.parse(selectedEquipmentStatus.eqHandover.remarks).photo_url;
+                        return url ? (
+                           <button onClick={() => window.open(url, '_blank')} className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-xs rounded text-indigo-400 border border-zinc-700 transition-colors cursor-pointer">View Image</button>
+                        ) : <span className="text-zinc-600 italic">No Image</span>;
+                      } catch(e) { return null; }
+                    })() : <span className="text-zinc-600 italic text-[10px]">Pending/Empty</span>}
+                  </td>
+                  <td className="py-3 text-right font-mono text-xs text-zinc-400">
+                    {selectedEquipmentStatus.eqHandover?.returned_at ? new Date(selectedEquipmentStatus.eqHandover.returned_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '-'}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div className="flex justify-end pt-2 border-t border-zinc-800">
+              <button
+                onClick={() => setSelectedEquipmentStatus(null)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Raw Footage Received Modal */}
       {receivingFootageOrderId && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -3388,10 +3467,8 @@ export const OperationsLeads: React.FC = () => {
                                 <th className="py-2.5 px-3.5 font-bold">Staff Name</th>
                                 <th className="py-2.5 px-3.5 font-bold">Assigned Task</th>
                                 <th className="py-2.5 px-3.5 font-bold text-right">Status</th>
-                                <th className="py-2.5 px-3.5 font-bold text-center">Equipment Taken</th>
-                                <th className="py-2.5 px-3.5 font-bold text-center">Event Start</th>
-                                <th className="py-2.5 px-3.5 font-bold text-center">Equipment Handover</th>
-                                <th className="py-2.5 px-3.5 font-bold text-center">Event End</th>
+                                <th className="py-2.5 px-3.5 font-bold text-center">Equipment Status</th>
+                                <th className="py-2.5 px-3.5 font-bold text-center">Event Image</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-zinc-800/60 text-xs">
@@ -3419,38 +3496,36 @@ export const OperationsLeads: React.FC = () => {
                                   );
                                 }
                                 
-                                const getPhotoForType = (stageKeyword: string, typeKeyword: string) => {
-                                  const proof = leadEquipmentHistory?.find(h => {
+                                const getRecordForStage = (stage: string) => {
+                                  return leadEquipmentHistory?.find(h => {
                                     if (h.order_id !== ord.order_id) return false;
-                                    if (!h.equipment_status?.toLowerCase().includes(stageKeyword)) return false;
+                                    if (h.equipment_status !== stage) return false;
                                     if (h.returned_by?.toLowerCase() !== member.staff_name.toLowerCase()) return false;
-                                    if (h.equipment_name && !h.equipment_name.toLowerCase().includes(typeKeyword)) return false;
-                                    
                                     if (!h.remarks) return false;
                                     try {
                                       const parsed = JSON.parse(h.remarks);
-                                      if (parsed.event_name && parsed.event_name !== evName && evName !== 'Main Event' && parsed.event_name !== 'Main Event') {
-                                        return false;
-                                      }
+                                      if (parsed.event_name && parsed.event_name !== evName && evName !== 'Main Event' && parsed.event_name !== 'Main Event') return false;
                                       return true;
-                                    } catch (e) {
-                                      return true;
-                                    }
+                                    } catch (e) { return true; }
                                   });
-                                  
-                                  if (!proof || !proof.remarks) return null;
-                                  try {
-                                    const parsed = JSON.parse(proof.remarks);
-                                    return parsed.photo_url || null;
-                                  } catch (e) {
-                                    return null;
-                                  }
                                 };
-                                
-                                const eqTakePhoto = getPhotoForType('start', 'equipment');
-                                const evStartPhoto = getPhotoForType('start', 'event');
-                                const eqHandoverPhoto = getPhotoForType('complete', 'equipment');
-                                const evEndPhoto = getPhotoForType('complete', 'event');
+
+                                const eqReceived = getRecordForStage('Equipment Received');
+                                const eqHandover = getRecordForStage('Equipment Handover');
+                                const evStart = getRecordForStage('Event Start');
+
+                                let equipmentStatusText = 'Pending';
+                                if (eqHandover) equipmentStatusText = 'Equipment Handover';
+                                else if (eqReceived) equipmentStatusText = 'Equipment Received';
+
+                                const getPhotoUrl = (record: any) => {
+                                  if (!record || !record.remarks) return null;
+                                  try {
+                                    return JSON.parse(record.remarks).photo_url;
+                                  } catch (e) { return null; }
+                                };
+
+                                const evStartPhoto = getPhotoUrl(evStart);
 
                                 return (
                                   <tr key={mIdx} className="hover:bg-zinc-800/30 transition-colors">
@@ -3466,48 +3541,20 @@ export const OperationsLeads: React.FC = () => {
                                       {statusBadge}
                                     </td>
                                     <td className="py-3 px-3.5 text-center">
-                                      {eqTakePhoto ? (
-                                        <img 
-                                          src={eqTakePhoto} 
-                                          alt="Take" 
-                                          className="w-10 h-10 object-cover rounded-md border border-zinc-700 mx-auto cursor-pointer hover:opacity-80"
-                                          onClick={() => window.open(eqTakePhoto, '_blank')}
-                                        />
-                                      ) : (
-                                        <span className="text-zinc-600 italic text-[10px]">Pending</span>
-                                      )}
+                                      <span 
+                                        onClick={() => setSelectedEquipmentStatus({ staffName: member.staff_name, eqReceived, eqHandover })}
+                                        className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline font-bold text-xs"
+                                      >
+                                        {equipmentStatusText}
+                                      </span>
                                     </td>
                                     <td className="py-3 px-3.5 text-center">
                                       {evStartPhoto ? (
-                                        <img 
-                                          src={evStartPhoto} 
-                                          alt="EvStart" 
-                                          className="w-10 h-10 object-cover rounded-md border border-zinc-700 mx-auto cursor-pointer hover:opacity-80"
+                                        <img
+                                           src={evStartPhoto}
+                                           alt="Event Start"
+                                           className="w-10 h-10 object-cover rounded-md border border-zinc-700 mx-auto cursor-pointer hover:opacity-80"
                                           onClick={() => window.open(evStartPhoto, '_blank')}
-                                        />
-                                      ) : (
-                                        <span className="text-zinc-600 italic text-[10px]">Pending</span>
-                                      )}
-                                    </td>
-                                    <td className="py-3 px-3.5 text-center">
-                                      {eqHandoverPhoto ? (
-                                        <img 
-                                          src={eqHandoverPhoto} 
-                                          alt="Handover" 
-                                          className="w-10 h-10 object-cover rounded-md border border-zinc-700 mx-auto cursor-pointer hover:opacity-80"
-                                          onClick={() => window.open(eqHandoverPhoto, '_blank')}
-                                        />
-                                      ) : (
-                                        <span className="text-zinc-600 italic text-[10px]">Pending</span>
-                                      )}
-                                    </td>
-                                    <td className="py-3 px-3.5 text-center">
-                                      {evEndPhoto ? (
-                                        <img 
-                                          src={evEndPhoto} 
-                                          alt="EvEnd" 
-                                          className="w-10 h-10 object-cover rounded-md border border-zinc-700 mx-auto cursor-pointer hover:opacity-80"
-                                          onClick={() => window.open(evEndPhoto, '_blank')}
                                         />
                                       ) : (
                                         <span className="text-zinc-600 italic text-[10px]">Pending</span>

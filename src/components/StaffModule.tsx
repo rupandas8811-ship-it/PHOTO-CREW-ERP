@@ -138,34 +138,41 @@ export const StaffModule: React.FC = () => {
       });
     }
 
-    // 2. Restore equipment verification photo proofs from leadEquipmentHistory
+        // 2. Restore equipment verification photo proofs from leadEquipmentHistory
     if (leadEquipmentHistory && leadEquipmentHistory.length > 0) {
       setStaffProofs(prev => {
         const restored = { ...prev };
         leadEquipmentHistory.forEach(leh => {
           if (
             leh.returned_by &&
-            leh.returned_by.toLowerCase() === staffName.toLowerCase() &&
-            (leh.equipment_status === 'Event Start' || leh.equipment_status === 'Event Complete')
+            leh.returned_by.toLowerCase() === staffName.toLowerCase()
           ) {
-            const key = `${leh.order_id}_gen_${staffName.toLowerCase()}`;
+            let eventId = 'gen';
             let photoUrl = (leh as any).photo_url || '';
             let assetId = (leh as any).asset_id || '';
-
-            if (!photoUrl && leh.remarks) {
+            
+            if (leh.remarks) {
               try {
                 const parsed = JSON.parse(leh.remarks);
                 photoUrl = parsed.photo_url || photoUrl;
                 assetId = parsed.asset_id || assetId;
+                if (parsed.event_id) {
+                  eventId = parsed.event_id;
+                }
               } catch (e) {}
             }
+            
+            const key = `${leh.order_id}_${eventId}_${staffName.toLowerCase()}`;
 
             if (photoUrl) {
-              const stage = leh.equipment_status as 'Event Start' | 'Event Complete';
-              const proofField = stage === 'Event Start' ? 'startProofs' : 'completeProofs';
+              const stage = leh.equipment_status;
+              const proofField = stage === 'Equipment Received' ? 'equipmentReceivedProofs' :
+                                 stage === 'Event Start' ? 'eventStartProofs' :
+                                 stage === 'Equipment Handover' ? 'equipmentHandoverProofs' :
+                                 stage === 'Event Complete' ? 'completeProofs' : 'startProofs';
+              
               const existing = restored[key] || {};
               const proofArr = existing[proofField] ? [...existing[proofField]!] : [];
-
               const proofItem: EquipmentProofItem = {
                 equipmentName: leh.equipment_name,
                 assetId: assetId || `EQ-${leh.equipment_name}`,
@@ -193,7 +200,7 @@ export const StaffModule: React.FC = () => {
   const [selectedBookingDetails, setSelectedBookingDetails] = useState<any | null>(null);
   const [photoModalData, setPhotoModalData] = useState<{
     booking: any;
-    stage: 'Event Start' | 'Event Complete';
+    stage: 'Equipment Received' | 'Event Start' | 'Equipment Handover' | 'Event Complete';
   } | null>(null);
 
   // Photos attached in modal
@@ -401,7 +408,7 @@ export const StaffModule: React.FC = () => {
   }, [leads, orders, operations, staffAssignments, staffName, staff, equipment, staffStatuses]);
 
   // Open Equipment Photo Verification Modal
-  const openPhotoModal = (booking: any, stage: 'Event Start' | 'Event Complete') => {
+  const openPhotoModal = (booking: any, stage: 'Equipment Received' | 'Event Start' | 'Equipment Handover' | 'Event Complete') => {
     setModalPhotos({});
     setPhotoModalData({ booking, stage });
   };
@@ -427,17 +434,19 @@ export const StaffModule: React.FC = () => {
     if (!photoModalData) return;
 
     const { booking, stage } = photoModalData;
-    const reqItems = stage === 'Event Start' 
-      ? [
-          { name: 'Equipment Taken Image', assetId: 'Verification' },
-          { name: 'Event Start Image', assetId: 'Verification' }
-        ]
-      : [
-          { name: 'Equipment Handover Image', assetId: 'Verification' },
-          { name: 'Event End Image', assetId: 'Verification' }
-        ];
+    
+    let reqItems: { name: string; assetId: string }[] = [];
+    if (stage === 'Equipment Received') {
+      reqItems = [{ name: 'Equipment Received Photo', assetId: 'Verification' }];
+    } else if (stage === 'Event Start') {
+      reqItems = [{ name: 'Event Start Photo', assetId: 'Verification' }];
+    } else if (stage === 'Equipment Handover') {
+      reqItems = [{ name: 'Equipment Handover Photo', assetId: 'Verification' }];
+    } else if (stage === 'Event Complete') {
+      reqItems = []; // No photo needed
+    }
 
-    // Verify all assigned equipment items have photos
+    // Verify photos if required
     for (const item of reqItems) {
       if (!modalPhotos[item.name]) {
         showToast(`⚠️ Please capture/upload a photo for ${item.name}`);
@@ -448,7 +457,6 @@ export const StaffModule: React.FC = () => {
     try {
       setIsSubmitting(true);
       const timestamp = new Date().toISOString();
-
       const newProofs: EquipmentProofItem[] = reqItems.map(item => ({
         equipmentName: item.name,
         assetId: item.assetId,
@@ -458,26 +466,42 @@ export const StaffModule: React.FC = () => {
 
       // Update local proof storage
       const existingProofs = staffProofs[booking.key] || {};
-      const updatedEventProofs: EventProofData = {
+      
+      const proofField = stage === 'Equipment Received' ? 'equipmentReceivedProofs' :
+                         stage === 'Event Start' ? 'eventStartProofs' :
+                         stage === 'Equipment Handover' ? 'equipmentHandoverProofs' :
+                         'completeProofs';
+
+      const updatedEventProofs = {
         ...existingProofs,
-        [stage === 'Event Start' ? 'startProofs' : 'completeProofs']: newProofs
+        [proofField]: newProofs
       };
 
       const nextProofs = {
         ...staffProofs,
         [booking.key]: updatedEventProofs
       };
+
       setStaffProofs(nextProofs);
       localStorage.setItem('staff_equipment_proofs_v2', JSON.stringify(nextProofs));
 
       // Update staff status
-      const nextStatus = stage === 'Event Start' ? 'Event Started' : 'Event Completed';
+      // We only advance the status on Event Start and Event Complete
+      let nextStatus = staffStatuses[booking.key] || 'Event Scheduled';
+      if (stage === 'Event Start') {
+        nextStatus = 'Event Started';
+      } else if (stage === 'Event Complete') {
+        nextStatus = 'Event Completed';
+      }
+
       const nextStatuses = {
         ...staffStatuses,
         [booking.key]: nextStatus
       };
+
       setStaffStatuses(nextStatuses);
       localStorage.setItem('staff_event_statuses_v2', JSON.stringify(nextStatuses));
+
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('staff_status_updated'));
       }
@@ -506,70 +530,72 @@ export const StaffModule: React.FC = () => {
         }
       }
 
-      // Sync status to operations table and staff_assignments table
-      try {
-        if (supabaseClient && booking.orderId) {
-          // 1. Update the individual staff assignment
-          await supabaseClient
-            .from('staff_assignments')
-            .update({
-              assignment_status: nextStatus,
-              task_status: nextStatus,
-              updated_by: staffName
-            })
-            .eq('order_id', booking.orderId)
-            .ilike('staff_name', staffName);
+      // Sync status to operations table and staff_assignments table ONLY when status actually changes
+      if (stage === 'Event Start' || stage === 'Event Complete') {
+        try {
+          if (supabaseClient && booking.orderId) {
+            // 1. Update the individual staff assignment
+            await supabaseClient
+              .from('staff_assignments')
+              .update({
+                assignment_status: nextStatus,
+                task_status: nextStatus,
+                updated_by: staffName
+              })
+              .eq('order_id', booking.orderId)
+              .ilike('staff_name', staffName);
 
-          // 2. Fetch all current staff assignments for this order
-          const { data: allStaffAssignments } = await supabaseClient
-            .from('staff_assignments')
-            .select('assignment_status')
-            .eq('order_id', booking.orderId);
+            // 2. Fetch all current staff assignments for this order
+            const { data: allStaffAssignments } = await supabaseClient
+              .from('staff_assignments')
+              .select('assignment_status')
+              .eq('order_id', booking.orderId);
 
-          if (allStaffAssignments && allStaffAssignments.length > 0) {
-            const allReachedStarted = allStaffAssignments.every(a => ['Event Started', 'Event Completed'].includes(a.assignment_status));
-            const allReachedCompleted = allStaffAssignments.every(a => a.assignment_status === 'Event Completed');
-            
-            let globalNextStatus = null;
-            if (allReachedCompleted) {
-              globalNextStatus = 'Event Completed';
-            } else if (allReachedStarted) {
-              globalNextStatus = 'Event Started';
-            }
-            
-            if (globalNextStatus) {
-              // Update operations status if unanimous
-              await supabaseClient
-                .from('operations')
-                .update({ 
-                  event_status: globalNextStatus,
-                  remarks: `Updated by System: All staff reached ${globalNextStatus}`
-                })
-                .eq('order_id', booking.orderId);
+            if (allStaffAssignments && allStaffAssignments.length > 0) {
+              const allReachedStarted = allStaffAssignments.every(a => ['Event Started', 'Event Completed'].includes(a.assignment_status));
+              const allReachedCompleted = allStaffAssignments.every(a => a.assignment_status === 'Event Completed');
+              
+              let globalNextStatus = null;
+              if (allReachedCompleted) {
+                globalNextStatus = 'Event Completed';
+              } else if (allReachedStarted) {
+                globalNextStatus = 'Event Started';
+              }
+              
+              if (globalNextStatus) {
+                // Update operations status if unanimous
+                await supabaseClient
+                  .from('operations')
+                  .update({ 
+                    event_status: globalNextStatus,
+                    remarks: `Updated by System: All staff reached ${globalNextStatus}`
+                  })
+                  .eq('order_id', booking.orderId);
 
-              // Update lead status if unanimous
-              if (booking.leadId) {
-                await updateLead(booking.leadId, { status: globalNextStatus as any });
+                // Update lead status if unanimous
+                if (booking.leadId) {
+                  await updateLead(booking.leadId, { status: globalNextStatus as any });
+                }
               }
             }
           }
+        } catch (opErr) {
+          console.warn('Syncing operation/staff status notice:', opErr);
         }
-      } catch (opErr) {
-        console.warn('Syncing operation/staff status notice:', opErr);
       }
 
-      refreshData();
-
-      showToast(`✅ ${stage} confirmed! Equipment photo proofs recorded.`);
       setPhotoModalData(null);
       setModalPhotos({});
-    } catch (err: any) {
-      console.error('Error confirming status update:', err);
-      showToast('❌ An error occurred while confirming status update.');
+      showToast(`✅ ${stage} saved successfully!`);
+    } catch (error) {
+      console.error('Error updating status:', error);
+      showToast('❌ Failed to update status. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
+
+
 
   // Calendar View & Navigation state
   const [activeTab, setActiveTab] = useState<'calendar' | 'tasks'>('calendar');
@@ -874,6 +900,10 @@ export const StaffModule: React.FC = () => {
                     const proofData = staffProofs[b.key] || {};
                     const isStarted = b.taskStatus === 'Event Started' || b.taskStatus === 'Event Completed' || b.taskStatus === 'Event Start' || b.taskStatus === 'Event Complete';
                     const isCompleted = b.taskStatus === 'Event Completed' || b.taskStatus === 'Event Complete';
+                    
+                    const hasEquipmentReceived = proofData.equipmentReceivedProofs && proofData.equipmentReceivedProofs.length > 0;
+                    const hasEventStart = proofData.eventStartProofs && proofData.eventStartProofs.length > 0;
+                    const hasEquipmentHandover = proofData.equipmentHandoverProofs && proofData.equipmentHandoverProofs.length > 0;
 
                     return (
                       <tr key={b.key} className="hover:bg-zinc-800/30 transition-colors">
@@ -922,7 +952,15 @@ export const StaffModule: React.FC = () => {
                               <Eye className="w-3.5 h-3.5" /> View Details
                             </button>
 
-                            {!isStarted && (
+                            {!hasEquipmentReceived && (
+                              <button
+                                onClick={() => openPhotoModal(b, 'Equipment Received')}
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 shadow-lg shadow-blue-500/10"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" /> Equipment Received
+                              </button>
+                            )}
+                            {hasEquipmentReceived && !hasEventStart && (
                               <button
                                 onClick={() => openPhotoModal(b, 'Event Start')}
                                 className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 shadow-lg shadow-amber-500/10"
@@ -930,8 +968,15 @@ export const StaffModule: React.FC = () => {
                                 <Play className="w-3.5 h-3.5" /> Event Start
                               </button>
                             )}
-
-                            {isStarted && !isCompleted && (
+                            {hasEventStart && !hasEquipmentHandover && (
+                              <button
+                                onClick={() => openPhotoModal(b, 'Equipment Handover')}
+                                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 shadow-lg shadow-purple-600/10"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" /> Equipment Handover
+                              </button>
+                            )}
+                            {hasEquipmentHandover && !isCompleted && (
                               <button
                                 onClick={() => openPhotoModal(b, 'Event Complete')}
                                 className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-600/10"
