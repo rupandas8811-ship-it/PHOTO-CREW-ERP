@@ -570,8 +570,8 @@ export const StaffModule: React.FC = () => {
         const { data: updateData, error: updateErr } = await supabaseClient
           .from('staff_assignments')
           .update({
+            assignment_status: nextStatus,
             task_status: nextStatus,
-            updated_by: staffName,
             updated_at: timestamp
           })
           .eq('order_id', booking.orderId)

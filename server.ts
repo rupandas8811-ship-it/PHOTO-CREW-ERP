@@ -67,7 +67,39 @@ async function startServer() {
     );
   }
 
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
+
+  app.post('/api/upload-proof', async (req, res) => {
+    try {
+      const { base64, fileName, contentType } = req.body;
+      if (!base64 || !fileName) {
+        return res.status(400).json({ error: 'Missing base64 or fileName' });
+      }
+
+      const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      
+      const base64Data = base64.replace(/^data:image\/\w+;base64,/, '');
+      const buffer = Buffer.from(base64Data, 'base64');
+      
+      const { data, error } = await supabaseAdmin.storage.from('img').upload(fileName, buffer, {
+        contentType: contentType || 'image/jpeg',
+        upsert: true
+      });
+      
+      if (error) {
+        console.error('Storage upload error (Admin):', error);
+        return res.status(500).json({ error: error.message, details: error });
+      }
+      
+      const { data: { publicUrl } } = supabaseAdmin.storage.from('img').getPublicUrl(data.path);
+      
+      res.json({ success: true, publicUrl });
+    } catch (err) {
+      console.error('Upload proof error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
 
   // Initialize server-side Supabase client lazily
   let serverSupabase: any = null;
