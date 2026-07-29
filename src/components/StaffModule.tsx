@@ -427,7 +427,15 @@ export const StaffModule: React.FC = () => {
     if (!photoModalData) return;
 
     const { booking, stage } = photoModalData;
-    const reqItems = booking.equipmentItems as { name: string; assetId: string }[];
+    const reqItems = stage === 'Event Start' 
+      ? [
+          { name: 'Equipment Taken Image', assetId: 'Verification' },
+          { name: 'Event Start Image', assetId: 'Verification' }
+        ]
+      : [
+          { name: 'Equipment Handover Image', assetId: 'Verification' },
+          { name: 'Event End Image', assetId: 'Verification' }
+        ];
 
     // Verify all assigned equipment items have photos
     for (const item of reqItems) {
@@ -463,7 +471,7 @@ export const StaffModule: React.FC = () => {
       localStorage.setItem('staff_equipment_proofs_v2', JSON.stringify(nextProofs));
 
       // Update staff status
-      const nextStatus = stage === 'Event Start' ? 'Event Start' : 'Event Complete';
+      const nextStatus = stage === 'Event Start' ? 'Event Started' : 'Event Completed';
       const nextStatuses = {
         ...staffStatuses,
         [booking.key]: nextStatus
@@ -519,22 +527,29 @@ export const StaffModule: React.FC = () => {
             .eq('order_id', booking.orderId);
 
           if (allStaffAssignments && allStaffAssignments.length > 0) {
-            // Check if ALL assigned staff have the SAME nextStatus
-            const allMatch = allStaffAssignments.every(a => a.assignment_status === nextStatus);
+            const allReachedStarted = allStaffAssignments.every(a => ['Event Started', 'Event Completed'].includes(a.assignment_status));
+            const allReachedCompleted = allStaffAssignments.every(a => a.assignment_status === 'Event Completed');
             
-            if (allMatch) {
+            let globalNextStatus = null;
+            if (allReachedCompleted) {
+              globalNextStatus = 'Event Completed';
+            } else if (allReachedStarted) {
+              globalNextStatus = 'Event Started';
+            }
+            
+            if (globalNextStatus) {
               // Update operations status if unanimous
               await supabaseClient
                 .from('operations')
                 .update({ 
-                  event_status: nextStatus,
-                  remarks: `Updated by System: All staff marked as ${nextStatus}`
+                  event_status: globalNextStatus,
+                  remarks: `Updated by System: All staff reached ${globalNextStatus}`
                 })
                 .eq('order_id', booking.orderId);
 
               // Update lead status if unanimous
               if (booking.leadId) {
-                await updateLead(booking.leadId, { status: nextStatus as any });
+                await updateLead(booking.leadId, { status: globalNextStatus as any });
               }
             }
           }
@@ -857,8 +872,8 @@ export const StaffModule: React.FC = () => {
                 <tbody className="divide-y divide-zinc-800/60 text-sm">
                   {activeBookings.map((b) => {
                     const proofData = staffProofs[b.key] || {};
-                    const isStarted = b.taskStatus === 'Event Start' || b.taskStatus === 'Event Complete';
-                    const isCompleted = b.taskStatus === 'Event Complete';
+                    const isStarted = b.taskStatus === 'Event Started' || b.taskStatus === 'Event Completed' || b.taskStatus === 'Event Start' || b.taskStatus === 'Event Complete';
+                    const isCompleted = b.taskStatus === 'Event Completed' || b.taskStatus === 'Event Complete';
 
                     return (
                       <tr key={b.key} className="hover:bg-zinc-800/30 transition-colors">
@@ -1164,7 +1179,16 @@ export const StaffModule: React.FC = () => {
 
               {/* Equipment Items list with photo inputs */}
               <div className="space-y-4">
-                {photoModalData.booking.equipmentItems.map((item: any, idx: number) => {
+                {(photoModalData.stage === 'Event Start' 
+                  ? [
+                      { name: 'Equipment Taken Image', assetId: 'Verification' },
+                      { name: 'Event Start Image', assetId: 'Verification' }
+                    ]
+                  : [
+                      { name: 'Equipment Handover Image', assetId: 'Verification' },
+                      { name: 'Event End Image', assetId: 'Verification' }
+                    ]
+                ).map((item: any, idx: number) => {
                   const currentPhoto = modalPhotos[item.name];
 
                   return (

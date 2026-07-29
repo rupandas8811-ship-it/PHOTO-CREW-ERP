@@ -640,79 +640,7 @@ export const OperationsLeads: React.FC = () => {
     return staffDetailsList;
   };
 
-  const checkAndUpdateAllOrdersStage = async () => {
-    if (!orders || orders.length === 0) return;
-
-    for (const ord of orders) {
-      const staffDetails = getAssignedStaffDetailsForOrder(ord);
-      if (staffDetails.length === 0) continue;
-
-      const lead = leads.find(l => l.lead_id === ord.lead_id);
-      const currentStage = lead ? getLeadCurrentStatus(lead) : (ord.current_stage || 'Operations Assigned');
-
-      const completedOrLaterStages = [
-        'Event Completed',
-        'Raw Footage Received',
-        'Editor Assigned',
-        'Editing Started',
-        'Editing In Progress',
-        'Internal QC Review',
-        'Client Review Sent',
-        'Revision Required',
-        'Revision In Progress',
-        'Final Approval',
-        'Project Delivered',
-        'Project Closed',
-        'Customer Review',
-        'Approved'
-      ];
-      if (completedOrLaterStages.includes(currentStage)) continue;
-
-      const normalizedStatuses = staffDetails.map(sd => {
-        const s = (sd.staff_status || '').toLowerCase();
-        if (s.includes('complete') || s === 'completed') return 'Completed';
-        if (s.includes('start') || s.includes('progress') || s.includes('started')) return 'In Progress';
-        return 'Pending';
-      });
-
-      const allCompleted = normalizedStatuses.length > 0 && normalizedStatuses.every(s => s === 'Completed');
-      const allStartedOrCompleted = normalizedStatuses.length > 0 && normalizedStatuses.every(s => s === 'In Progress' || s === 'Completed');
-
-      if (allCompleted) {
-        if (currentStage !== 'Event Completed') {
-          try {
-            await markEventCompleted(ord.order_id, '');
-          } catch (err) {
-            console.error(`Auto-stage error for ${ord.order_id}:`, err);
-          }
-        }
-      } else if (allStartedOrCompleted) {
-        if (['Operations Assigned', 'Staff Assigned', 'Order Confirmed'].includes(currentStage)) {
-          try {
-            await updateOrderStage(ord.order_id, 'Event Scheduled');
-          } catch (err) {
-            console.error(`Auto-stage error for ${ord.order_id}:`, err);
-          }
-        }
-      }
-    }
-  };
-
-  useEffect(() => {
-    checkAndUpdateAllOrdersStage();
-
-    const handleStatusChange = () => {
-      checkAndUpdateAllOrdersStage();
-    };
-
-    window.addEventListener('staff_status_updated', handleStatusChange);
-    window.addEventListener('storage', handleStatusChange);
-
-    return () => {
-      window.removeEventListener('staff_status_updated', handleStatusChange);
-      window.removeEventListener('storage', handleStatusChange);
-    };
-  }, [orders, leads, staffAssignments, operations]);
+  
 
   // Helper to generate personalized WhatsApp message for a staff member
   const generateWhatsAppMessageForStaff = (ord: Order, staffName: string, modalEventAllocations?: any, modalLead?: any, finalAssignments?: any[]) => {
@@ -2017,9 +1945,13 @@ export const OperationsLeads: React.FC = () => {
                           >
                             <option value="">▼ UPDATE STATUS</option>
                             <option value="Event Scheduled">Event Scheduled</option>
-                            <option value="Event Completed">Event Completed</option>
-                            <option value="Raw Footage Received">Raw Footage Received</option>
+                            {/* Staff updates status automatically, but if admin needs override */}
                             <option value="Event Cancelled">Event Cancelled</option>
+                            
+                            {/* Raw Footage requires Event Completed stage first */}
+                            {currentStage === 'Event Completed' && (
+                              <option value="Raw Footage Received">Upload Raw Footage</option>
+                            )}
                           </select>
                         )}
                         {(() => {
@@ -3454,11 +3386,12 @@ export const OperationsLeads: React.FC = () => {
                             <thead>
                               <tr className="bg-zinc-950/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
                                 <th className="py-2.5 px-3.5 font-bold">Staff Name</th>
-                                <th className="py-2.5 px-3.5 font-bold">Mobile Number</th>
                                 <th className="py-2.5 px-3.5 font-bold">Assigned Task</th>
-                                <th className="py-2.5 px-3.5 font-bold text-center">Equipment Take</th>
+                                <th className="py-2.5 px-3.5 font-bold text-right">Status</th>
+                                <th className="py-2.5 px-3.5 font-bold text-center">Equipment Taken</th>
+                                <th className="py-2.5 px-3.5 font-bold text-center">Event Start</th>
                                 <th className="py-2.5 px-3.5 font-bold text-center">Equipment Handover</th>
-                                <th className="py-2.5 px-3.5 font-bold text-right">Staff Status</th>
+                                <th className="py-2.5 px-3.5 font-bold text-center">Event End</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-zinc-800/60 text-xs">
@@ -3486,21 +3419,22 @@ export const OperationsLeads: React.FC = () => {
                                   );
                                 }
                                 
-                                const getPhotoForStatus = (statusKeyword: string) => {
+                                const getPhotoForType = (stageKeyword: string, typeKeyword: string) => {
                                   const proof = leadEquipmentHistory?.find(h => {
                                     if (h.order_id !== ord.order_id) return false;
-                                    if (!h.equipment_status?.toLowerCase().includes(statusKeyword)) return false;
+                                    if (!h.equipment_status?.toLowerCase().includes(stageKeyword)) return false;
                                     if (h.returned_by?.toLowerCase() !== member.staff_name.toLowerCase()) return false;
+                                    if (h.equipment_name && !h.equipment_name.toLowerCase().includes(typeKeyword)) return false;
                                     
                                     if (!h.remarks) return false;
                                     try {
                                       const parsed = JSON.parse(h.remarks);
                                       if (parsed.event_name && parsed.event_name !== evName && evName !== 'Main Event' && parsed.event_name !== 'Main Event') {
-                                        return false; // Skip if it's explicitly for another event
+                                        return false;
                                       }
                                       return true;
                                     } catch (e) {
-                                      return true; // Fallback for old data without valid JSON
+                                      return true;
                                     }
                                   });
                                   
@@ -3513,48 +3447,71 @@ export const OperationsLeads: React.FC = () => {
                                   }
                                 };
                                 
-                                const takePhoto = getPhotoForStatus('start');
-                                const handoverPhoto = getPhotoForStatus('complete');
+                                const eqTakePhoto = getPhotoForType('start', 'equipment');
+                                const evStartPhoto = getPhotoForType('start', 'event');
+                                const eqHandoverPhoto = getPhotoForType('complete', 'equipment');
+                                const evEndPhoto = getPhotoForType('complete', 'event');
 
                                 return (
                                   <tr key={mIdx} className="hover:bg-zinc-800/30 transition-colors">
                                     <td className="py-3 px-3.5 font-bold text-white font-sans">
                                       {member.staff_name}
                                     </td>
-                                    <td className="py-3 px-3.5 font-mono text-zinc-300">
-                                      {member.mobile || '—'}
-                                    </td>
                                     <td className="py-3 px-3.5 font-sans">
                                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-bold text-xs">
                                         {member.assigned_task || member.staff_role}
                                       </span>
                                     </td>
-                                    <td className="py-3 px-3.5 text-center">
-                                      {takePhoto ? (
-                                        <img 
-                                          src={takePhoto} 
-                                          alt="Take" 
-                                          className="w-10 h-10 object-cover rounded-md border border-zinc-700 mx-auto cursor-pointer hover:opacity-80"
-                                          onClick={() => window.open(takePhoto, '_blank')}
-                                        />
-                                      ) : (
-                                        <span className="text-zinc-600 italic text-[10px]">Pending</span>
-                                      )}
-                                    </td>
-                                    <td className="py-3 px-3.5 text-center">
-                                      {handoverPhoto ? (
-                                        <img 
-                                          src={handoverPhoto} 
-                                          alt="Handover" 
-                                          className="w-10 h-10 object-cover rounded-md border border-zinc-700 mx-auto cursor-pointer hover:opacity-80"
-                                          onClick={() => window.open(handoverPhoto, '_blank')}
-                                        />
-                                      ) : (
-                                        <span className="text-zinc-600 italic text-[10px]">Pending</span>
-                                      )}
-                                    </td>
                                     <td className="py-3 px-3.5 text-right font-mono">
                                       {statusBadge}
+                                    </td>
+                                    <td className="py-3 px-3.5 text-center">
+                                      {eqTakePhoto ? (
+                                        <img 
+                                          src={eqTakePhoto} 
+                                          alt="Take" 
+                                          className="w-10 h-10 object-cover rounded-md border border-zinc-700 mx-auto cursor-pointer hover:opacity-80"
+                                          onClick={() => window.open(eqTakePhoto, '_blank')}
+                                        />
+                                      ) : (
+                                        <span className="text-zinc-600 italic text-[10px]">Pending</span>
+                                      )}
+                                    </td>
+                                    <td className="py-3 px-3.5 text-center">
+                                      {evStartPhoto ? (
+                                        <img 
+                                          src={evStartPhoto} 
+                                          alt="EvStart" 
+                                          className="w-10 h-10 object-cover rounded-md border border-zinc-700 mx-auto cursor-pointer hover:opacity-80"
+                                          onClick={() => window.open(evStartPhoto, '_blank')}
+                                        />
+                                      ) : (
+                                        <span className="text-zinc-600 italic text-[10px]">Pending</span>
+                                      )}
+                                    </td>
+                                    <td className="py-3 px-3.5 text-center">
+                                      {eqHandoverPhoto ? (
+                                        <img 
+                                          src={eqHandoverPhoto} 
+                                          alt="Handover" 
+                                          className="w-10 h-10 object-cover rounded-md border border-zinc-700 mx-auto cursor-pointer hover:opacity-80"
+                                          onClick={() => window.open(eqHandoverPhoto, '_blank')}
+                                        />
+                                      ) : (
+                                        <span className="text-zinc-600 italic text-[10px]">Pending</span>
+                                      )}
+                                    </td>
+                                    <td className="py-3 px-3.5 text-center">
+                                      {evEndPhoto ? (
+                                        <img 
+                                          src={evEndPhoto} 
+                                          alt="EvEnd" 
+                                          className="w-10 h-10 object-cover rounded-md border border-zinc-700 mx-auto cursor-pointer hover:opacity-80"
+                                          onClick={() => window.open(evEndPhoto, '_blank')}
+                                        />
+                                      ) : (
+                                        <span className="text-zinc-600 italic text-[10px]">Pending</span>
+                                      )}
                                     </td>
                                   </tr>
                                 );
