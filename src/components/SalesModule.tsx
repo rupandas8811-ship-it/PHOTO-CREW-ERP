@@ -3480,7 +3480,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
           Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
           Final_Quotation_Amount: finalAmt,
-          
+          sales_staff_name: salesStaffName,
+          sales_staff_mobile: salesStaffMobile,
           client_residence_address: leadObj.client_residence_address,
           city: leadObj.city,
           state: leadObj.state,
@@ -6158,7 +6159,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           Final_Quotation_Amount: finalTotal,
         deliverables_description: selectedPkgs.map(p => pkgDeliverables[p.id] || p.deliverables || 'N/A').join('\n'),
         notes_special_customizations: selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
-        
+        sales_staff_name: salesStaffName,
+        sales_staff_mobile: salesStaffMobile,
         client_residence_address: createForm.client_residence_address,
         city: createForm.city,
         state: createForm.state,
