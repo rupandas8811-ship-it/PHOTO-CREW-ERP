@@ -457,6 +457,7 @@ export const StaffModule: React.FC = () => {
       // 2. Set loading = true
       setIsSubmitting(true);
       const timestamp = new Date().toISOString();
+      console.log("[EquipmentReceived] START - Confirm clicked");
       const uploadedProofs: EquipmentProofItem[] = [];
 
       // 3. Upload the selected image to the existing Supabase Storage bucket
@@ -464,24 +465,24 @@ export const StaffModule: React.FC = () => {
         let finalUrl = modalPhotos[item.name];
         
         if (finalUrl && finalUrl.startsWith('data:image')) {
-          const res = await fetch(finalUrl);
-          const blob = await res.blob();
           const fileName = `proofs/${booking.orderId}_${stage.replace(/\s+/g, '_')}_${Date.now()}.jpg`;
           
-          const { data, error } = await supabaseClient.storage.from('img').upload(fileName, blob, {
-            contentType: 'image/jpeg',
-            upsert: true
+          console.log("[EquipmentReceived] uploading image to /api/upload-proof");
+          const uploadRes = await fetch('/api/upload-proof', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ base64: finalUrl, fileName, contentType: 'image/jpeg' })
           });
+          const uploadData = await uploadRes.json();
           
-          // 4. WAIT for upload result.
-          // 5. If upload fails, throw error
-          if (error) {
-            console.error("Storage upload error:", error);
-            throw new Error(`Upload failed: ${error.message}`);
+          console.log("[EquipmentReceived] storage result", uploadData);
+          
+          if (!uploadRes.ok || !uploadData.success) {
+            console.error("Storage upload error:", uploadData.error || uploadData);
+            throw new Error(uploadData.error || 'Failed to upload proof to storage');
           }
           
-          const { data: { publicUrl } } = supabaseClient.storage.from('img').getPublicUrl(data.path);
-          finalUrl = publicUrl;
+          finalUrl = uploadData.publicUrl;
         }
         
         uploadedProofs.push({
@@ -497,6 +498,7 @@ export const StaffModule: React.FC = () => {
       // 6 & 7. Save Equipment Received verification state & Save Equipment Received timestamp.
       if (supabaseClient) {
         for (const p of newProofs) {
+          console.log("[EquipmentReceived] saving verification to lead_equipment_history");
           const { data: addData, error: dbErr } = await supabaseClient.from('lead_equipment_history').insert([{
             lead_id: booking.leadId,
             order_id: booking.orderId,
@@ -519,8 +521,14 @@ export const StaffModule: React.FC = () => {
             proof_type: stage
           }]).select();
 
+          console.log("[EquipmentReceived] DB lead_equipment_history result", addData, dbErr);
           if (dbErr) {
-            console.error('Error saving to lead_equipment_history:', dbErr);
+            console.error('[EquipmentReceived] lead_equipment_history ERROR:', {
+              message: dbErr?.message,
+              code: dbErr?.code,
+              details: dbErr?.details,
+              hint: dbErr?.hint
+            });
             throw new Error(`Database save failed: ${dbErr.message}`);
           }
         }
@@ -567,6 +575,7 @@ export const StaffModule: React.FC = () => {
 
       if (supabaseClient && booking.orderId) {
         // Update the individual staff assignment task_status
+        console.log("[EquipmentReceived] updating assignment in staff_assignments for order:", booking.orderId, "staff:", staffName);
         const { data: updateData, error: updateErr } = await supabaseClient
           .from('staff_assignments')
           .update({
@@ -578,7 +587,14 @@ export const StaffModule: React.FC = () => {
           .ilike('staff_name', staffName)
           .select();
 
+        console.log("[EquipmentReceived] assignment result", updateData, updateErr);
         if (updateErr) {
+          console.error('[EquipmentReceived] staff_assignments ERROR:', {
+            message: updateErr?.message,
+            code: updateErr?.code,
+            details: updateErr?.details,
+            hint: updateErr?.hint
+          });
           throw new Error(`Failed to update assignment: ${updateErr.message}`);
         }
         
@@ -621,6 +637,7 @@ export const StaffModule: React.FC = () => {
         }
       }
 
+      console.log("[EquipmentReceived] SUCCESS");
       // 13. CLOSE the Equipment Verification popup automatically.
       setPhotoModalData(null);
       setModalPhotos({});
