@@ -432,7 +432,6 @@ export const StaffModule: React.FC = () => {
   // Submit Equipment Photos & Update Task Status
   const handleConfirmStatusUpdate = async () => {
     if (!photoModalData) return;
-
     const { booking, stage } = photoModalData;
     
     let reqItems: { name: string; assetId: string }[] = [];
@@ -446,7 +445,7 @@ export const StaffModule: React.FC = () => {
       reqItems = []; // No photo needed
     }
 
-    // Verify photos if required
+    // 1. Validate photo exists
     for (const item of reqItems) {
       if (!modalPhotos[item.name]) {
         showToast(`⚠️ Please capture/upload a photo for ${item.name}`);
@@ -455,38 +454,34 @@ export const StaffModule: React.FC = () => {
     }
 
     try {
+      // 2. Set loading = true
       setIsSubmitting(true);
       const timestamp = new Date().toISOString();
-      // Ensure upload to Supabase
       const uploadedProofs: EquipmentProofItem[] = [];
+
+      // 3. Upload the selected image to the existing Supabase Storage bucket
       for (const item of reqItems) {
         let finalUrl = modalPhotos[item.name];
         
-        // If it's a base64 data URL, upload it to Supabase
         if (finalUrl && finalUrl.startsWith('data:image')) {
-          try {
-            const res = await fetch(finalUrl);
-            const blob = await res.blob();
-            const fileName = `proofs/${booking.orderId}_${stage.replace(/\s+/g, '_')}_${Date.now()}.jpg`;
-            
-            const { data, error } = await supabaseClient.storage.from('img').upload(fileName, blob, {
-              contentType: 'image/jpeg',
-              upsert: true
-            });
-            
-            if (error) {
-              console.error("Storage upload error:", error);
-              throw error;
-            }
-            
-            const { data: { publicUrl } } = supabaseClient.storage.from('img').getPublicUrl(data.path);
-            finalUrl = publicUrl;
-          } catch (uploadErr: any) {
-             console.error("Error uploading to Supabase:", uploadErr);
-             showToast(`❌ Failed to upload photo: ${uploadErr.message || "Unknown error"}`);
-             setIsSubmitting(false);
-             return; // Do NOT continue or mark as complete
+          const res = await fetch(finalUrl);
+          const blob = await res.blob();
+          const fileName = `proofs/${booking.orderId}_${stage.replace(/\s+/g, '_')}_${Date.now()}.jpg`;
+          
+          const { data, error } = await supabaseClient.storage.from('img').upload(fileName, blob, {
+            contentType: 'image/jpeg',
+            upsert: true
+          });
+          
+          // 4. WAIT for upload result.
+          // 5. If upload fails, throw error
+          if (error) {
+            console.error("Storage upload error:", error);
+            throw new Error(`Upload failed: ${error.message}`);
           }
+          
+          const { data: { publicUrl } } = supabaseClient.storage.from('img').getPublicUrl(data.path);
+          finalUrl = publicUrl;
         }
         
         uploadedProofs.push({
@@ -499,52 +494,10 @@ export const StaffModule: React.FC = () => {
 
       const newProofs: EquipmentProofItem[] = uploadedProofs;
 
-      // Update local proof storage
-      const existingProofs = staffProofs[booking.key] || {};
-      
-      const proofField = stage === 'Equipment Received' ? 'equipmentReceivedProofs' :
-                         stage === 'Event Start' ? 'eventStartProofs' :
-                         stage === 'Equipment Handover' ? 'equipmentHandoverProofs' :
-                         'completeProofs';
-
-      const updatedEventProofs = {
-        ...existingProofs,
-        [proofField]: newProofs
-      };
-
-      const nextProofs = {
-        ...staffProofs,
-        [booking.key]: updatedEventProofs
-      };
-
-      setStaffProofs(nextProofs);
-      localStorage.setItem('staff_equipment_proofs_v2', JSON.stringify(nextProofs));
-
-      // Update staff status
-      // We only advance the status on Event Start and Event Complete
-      let nextStatus = staffStatuses[booking.key] || 'Event Scheduled';
-      if (stage === 'Event Start') {
-        nextStatus = 'Event Started';
-      } else if (stage === 'Event Complete') {
-        nextStatus = 'Event Completed';
-      }
-
-      const nextStatuses = {
-        ...staffStatuses,
-        [booking.key]: nextStatus
-      };
-
-      setStaffStatuses(nextStatuses);
-      localStorage.setItem('staff_event_statuses_v2', JSON.stringify(nextStatuses));
-
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('staff_status_updated'));
-      }
-
-      // Save records into Supabase lead_equipment_history table for durability
-      for (const p of newProofs) {
-        try {
-          await addLeadEquipmentHistory({
+      // 6 & 7. Save Equipment Received verification state & Save Equipment Received timestamp.
+      if (supabaseClient) {
+        for (const p of newProofs) {
+          const { data: addData, error: dbErr } = await supabaseClient.from('lead_equipment_history').insert([{
             lead_id: booking.leadId,
             order_id: booking.orderId,
             equipment_name: p.equipmentName,
@@ -564,79 +517,123 @@ export const StaffModule: React.FC = () => {
             event_name: booking.eventName,
             asset_id: p.assetId,
             proof_type: stage
-          });
-        } catch (dbErr) {
-          console.warn('Error saving to lead_equipment_history:', dbErr);
+          }]).select();
+
+          if (dbErr) {
+            console.error('Error saving to lead_equipment_history:', dbErr);
+            throw new Error(`Database save failed: ${dbErr.message}`);
+          }
         }
       }
 
-      // Sync status to operations table and staff_assignments table ONLY when status actually changes
-      if (stage === 'Event Start' || stage === 'Event Complete') {
-        try {
-          if (supabaseClient && booking.orderId) {
-            // 1. Update the individual staff assignment
-            await supabaseClient
-              .from('staff_assignments')
-              .update({
-                assignment_status: nextStatus,
-                task_status: nextStatus,
-                updated_by: staffName
-              })
-              .eq('order_id', booking.orderId)
-              .ilike('staff_name', staffName);
+      // 9 & 10 & 11. Confirm the database update succeeded. Refresh/update local state. Change action.
+      // Update staff status - also save 'Equipment Received' or 'Equipment Handover'
+      let nextStatus = staffStatuses[booking.key] || 'Event Scheduled';
+      if (stage === 'Event Start') {
+        nextStatus = 'Event Started';
+      } else if (stage === 'Event Complete') {
+        nextStatus = 'Event Completed';
+      } else {
+        nextStatus = stage; // 'Equipment Received' or 'Equipment Handover'
+      }
 
-            // 2. Fetch all current staff assignments for this order
-            const { data: allStaffAssignments } = await supabaseClient
-              .from('staff_assignments')
-              .select('assignment_status')
-              .eq('order_id', booking.orderId);
+      const nextStatuses = {
+        ...staffStatuses,
+        [booking.key]: nextStatus
+      };
+      setStaffStatuses(nextStatuses);
+      localStorage.setItem('staff_event_statuses_v2', JSON.stringify(nextStatuses));
 
-            if (allStaffAssignments && allStaffAssignments.length > 0) {
-              const allReachedStarted = allStaffAssignments.every(a => ['Event Started', 'Event Completed'].includes(a.assignment_status));
-              const allReachedCompleted = allStaffAssignments.every(a => a.assignment_status === 'Event Completed');
-              
-              let globalNextStatus = null;
-              if (allReachedCompleted) {
-                globalNextStatus = 'Event Completed';
-              } else if (allReachedStarted) {
-                globalNextStatus = 'Event Started';
-              }
-              
-              if (globalNextStatus) {
-                // Update operations status if unanimous
-                await supabaseClient
-                  .from('operations')
-                  .update({ 
-                    event_status: globalNextStatus,
-                    remarks: `Updated by System: All staff reached ${globalNextStatus}`
-                  })
-                  .eq('order_id', booking.orderId);
+      // Update local proof storage so UI updates instantly
+      const existingProofs = staffProofs[booking.key] || {};
+      const proofField = stage === 'Equipment Received' ? 'equipmentReceivedProofs' :
+                         stage === 'Event Start' ? 'eventStartProofs' :
+                         stage === 'Equipment Handover' ? 'equipmentHandoverProofs' :
+                         'completeProofs';
+      const updatedEventProofs = {
+        ...existingProofs,
+        [proofField]: newProofs
+      };
+      const nextProofs = {
+        ...staffProofs,
+        [booking.key]: updatedEventProofs
+      };
+      setStaffProofs(nextProofs);
+      localStorage.setItem('staff_equipment_proofs_v2', JSON.stringify(nextProofs));
 
-                // Update lead status if unanimous
-                if (booking.leadId) {
-                  await updateLead(booking.leadId, { status: globalNextStatus as any });
-                }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('staff_status_updated'));
+      }
+
+      if (supabaseClient && booking.orderId) {
+        // Update the individual staff assignment task_status
+        const { data: updateData, error: updateErr } = await supabaseClient
+          .from('staff_assignments')
+          .update({
+            task_status: nextStatus,
+            updated_by: staffName,
+            updated_at: timestamp
+          })
+          .eq('order_id', booking.orderId)
+          .ilike('staff_name', staffName)
+          .select();
+
+        if (updateErr) {
+          throw new Error(`Failed to update assignment: ${updateErr.message}`);
+        }
+        
+        if (!updateData || updateData.length === 0) {
+          throw new Error(`No matching assignment found for Order ID: ${booking.orderId} and Staff: ${staffName}`);
+        }
+
+        // Only sync global operations status if Event Start or Event Complete
+        if (stage === 'Event Start' || stage === 'Event Complete') {
+          const { data: allStaffAssignments } = await supabaseClient
+            .from('staff_assignments')
+            .select('task_status')
+            .eq('order_id', booking.orderId);
+
+          if (allStaffAssignments && allStaffAssignments.length > 0) {
+            const allReachedStarted = allStaffAssignments.every(a => ['Event Started', 'Event Completed'].includes(a.task_status));
+            const allReachedCompleted = allStaffAssignments.every(a => a.task_status === 'Event Completed');
+            
+            let globalNextStatus = null;
+            if (allReachedCompleted) {
+              globalNextStatus = 'Event Completed';
+            } else if (allReachedStarted) {
+              globalNextStatus = 'Event Started';
+            }
+            
+            if (globalNextStatus) {
+              await supabaseClient
+                .from('operations')
+                .update({ 
+                   event_status: globalNextStatus,
+                  remarks: `Updated by System: All staff reached ${globalNextStatus}`
+                })
+                .eq('order_id', booking.orderId);
+
+              if (booking.leadId) {
+                await updateLead(booking.leadId, { status: globalNextStatus as any });
               }
             }
           }
-        } catch (opErr) {
-          console.warn('Syncing operation/staff status notice:', opErr);
         }
       }
 
+      // 13. CLOSE the Equipment Verification popup automatically.
       setPhotoModalData(null);
       setModalPhotos({});
       showToast(`✅ ${stage} saved successfully!`);
-    } catch (error) {
+
+    } catch (error: any) {
       console.error('Error updating status:', error);
-      showToast('❌ Failed to update status. Please try again.');
+      showToast(`❌ ${error.message || 'Failed to update status.'}`);
     } finally {
+      // 12. Set loading = false.
       setIsSubmitting(false);
     }
   };
-
-
-
   // Calendar View & Navigation state
   const [activeTab, setActiveTab] = useState<'calendar' | 'tasks'>('calendar');
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
