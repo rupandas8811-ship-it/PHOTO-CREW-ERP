@@ -195,8 +195,17 @@ export const OperationsLeads: React.FC = () => {
   // Track which order's action dropdown is open
   const [activeMenuOrderId, setActiveMenuOrderId] = useState<string | null>(null);
   const [selectedEquipmentStatus, setSelectedEquipmentStatus] = useState<{ staffName: string, eqReceived: any, eqHandover: any } | null>(null);
+  const [selectedEventImages, setSelectedEventImages] = useState<{ staffName: string, evStart: any, evEnd: any } | null>(null);
   const [activeMenuItems, setActiveMenuItems] = useState<{ label: string; onClick: () => void }[]>([]);
   const [menuCoords, setMenuCoords] = useState<{ x: number, y: number, openUpward: boolean }>({ x: 0, y: 0, openUpward: false });
+
+  useEffect(() => {
+    const handleStaffUpdate = () => {
+      refreshData();
+    };
+    window.addEventListener('staff_status_updated', handleStaffUpdate);
+    return () => window.removeEventListener('staff_status_updated', handleStaffUpdate);
+  }, [refreshData]);
 
   useEffect(() => {
     if (!activeMenuOrderId) return;
@@ -416,6 +425,46 @@ export const OperationsLeads: React.FC = () => {
   } | null>(null);
 
   const [viewingStaffOrderId, setViewingStaffOrderId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (viewingStaffOrderId) {
+      refreshData();
+    }
+  }, [viewingStaffOrderId, refreshData]);
+
+  const getRecordMeta = (record: any) => {
+    if (!record) return { url: null, date: '-', time: '-' };
+
+    let url = record.photo_url || null;
+    if (!url && record.remarks) {
+      try {
+        const parsed = JSON.parse(record.remarks);
+        url = parsed.photo_url || parsed.url || null;
+      } catch (e) {}
+    }
+
+    let date = '-';
+    let time = '-';
+    const timestamp = record.returned_at || record.created_at;
+    if (timestamp) {
+      const dt = new Date(timestamp);
+      if (!isNaN(dt.getTime())) {
+        const day = String(dt.getDate()).padStart(2, '0');
+        const month = String(dt.getMonth() + 1).padStart(2, '0');
+        const year = dt.getFullYear();
+        date = `${day}-${month}-${year}`;
+
+        time = dt.toLocaleTimeString('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+          timeZone: 'Asia/Kolkata'
+        }).toUpperCase();
+      }
+    }
+
+    return { url, date, time };
+  };
   const [editedMessages, setEditedMessages] = useState<Record<string, string>>({});
   const [selectedStaffForShare, setSelectedStaffForShare] = useState<Record<string, boolean>>({});
 
@@ -2943,58 +2992,164 @@ export const OperationsLeads: React.FC = () => {
       {/* Equipment Status Modal */}
       {selectedEquipmentStatus && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-805 rounded-2xl w-full max-w-lg shadow-2xl relative p-5">
-            <h3 className="text-sm font-bold text-indigo-400 font-mono uppercase mb-4">
-              Equipment Status - {selectedEquipmentStatus.staffName}
-            </h3>
-            
-            <table className="w-full text-left text-sm mb-4">
-              <thead>
-                <tr className="border-b border-zinc-800 text-zinc-400">
-                  <th className="py-2">Verification</th>
-                  <th className="py-2 text-center">Image</th>
-                  <th className="py-2 text-right">Date & Time</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800/50">
-                <tr>
-                  <td className="py-3 text-white font-bold text-xs">Equipment Received</td>
-                  <td className="py-3 text-center">
-                    {selectedEquipmentStatus.eqReceived ? (() => {
-                      try {
-                        const url = selectedEquipmentStatus.eqReceived.photo_url || JSON.parse(selectedEquipmentStatus.eqReceived.remarks).photo_url;
-                        return url ? (
-                           <button onClick={() => window.open(url, '_blank')} className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-xs rounded text-indigo-400 border border-zinc-700 transition-colors cursor-pointer">View Image</button>
-                        ) : <span className="text-zinc-600 italic">No Image</span>;
-                      } catch(e) { return null; }
-                    })() : <span className="text-zinc-600 italic text-[10px]">Pending/Empty</span>}
-                  </td>
-                  <td className="py-3 text-right font-mono text-xs text-zinc-400">
-                    {selectedEquipmentStatus.eqReceived?.returned_at ? new Date(selectedEquipmentStatus.eqReceived.returned_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '-'}
-                  </td>
-                </tr>
-                <tr>
-                  <td className="py-3 text-white font-bold text-xs">Equipment Handover</td>
-                  <td className="py-3 text-center">
-                    {selectedEquipmentStatus.eqHandover ? (() => {
-                      try {
-                        const url = selectedEquipmentStatus.eqHandover.photo_url || JSON.parse(selectedEquipmentStatus.eqHandover.remarks).photo_url;
-                        return url ? (
-                           <button onClick={() => window.open(url, '_blank')} className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-xs rounded text-indigo-400 border border-zinc-700 transition-colors cursor-pointer">View Image</button>
-                        ) : <span className="text-zinc-600 italic">No Image</span>;
-                      } catch(e) { return null; }
-                    })() : <span className="text-zinc-600 italic text-[10px]">Pending/Empty</span>}
-                  </td>
-                  <td className="py-3 text-right font-mono text-xs text-zinc-400">
-                    {selectedEquipmentStatus.eqHandover?.returned_at ? new Date(selectedEquipmentStatus.eqHandover.returned_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '-'}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl relative p-5">
+            <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-3">
+              <h3 className="text-sm font-bold text-indigo-400 font-mono uppercase">
+                Equipment Verification • {selectedEquipmentStatus.staffName}
+              </h3>
+              <button
+                onClick={() => setSelectedEquipmentStatus(null)}
+                className="text-zinc-400 hover:text-white font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/60 mb-4">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono uppercase tracking-wider text-[10px]">
+                    <th className="py-2.5 px-3 font-bold">Verification Stage</th>
+                    <th className="py-2.5 px-3 font-bold text-center">Image</th>
+                    <th className="py-2.5 px-3 font-bold text-center">Upload Date</th>
+                    <th className="py-2.5 px-3 font-bold text-right">Upload Time</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/60">
+                  {(() => {
+                    const recMeta = getRecordMeta(selectedEquipmentStatus.eqReceived);
+                    const handMeta = getRecordMeta(selectedEquipmentStatus.eqHandover);
+                    return (
+                      <>
+                        <tr className="hover:bg-zinc-800/20">
+                          <td className="py-3 px-3 text-white font-bold">Equipment Received</td>
+                          <td className="py-3 px-3 text-center">
+                            {recMeta.url ? (
+                              <button
+                                onClick={() => window.open(recMeta.url, '_blank')}
+                                className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                View Image
+                              </button>
+                            ) : (
+                              <span className="text-zinc-600 italic text-[11px]">Pending</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{recMeta.date}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{recMeta.time}</td>
+                        </tr>
+                        <tr className="hover:bg-zinc-800/20">
+                          <td className="py-3 px-3 text-white font-bold">Equipment Handover</td>
+                          <td className="py-3 px-3 text-center">
+                            {handMeta.url ? (
+                              <button
+                                onClick={() => window.open(handMeta.url, '_blank')}
+                                className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                View Image
+                              </button>
+                            ) : (
+                              <span className="text-zinc-600 italic text-[11px]">Pending</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{handMeta.date}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{handMeta.time}</td>
+                        </tr>
+                      </>
+                    );
+                  })()}
+                </tbody>
+              </table>
+            </div>
 
             <div className="flex justify-end pt-2 border-t border-zinc-800">
               <button
                 onClick={() => setSelectedEquipmentStatus(null)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Event Images Modal */}
+      {selectedEventImages && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl relative p-5">
+            <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-3">
+              <h3 className="text-sm font-bold text-indigo-400 font-mono uppercase">
+                Event Images • {selectedEventImages.staffName}
+              </h3>
+              <button
+                onClick={() => setSelectedEventImages(null)}
+                className="text-zinc-400 hover:text-white font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/60 mb-4">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono uppercase tracking-wider text-[10px]">
+                    <th className="py-2.5 px-3 font-bold">Event Stage</th>
+                    <th className="py-2.5 px-3 font-bold text-center">Image</th>
+                    <th className="py-2.5 px-3 font-bold text-center">Upload Date</th>
+                    <th className="py-2.5 px-3 font-bold text-right">Upload Time</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/60">
+                  {(() => {
+                    const startMeta = getRecordMeta(selectedEventImages.evStart);
+                    const endMeta = getRecordMeta(selectedEventImages.evEnd);
+                    return (
+                      <>
+                        <tr className="hover:bg-zinc-800/20">
+                          <td className="py-3 px-3 text-white font-bold">Event Start</td>
+                          <td className="py-3 px-3 text-center">
+                            {startMeta.url ? (
+                              <button
+                                onClick={() => window.open(startMeta.url, '_blank')}
+                                className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                View Image
+                              </button>
+                            ) : (
+                              <span className="text-zinc-600 italic text-[11px]">Pending</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{startMeta.date}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{startMeta.time}</td>
+                        </tr>
+                        <tr className="hover:bg-zinc-800/20">
+                          <td className="py-3 px-3 text-white font-bold">Event Complete</td>
+                          <td className="py-3 px-3 text-center">
+                            {endMeta.url ? (
+                              <button
+                                onClick={() => window.open(endMeta.url, '_blank')}
+                                className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                View Image
+                              </button>
+                            ) : (
+                              <span className="text-zinc-600 italic text-[11px]">Pending</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{endMeta.date}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{endMeta.time}</td>
+                        </tr>
+                      </>
+                    );
+                  })()}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-zinc-800">
+              <button
+                onClick={() => setSelectedEventImages(null)}
                 className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
               >
                 Close
@@ -3416,7 +3571,7 @@ export const OperationsLeads: React.FC = () => {
 
         return (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-xl shadow-2xl p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-4xl shadow-2xl p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
               <button 
                 onClick={() => setViewingStaffOrderId(null)}
                 className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
@@ -3459,92 +3614,170 @@ export const OperationsLeads: React.FC = () => {
                         </div>
 
                         <div className="overflow-x-auto rounded-xl border border-zinc-800/80 bg-zinc-900/60 mt-2">
-                          <table className="w-full text-left border-collapse">
+                          <table className="w-full text-left border-collapse min-w-[750px]">
                             <thead>
                               <tr className="bg-zinc-950/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
-                                <th className="py-2.5 px-3.5 font-bold">Staff Name</th>
-                                <th className="py-2.5 px-3.5 font-bold">Assigned Task</th>
-                                <th className="py-2.5 px-3.5 font-bold text-right">Status</th>
-                                <th className="py-2.5 px-3.5 font-bold text-center">Equipment Status</th>
-                                <th className="py-2.5 px-3.5 font-bold text-center">Event Image</th>
-                                <th className="py-2.5 px-3.5 font-bold text-center">Raw Footage</th>
+                                <th className="py-2.5 px-3.5 font-bold whitespace-nowrap">Staff Name</th>
+                                <th className="py-2.5 px-3.5 font-bold whitespace-nowrap">Assigned Task</th>
+                                <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Current Status</th>
+                                <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Equipment Status</th>
+                                <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Event Images</th>
+                                <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Raw Footage</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-zinc-800/60 text-xs">
                               {members.map((member, mIdx) => {
-                                const normStatus = (member.staff_status || 'Pending').toLowerCase();
+                                const normStaffName = (member.staff_name || '').trim().toLowerCase();
+                                const normEvName = (evName || '').trim().toLowerCase();
+                                const memberEvId = member.event_id;
+
+                                const getRecordForStage = (stages: string[]) => {
+                                  if (!leadEquipmentHistory || leadEquipmentHistory.length === 0) return null;
+                                  return leadEquipmentHistory.find(h => {
+                                    if (h.order_id && h.order_id !== ord.order_id) return false;
+                                    const retBy = (h.returned_by || h.staff_name || '').trim().toLowerCase();
+                                    if (retBy && retBy !== normStaffName) return false;
+
+                                    const eqStatus = (h.equipment_status || h.proof_type || '').trim();
+                                    const stageMatch = stages.some(s => s.toLowerCase() === eqStatus.toLowerCase());
+                                    if (!stageMatch) return false;
+
+                                    if (memberEvId && h.event_id) {
+                                      if (h.event_id !== memberEvId) return false;
+                                    } else if (h.event_name) {
+                                      if (h.event_name.trim().toLowerCase() !== normEvName) return false;
+                                    } else if (h.remarks) {
+                                      try {
+                                        const parsed = JSON.parse(h.remarks);
+                                        if (parsed.event_id && memberEvId && parsed.event_id !== memberEvId) return false;
+                                        if (parsed.event_name && parsed.event_name.trim().toLowerCase() !== normEvName) return false;
+                                      } catch (e) {}
+                                    }
+                                    return true;
+                                  });
+                                };
+
+                                const eqReceived = getRecordForStage(['Equipment Received']);
+                                const eqHandover = getRecordForStage(['Equipment Handover']);
+                                const evStart = getRecordForStage(['Event Start', 'Event Started']);
+                                const evEnd = getRecordForStage(['Event Complete', 'Event Completed', 'Event End', 'Event Ended']);
+
+                                // 1. Real-time individual staff status for this event (Event Workflow)
+                                let staffStatusText = 'Pending';
+                                if (evEnd) {
+                                  staffStatusText = 'Event Completed';
+                                } else if (evStart) {
+                                  staffStatusText = 'Event Started';
+                                } else {
+                                  const rawTaskStatus = getStaffTaskStatus(ord.order_id, memberEvId, evIdx, member.staff_name, ord);
+                                  if (rawTaskStatus && (rawTaskStatus.toLowerCase().includes('complete') || rawTaskStatus.toLowerCase().includes('ended'))) {
+                                    staffStatusText = 'Event Completed';
+                                  } else if (rawTaskStatus && (rawTaskStatus.toLowerCase().includes('start') || rawTaskStatus.toLowerCase().includes('progress'))) {
+                                    staffStatusText = 'Event Started';
+                                  } else {
+                                    staffStatusText = 'Pending';
+                                  }
+                                }
+
                                 let statusBadge = (
                                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold text-[11px]">
                                     <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
                                     Pending
                                   </span>
                                 );
-                                if (normStatus.includes('complete') || normStatus === 'completed') {
+                                if (staffStatusText === 'Event Completed') {
                                   statusBadge = (
                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold text-[11px]">
                                       <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
-                                      Completed
+                                      Event Completed
                                     </span>
                                   );
-                                } else if (normStatus.includes('start') || normStatus.includes('progress') || normStatus.includes('started')) {
+                                } else if (staffStatusText === 'Event Started') {
                                   statusBadge = (
                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold text-[11px]">
                                       <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
-                                      In Progress
+                                      Event Started
                                     </span>
                                   );
                                 }
-                                
-                                const getRecordForStage = (stage: string) => {
-                                  return leadEquipmentHistory?.find(h => {
-                                    if (h.order_id !== ord.order_id) return false;
-                                    if (h.equipment_status !== stage) return false;
-                                    if (h.returned_by?.toLowerCase() !== member.staff_name.toLowerCase()) return false;
-                                    if (h.event_name && h.event_name !== evName && evName !== 'Main Event' && h.event_name !== 'Main Event') return false;
-                                    
-                                    if (!h.event_name && h.remarks) {
-                                      try {
-                                        const parsed = JSON.parse(h.remarks);
-                                        if (parsed.event_name && parsed.event_name !== evName && evName !== 'Main Event' && parsed.event_name !== 'Main Event') return false;
-                                      } catch (e) { }
-                                    }
-                                    return true;
-                                  });
-                                };
 
-                                const eqReceived = getRecordForStage('Equipment Received');
-                                const eqHandover = getRecordForStage('Equipment Handover');
-                                const evStart = getRecordForStage('Event Start');
-
+                                // 2. Equipment Status Text
                                 let equipmentStatusText = 'Pending';
                                 if (eqHandover) equipmentStatusText = 'Equipment Handover';
                                 else if (eqReceived) equipmentStatusText = 'Equipment Received';
 
-                                const getPhotoUrl = (record: any) => {
-                                  if (!record) return null;
-                                  if (record.photo_url) return record.photo_url;
-                                  if (!record.remarks) return null;
-                                  try {
-                                    return JSON.parse(record.remarks).photo_url;
-                                  } catch (e) { return null; }
-                                };
+                                // 3. Event Image Status Text
+                                let eventImageStatusText = 'Pending';
+                                if (evEnd) eventImageStatusText = 'Event Completed';
+                                else if (evStart) eventImageStatusText = 'Event Started';
 
-                                const evStartPhoto = getPhotoUrl(evStart);
+                                // 4. Raw Footage Link
+                                let rawFootageLink: string | null = null;
+                                if (rawFootage && rawFootage.length > 0) {
+                                  const rfMatch = rawFootage.find(rf => {
+                                    if (rf.order_id !== ord.order_id) return false;
+                                    const upBy = (rf.uploaded_by || '').trim().toLowerCase();
+                                    if (upBy && upBy !== normStaffName) return false;
+                                    if (memberEvId && rf.event_id) {
+                                      if (rf.event_id !== memberEvId) return false;
+                                    } else if (rf.event_name) {
+                                      if (rf.event_name.trim().toLowerCase() !== normEvName) return false;
+                                    }
+                                    return true;
+                                  });
+                                  if (rfMatch) {
+                                    rawFootageLink = rfMatch.server_path || rfMatch.drive_link || null;
+                                  }
+                                }
+
+                                if (!rawFootageLink && staffAssignments && staffAssignments.length > 0) {
+                                  const saMatch = staffAssignments.find(sa => {
+                                    if (sa.order_id !== ord.order_id) return false;
+                                    if ((sa.staff_name || '').trim().toLowerCase() !== normStaffName) return false;
+                                    return true;
+                                  });
+                                  if (saMatch) {
+                                    const saLink = saMatch.raw_footage_link || (saMatch as any).drive_link || (saMatch as any).raw_footage_location;
+                                    if (saLink && saLink.trim() && saLink.trim() !== 'Pending') {
+                                      rawFootageLink = saLink.trim();
+                                    }
+                                  }
+                                }
+
+                                if (!rawFootageLink && leadEquipmentHistory && leadEquipmentHistory.length > 0) {
+                                  const hMatch = leadEquipmentHistory.find(h => {
+                                    if (h.order_id !== ord.order_id) return false;
+                                    if ((h.returned_by || '').trim().toLowerCase() !== normStaffName) return false;
+                                    if (h.remarks) {
+                                      try {
+                                        const parsed = JSON.parse(h.remarks);
+                                        return !!(parsed.raw_footage_link || parsed.drive_link);
+                                      } catch (e) { return false; }
+                                    }
+                                    return false;
+                                  });
+                                  if (hMatch && hMatch.remarks) {
+                                    try {
+                                      const parsed = JSON.parse(hMatch.remarks);
+                                      rawFootageLink = parsed.raw_footage_link || parsed.drive_link || null;
+                                    } catch (e) {}
+                                  }
+                                }
 
                                 return (
                                   <tr key={mIdx} className="hover:bg-zinc-800/30 transition-colors">
-                                    <td className="py-3 px-3.5 font-bold text-white font-sans">
+                                    <td className="py-3 px-3.5 font-bold text-white font-sans whitespace-nowrap">
                                       {member.staff_name}
                                     </td>
-                                    <td className="py-3 px-3.5 font-sans">
+                                    <td className="py-3 px-3.5 font-sans whitespace-nowrap">
                                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-bold text-xs">
                                         {member.assigned_task || member.staff_role}
                                       </span>
                                     </td>
-                                    <td className="py-3 px-3.5 text-right font-mono">
+                                    <td className="py-3 px-3.5 text-center font-mono whitespace-nowrap">
                                       {statusBadge}
                                     </td>
-                                    <td className="py-3 px-3.5 text-center">
+                                    <td className="py-3 px-3.5 text-center whitespace-nowrap">
                                       <span 
                                         onClick={() => setSelectedEquipmentStatus({ staffName: member.staff_name, eqReceived, eqHandover })}
                                         className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline font-bold text-xs"
@@ -3552,16 +3785,26 @@ export const OperationsLeads: React.FC = () => {
                                         {equipmentStatusText}
                                       </span>
                                     </td>
-                                    <td className="py-3 px-3.5 text-center">
-                                      {evStartPhoto ? (
-                                        <img
-                                           src={evStartPhoto}
-                                           alt="Event Start"
-                                           className="w-10 h-10 object-cover rounded-md border border-zinc-700 mx-auto cursor-pointer hover:opacity-80"
-                                          onClick={() => window.open(evStartPhoto, '_blank')}
-                                        />
+                                    <td className="py-3 px-3.5 text-center whitespace-nowrap">
+                                      <span 
+                                        onClick={() => setSelectedEventImages({ staffName: member.staff_name, evStart, evEnd })}
+                                        className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline font-bold text-xs"
+                                      >
+                                        {eventImageStatusText}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-3.5 text-center font-mono whitespace-nowrap">
+                                      {rawFootageLink ? (
+                                        <a
+                                          href={rawFootageLink.startsWith('http') ? rawFootageLink : `https://${rawFootageLink}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300 underline font-bold text-xs"
+                                        >
+                                          Uploaded ↗
+                                        </a>
                                       ) : (
-                                        <span className="text-zinc-600 italic text-[10px]">Pending</span>
+                                        <span className="text-zinc-600 italic text-[11px]">Pending</span>
                                       )}
                                     </td>
                                   </tr>

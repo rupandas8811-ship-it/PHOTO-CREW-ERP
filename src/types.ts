@@ -165,6 +165,7 @@ export interface LeadEvent {
   event_date: string;
   event_start_date: string;
   event_end_date: string;
+  Event_End_Date?: string;
   event_location: string;
   event_shoot_type: string;
   guest_pax: number;
@@ -193,6 +194,8 @@ export interface Lead {
   custom_event_type?: string;
   shoot_type?: string;
   event_date: string;
+  Event_End_Date?: string;
+  event_end_date?: string;
   event_time: string;
   reporting_time?: string;
   Reporting_date?: string;

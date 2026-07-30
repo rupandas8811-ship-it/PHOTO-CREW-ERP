@@ -1918,7 +1918,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
               .map((e: any) => ({
                 ...e,
                 event_start_date: e.event_start_date || e.event_date || '',
-                event_end_date: e.event_end_date || e.event_date || '',
+                event_end_date: e.event_end_date || e.Event_End_Date || l.Event_End_Date || '',
                 event_start_time: e.event_start_time || '',
                 event_end_time: e.event_end_time || ''
               }));
@@ -5815,6 +5815,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           event_date: ev.event_date || '',
           event_start_time: ev.event_start_time || '',
           event_end_time: ev.event_end_time || '',
+          event_end_date: ev.event_end_date || (ev as any).Event_End_Date || null,
           event_location: ev.event_location || '',
           google_maps_link: ev.google_maps_link || '',
           guest_pax: String(ev.guest_pax) !== '' && ev.guest_pax != null ? Number(ev.guest_pax) : null,

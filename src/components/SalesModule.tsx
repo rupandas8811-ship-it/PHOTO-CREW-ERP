@@ -3178,7 +3178,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             event_name: ev.event_name,
             event_date: ev.event_date,
             event_start_date: ev.event_date,
-            event_end_date: ev.event_date,
+            event_end_date: ev.event_end_date || ev.Event_End_Date || '',
             event_location: ev.event_location,
             event_shoot_type: ev.event_shoot_type,
             guest_pax: ev.guest_pax,
@@ -3205,7 +3205,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             event_name: firstEv.event_name || '',
             event_date: firstEv.event_date || '',
             event_start_date: firstEv.event_date || '',
-            event_end_date: firstEv.event_date || '',
+            event_end_date: firstEv.event_end_date || (firstEv as any).Event_End_Date || '',
             event_location: firstEv.event_location || '',
             event_shoot_type: firstEv.event_shoot_type || '',
             guest_pax: firstEv.guest_pax || '',
@@ -4275,7 +4275,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const evShootType = firstEvent?.event_shoot_type || fullLead.desired_event_shoot_type || fullLead.shoot_type || '';
     const evDate = firstEvent?.event_date || fullLead.event_date || '';
     const evStartDate = firstEvent?.event_start_date || fullLead.event_date || '';
-    const evEndDate = firstEvent?.event_end_date || fullLead.event_date || '';
+    const evEndDate = firstEvent?.event_end_date || (firstEvent as any)?.Event_End_Date || fullLead.Event_End_Date || '';
     const evLocation = firstEvent?.event_location || fullLead.event_location || '';
     const evGuestPax = firstEvent?.guest_pax ?? fullLead.guest_pax ?? fullLead.total_pax ?? '';
     const evStaffPax = firstEvent?.staff_pax ?? fullLead.staff_pax ?? '';
@@ -4635,7 +4635,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             guest_pax: guestPaxVal,
             staff_pax: staffPaxVal,
             event_start_date: eventForm.event_date,
-            event_end_date: eventForm.event_date
+            event_end_date: eventForm.event_end_date || ''
           };
 
           if (editingEventId) {
@@ -4946,6 +4946,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         custom_event_name: firstEvent.event_name,
         custom_event_type: firstEvent.event_type === 'Other' ? firstEvent.event_name : undefined,
         event_date: firstEvent.event_date,
+        Event_End_Date: firstEvent.event_end_date || (firstEvent as any).Event_End_Date || null,
         event_time: formattedEventTime || null,
         event_start_time: firstEvent.event_start_time || null,
         event_end_time: firstEvent.event_end_time || null,
@@ -5133,7 +5134,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           guest_pax: eventForm.guest_pax || '',
           staff_pax: eventForm.staff_pax || '',
           event_start_date: eventForm.event_date || '',
-          event_end_date: eventForm.event_date || ''
+          event_end_date: eventForm.event_end_date || ''
         } as any);
       }
       const firstEvent = finalEventsList[0] || {};
@@ -5337,7 +5338,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       guest_pax: guestPaxVal,
       staff_pax: staffPaxVal,
       event_start_date: eventForm.event_date,
-      event_end_date: eventForm.event_date
+      event_end_date: eventForm.event_end_date || ''
     };
 
     const savedEventType = eventForm.event_type;
@@ -5393,19 +5394,28 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleEditEvent = (ev: LeadEvent) => {
     setEditingEventId(ev.id);
+    const startDate = ev.event_start_date || ev.event_date || '';
+    const endDate = ev.event_end_date || (ev as any).Event_End_Date || (ev as any).Event_end_date || '';
+    const startTime = ev.event_start_time || (ev as any).start_time || (ev as any).event_time || '';
+    const endTime = ev.event_end_time || (ev as any).end_time || '';
+    const location = ev.event_location || (ev as any).location || (ev as any).venue_address || '';
+    const maps = ev.google_maps_link || (ev as any).maps_link || '';
+
     setEventForm({
       event_type: ev.event_type || '',
       event_name: ev.event_name || '',
       event_shoot_type: ev.event_shoot_type || '',
-      event_date: ev.event_date || '',
-      event_start_time: ev.event_start_time || '',
-      event_end_time: ev.event_end_time || '',
-      event_location: ev.event_location || '',
-      google_maps_link: ev.google_maps_link || '',
+      event_date: startDate,
+      event_start_date: startDate,
+      event_end_date: endDate,
+      event_start_time: startTime,
+      event_end_time: endTime,
+      event_location: location,
+      google_maps_link: maps,
       guest_pax: ev.guest_pax !== null && ev.guest_pax !== undefined ? ev.guest_pax : ('' as any),
       staff_pax: ev.staff_pax !== null && ev.staff_pax !== undefined ? ev.staff_pax : ('' as any),
-      event_start_date: ev.event_start_date || ev.event_date || '',
-      event_end_date: ev.event_end_date || ev.event_date || ''
+      reporting_date: ev.reporting_date || '',
+      reporting_time: ev.reporting_time || ''
     });
     setShowEventForm(true);
   };
@@ -5438,13 +5448,25 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setShowEventForm(true);
   };
 
+  const formatDDMMYYYY = (dateStr: string | undefined | null): string => {
+    if (!dateStr) return 'N/A';
+    const clean = dateStr.trim();
+    if (!clean) return 'N/A';
+    if (/^\d{2}-\d{2}-\d{4}$/.test(clean)) return clean;
+    const match = clean.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      return `${match[3]}-${match[2]}-${match[1]}`;
+    }
+    return clean;
+  };
+
   const convertTo24Hour = (timeStr: string | undefined | null): string => {
     if (!timeStr) return '';
     const clean = timeStr.trim().toUpperCase();
     if (!clean) return '';
 
-    // Match 12-hour AM/PM format (e.g., "08:00 AM", "8:00 AM", "12:30 PM", "01:00 PM")
-    const ampmMatch = clean.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+    // Match 12-hour AM/PM format (e.g., "08:00 AM", "8:00:00 AM", "12:30 PM", "01:00:00 PM")
+    const ampmMatch = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/);
     if (ampmMatch) {
       let hours = parseInt(ampmMatch[1], 10);
       const minutes = ampmMatch[2];
@@ -5460,16 +5482,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return `${hh}:${minutes}`;
     }
 
-    // Check if it's already in 24-hour format (e.g., "14:30")
-    const hhmmMatch = clean.match(/^(\d{2}):(\d{2})$/);
-    if (hhmmMatch) {
-      return clean;
-    }
-
-    // Check if it's a single digit hour (e.g. "8:30")
-    const looseMatch = clean.match(/^(\d{1}):(\d{2})$/);
-    if (looseMatch) {
-      return `0${looseMatch[1]}:${looseMatch[2]}`;
+    // Check if it's in 24-hour format with or without seconds (e.g., "14:30", "14:30:00", "8:30:00")
+    const hhmmssMatch = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (hhmmssMatch) {
+      const hh = String(parseInt(hhmmssMatch[1], 10)).padStart(2, '0');
+      const mm = hhmmssMatch[2];
+      return `${hh}:${mm}`;
     }
 
     return '';
@@ -5480,12 +5498,21 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const clean = timeStr.trim();
     if (!clean) return '';
 
-    const match = clean.match(/^(\d{1,2}):(\d{2})$/);
-    if (!match) {
-      // If it already has AM/PM, return it
-      if (clean.toUpperCase().includes('AM') || clean.toUpperCase().includes('PM')) {
-        return clean;
+    // If it already has AM/PM, format nicely
+    if (clean.toUpperCase().includes('AM') || clean.toUpperCase().includes('PM')) {
+      const ampmMatch = clean.toUpperCase().match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/);
+      if (ampmMatch) {
+        const hh = String(parseInt(ampmMatch[1], 10)).padStart(2, '0');
+        const mm = ampmMatch[2];
+        const period = ampmMatch[3];
+        return `${hh}:${mm} ${period}`;
       }
+      return clean;
+    }
+
+    // Match 24-hour format HH:MM or HH:MM:SS
+    const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (!match) {
       return clean;
     }
 
@@ -5525,6 +5552,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             <div className="grid grid-cols-1 gap-3">
               {eventsList.map((ev, idx) => {
                 const isCollapsed = collapsedEventIds[ev.id] ?? false;
+                const startDateStr = formatDDMMYYYY(ev.event_start_date || ev.event_date);
+                const endDateRaw = ev.event_end_date || (ev as any).Event_End_Date || '';
+                const endDateStr = endDateRaw ? formatDDMMYYYY(endDateRaw) : 'N/A';
+                const startTimeStr = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A';
+                const endTimeStr = ev.event_end_time ? convertTo12Hour(ev.event_end_time) : 'N/A';
+
                 return (
                   <div key={ev.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm transition-all duration-200">
                     <div 
@@ -5543,7 +5576,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             </span>
                           </div>
                           <p className="text-[11px] text-slate-400 mt-0.5 font-mono">
-                            {ev.event_date} {ev.event_start_time ? `• ${convertTo12Hour(ev.event_start_time)}` : ''}
+                            Start: {startDateStr} {startTimeStr !== 'N/A' ? `| ${startTimeStr}` : ''}
+                            {endDateRaw ? ` • End: ${endDateStr} ${endTimeStr !== 'N/A' ? `| ${endTimeStr}` : ''}` : (endTimeStr !== 'N/A' ? ` • End Time: ${endTimeStr}` : '')}
                           </p>
                         </div>
                       </div>
@@ -5576,18 +5610,33 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                     {!isCollapsed && (
                       <div className="p-4 bg-slate-900/50 text-xs text-slate-300 space-y-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-950/40 p-3 rounded-lg border border-slate-850/60 font-mono">
+                          <div>
+                            <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Start Date</span>
+                            <span className="text-slate-200 font-semibold">{startDateStr}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Start Time</span>
+                            <span className="text-slate-200 font-semibold">{startTimeStr}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">End Date</span>
+                            <span className="text-slate-200 font-semibold">{endDateStr}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">End Time</span>
+                            <span className="text-slate-200 font-semibold">{endTimeStr}</span>
+                          </div>
+                        </div>
+
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-                          {ev.event_start_time && (
-                            <div>
-                              <span className="text-slate-400">Timings:</span>
-                              <span className="ml-1.5 font-mono text-slate-200">
-                                {convertTo12Hour(ev.event_start_time)} {ev.event_end_time ? `to ${convertTo12Hour(ev.event_end_time)}` : ''}
-                              </span>
-                            </div>
-                          )}
                           <div>
                             <span className="text-slate-400">Guest Pax:</span>
-                            <span className="ml-1.5 font-semibold text-slate-200">{ev.guest_pax}</span>
+                            <span className="ml-1.5 font-semibold text-slate-200">{ev.guest_pax !== '' && ev.guest_pax !== null && ev.guest_pax !== undefined ? ev.guest_pax : 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">Staff Pax:</span>
+                            <span className="ml-1.5 font-semibold text-slate-200">{ev.staff_pax !== '' && ev.staff_pax !== null && ev.staff_pax !== undefined ? ev.staff_pax : 'N/A'}</span>
                           </div>
                         </div>
 
@@ -5719,6 +5768,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     />
                   </div>
 
+                  {/* Event End Date */}
+                  <div className="text-left">
+                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                      Event End Date
+                    </label>
+                    <input
+                      id="input_event_end_date"
+                      type="date"
+                      value={eventForm.event_end_date || ''}
+                      onChange={(e) => setEventForm({ ...eventForm, event_end_date: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono cursor-pointer"
+                    />
+                  </div>
+
                   {/* Event End Time */}
                   <div className="text-left">
                     <label className="block text-xs font-semibold text-slate-400 mb-1.5">
@@ -5782,6 +5845,21 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       placeholder="e.g. 150"
                       value={eventForm.guest_pax}
                       onChange={(e) => setEventForm({ ...eventForm, guest_pax: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0) })}
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono"
+                    />
+                  </div>
+
+                  {/* Staff Pax */}
+                  <div className="text-left">
+                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                      Staff Pax
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="e.g. 5"
+                      value={eventForm.staff_pax}
+                      onChange={(e) => setEventForm({ ...eventForm, staff_pax: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0) })}
                       className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono"
                     />
                   </div>
@@ -6170,7 +6248,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           guest_pax: guestPaxVal,
           staff_pax: staffPaxVal,
           event_start_date: eventForm.event_date,
-          event_end_date: eventForm.event_date
+          event_end_date: eventForm.event_end_date || ''
         };
 
         if (editingEventId) {
@@ -9450,7 +9528,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-3 gap-3">
                         <div>
                           <label className="block font-medium text-slate-400 mb-1">
                             Reporting Date *
@@ -9464,6 +9542,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               [ev.id]: { ...evData, reporting_date: e.target.value } 
                             })}
                             className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-2 text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-[11px]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-medium text-slate-400 mb-1">
+                            Reporting End Date
+                          </label>
+                          <input
+                            type="date"
+                            readOnly
+                            value={ev.event_end_date || ev.Event_End_Date || (selectedLead?.Event_End_Date && selectedLead?.events?.length === 1 ? selectedLead.Event_End_Date : '') || ''}
+                            className="w-full bg-slate-950/60 border border-slate-800 rounded-lg py-1.5 px-2 text-slate-300 font-mono text-[11px] cursor-not-allowed"
                           />
                         </div>
                         <div>
@@ -10406,8 +10495,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   <div className="mt-4 space-y-3">
                                     <h5 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest font-mono border-b border-emerald-500/20 pb-1.5">Event-wise Details</h5>
                                     {crmEvents.map((ev: any) => (
-                                      <div key={ev.id} className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
-                                        <div className="col-span-1 sm:col-span-3">
+                                      <div key={ev.id} className="grid grid-cols-1 sm:grid-cols-4 gap-3.5 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
+                                        <div className="col-span-1 sm:col-span-4">
                                           <span className="text-xs font-bold text-slate-200">🎬 {ev.event_name || ev.event_type}</span>
                                         </div>
                                         <div>
@@ -10417,6 +10506,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                         <div>
                                            <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Reporting Date</span>
                                            <strong className="text-slate-300 font-mono">{ev.reporting_date || ev.event_date || 'N/A'}</strong>
+                                        </div>
+                                        <div>
+                                           <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Reporting End Date</span>
+                                           <strong className="text-slate-300 font-mono">{ev.event_end_date || ev.Event_End_Date || (crmEvents.length === 1 && selectedLead?.Event_End_Date ? selectedLead.Event_End_Date : 'N/A')}</strong>
                                         </div>
                                         <div>
                                            <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Reporting Time</span>
@@ -10514,39 +10607,53 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 {crmEvents && crmEvents.length > 0 && (
                                   <div className="col-span-1 sm:col-span-2 mt-4 space-y-3">
                                     <h5 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest font-mono border-b border-emerald-500/20 pb-1.5">Event-wise Reporting Details</h5>
-                                    {crmEvents.map(ev => (
-                                      <div key={ev.id} className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
-                                        <div className="col-span-1 sm:col-span-2"><span className="text-xs font-bold text-slate-200">🎬 {ev.event_name || ev.event_type}</span></div>
-                                        <div>
-                                           <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting Date *</label>
-                                           <input 
-                                             id={`reporting_date_${ev.id}`}
-                                             type="date" 
-                                             value={ev.reporting_date || ev.event_date || ''} 
-                                             onChange={(e) => {
-                                               const updated = crmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_date: e.target.value } : eItem);
-                                               setCrmEvents(updated);
-                                             }} 
-                                             className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
-                                             required 
-                                           />
+                                    {crmEvents.map(ev => {
+                                      const repEndDate = ev.event_end_date || ev.Event_End_Date || (crmEvents.length === 1 && selectedLead?.Event_End_Date ? selectedLead.Event_End_Date : '');
+                                      return (
+                                        <div key={ev.id} className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
+                                          <div className="col-span-1 sm:col-span-3"><span className="text-xs font-bold text-slate-200">🎬 {ev.event_name || ev.event_type}</span></div>
+                                          <div>
+                                             <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting Date *</label>
+                                             <input 
+                                               id={`reporting_date_${ev.id}`}
+                                               type="date" 
+                                               value={ev.reporting_date || ev.event_date || ''} 
+                                               onChange={(e) => {
+                                                 const updated = crmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_date: e.target.value } : eItem);
+                                                 setCrmEvents(updated);
+                                               }} 
+                                               className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
+                                               required 
+                                             />
+                                          </div>
+                                          <div>
+                                             <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting End Date</label>
+                                             <input 
+                                               id={`reporting_end_date_${ev.id}`}
+                                               type="date" 
+                                               value={repEndDate} 
+                                               readOnly
+                                               placeholder="N/A"
+                                               className="w-full bg-slate-950/60 border border-slate-850/80 rounded-lg py-1.5 px-3 text-xs text-slate-300 font-mono cursor-not-allowed"
+                                             />
+                                          </div>
+                                          <div>
+                                             <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting Time *</label>
+                                             <input 
+                                               id={`reporting_time_${ev.id}`}
+                                               type="time" 
+                                               value={ev.reporting_time || ''} 
+                                               onChange={(e) => {
+                                                 const updated = crmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_time: e.target.value } : eItem);
+                                                 setCrmEvents(updated);
+                                               }} 
+                                               className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
+                                               required 
+                                             />
+                                          </div>
                                         </div>
-                                        <div>
-                                           <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting Time *</label>
-                                           <input 
-                                             id={`reporting_time_${ev.id}`}
-                                             type="time" 
-                                             value={ev.reporting_time || ''} 
-                                             onChange={(e) => {
-                                               const updated = crmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_time: e.target.value } : eItem);
-                                               setCrmEvents(updated);
-                                             }} 
-                                             className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
-                                             required 
-                                           />
-                                        </div>
-                                      </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 )}
                               </div>
