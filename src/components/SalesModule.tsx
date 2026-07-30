@@ -2462,14 +2462,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
   };
 
-  const getCleanSalesStaffName = (rawName?: string | null, leadObj?: Lead | null): string => {
-    let candidate = (rawName || '').trim();
+  const getCleanSalesStaffName = (rawName?: any, leadObj?: Lead | null): string => {
+    let candidate = String(rawName || '').trim();
 
     if (!candidate && leadObj) {
-      if (leadObj.sales_staff_name && leadObj.sales_staff_name.trim()) {
-        candidate = leadObj.sales_staff_name.trim();
-      } else if (leadObj.sales_person && !['Sales', 'Sales Team', 'Admin', 'Admin User'].includes(leadObj.sales_person.trim())) {
-        candidate = leadObj.sales_person.trim();
+      if (leadObj.sales_staff_name && String(leadObj.sales_staff_name).trim()) {
+        candidate = String(leadObj.sales_staff_name).trim();
+      } else if (leadObj.sales_person && !['Sales', 'Sales Team', 'Admin', 'Admin User'].includes(String(leadObj.sales_person).trim())) {
+        candidate = String(leadObj.sales_person).trim();
       }
     }
 
@@ -2477,8 +2477,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     // If candidate contains comma-separated names, extract only the actual Sales Person
     if (candidate.includes(',')) {
-      if (leadObj?.sales_person && !['Sales', 'Sales Team', 'Admin', 'Admin User'].includes(leadObj.sales_person.trim())) {
-        const sp = leadObj.sales_person.trim().toLowerCase();
+      if (leadObj?.sales_person && !['Sales', 'Sales Team', 'Admin', 'Admin User'].includes(String(leadObj.sales_person).trim())) {
+        const sp = String(leadObj.sales_person).trim().toLowerCase();
         const parts = candidate.split(',').map(s => s.trim());
         const match = parts.find(p => p.toLowerCase() === sp || p.toLowerCase().includes(sp) || sp.includes(p.toLowerCase()));
         if (match) return match;
@@ -2489,11 +2489,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     return candidate;
   };
 
-  const getCleanSalesStaffMobile = (rawMobile?: string | null, leadObj?: Lead | null): string => {
-    let candidate = (rawMobile || '').trim();
+  const getCleanSalesStaffMobile = (rawMobile?: any, leadObj?: Lead | null): string => {
+    let candidate = String(rawMobile || '').trim();
 
-    if (!candidate && leadObj && leadObj.sales_staff_mobile && leadObj.sales_staff_mobile.trim()) {
-      candidate = leadObj.sales_staff_mobile.trim();
+    if (!candidate && leadObj && leadObj.sales_staff_mobile && String(leadObj.sales_staff_mobile).trim()) {
+      candidate = String(leadObj.sales_staff_mobile).trim();
     }
 
     if (!candidate) return '';
@@ -3008,6 +3008,110 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editableDeliverables, editableInclusions, selectedLead?.lead_id, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option]);
 
+  // Step 1 Automatic Data Prefill & Hydration from Supabase leads table
+  React.useEffect(() => {
+    if (!selectedLead?.lead_id || !supabaseClient || selectedLead.lead_id === 'DRAFT-LEAD') return;
+
+    let isMounted = true;
+
+    const loadStep1DataFromDB = async () => {
+      try {
+        const { data: dbLead, error } = await supabaseClient
+          .from('leads')
+          .select('*')
+          .eq('lead_id', selectedLead.lead_id)
+          .maybeSingle();
+
+        if (error || !dbLead || !isMounted) return;
+
+        setWizardLeadData(prev => ({
+          ...prev,
+          customer_name: dbLead.customer_name || prev.customer_name || '',
+          mobile: dbLead.mobile ? String(dbLead.mobile) : (prev.mobile ? String(prev.mobile) : ''),
+          whatsapp_number: dbLead.whatsapp_number ? String(dbLead.whatsapp_number) : (dbLead.mobile ? String(dbLead.mobile) : (prev.whatsapp_number ? String(prev.whatsapp_number) : '')),
+          email: dbLead.email ?? prev.email ?? '',
+          lead_source: dbLead.lead_source || prev.lead_source || '',
+          Specify_Custom_Lead_Source_Name: dbLead.Specify_Custom_Lead_Source_Name || prev.Specify_Custom_Lead_Source_Name || '',
+          address: dbLead.address || prev.address || '',
+          city: dbLead.city || prev.city || '',
+          state: dbLead.state || prev.state || '',
+          pincode: dbLead.pincode || prev.pincode || '',
+          client_residence_address: dbLead.client_residence_address || prev.client_residence_address || '',
+          desired_event_shoot_type: dbLead.desired_event_shoot_type || prev.desired_event_shoot_type || '',
+          status: dbLead.status || dbLead.current_status || prev.status,
+          budget: dbLead.budget ?? prev.budget ?? 0,
+          package_price: dbLead.package_price ?? prev.package_price ?? 0,
+          Select_Package_Option: dbLead.Select_Package_Option || prev.Select_Package_Option || '',
+          selected_package_id: dbLead.Select_Package_Option || prev.selected_package_id || '',
+        }));
+
+        // Keep selectedLead object in sync with fresh database values
+        setSelectedLead(prev => {
+          if (!prev || prev.lead_id !== dbLead.lead_id) return prev;
+          return {
+            ...prev,
+            customer_name: dbLead.customer_name || prev.customer_name,
+            mobile: dbLead.mobile ? String(dbLead.mobile) : prev.mobile,
+            whatsapp_number: dbLead.whatsapp_number ? String(dbLead.whatsapp_number) : prev.whatsapp_number,
+            email: dbLead.email ?? prev.email,
+            lead_source: dbLead.lead_source || prev.lead_source,
+            Specify_Custom_Lead_Source_Name: dbLead.Specify_Custom_Lead_Source_Name || prev.Specify_Custom_Lead_Source_Name,
+            status: dbLead.status || dbLead.current_status || prev.status,
+          };
+        });
+      } catch (err) {
+        console.error("Error loading Step 1 data from DB:", err);
+      }
+    };
+
+    loadStep1DataFromDB();
+
+    return () => { isMounted = false; };
+  }, [selectedLead?.lead_id, supabaseClient]);
+
+  // Step 1 Customer Details Automatic Data Hydration from Supabase
+  React.useEffect(() => {
+    if (!selectedLead?.lead_id || selectedLead.lead_id === 'DRAFT-LEAD' || !supabaseClient) return;
+
+    let isMounted = true;
+
+    const hydrateCustomerDetails = async () => {
+      try {
+        const { data: leadData, error } = await supabaseClient
+          .from('leads')
+          .select('*')
+          .eq('lead_id', selectedLead.lead_id)
+          .maybeSingle();
+
+        if (error || !leadData || !isMounted) return;
+
+        setWizardLeadData(prev => ({
+          ...prev,
+          customer_name: leadData.customer_name || prev.customer_name || selectedLead.customer_name || '',
+          mobile: String(leadData.mobile || prev.mobile || selectedLead.mobile || ''),
+          whatsapp_number: String(leadData.whatsapp_number || prev.whatsapp_number || leadData.mobile || prev.mobile || selectedLead.whatsapp_number || selectedLead.mobile || ''),
+          email: leadData.email ?? prev.email ?? selectedLead.email ?? '',
+          lead_source: leadData.lead_source || prev.lead_source || selectedLead.lead_source || 'Reference',
+          Specify_Custom_Lead_Source_Name: leadData.Specify_Custom_Lead_Source_Name || prev.Specify_Custom_Lead_Source_Name || selectedLead.Specify_Custom_Lead_Source_Name || '',
+          address: leadData.address || prev.address || selectedLead.address || '',
+          city: leadData.city || prev.city || selectedLead.city || '',
+          state: leadData.state || prev.state || selectedLead.state || '',
+          pincode: leadData.pincode || prev.pincode || selectedLead.pincode || '',
+          client_residence_address: leadData.client_residence_address || prev.client_residence_address || selectedLead.client_residence_address || '',
+          desired_event_shoot_type: leadData.desired_event_shoot_type || prev.desired_event_shoot_type || selectedLead.desired_event_shoot_type || '',
+          Select_Package_Option: leadData.Select_Package_Option || prev.Select_Package_Option || selectedLead.Select_Package_Option || '',
+          status: leadData.status || leadData.current_status || prev.status || selectedLead.status || '',
+        }));
+      } catch (err) {
+        console.warn("Failed to hydrate customer details from Supabase", err);
+      }
+    };
+
+    hydrateCustomerDetails();
+
+    return () => { isMounted = false; };
+  }, [selectedLead?.lead_id, supabaseClient]);
+
   // Step 2 Automatic Data Persistence & Prefill
   React.useEffect(() => {
     const isStep2 = (activeTab === 'create' && wizardStep === 2) || (activeTab === 'crm' && crmWizardStep === 2);
@@ -3268,11 +3372,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const validateLeadForQuotation = (leadObj: any, activePkgs: any[]) => {
     const missing: string[] = [];
-    if (!leadObj.customer_name?.trim()) missing.push('Customer Name');
-    if (!leadObj.mobile?.trim()) missing.push('Mobile Number');
-    if (!leadObj.event_type?.trim()) missing.push('Event Type');
-    if (!leadObj.event_date?.trim()) missing.push('Event Date');
-    if (!leadObj.event_location?.trim() && !leadObj.location?.trim()) missing.push('Event Location');
+    if (!String(leadObj.customer_name || '').trim()) missing.push('Customer Name');
+    if (!String(leadObj.mobile || '').trim()) missing.push('Mobile Number');
+    if (!String(leadObj.event_type || '').trim()) missing.push('Event Type');
+    if (!String(leadObj.event_date || '').trim()) missing.push('Event Date');
+    if (!String(leadObj.event_location || '').trim() && !String(leadObj.location || '').trim()) missing.push('Event Location');
     if (activePkgs.length === 0) missing.push('At least one selected package');
     return missing;
   };
@@ -3284,12 +3388,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const leadObj = getLeadInfoForQuote(isEdit);
       const leadIdForError = leadObj?.lead_id || createdLeadId || 'UNKNOWN';
 
-      if (!salesStaffName || !salesStaffName.trim()) {
+      if (!salesStaffName || !String(salesStaffName).trim()) {
         showValidationError("input_sales_staff_name", "Missing required field: Sales Staff Name");
         setIsSaving(false);
         return null;
       }
-      if (!salesStaffMobile || !salesStaffMobile.trim() || salesStaffMobile.trim().length !== 10 || !/^\d+$/.test(salesStaffMobile.trim())) {
+      const mobileVal = String(salesStaffMobile || '').trim();
+      if (!salesStaffMobile || !mobileVal || mobileVal.length !== 10 || !/^\d+$/.test(mobileVal)) {
         showValidationError("input_sales_staff_mobile", "Invalid mobile number. Must be 10 digits.");
         setIsSaving(false);
         return null;
@@ -3513,11 +3618,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handlePreviewQuotePDF = async (isEdit: boolean) => {
     try {
-      if (!salesStaffName || !salesStaffName.trim()) {
+      if (!salesStaffName || !String(salesStaffName).trim()) {
         showValidationError("input_sales_staff_name", "Quotation Incomplete! Please enter Sales Staff Name.");
         return;
       }
-      if (!salesStaffMobile || !salesStaffMobile.trim() || salesStaffMobile.trim().length !== 10 || !/^\d+$/.test(salesStaffMobile.trim())) {
+      const mobileVal = String(salesStaffMobile || '').trim();
+      if (!salesStaffMobile || !mobileVal || mobileVal.length !== 10 || !/^\d+$/.test(mobileVal)) {
         showValidationError("input_sales_staff_mobile", "Please enter a valid 10-digit mobile number.");
         return;
       }
@@ -3966,16 +4072,33 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   }, [leads]);
   
   const handleSelectLead = async (lead: Lead) => {
-    setSelectedLead(lead);
-    setCrmEvents(lead.events || []);
+    let fullLead = lead;
+    if (supabaseClient && lead.lead_id && lead.lead_id !== 'DRAFT-LEAD') {
+      try {
+        const { data: dbLead, error: dbLeadErr } = await supabaseClient
+          .from('leads')
+          .select('*')
+          .eq('lead_id', lead.lead_id)
+          .maybeSingle();
+        
+        if (!dbLeadErr && dbLead) {
+          fullLead = { ...lead, ...dbLead };
+        }
+      } catch (err) {
+        console.warn("Failed to fetch full lead details on select", err);
+      }
+    }
+
+    setSelectedLead(fullLead);
+    setCrmEvents(fullLead.events || []);
 
     // Always fetch fresh events to ensure no cached EV- IDs are used
-    if (supabaseClient && lead.lead_id && lead.lead_id !== 'DRAFT-LEAD') {
+    if (supabaseClient && fullLead.lead_id && fullLead.lead_id !== 'DRAFT-LEAD') {
       try {
         const { data: freshEvents, error } = await supabaseClient
           .from('lead_events')
           .select('*')
-          .eq('lead_id', lead.lead_id)
+          .eq('lead_id', fullLead.lead_id)
           .order('created_at', { ascending: true });
         
         if (!error && freshEvents && freshEvents.length > 0) {
@@ -4008,47 +4131,45 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       .filter(q => q.lead_id === lead.lead_id)
       .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0];
 
-    // Detect highest completed step
-    const localSavedStep = localStorage.getItem(`crm_last_step_${lead.lead_id}`);
-    let completedStep = 0;
-    
-    // Explicit override for New Lead status to strictly enforce step 2 routing
-    const isNewLeadStatus = lead.status === 'New Lead' || lead.current_status === 'New Lead';
+    // Determine the target CRM step based on persisted data and status
+    const hasQuotationOrPackage = !!(
+      latestQuote ||
+      primaryLP?.package_id ||
+      (fullLead.Select_Package_Option && String(fullLead.Select_Package_Option).trim() !== '') ||
+      ['Quotation Sent', 'Negotiation', 'Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed', 'Lost Lead'].includes(fullLead.status || '') ||
+      ['Quotation Sent', 'Negotiation', 'Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed', 'Lost Lead'].includes((fullLead as any).current_status || '')
+    );
 
-    if (isNewLeadStatus) {
-      completedStep = 1; // Enforce step 1 completed for New Lead
-    } else if (localSavedStep) {
-      completedStep = parseInt(localSavedStep, 10);
+    const hasEventDetails = !!(
+      (fullLead.events && fullLead.events.length > 0) ||
+      (fullLead.event_type && String(fullLead.event_type).trim() !== '') ||
+      (fullLead.event_date && String(fullLead.event_date).trim() !== '') ||
+      (fullLead.event_location && String(fullLead.event_location).trim() !== '') ||
+      (fullLead.desired_event_shoot_type && String(fullLead.desired_event_shoot_type).trim() !== '')
+    );
+
+    const hasCustomerDetails = !!(
+      (fullLead.customer_name && String(fullLead.customer_name).trim() !== '') ||
+      (fullLead.mobile && String(fullLead.mobile).trim() !== '')
+    );
+
+    const localSavedStep = localStorage.getItem(`crm_last_step_${lead.lead_id}`);
+    const remarksMatch = fullLead.remarks?.match(/\[CRM_COMPLETED_STEP:\s*(\d+)\]/);
+    const explicitStep = localSavedStep ? parseInt(localSavedStep, 10) : (remarksMatch ? parseInt(remarksMatch[1], 10) : null);
+
+    let startStep = 1;
+    if (hasQuotationOrPackage || explicitStep === 3) {
+      startStep = 3;
+    } else if (hasEventDetails || explicitStep === 2) {
+      startStep = 2;
+    } else if (hasCustomerDetails || explicitStep === 1) {
+      startStep = 2; // Step 1 completed, proceed to Step 2
     } else {
-      // Parse from remarks tag [CRM_COMPLETED_STEP: X]
-      const remarksMatch = lead.remarks?.match(/\[CRM_COMPLETED_STEP:\s*(\d+)\]/);
-      if (remarksMatch) {
-        completedStep = parseInt(remarksMatch[1], 10);
-      } else {
-        // Dynamic fallback detection based on fields
-        const hasEvents = lead.events && lead.events.length > 0;
-        const hasPackage = !!(lead.Select_Package_Option || primaryLP?.package_id || latestQuote?.package_id);
-        
-        if (hasEvents && hasPackage) {
-          completedStep = 3;
-        } else if (hasEvents) {
-          completedStep = 2;
-        } else {
-          completedStep = 1;
-        }
-      }
+      startStep = 1;
     }
 
-    // Set highest step reached
+    const completedStep = Math.max(startStep, explicitStep || 1);
     setCrmHighestStep(completedStep);
-
-    // Set active start wizard step based on resume rules
-    let startStep = 1;
-    if (completedStep === 1) startStep = 2;
-    else if (completedStep === 2) startStep = 3;
-    else if (completedStep === 3) startStep = 3;
-    else startStep = 1;
-
     setCrmWizardStep(startStep);
     
     const hasPackageAnywhere = !!(lead.Select_Package_Option || primaryLP?.package_id || latestQuote?.package_id);
@@ -4149,70 +4270,70 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
     }
 
-    const firstEvent = lead.events && lead.events.length > 0 ? lead.events[0] : null;
-    const evName = firstEvent?.event_name || lead.custom_event_name || '';
-    const evShootType = firstEvent?.event_shoot_type || lead.desired_event_shoot_type || lead.shoot_type || '';
-    const evDate = firstEvent?.event_date || lead.event_date || '';
-    const evStartDate = firstEvent?.event_start_date || lead.event_date || '';
-    const evEndDate = firstEvent?.event_end_date || lead.event_date || '';
-    const evLocation = firstEvent?.event_location || lead.event_location || '';
-    const evGuestPax = firstEvent?.guest_pax ?? lead.guest_pax ?? lead.total_pax ?? '';
-    const evStaffPax = firstEvent?.staff_pax ?? lead.staff_pax ?? '';
-    setInternalNotes(lead.follow_up_notes || '');
-    setFollowUpDate(lead.next_follow_up_date || '');
+    const firstEvent = fullLead.events && fullLead.events.length > 0 ? fullLead.events[0] : null;
+    const evName = firstEvent?.event_name || fullLead.custom_event_name || '';
+    const evShootType = firstEvent?.event_shoot_type || fullLead.desired_event_shoot_type || fullLead.shoot_type || '';
+    const evDate = firstEvent?.event_date || fullLead.event_date || '';
+    const evStartDate = firstEvent?.event_start_date || fullLead.event_date || '';
+    const evEndDate = firstEvent?.event_end_date || fullLead.event_date || '';
+    const evLocation = firstEvent?.event_location || fullLead.event_location || '';
+    const evGuestPax = firstEvent?.guest_pax ?? fullLead.guest_pax ?? fullLead.total_pax ?? '';
+    const evStaffPax = firstEvent?.staff_pax ?? fullLead.staff_pax ?? '';
+    setInternalNotes(fullLead.follow_up_notes || '');
+    setFollowUpDate(fullLead.next_follow_up_date || '');
     setWizardLeadData({
-      customer_name: lead.customer_name || '',
-      mobile: lead.mobile || '',
-      whatsapp_number: lead.whatsapp_number || lead.mobile || '',
-      email: lead.email || '',
-      address: lead.address || '',
-      city: latestQuote?.city || lead.city || '',
-      state: latestQuote?.state || lead.state || '',
-      pincode: latestQuote?.pincode || lead.pincode || '',
-      client_residence_address: latestQuote?.client_residence_address || lead.client_residence_address || '',
-      desired_event_shoot_type: latestQuote?.desired_event_shoot_type || lead.desired_event_shoot_type || '',
-      Select_Package_Option: lead.Select_Package_Option || latestQuote?.Select_Package_Option || primaryLP?.package_id || '',
+      customer_name: fullLead.customer_name || '',
+      mobile: fullLead.mobile ? String(fullLead.mobile) : '',
+      whatsapp_number: fullLead.whatsapp_number ? String(fullLead.whatsapp_number) : (fullLead.mobile ? String(fullLead.mobile) : ''),
+      email: fullLead.email || '',
+      address: fullLead.address || '',
+      city: latestQuote?.city || fullLead.city || '',
+      state: latestQuote?.state || fullLead.state || '',
+      pincode: latestQuote?.pincode || fullLead.pincode || '',
+      client_residence_address: latestQuote?.client_residence_address || fullLead.client_residence_address || '',
+      desired_event_shoot_type: latestQuote?.desired_event_shoot_type || fullLead.desired_event_shoot_type || '',
+      Select_Package_Option: fullLead.Select_Package_Option || latestQuote?.Select_Package_Option || primaryLP?.package_id || '',
       // Step 2
-      event_type: lead.event_type || '',
-      custom_event_name: lead.custom_event_name || '',
+      event_type: fullLead.event_type || '',
+      custom_event_name: fullLead.custom_event_name || '',
       event_name: evName,
       event_shoot_type: evShootType,
       event_date: evDate,
       event_start_date: evStartDate,
       event_end_date: evEndDate,
-      event_time: lead.event_time || '',
-      reporting_time: lead.reporting_time || '',
+      event_time: fullLead.event_time || '',
+      reporting_time: fullLead.reporting_time || '',
       event_location: evLocation,
       guest_pax: evGuestPax,
       staff_pax: evStaffPax,
-      lead_source: lead.lead_source || 'Reference',
-      Specify_Custom_Lead_Source_Name: lead.Specify_Custom_Lead_Source_Name || '',
+      lead_source: fullLead.lead_source || '',
+      Specify_Custom_Lead_Source_Name: fullLead.Specify_Custom_Lead_Source_Name || '',
       shoot_type: evShootType,
       // Step 3
-      selected_package_id: latestQuote?.package_id || primaryLP?.package_id || lead.Select_Package_Option || '',
-      package_cost: lead.package_price || latestQuote?.package_price || (primaryLP ? Number(primaryLP.package_cost) : (matchedPkg ? Number(matchedPkg.price) : 0)),
-      package_price: lead.package_price || latestQuote?.package_price || (primaryLP ? Number(primaryLP.package_cost) : (matchedPkg ? Number(matchedPkg.price) : 0)),
+      selected_package_id: latestQuote?.package_id || primaryLP?.package_id || fullLead.Select_Package_Option || '',
+      package_cost: fullLead.package_price || latestQuote?.package_price || (primaryLP ? Number(primaryLP.package_cost) : (matchedPkg ? Number(matchedPkg.price) : 0)),
+      package_price: fullLead.package_price || latestQuote?.package_price || (primaryLP ? Number(primaryLP.package_cost) : (matchedPkg ? Number(matchedPkg.price) : 0)),
       deliverables: latestQuote?.deliverables_description || primaryLP?.deliverables_description || matchedPkg?.deliverables || '',
       deliverables_description: latestQuote?.deliverables_description || primaryLP?.deliverables_description || matchedPkg?.deliverables || '',
       notes_special_customizations: latestQuote?.notes_special_customizations || primaryLP?.notes_special_customizations || '',
-      notes: lead.remarks || '',
+      notes: fullLead.remarks || '',
       // Step 4
-      budget: latestQuote?.quotation_amount || lead.budget || 0,
+      budget: latestQuote?.quotation_amount || fullLead.budget || 0,
       final_quoted_amount: latestQuote?.final_amount || (primaryLP ? Number(primaryLP.final_amount) : 0),
-      remarks: lead.remarks || '',
+      remarks: fullLead.remarks || '',
       next_follow_up_date: '',
       // Step 5
-      status: lead.status || 'New Lead',
+      status: fullLead.status || 'New Lead',
       // Order Confirmed Rule fields
-      confirmed_event_date: lead.booking_date || lead.event_date || '',
-      confirmed_event_time: lead.booking_time || lead.event_time || '',
-      final_amount: lead.final_package_amount || lead.Final_Quotation_Amount || 0,
-      advance_received: lead.advance_collected || 0,
-      total_pax: lead.total_pax || 0,
-      reference_source: lead.reference_source || '',
-      lead_value: lead.lead_value || 0,
-      lead_score: lead.lead_score || 0,
-      booking_status: lead.booking_status || 'Pending',
+      confirmed_event_date: fullLead.booking_date || fullLead.event_date || '',
+      confirmed_event_time: fullLead.booking_time || fullLead.event_time || '',
+      final_amount: fullLead.final_package_amount || fullLead.Final_Quotation_Amount || 0,
+      advance_received: fullLead.advance_collected || 0,
+      total_pax: fullLead.total_pax || 0,
+      reference_source: fullLead.reference_source || '',
+      lead_value: fullLead.lead_value || 0,
+      lead_score: fullLead.lead_score || 0,
+      booking_status: fullLead.booking_status || 'Pending',
     });
 
     setFollowUpForm({
@@ -4300,13 +4421,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
 
     // Validate Sales Executive details
-    if (!salesStaffName || !salesStaffName.trim()) {
+    if (!salesStaffName || !String(salesStaffName).trim()) {
       showValidationError("input_sales_staff_name", "Please enter Sales Staff Name.");
       showToastMsg("❌ Please complete all required fields before saving the package.", "error");
       return false;
     }
 
-    const mobileVal = (salesStaffMobile || '').trim();
+    const mobileVal = String(salesStaffMobile || '').trim();
     if (!mobileVal || mobileVal.length !== 10 || !/^\d+$/.test(mobileVal)) {
       showValidationError("input_sales_staff_mobile", "Please enter a valid 10-digit Sales Staff Mobile Number.");
       showToastMsg("❌ Please complete all required fields before saving the package.", "error");
@@ -4434,7 +4555,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           setIsSaving(false);
           return;
         }
-        const mobileVal = (wizardLeadData.mobile || '').trim();
+        const mobileVal = String(wizardLeadData.mobile || '').trim();
         if (!/^\d{10}$/.test(mobileVal)) {
           showToastMsg("Please enter a valid 10-digit mobile number.", "error");
           setIsSaving(false);
@@ -5853,7 +5974,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         }
       }
 
-      const mobileVal = (createForm.mobile || '').trim();
+      const mobileVal = String(createForm.mobile || '').trim();
       if (!/^\d{10}$/.test(mobileVal)) {
         showToastMsg("Please enter a valid 10-digit mobile number.", "error");
         return;
@@ -5875,7 +5996,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           const newId = await addLead({
             customer_name: createForm.customer_name || '',
             mobile: createForm.mobile,
-            alternate_mobile: (createForm.alternate_mobile && createForm.alternate_mobile.trim() !== '' && createForm.alternate_mobile.trim() !== '+91') ? createForm.alternate_mobile : undefined,
+            alternate_mobile: (createForm.alternate_mobile && String(createForm.alternate_mobile).trim() !== '' && String(createForm.alternate_mobile).trim() !== '+91') ? String(createForm.alternate_mobile) : undefined,
             email: createForm.email,
             lead_source: finalSource,
             Specify_Custom_Lead_Source_Name: customLeadSourceName,
@@ -5910,7 +6031,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           await updateLead(createdLeadId, {
             customer_name: createForm.customer_name || '',
             mobile: createForm.mobile,
-            alternate_mobile: (createForm.alternate_mobile && createForm.alternate_mobile.trim() !== '' && createForm.alternate_mobile.trim() !== '+91') ? createForm.alternate_mobile : undefined,
+            alternate_mobile: (createForm.alternate_mobile && String(createForm.alternate_mobile).trim() !== '' && String(createForm.alternate_mobile).trim() !== '+91') ? String(createForm.alternate_mobile) : undefined,
             email: createForm.email,
             lead_source: finalSource,
             Specify_Custom_Lead_Source_Name: customLeadSourceName,
@@ -5939,7 +6060,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           lead_id: finalId,
           customer_name: createForm.customer_name || '',
           mobile: createForm.mobile,
-          alternate_mobile: (createForm.alternate_mobile && createForm.alternate_mobile.trim() !== '' && createForm.alternate_mobile.trim() !== '+91') ? createForm.alternate_mobile : undefined,
+          alternate_mobile: (createForm.alternate_mobile && String(createForm.alternate_mobile).trim() !== '' && String(createForm.alternate_mobile).trim() !== '+91') ? String(createForm.alternate_mobile) : undefined,
           email: createForm.email,
           lead_source: finalSource,
             Specify_Custom_Lead_Source_Name: customLeadSourceName,
@@ -9735,21 +9856,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </div>
             )}
 
-            {/* If locked, display banner */}
-            {isLeadLocked && (
-              <div className="mx-4 sm:mx-5 mt-2 bg-amber-950/25 border border-amber-500/20 p-2.5 rounded-xl flex items-start gap-3 text-left shadow-lg">
-                <span className="text-amber-500 text-base mt-0.5">🔒</span>
-                <div>
-                  <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wide">Record Lock Active (CRM Closed)</h4>
-                  <p className="text-[10px] text-zinc-400 leading-relaxed mt-0.5">
-                    This lead status is currently <span className="text-amber-400 font-extrabold">{selectedLead.status}</span>. 
-                    It has been fully transitioned from Sales CRM into an active Booking Contract under production. 
-                    Follow-up and budget editing are locked. Only Operations can modify live states.
-                  </p>
-                </div>
-              </div>
-            )}
-
             {/* Content container with horizontal padding */}
             <div id="crm-wizard-scroll-container" className="flex-1 overflow-y-auto p-2.5 sm:p-3">
               <div className="max-w-5xl mx-auto">
@@ -9769,7 +9875,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <input
                             type="text"
                             value={wizardLeadData.customer_name || ''}
-                            disabled={isLeadLocked}
                             onChange={(e) => setWizardLeadData({ ...wizardLeadData, customer_name: e.target.value })}
                             className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-white"
                           />
@@ -9779,7 +9884,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <input
                             type="text"
                             value={wizardLeadData.mobile || ''}
-                            disabled={isLeadLocked}
                             onChange={(e) => {
                               const val = e.target.value.replace(/[^\d]/g, '').slice(0, 10);
                               setWizardLeadData({ ...wizardLeadData, mobile: val });
@@ -9793,7 +9897,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <input
                             type="text"
                             value={wizardLeadData.whatsapp_number || ''}
-                            disabled={isLeadLocked}
                             onChange={(e) => setWizardLeadData({ ...wizardLeadData, whatsapp_number: e.target.value })}
                             className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-white font-mono"
                           />
@@ -9803,7 +9906,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <input
                             type="email"
                             value={wizardLeadData.email || ''}
-                            disabled={isLeadLocked}
                             onChange={(e) => setWizardLeadData({ ...wizardLeadData, email: e.target.value })}
                             className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-white font-mono"
                           />
@@ -9812,7 +9914,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Inbound Lead Channel Source *</label>
                           <select
                             value={wizardLeadData.lead_source || ''}
-                            disabled={isLeadLocked}
                             onChange={(e) => setWizardLeadData({ ...wizardLeadData, lead_source: e.target.value })}
                             className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-white cursor-pointer select-element"
                             required
@@ -9832,7 +9933,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 required
                                 placeholder="e.g. Billboard, Event Flyer"
                                 value={wizardLeadData.Specify_Custom_Lead_Source_Name || ''}
-                                disabled={isLeadLocked}
                                 onChange={(e) => setWizardLeadData({ ...wizardLeadData, Specify_Custom_Lead_Source_Name: e.target.value })}
                                 className="w-full bg-slate-955 border border-amber-500/50 rounded-lg py-2 px-3 text-xs text-amber-200 focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all"
                               />
@@ -9872,7 +9972,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                            <select
                              id="select_package_option"
                              value={wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option || (selectedLead as any)?.selected_package_id || (leadPackages?.find(lp => lp.lead_id === selectedLead?.lead_id)?.package_id) || (quotations?.find(q => q.lead_id === selectedLead?.lead_id)?.package_id) || ''}
-                             disabled={isLeadLocked}
                              onChange={(e) => handlePackageChange(e.target.value)}
                              className={`w-full bg-slate-955 border focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer ${
                                !(wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option)
@@ -9937,7 +10036,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       id="input_sales_staff_name"
                                       type="text"
                                       required
-                                      disabled={isLeadLocked}
                                       value={salesStaffName}
                                       onChange={(e) => setSalesStaffName(e.target.value)}
                                       placeholder="E.g., Jane Doe"
@@ -9952,7 +10050,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       id="input_sales_staff_mobile"
                                       type="text"
                                       required
-                                      disabled={isLeadLocked}
                                       value={salesStaffMobile}
                                       onChange={(e) => setSalesStaffMobile(e.target.value)}
                                       placeholder="E.g., 9876543210"
@@ -9988,7 +10085,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 <input
                                   type="number"
                                   value={wizardLeadData.package_cost !== undefined ? wizardLeadData.package_cost : selectedPkg.price}
-                                  disabled={isLeadLocked}
                                   onChange={(e) => setWizardLeadData({ ...wizardLeadData, package_cost: Math.max(0, parseInt(e.target.value) || 0) })}
                                   className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-amber-400 font-mono font-bold"
                                   required
@@ -10018,7 +10114,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                             </label>
                                             <button
                                               type="button"
-                                              disabled={isLeadLocked}
                                               onClick={() => {
                                                 const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList))];
                                                 currentList.push('');
@@ -10043,7 +10138,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                                 <div key={idx} className="flex items-center gap-2">
                                                   <LocalEditableInput
                                                     value={item}
-                                                    disabled={isLeadLocked}
                                                     onChange={(newVal) => {
                                                       const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList))];
                                                       currentList[idx] = newVal;
@@ -10057,25 +10151,23 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                                     }}
                                                     className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
                                                   />
-                                                  {!isLeadLocked && (
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => {
-                                                        const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList))];
-                                                        currentList.splice(idx, 1);
-                                                        const updated = {
-                                                          ...editableInclusions,
-                                                          [eventKey]: currentList,
-                                                          [nameKey]: currentList
-                                                        };
-                                                        setEditableInclusions(updated);
-                                                        saveStep3DataRealtime(updated, editableDeliverables);
-                                                      }}
-                                                      className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer"
-                                                    >
-                                                      Remove
-                                                    </button>
-                                                  )}
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList))];
+                                                      currentList.splice(idx, 1);
+                                                      const updated = {
+                                                        ...editableInclusions,
+                                                        [eventKey]: currentList,
+                                                        [nameKey]: currentList
+                                                      };
+                                                      setEditableInclusions(updated);
+                                                      saveStep3DataRealtime(updated, editableDeliverables);
+                                                    }}
+                                                    className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer"
+                                                  >
+                                                    Remove
+                                                  </button>
                                                 </div>
                                               ))}
                                             </div>
@@ -10090,7 +10182,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Team Members Included (Editable)</label>
                                       <button
                                         type="button"
-                                        disabled={isLeadLocked}
                                         onClick={() => {
                                           const currentList = [...(editableInclusions[selectedPkgId] || [])];
                                           currentList.push('');
@@ -10114,7 +10205,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                           <div key={idx} className="flex items-center gap-2">
                                             <LocalEditableInput
                                               value={item}
-                                              disabled={isLeadLocked}
                                               onChange={(newVal) => {
                                                 const currentList = [...(editableInclusions[selectedPkgId] || [])];
                                                 currentList[idx] = newVal;
@@ -10127,24 +10217,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                               }}
                                               className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
                                             />
-                                            {!isLeadLocked && (
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  const currentList = [...(editableInclusions[selectedPkgId] || [])];
-                                                  currentList.splice(idx, 1);
-                                                  const updated = {
-                                                    ...editableInclusions,
-                                                    [selectedPkgId]: currentList
-                                                  };
-                                                  setEditableInclusions(updated);
-                                                  saveStep3DataRealtime(updated, editableDeliverables);
-                                                }}
-                                                className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono"
-                                              >
-                                                Remove
-                                              </button>
-                                            )}
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const currentList = [...(editableInclusions[selectedPkgId] || [])];
+                                                currentList.splice(idx, 1);
+                                                const updated = {
+                                                  ...editableInclusions,
+                                                  [selectedPkgId]: currentList
+                                                };
+                                                setEditableInclusions(updated);
+                                                saveStep3DataRealtime(updated, editableDeliverables);
+                                              }}
+                                              className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono"
+                                            >
+                                              Remove
+                                            </button>
                                           </div>
                                         ))}
                                       </div>
@@ -10158,7 +10246,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Deliverables Description / Base Package Deliverables (Editable)</label>
                                   <button
                                     type="button"
-                                    disabled={isLeadLocked}
                                     onClick={() => {
                                       const currentList = [...(editableDeliverables[selectedPkgId] || [])];
                                       currentList.unshift('');
@@ -10182,7 +10269,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       <div key={idx} className="flex items-center gap-2">
                                         <LocalEditableInput
                                           value={item}
-                                          disabled={isLeadLocked}
                                           onChange={(newVal) => {
                                             const currentList = [...(editableDeliverables[selectedPkgId] || [])];
                                             currentList[idx] = newVal;
@@ -10195,313 +10281,294 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                           }}
                                           className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
                                         />
-                                        {!isLeadLocked && (
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              const currentList = [...(editableDeliverables[selectedPkgId] || [])];
-                                              currentList.splice(idx, 1);
-                                              const updated = {
-                                                ...editableDeliverables,
-                                                [selectedPkgId]: currentList
-                                              };
-                                              setEditableDeliverables(updated);
-                                              saveStep3DataRealtime(editableInclusions, updated);
-                                            }}
-                                            className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono"
-                                          >
-                                            Remove
-                                          </button>
-                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const currentList = [...(editableDeliverables[selectedPkgId] || [])];
+                                            currentList.splice(idx, 1);
+                                            const updated = {
+                                              ...editableDeliverables,
+                                              [selectedPkgId]: currentList
+                                            };
+                                            setEditableDeliverables(updated);
+                                            saveStep3DataRealtime(editableInclusions, updated);
+                                          }}
+                                          className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono"
+                                        >
+                                          Remove
+                                        </button>
                                       </div>
                                     ))}
                                   </div>
                                 )}
                               </div>
 
-                              {!isLeadLocked && (
-                                <div className="mt-4 flex justify-end pb-2">
-                                  <button
-                                    type="button"
-                                    onClick={handleSavePackageOnly}
-                                    disabled={isSaving}
-                                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] font-bold uppercase tracking-wider rounded-lg shadow transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    {isSaving ? 'Saving...' : 'Save Package'}
-                                  </button>
-                                </div>
-                              )}
-                              
-                              {false && (
-                                <div className="mt-2 flex justify-end pb-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => setIsPackageDetailsSaved(false)}
-                                    className="text-xs text-indigo-400 hover:text-indigo-300 underline font-mono cursor-pointer"
-                                  >
-                                    Edit Package Details
-                                  </button>
-                                </div>
-                              )}
+                              <div className="mt-4 flex justify-end pb-2">
+                                <button
+                                  type="button"
+                                  onClick={handleSavePackageOnly}
+                                  disabled={isSaving}
+                                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] font-bold uppercase tracking-wider rounded-lg shadow transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {isSaving ? 'Saving...' : 'Save Package'}
+                                </button>
+                              </div>
 
                               {isPackageDetailsSaved && renderQuotationAndStep4Section(true)}
                             </div>
                           );
                         })()}
                       </div>
-                    </div>
-                  )}
 
-                  {/* STEP 5 INTEGRATED (CRM): Status Update */}
-                  <div className="space-y-4 animate-fade-in text-left mt-6">
-                      <div className="border-b border-slate-800 pb-1.5">
-                        <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                          <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">4</span>
-                          <span>Status Update</span>
-                        </h3>
-                        <p className="text-[10px] text-zinc-400 mt-0.5">Determine final CRM pipeline stages or transition the contract to Operations.</p>
-                      </div>
-                      <div className="space-y-4 text-left">
-                        {wizardLeadData.status === 'Order Confirmed' ? (
-                          selectedLead?.status === 'Order Confirmed' ? (
-                            <div id="configure_confirmed_order_section" className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
-                              <div className="border-b border-emerald-500/20 pb-1.5">
-                                <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest font-mono">💍 Order Confirmation Details</h4>
-                                <p className="text-[10px] text-zinc-400 mt-0.5">These are the finalized details saved for this order from the database.</p>
-                              </div>
-                              
-                              <div className="hidden">
-                                <input type="text" value={selectedLead?.booking_date || selectedLead?.event_date || wizardLeadData.confirmed_event_date || ''} onChange={() => {}} />
-                                <input type="number" value={selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0} onChange={() => {}} />
-                                <input type="number" value={selectedLead?.advance_collected || wizardLeadData.advance_received || 0} onChange={() => {}} />
-                              </div>
-
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-left text-xs">
-                                <div>
-                                  <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Order Status</span>
-                                  <strong className="text-emerald-400">Order Confirmed</strong>
+                      {/* STEP 5 INTEGRATED (CRM): Status Update / Order Confirmation Details at BOTTOM of Step 3 */}
+                      <div className="space-y-4 animate-fade-in text-left mt-6">
+                        <div className="border-b border-slate-800 pb-1.5">
+                          <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                            <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">4</span>
+                            <span>Status Update</span>
+                          </h3>
+                          <p className="text-[10px] text-zinc-400 mt-0.5">Determine final CRM pipeline stages or transition the contract to Operations.</p>
+                        </div>
+                        <div className="space-y-4 text-left">
+                          {(['Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Raw Footage Received', 'Editing Started', 'Client Review', 'Editing Complete', 'Completed'].includes(wizardLeadData.status || selectedLead?.status || '') || selectedLead?.booking_status === 'Confirmed' || !!orders?.find(o => o.lead_id === selectedLead?.lead_id)) ? (
+                            (selectedLead?.status === 'Order Confirmed' || selectedLead?.status === 'Event Scheduled' || selectedLead?.booking_status === 'Confirmed' || !!orders?.find(o => o.lead_id === selectedLead?.lead_id)) ? (
+                              <div id="configure_confirmed_order_section" className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
+                                <div className="border-b border-emerald-500/20 pb-1.5">
+                                  <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest font-mono">💍 Order Confirmation Details</h4>
+                                  <p className="text-[10px] text-zinc-400 mt-0.5">These are the finalized details saved for this order from the database.</p>
                                 </div>
                                 
-                                <div className="col-span-1 sm:col-span-2 space-y-2 mb-2">
-                                  {crmEvents && crmEvents.length > 0 ? (
-                                    crmEvents.map((ev: any, idx: number) => (
-                                      <div key={ev.id} className="bg-slate-900/50 p-3 rounded-lg border border-slate-800 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-                                        <div className="flex flex-col min-w-[150px]">
-                                          <span className="text-[10px] text-amber-500 font-black uppercase tracking-wider mb-0.5">Event {idx + 1}</span>
-                                          <span className="text-xs font-bold text-slate-200">{ev.event_name || ev.event_type || 'N/A'}</span>
+                                <div className="hidden">
+                                  <input type="text" value={selectedLead?.booking_date || selectedLead?.event_date || wizardLeadData.confirmed_event_date || ''} onChange={() => {}} />
+                                  <input type="number" value={selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0} onChange={() => {}} />
+                                  <input type="number" value={selectedLead?.advance_collected || wizardLeadData.advance_received || 0} onChange={() => {}} />
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-left text-xs">
+                                  <div>
+                                    <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Order Status</span>
+                                    <strong className="text-emerald-400">Order Confirmed</strong>
+                                  </div>
+                                  
+                                  <div className="col-span-1 sm:col-span-2 space-y-2 mb-2">
+                                    {crmEvents && crmEvents.length > 0 ? (
+                                      crmEvents.map((ev: any, idx: number) => (
+                                        <div key={ev.id} className="bg-slate-900/50 p-3 rounded-lg border border-slate-800 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                                          <div className="flex flex-col min-w-[150px]">
+                                            <span className="text-[10px] text-amber-500 font-black uppercase tracking-wider mb-0.5">Event {idx + 1}</span>
+                                            <span className="text-xs font-bold text-slate-200">{ev.event_name || ev.event_type || 'N/A'}</span>
+                                          </div>
+                                          <div className="flex gap-4">
+                                            <div>
+                                              <span className="block text-[9px] text-zinc-500 uppercase font-mono font-bold">Booking Date</span>
+                                              <strong className="text-slate-300 text-xs font-mono">{ev.event_date || 'N/A'}</strong>
+                                            </div>
+                                            <div>
+                                              <span className="block text-[9px] text-zinc-500 uppercase font-mono font-bold">Booking Time</span>
+                                              <strong className="text-slate-300 text-xs font-mono">{ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A'}</strong>
+                                            </div>
+                                          </div>
                                         </div>
-                                        <div className="flex gap-4">
-                                          <div>
-                                            <span className="block text-[9px] text-zinc-500 uppercase font-mono font-bold">Booking Date</span>
-                                            <strong className="text-slate-300 text-xs font-mono">{ev.event_date || 'N/A'}</strong>
-                                          </div>
-                                          <div>
-                                            <span className="block text-[9px] text-zinc-500 uppercase font-mono font-bold">Booking Time</span>
-                                            <strong className="text-slate-300 text-xs font-mono">{ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A'}</strong>
-                                          </div>
+                                      ))
+                                    ) : (
+                                      <div>
+                                        <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Booking Date & Time</span>
+                                        <strong className="text-slate-200">{selectedLead?.booking_date || 'N/A'} {selectedLead?.booking_time ? `at ${selectedLead.booking_time}` : ''}</strong>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div>
+                                    <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Final Package Amount</span>
+                                    <strong className="text-amber-400 font-mono">₹{Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0).toLocaleString('en-IN')}</strong>
+                                  </div>
+                                  <div>
+                                    <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Advance Payment</span>
+                                    <strong className="text-emerald-400 font-mono">₹{Number(selectedLead?.advance_collected || wizardLeadData.advance_received || 0).toLocaleString('en-IN')}</strong>
+                                  </div>
+                                  <div>
+                                    <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Payment Mode</span>
+                                    <strong className="text-slate-200">{selectedLead?.payment_mode || 'N/A'}</strong>
+                                  </div>
+                                  <div>
+                                    <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Transaction ID</span>
+                                    <strong className="text-slate-200">
+                                      {(selectedLead?.payment_mode === 'Cash' || selectedLead?.payment_mode === 'Other') ? 'N/A' : (selectedLead?.transaction_id || payments?.find(p => p.order_id === (orders?.find(o => o.lead_id === selectedLead?.lead_id)?.order_id || selectedLead?.lead_id))?.transaction_id || 'N/A')}
+                                    </strong>
+                                  </div>
+                                  <div className="col-span-1 sm:col-span-2">
+                                    <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Booking Notes</span>
+                                    <p className="text-slate-300 whitespace-pre-wrap">{selectedLead?.contract_notes || 'No extra notes'}</p>
+                                  </div>
+                                </div>
+
+                                {crmEvents && crmEvents.length > 0 && (
+                                  <div className="mt-4 space-y-3">
+                                    <h5 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest font-mono border-b border-emerald-500/20 pb-1.5">Event-wise Details</h5>
+                                    {crmEvents.map((ev: any) => (
+                                      <div key={ev.id} className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
+                                        <div className="col-span-1 sm:col-span-3">
+                                          <span className="text-xs font-bold text-slate-200">🎬 {ev.event_name || ev.event_type}</span>
+                                        </div>
+                                        <div>
+                                           <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Event Date</span>
+                                           <strong className="text-slate-300 font-mono">{ev.event_date || 'N/A'}</strong>
+                                        </div>
+                                        <div>
+                                           <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Reporting Date</span>
+                                           <strong className="text-slate-300 font-mono">{ev.reporting_date || ev.event_date || 'N/A'}</strong>
+                                        </div>
+                                        <div>
+                                           <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Reporting Time</span>
+                                           <strong className="text-slate-300 font-mono">{ev.reporting_time || 'N/A'}</strong>
                                         </div>
                                       </div>
-                                    ))
+                                    ))}
+                                  </div>
+                                )}
+
+                                <div className="bg-slate-950 p-3 rounded-lg border border-slate-850 flex items-center justify-between text-xs mt-4">
+                                  <div>
+                                    <span className="text-[10px] text-zinc-555 uppercase font-bold font-mono">Calculated Pending Amount</span>
+                                    <strong className="block text-red-500 text-sm font-mono mt-0.5">
+                                      ₹{(Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0) - Number(selectedLead?.advance_collected || wizardLeadData.advance_received || 0)).toLocaleString('en-IN')}
+                                    </strong>
+                                  </div>
+                                  {(Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0) - Number(selectedLead?.advance_collected || wizardLeadData.advance_received || 0)) > 0 ? (
+                                    <span className="text-[9px] bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Payment Pending</span>
                                   ) : (
-                                    <div>
-                                      <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Booking Date & Time</span>
-                                      <strong className="text-slate-200">{selectedLead?.booking_date || 'N/A'} {selectedLead?.booking_time ? `at ${selectedLead.booking_time}` : ''}</strong>
-                                    </div>
+                                    <span className="text-[9px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Fully Paid</span>
                                   )}
                                 </div>
+                              </div>
+                            ) : (
 
-                                <div>
-                                  <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Final Package Amount</span>
-                                  <strong className="text-amber-400 font-mono">₹{Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0).toLocaleString('en-IN')}</strong>
-                                </div>
-                                <div>
-                                  <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Advance Payment</span>
-                                  <strong className="text-emerald-400 font-mono">₹{Number(selectedLead?.advance_collected || wizardLeadData.advance_received || 0).toLocaleString('en-IN')}</strong>
-                                </div>
-                                <div>
-                                  <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Payment Mode</span>
-                                  <strong className="text-slate-200">{selectedLead?.payment_mode || 'N/A'}</strong>
-                                </div>
-                                <div>
-                                  <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Transaction ID</span>
-                                  <strong className="text-slate-200">
-                                    {(selectedLead?.payment_mode === 'Cash' || selectedLead?.payment_mode === 'Other') ? 'N/A' : (selectedLead?.transaction_id || payments?.find(p => p.order_id === (orders?.find(o => o.lead_id === selectedLead?.lead_id)?.order_id || selectedLead?.lead_id))?.transaction_id || 'N/A')}
-                                  </strong>
-                                </div>
-                                <div className="col-span-1 sm:col-span-2">
-                                  <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Booking Notes</span>
-                                  <p className="text-slate-300 whitespace-pre-wrap">{selectedLead?.contract_notes || 'No extra notes'}</p>
-                                </div>
+                            <div id="configure_confirmed_order_section" className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
+                              <div className="border-b border-emerald-500/20 pb-1.5">
+                                <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest font-mono">💍 Configure Confirmed Order & Booking Contract</h4>
+                                <p className="text-[10px] text-zinc-400 mt-0.5">Confirming this order locks the CRM profile and creates a real-time production entry. Only payment configurations remain editable.</p>
                               </div>
 
+                              {/* Display each event separately */}
                               {crmEvents && crmEvents.length > 0 && (
-                                <div className="mt-4 space-y-3">
-                                  <h5 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest font-mono border-b border-emerald-500/20 pb-1.5">Event-wise Details</h5>
-                                  {crmEvents.map((ev: any) => (
-                                    <div key={ev.id} className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
-                                      <div className="col-span-1 sm:col-span-3">
-                                        <span className="text-xs font-bold text-slate-200">🎬 {ev.event_name || ev.event_type}</span>
-                                      </div>
-                                      <div>
-                                         <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Event Date</span>
-                                         <strong className="text-slate-300 font-mono">{ev.event_date || 'N/A'}</strong>
-                                      </div>
-                                      <div>
-                                         <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Reporting Date</span>
-                                         <strong className="text-slate-300 font-mono">{ev.reporting_date || ev.event_date || 'N/A'}</strong>
-                                      </div>
-                                      <div>
-                                         <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Reporting Time</span>
-                                         <strong className="text-slate-300 font-mono">{ev.reporting_time || 'N/A'}</strong>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-
-                              <div className="bg-slate-950 p-3 rounded-lg border border-slate-850 flex items-center justify-between text-xs mt-4">
-                                <div>
-                                  <span className="text-[10px] text-zinc-550 uppercase font-bold font-mono">Calculated Pending Amount</span>
-                                  <strong className="block text-red-500 text-sm font-mono mt-0.5">
-                                    ₹{(Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0) - Number(selectedLead?.advance_collected || wizardLeadData.advance_received || 0)).toLocaleString('en-IN')}
-                                  </strong>
-                                </div>
-                                {(Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0) - Number(selectedLead?.advance_collected || wizardLeadData.advance_received || 0)) > 0 ? (
-                                  <span className="text-[9px] bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Payment Pending</span>
-                                ) : (
-                                  <span className="text-[9px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Fully Paid</span>
-                                )}
-                              </div>
-                            </div>
-                          ) : (
-
-                          <div id="configure_confirmed_order_section" className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
-                            <div className="border-b border-emerald-500/20 pb-1.5">
-                              <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest font-mono">💍 Configure Confirmed Order & Booking Contract</h4>
-                              <p className="text-[10px] text-zinc-400 mt-0.5">Confirming this order locks the CRM profile and creates a real-time production entry. Only payment configurations remain editable.</p>
-                            </div>
-
-                            {/* Display each event separately */}
-                            {crmEvents && crmEvents.length > 0 && (
-                              <div className="space-y-2 mb-4">
-                                <label className="block text-[10px] text-zinc-400 mb-2 uppercase font-mono font-bold border-b border-zinc-800 pb-1">Confirmed Event Dates</label>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                  {crmEvents.map(ev => (
-                                    <div key={ev.id} className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-800 flex items-center justify-between">
-                                      <div className="flex flex-col">
-                                        <span className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-0.5">🎬 {ev.event_name || ev.event_type || 'Event'}</span>
-                                        <div className="flex items-center gap-3 mt-1">
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="text-[10px] text-slate-500 font-mono">Date:</span>
-                                            <span className="text-[11px] text-slate-300 font-mono font-semibold">{ev.event_date || 'N/A'}</span>
-                                          </div>
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="text-[10px] text-slate-500 font-mono">Time:</span>
-                                            <span className="text-[11px] text-slate-300 font-mono font-semibold">{ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A'}</span>
+                                <div className="space-y-2 mb-4">
+                                  <label className="block text-[10px] text-zinc-400 mb-2 uppercase font-mono font-bold border-b border-zinc-800 pb-1">Confirmed Event Dates</label>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {crmEvents.map(ev => (
+                                      <div key={ev.id} className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-800 flex items-center justify-between">
+                                        <div className="flex flex-col">
+                                          <span className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-0.5">🎬 {ev.event_name || ev.event_type || 'Event'}</span>
+                                          <div className="flex items-center gap-3 mt-1">
+                                            <div className="flex items-center gap-1.5">
+                                              <span className="text-[10px] text-slate-500 font-mono">Date:</span>
+                                              <span className="text-[11px] text-slate-300 font-mono font-semibold">{ev.event_date || 'N/A'}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                              <span className="text-[10px] text-slate-500 font-mono">Time:</span>
+                                              <span className="text-[11px] text-slate-300 font-mono font-semibold">{ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A'}</span>
+                                            </div>
                                           </div>
                                         </div>
                                       </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-left">
-                              {/* Hidden input to preserve business logic without confusing the UI */}
-                              <div className="hidden">
-                                <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Confirmed Event Date *</label>
-                                <input
-                                  id="input_confirmed_event_date"
-                                  type="date"
-                                  value={wizardLeadData.confirmed_event_date || (crmEvents && crmEvents.length > 0 ? crmEvents[0].event_date : '') || ''}
-                                  disabled={isLeadLocked}
-                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, confirmed_event_date: e.target.value })}
-                                  className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Contract Final Amount (₹) *</label>
-                                <input
-                                  id="input_final_amount"
-                                  type="number"
-                                  value={wizardLeadData.final_amount || 0}
-                                  disabled={isLeadLocked}
-                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, final_amount: Math.max(0, parseInt(e.target.value) || 0) })}
-                                  className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-amber-400 font-mono font-bold"
-                                  required
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Advance Payment Received (₹) *</label>
-                                <input
-                                  id="input_advance_received"
-                                  type="number"
-                                  value={wizardLeadData.advance_received || 0}
-                                  disabled={isLeadLocked}
-                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, advance_received: Math.max(0, parseInt(e.target.value) || 0) })}
-                                  className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-emerald-400 font-mono font-bold"
-                                  required
-                                />
-                              </div>
-                              
-                              {crmEvents && crmEvents.length > 0 && (
-                                <div className="col-span-1 sm:col-span-2 mt-4 space-y-3">
-                                  <h5 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest font-mono border-b border-emerald-500/20 pb-1.5">Event-wise Reporting Details</h5>
-                                  {crmEvents.map(ev => (
-                                    <div key={ev.id} className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
-                                      <div className="col-span-1 sm:col-span-2"><span className="text-xs font-bold text-slate-200">🎬 {ev.event_name || ev.event_type}</span></div>
-                                      <div>
-                                         <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting Date *</label>
-                                         <input 
-                                           id={`reporting_date_${ev.id}`}
-                                           type="date" 
-                                           value={ev.reporting_date || ev.event_date || ''} 
-                                           onChange={(e) => {
-                                             const updated = crmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_date: e.target.value } : eItem);
-                                             setCrmEvents(updated);
-                                           }} 
-                                           className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
-                                           required 
-                                         />
-                                      </div>
-                                      <div>
-                                         <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting Time *</label>
-                                         <input 
-                                           id={`reporting_time_${ev.id}`}
-                                           type="time" 
-                                           value={ev.reporting_time || ''} 
-                                           onChange={(e) => {
-                                             const updated = crmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_time: e.target.value } : eItem);
-                                             setCrmEvents(updated);
-                                           }} 
-                                           className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
-                                           required 
-                                         />
-                                      </div>
-                                    </div>
-                                  ))}
+                                    ))}
+                                  </div>
                                 </div>
                               )}
-                            </div>
 
-                            <div className="bg-slate-950 p-3 rounded-lg border border-slate-850 flex items-center justify-between text-xs">
-                              <div>
-                                <span className="text-[10px] text-zinc-550 uppercase font-bold font-mono">Calculated Pending Amount</span>
-                                <strong className="block text-red-500 text-sm font-mono mt-0.5">₹{((wizardLeadData.final_amount || 0) - (wizardLeadData.advance_received || 0)).toLocaleString('en-IN')}</strong>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-left">
+                                {/* Hidden input to preserve business logic without confusing the UI */}
+                                <div className="hidden">
+                                  <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Confirmed Event Date *</label>
+                                  <input
+                                    id="input_confirmed_event_date"
+                                    type="date"
+                                    value={wizardLeadData.confirmed_event_date || (crmEvents && crmEvents.length > 0 ? crmEvents[0].event_date : '') || ''}
+                                    onChange={(e) => setWizardLeadData({ ...wizardLeadData, confirmed_event_date: e.target.value })}
+                                    className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Contract Final Amount (₹) *</label>
+                                  <input
+                                    id="input_final_amount"
+                                    type="number"
+                                    value={wizardLeadData.final_amount || 0}
+                                    onChange={(e) => setWizardLeadData({ ...wizardLeadData, final_amount: Math.max(0, parseInt(e.target.value) || 0) })}
+                                    className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-amber-400 font-mono font-bold"
+                                    required
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Advance Payment Received (₹) *</label>
+                                  <input
+                                    id="input_advance_received"
+                                    type="number"
+                                    value={wizardLeadData.advance_received || 0}
+                                    onChange={(e) => setWizardLeadData({ ...wizardLeadData, advance_received: Math.max(0, parseInt(e.target.value) || 0) })}
+                                    className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-emerald-400 font-mono font-bold"
+                                    required
+                                  />
+                                </div>
+                                
+                                {crmEvents && crmEvents.length > 0 && (
+                                  <div className="col-span-1 sm:col-span-2 mt-4 space-y-3">
+                                    <h5 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest font-mono border-b border-emerald-500/20 pb-1.5">Event-wise Reporting Details</h5>
+                                    {crmEvents.map(ev => (
+                                      <div key={ev.id} className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
+                                        <div className="col-span-1 sm:col-span-2"><span className="text-xs font-bold text-slate-200">🎬 {ev.event_name || ev.event_type}</span></div>
+                                        <div>
+                                           <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting Date *</label>
+                                           <input 
+                                             id={`reporting_date_${ev.id}`}
+                                             type="date" 
+                                             value={ev.reporting_date || ev.event_date || ''} 
+                                             onChange={(e) => {
+                                               const updated = crmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_date: e.target.value } : eItem);
+                                               setCrmEvents(updated);
+                                             }} 
+                                             className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
+                                             required 
+                                           />
+                                        </div>
+                                        <div>
+                                           <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting Time *</label>
+                                           <input 
+                                             id={`reporting_time_${ev.id}`}
+                                             type="time" 
+                                             value={ev.reporting_time || ''} 
+                                             onChange={(e) => {
+                                               const updated = crmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_time: e.target.value } : eItem);
+                                               setCrmEvents(updated);
+                                             }} 
+                                             className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
+                                             required 
+                                           />
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
-                              <span className="text-[9px] bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Payment Pending</span>
+
+                              <div className="bg-slate-950 p-3 rounded-lg border border-slate-850 flex items-center justify-between text-xs">
+                                <div>
+                                  <span className="text-[10px] text-zinc-550 uppercase font-bold font-mono">Calculated Pending Amount</span>
+                                  <strong className="block text-red-500 text-sm font-mono mt-0.5">₹{((wizardLeadData.final_amount || 0) - (wizardLeadData.advance_received || 0)).toLocaleString('en-IN')}</strong>
+                                </div>
+                                <span className="text-[9px] bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Payment Pending</span>
+                              </div>
                             </div>
-                          </div>
-                          )
-                        ) : (
-                          <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-center">
-                            <span className="text-slate-500 text-xs font-mono">No Order Confirmation Details Available.</span>
-                          </div>
-                        )}
+                            )
+                          ) : (
+                            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-center">
+                              <span className="text-slate-500 text-xs font-mono">No Order Confirmation Details Available.</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                     </div>
+                   )}
                 </form>
               </div>
             </div>

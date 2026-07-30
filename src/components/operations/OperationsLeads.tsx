@@ -490,13 +490,11 @@ export const OperationsLeads: React.FC = () => {
     }
 
     const sa = staffAssignments?.find(s => s.order_id === orderId && s.staff_name?.toLowerCase() === nameLower);
+    if (sa && sa.task_status && !['Assigned', 'Unassigned'].includes(sa.task_status)) {
+      return sa.task_status;
+    }
     if (sa && sa.assignment_status && !['Assigned', 'Unassigned'].includes(sa.assignment_status)) {
       return sa.assignment_status;
-    }
-
-    const op = getOpDetails(orderId);
-    if (op?.event_status && !['Assigned', 'Event Scheduled', 'Operations Assigned'].includes(op.event_status)) {
-      return op.event_status;
     }
 
     return 'Pending';
@@ -3469,6 +3467,7 @@ export const OperationsLeads: React.FC = () => {
                                 <th className="py-2.5 px-3.5 font-bold text-right">Status</th>
                                 <th className="py-2.5 px-3.5 font-bold text-center">Equipment Status</th>
                                 <th className="py-2.5 px-3.5 font-bold text-center">Event Image</th>
+                                <th className="py-2.5 px-3.5 font-bold text-center">Raw Footage</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-zinc-800/60 text-xs">

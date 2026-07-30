@@ -323,8 +323,8 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     return (staff || []).filter(member => {
       const nameMatch = member.name.toLowerCase().includes(searchName.trim().toLowerCase());
       
-      const whatsappClean = (member.whatsapp_number || '').trim();
-      const mobileClean = (member.mobile || '').trim();
+      const whatsappClean = String(member.whatsapp_number || '').trim();
+      const mobileClean = String(member.mobile || '').trim();
       const whatsappMatch = searchWhatsapp.trim() === '' || 
         whatsappClean.includes(searchWhatsapp.trim()) || 
         mobileClean.includes(searchWhatsapp.trim());
