@@ -4619,12 +4619,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             return;
           }
 
-          if (eventForm.event_start_time && eventForm.event_end_time) {
-            if (isTimeEarlier(eventForm.event_start_time, eventForm.event_end_time)) {
-              showToastMsg("Event End Time cannot be earlier than Event Start Time.", "error");
-              setIsSaving(false);
-              return;
-            }
+          if (isEventDateTimeInvalid(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time)) {
+            showToastMsg("Event End Date & Time must be later than Event Start Date & Time.", "error");
+            setIsSaving(false);
+            return;
           }
 
           const guestPaxVal = eventForm.guest_pax !== '' ? Math.max(0, parseInt(String(eventForm.guest_pax)) || 0) : '';
@@ -5323,11 +5321,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return;
     }
 
-    if (eventForm.event_start_time && eventForm.event_end_time) {
-      if (isTimeEarlier(eventForm.event_start_time, eventForm.event_end_time)) {
-        showToastMsg("Event End Time cannot be earlier than Event Start Time.", "error");
-        return;
-      }
+    if (isEventDateTimeInvalid(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time)) {
+      showToastMsg("Event End Date & Time must be later than Event Start Date & Time.", "error");
+      return;
     }
 
     const guestPaxVal = eventForm.guest_pax !== '' ? Math.max(0, parseInt(String(eventForm.guest_pax)) || 0) : '';
@@ -5529,12 +5525,58 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     return `${hh}:${minutes} ${period}`;
   };
 
+  const normalizeDateStr = (dStr: string | undefined | null): string => {
+    if (!dStr) return '';
+    const trimmed = dStr.trim();
+    if (!trimmed) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    const parts = trimmed.split(/[-/]/);
+    if (parts.length === 3) {
+      if (parts[0].length === 4) return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      if (parts[2].length === 4) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) {
+      const y = parsed.getFullYear();
+      const m = String(parsed.getMonth() + 1).padStart(2, '0');
+      const d = String(parsed.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+    return trimmed;
+  };
+
+  const isEventDateTimeInvalid = (
+    startDate: string | undefined | null,
+    endDate: string | undefined | null,
+    startTime: string | undefined | null,
+    endTime: string | undefined | null
+  ): boolean => {
+    if (!startDate) return false;
+    const startD = normalizeDateStr(startDate);
+    const endD = normalizeDateStr(endDate) || startD;
+
+    if (startD && endD && endD < startD) {
+      return true; // End Date is earlier than Start Date
+    }
+
+    if (startD && endD && endD > startD) {
+      return false; // End Date is strictly after Start Date, so any End Time is valid
+    }
+
+    // Same day case: compare start and end times if both are present
+    if (startTime && endTime) {
+      const start24 = convertTo24Hour(startTime);
+      const end24 = convertTo24Hour(endTime);
+      if (start24 && end24 && end24 <= start24) {
+        return true; // End Time is not later than Start Time on the same day
+      }
+    }
+
+    return false;
+  };
+
   const isTimeEarlier = (start: string | undefined | null, end: string | undefined | null): boolean => {
-    if (!start || !end) return false;
-    const start24 = convertTo24Hour(start);
-    const end24 = convertTo24Hour(end);
-    if (!start24 || !end24) return false;
-    return end24 < start24;
+    return isEventDateTimeInvalid(eventForm.event_date, eventForm.event_end_date, start, end);
   };
 
   const renderEventDetailsSection = (isCrm: boolean) => {
@@ -5798,9 +5840,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       }}
                       className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono cursor-pointer"
                     />
-                    {eventForm.event_start_time && eventForm.event_end_time && isTimeEarlier(eventForm.event_start_time, eventForm.event_end_time) && (
+                    {isEventDateTimeInvalid(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time) && (
                       <p className="text-[11px] text-rose-400 mt-1 animate-fade-in font-medium">
-                        End Time cannot be earlier than Start Time.
+                        End Date & Time must be later than Start Date & Time.
                       </p>
                     )}
                   </div>
@@ -6233,11 +6275,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           showValidationError("input_event_location", "Please enter Event Location.");
           return;
         }
-        if (eventForm.event_start_time && eventForm.event_end_time) {
-          if (isTimeEarlier(eventForm.event_start_time, eventForm.event_end_time)) {
-            showValidationError("input_event_end_time", "Event End Time cannot be earlier than Event Start Time.");
-            return;
-          }
+        if (isEventDateTimeInvalid(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time)) {
+          showValidationError("input_event_end_time", "Event End Date & Time must be later than Event Start Date & Time.");
+          return;
         }
 
         const guestPaxVal = eventForm.guest_pax !== '' ? Math.max(0, parseInt(String(eventForm.guest_pax)) || 0) : '';
