@@ -6076,7 +6076,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           }
 
           if (finalUser.role !== 'Sales Team' && finalUser.role !== 'Business Owner') {
-            showToastMsg("User does not have permission to create leads.", "error");
+            showToastMsg("User does not have permission to create quotations.", "error");
             return;
           }
         } catch (authErr: any) {
@@ -6090,7 +6090,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         }
         finalUser = currentUser;
         if (currentUser.role !== 'Sales Team' && currentUser.role !== 'Business Owner') {
-          showToastMsg("User does not have permission to create leads.", "error");
+          showToastMsg("User does not have permission to create quotations.", "error");
           return;
         }
       }
@@ -6217,7 +6217,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         // Stay in Create Lead form, and advance to Step 2
         setWizardStep(2);
 
-        showToastMsg("Inbound lead created successfully! Continuing to Step 2.", "success");
+        showToastMsg("Inbound quotation created successfully! Continuing to Step 2.", "success");
       } catch (err: any) {
         console.error("Step 1 saving failed:", err);
   
@@ -6246,7 +6246,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         } else if (lowerMsg.includes("session expired") || lowerMsg.includes("jwt expired")) {
           displayedMsg = "Session expired.";
         } else if (lowerMsg.includes("permission") || lowerMsg.includes("permission denied")) {
-          displayedMsg = "User does not have permission to create leads.";
+          displayedMsg = "User does not have permission to create quotations.";
         } else if (lowerMsg.includes("login") || lowerMsg.includes("unauthenticated") || lowerMsg.includes("jwt")) {
           displayedMsg = "Please login again.";
         } else {
@@ -6417,7 +6417,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             follow_up_notes: internalNotes || null,
         Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
       });
-      showToastMsg("Lead created successfully.", "success");
+      showToastMsg("Quotation created successfully.", "success");
       resetForm();
       setActiveTab('list');
     } catch (err: any) {
@@ -6491,7 +6491,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         reportingTime
       );
       
-      showToastMsg("Lead created successfully.", "success");
+      showToastMsg("Quotation created successfully.", "success");
       resetForm();
       setActiveTab('list');
     } catch (err: any) {
@@ -7004,7 +7004,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               }`}
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Create Lead</span>
+              <span>Create Quotation</span>
             </button>
           ) : (
             <span className="text-[11px] bg-red-500/10 text-red-400 border border-red-500/20 rounded px-2.5 py-1 flex items-center gap-1.5" title="You are restricted from adding leads in this role.">
@@ -8453,7 +8453,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             <div className="border-b border-slate-800/80 py-2.5 px-4 sm:px-5 flex items-center justify-between shrink-0 bg-slate-950/40 backdrop-blur-md">
               <div className="space-y-0.5">
                 <h3 className="text-xs sm:text-sm font-bold text-slate-100 flex items-center gap-2">
-                  <span className="text-emerald-400">✍️</span> Create New Inbound Lead
+                  <span className="text-emerald-400">✍️</span> Create New Inbound Quotation
                 </h3>
               </div>
               <button 
@@ -8884,7 +8884,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   disabled={isSaving}
                   className="px-5.5 py-2 text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl shadow-lg shadow-emerald-500/10 cursor-pointer border border-transparent transition-colors flex items-center gap-1.5"
                 >
-                  {isSaving ? 'Saving...' : salesStatus === 'Order Confirmed' ? '🎉 Confirm Order & Transition' : '✍️ Create Lead'}
+                  {isSaving ? 'Saving...' : salesStatus === 'Order Confirmed' ? '🎉 Confirm Order & Transition' : '✍️ Create Quotation'}
                 </button>
               )}
             </div>

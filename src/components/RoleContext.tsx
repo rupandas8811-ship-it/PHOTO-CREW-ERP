@@ -2788,14 +2788,14 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (finalUser.role !== 'Sales Team' && finalUser.role !== 'Business Owner') {
-        throw new Error("User does not have permission to create leads.");
+        throw new Error("User does not have permission to create quotations.");
       }
     } else {
       if (!currentUser) {
         throw new Error("Please login again.");
       }
       if (currentUser.role !== 'Sales Team' && currentUser.role !== 'Business Owner') {
-        throw new Error("User does not have permission to create leads.");
+        throw new Error("User does not have permission to create quotations.");
       }
     }
 
