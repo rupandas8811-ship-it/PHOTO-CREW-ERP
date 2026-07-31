@@ -11,6 +11,7 @@ import {
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 import { Production, EditingStatus, Staff } from '../types';
+import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { ProjectDetailModal } from './ProjectDetailModal';
 import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour } from '../utils';
@@ -643,21 +644,24 @@ ${coordinatorName}`;
   // Dynamically compile active production projects/leads from leadsData / Supabase leads table
   const leads = useMemo(() => {
     const postProdStages = [
+      'Footage Handover Verified',
       'Raw Footage Received', 
+      'Assigned Editor',
       'Editor Assigned', 
       'Editing Started', 
       'Editing In Progress', 
       'Internal QC Review', 
+      'Customer Review',
       'Client Review Sent', 
       'Revision Required', 
       'Revision In Progress', 
+      'Client Acceptance',
       'Final Approval', 
       'Delivered', 
       'Project Delivered',
       'Completed',
       'Closed',
       'Project Closed',
-      'Customer Review',
       'Approved',
       'Payment Pending',
       'Project Completed',
@@ -667,7 +671,19 @@ ${coordinatorName}`;
     const mapped = (leadsData || []).filter(l => {
       const order = orders.find(o => o.lead_id === l.lead_id);
       const stage = l.status || order?.current_stage;
-      return postProdStages.includes(stage);
+      if (!postProdStages.includes(stage)) return false;
+
+      // Filter for Production Staff / Editors: only see assigned projects
+      if (currentRole === 'Production Staff') {
+        const myName = currentUserName || '';
+        const prodId = order?.order_id || l.lead_id;
+        const assignedInAssignments = editorAssignments ? editorAssignments.some(ea => ea.production_id === prodId && ea.staff_name?.toLowerCase() === myName.toLowerCase()) : false;
+        const prodItem = production ? production.find(p => p.production_id === prodId || p.tracking_id === prodId) : null;
+        const assignedInProd = prodItem ? (prodItem.editor_assigned?.toLowerCase() === myName.toLowerCase() || prodItem.assigned_staff?.toLowerCase().includes(myName.toLowerCase())) : false;
+        if (!assignedInAssignments && !assignedInProd) return false;
+      }
+
+      return true;
     }).map(l => {
       const order = orders.find(o => o.lead_id === l.lead_id);
       const rf = order ? rawFootage.find(f => f.order_id === order.order_id) : null;
@@ -7780,8 +7796,25 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         return;
                       }
 
+                      const currentOrder = orders.find(o => o.order_id === activeWorkflowProd.tracking_id || o.lead_id === activeWorkflowProd.tracking_id);
+                      const currentLead = leads.find(l => l.lead_id === (currentOrder?.lead_id || activeWorkflowProd.tracking_id));
+                      const currentPayment = payments.find(p => p.order_id === (currentOrder?.order_id || activeWorkflowProd.tracking_id) || p.lead_id === (currentLead?.lead_id));
+
+                      const validation = performBusinessOwnerReview(currentOrder, currentLead, activeWorkflowProd, currentPayment);
+
+                      if (!validation.isValid) {
+                        alert(validation.message);
+                        updateProduction(activeWorkflowProd.production_id, {
+                          editing_status: 'Business Owner Review',
+                          remarks: `Business Owner Review Pending: ${validation.pendingItems.join('; ')}`
+                        });
+                        setActiveWorkflowProd(null);
+                        setWorkflowActionType(null);
+                        return;
+                      }
+
                       updateProduction(activeWorkflowProd.production_id, {
-                        editing_status: selectedStage,
+                        editing_status: 'Order Closed',
                         remarks: closingNotes || activeWorkflowProd.remarks,
                         delivery_date: deliveryDate || new Date().toISOString().split('T')[0]
                       });

@@ -825,9 +825,16 @@ export const OperationsLeads: React.FC = () => {
   };
 
   // Filter orders to show confirmed ones for Operations
-  const allowedStages = ['Order Confirmed', 'New Order Received', 'Operations Assigned', 'Event Scheduled', 'Staff Assigned', 'Event Completed', 'Raw Footage Received', 'Event Cancelled'];
+  const allowedStages = ['Confirm Order', 'Order Confirmed', 'New Order Received', 'Operations Assigned', 'Assigned Crew', 'Event Scheduled', 'Staff Assigned', 'Event Started', 'Event Completed', 'Footage Handover Verified', 'Raw Footage Received', 'Event Cancelled'];
   const operationsOrders = orders.filter(o => {
-    return allowedStages.includes(o.current_stage);
+    if (!allowedStages.includes(o.current_stage)) return false;
+    if (currentRole === 'Operation Staff') {
+      const staffName = currentUserName || '';
+      const orderAssigns = staffAssignments ? staffAssignments.filter(sa => sa.order_id === o.order_id && sa.assignment_status !== 'Cancelled') : [];
+      const isAssigned = orderAssigns.some(sa => sa.staff_name?.toLowerCase() === staffName.toLowerCase());
+      if (!isAssigned) return false;
+    }
+    return true;
   });
 
   // Unique staff lists for individual filters
@@ -1956,7 +1963,7 @@ export const OperationsLeads: React.FC = () => {
                                 } finally {
                                   setIsSaving(false);
                                 }
-                              } else if (newStatus === 'Raw Footage Received') {
+                              } else if (newStatus === 'Footage Handover Verified' || newStatus === 'Raw Footage Received') {
                                 const staffAssignmentsForOrder = staffAssignments?.filter(sa => sa.order_id === ord.order_id && sa.assignment_status !== 'Cancelled') || [];
                                 const allCompleted = staffAssignmentsForOrder.length > 0 && staffAssignmentsForOrder.every(sa => sa.assignment_status === 'Event Completed' || (sa as any).task_status === 'Event Completed');
                                 if (!allCompleted) {
@@ -2003,9 +2010,9 @@ export const OperationsLeads: React.FC = () => {
                             {/* Staff updates status automatically, but if admin needs override */}
                             <option value="Event Cancelled">Event Cancelled</option>
                             
-                            {/* Raw Footage requires Event Completed stage first */}
+                            {/* Footage Handover requires Event Completed stage first */}
                             {currentStage === 'Event Completed' && (
-                              <option value="Raw Footage Received">Upload Raw Footage</option>
+                              <option value="Footage Handover Verified">Verify Footage Handover</option>
                             )}
                           </select>
                         )}

@@ -92,10 +92,10 @@ export type Department = 'Sales' | 'Operations' | 'Production' | 'Editor' | 'Dis
 
 export const DEPARTMENT_STAGES: Record<Department, CurrentStage[]> = {
   Sales: ['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quote Sent', 'Quotation Sent', 'Quote Follow-up', 'Negotiation', 'Confirm Order', 'Order Confirmed', 'Lost Lead'],
-  Operations: ['Operations Assigned', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Completed', 'Event Cancelled', 'Confirm Order', 'Order Confirmed'],
-  Production: ['Raw Footage Received'],
-  Editor: ['Editing Started', 'Customer Review', 'Revision Required', 'Approved'],
-  Dispatch: ['Delivered', 'Payment Pending', 'Closed']
+  Operations: ['Confirm Order', 'Order Confirmed', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Completed', 'Footage Handover Verified', 'Raw Footage Received', 'Event Cancelled'],
+  Production: ['Footage Handover Verified', 'Raw Footage Received', 'Assigned Editor', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Customer Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress', 'Client Acceptance', 'Final Approval', 'Approved', 'Project Delivered', 'Completed', 'Business Owner Review', 'Order Closed', 'Closed'],
+  Editor: ['Assigned Editor', 'Editor Assigned', 'Editing Started', 'Customer Review', 'Client Review Sent', 'Client Acceptance', 'Revision Required', 'Approved', 'Completed'],
+  Dispatch: ['Delivered', 'Payment Pending', 'Business Owner Review', 'Order Closed', 'Closed']
 };
 
 export const ROLE_DEPARTMENT_MAP: Record<UserRole, Department[]> = {
@@ -103,8 +103,8 @@ export const ROLE_DEPARTMENT_MAP: Record<UserRole, Department[]> = {
   'Sales Team': ['Sales'],
   'Operations Team': ['Operations'],
   'Production Team': ['Production', 'Editor', 'Dispatch'],
-  'Operation Staff': [],
-  'Production Staff': []
+  'Operation Staff': ['Operations'],
+  'Production Staff': ['Production', 'Editor']
 };
 
 export type CurrentStage =
@@ -121,29 +121,36 @@ export type CurrentStage =
   | 'Lost Lead'
   | 'New Order Received'
   | 'Operations Assigned'
+  | 'Assigned Crew'
   | 'Event Scheduled'
   | 'Staff Assigned'
   | 'Event Started'
   | 'Event Completed'
+  | 'Footage Handover Verified'
   | 'Raw Footage Received'
+  | 'Assigned Editor'
   | 'Editor Assigned'
   | 'Editing Started'
   | 'Editing In Progress'
   | 'Internal QC Review'
+  | 'Customer Review'
   | 'Client Review Sent'
   | 'Revision Required'
   | 'Revision In Progress'
+  | 'Client Acceptance'
   | 'Final Approval'
   | 'Project Delivered'
   | 'Project Closed'
-  | 'Customer Review'
   | 'Approved'
   | 'Delivered'
   | 'Payment Pending'
   | 'Event Cancelled'
+  | 'Completed'
+  | 'Business Owner Review'
+  | 'Order Closed'
   | 'Closed';
 
-export type EditingStatus = 'Raw Footage Received' | 'Editor Assigned' | 'Editing Started' | 'Editing In Progress' | 'Internal QC Review' | 'Client Review Sent' | 'Revision Required' | 'Revision In Progress' | 'Final Approval' | 'Project Delivered' | 'Editing Complete' | 'Client Review' | 'Project Completed' | 'Completed';
+export type EditingStatus = 'Footage Handover Verified' | 'Raw Footage Received' | 'Assigned Editor' | 'Editor Assigned' | 'Editing Started' | 'Editing In Progress' | 'Internal QC Review' | 'Customer Review' | 'Client Review Sent' | 'Revision Required' | 'Revision In Progress' | 'Client Acceptance' | 'Final Approval' | 'Project Delivered' | 'Editing Complete' | 'Client Review' | 'Project Completed' | 'Completed' | 'Business Owner Review' | 'Order Closed' | 'Closed';
 
 export type PaymentStatus = 'Pending' | 'Partially Paid' | 'Fully Paid';
 

@@ -6839,16 +6839,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const todayStr = '2026-06-10';
 
-  const statNewLeads = leads.filter(l => getLeadCurrentStatus(l) === 'New Lead').length;
-  const statTodayFollowups = leads.filter(l => getLeadCurrentStatus(l) === 'Follow Up' && getFollowUpDate(l.remarks) === todayStr).length;
-  const statOverdueFollowups = leads.filter(l => {
-    if (getLeadCurrentStatus(l) !== 'Follow Up') return false;
-    const fDate = getFollowUpDate(l.remarks);
-    return fDate ? fDate < todayStr : false;
+  const statQuotesSent = leads.filter(l => {
+    const st = getLeadCurrentStatus(l);
+    return st === 'Quote Sent' || st === 'Quotation Sent';
   }).length;
-  const statQuotesSent = leads.filter(l => getLeadCurrentStatus(l) === 'Quotation Sent').length;
-  const statNegotiations = leads.filter(l => getLeadCurrentStatus(l) === 'Negotiation').length;
-  const statConfirmedOrders = leads.filter(l => getLeadCurrentStatus(l) === 'Order Confirmed').length;
+  const statQuoteFollowups = leads.filter(l => {
+    const st = getLeadCurrentStatus(l);
+    return st === 'Quote Follow-up' || st === 'Follow Up' || st === 'Follow-up';
+  }).length;
+  const statConfirmedOrders = leads.filter(l => {
+    const st = getLeadCurrentStatus(l);
+    return st === 'Confirm Order' || st === 'Order Confirmed';
+  }).length;
 
   // Filter Leads List
   const filteredLeads = leads.filter((lead) => {
@@ -7191,15 +7193,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         onChange={(e) => setFollowUpForm({ ...followUpForm, status: e.target.value as CurrentStage })}
                         className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                       >
-                        <option value="Follow Up">Follow Up</option>
-                        <option value="Quotation Sent">Quotation Sent</option>
-                        <option value="Negotiation">Negotiation</option>
-                        <option value="Order Confirmed">Order Confirmed</option>
+                        <option value="Quote Sent">Quote Sent</option>
+                        <option value="Quote Follow-up">Quote Follow-up</option>
+                        <option value="Confirm Order">Confirm Order</option>
+                        {followUpForm.status && !['Quote Sent', 'Quote Follow-up', 'Confirm Order', 'Order Confirmed', 'Quotation Sent', 'Follow Up'].includes(followUpForm.status) && (
+                          <option value={followUpForm.status}>{followUpForm.status}</option>
+                        )}
                       </select>
                     </div>
                   </div>
 
-                  {followUpForm.status === 'Order Confirmed' ? (
+                  {(followUpForm.status === 'Confirm Order' || followUpForm.status === 'Order Confirmed') ? (
                     <div className="space-y-4 pt-2 border-t border-slate-800">
                       <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Configure Confirmed Order Settings</h4>
                       
@@ -8890,14 +8894,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         <div className="space-y-4">
 
           {/* Sales Performance Dashboard Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5 mt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mt-2">
             {[
-              { label: 'New Leads', val: statNewLeads, theme: 'gold' as CameraLensTheme, filterValue: 'New Lead', chartPoints: [10, 18, 14, 25, 20, 31, 35], trendText: 'Inbound' },
-              { label: "Today's Follow-ups", val: statTodayFollowups, theme: 'green' as CameraLensTheme, filterValue: 'Follow Up', chartPoints: [5, 12, 8, 15, 10, 19, 14], trendText: 'Pending Call' },
-              { label: 'Overdue Follow-ups', val: statOverdueFollowups, theme: 'red' as CameraLensTheme, filterValue: 'Overdue', chartPoints: [2, 6, 3, 8, 4, 10, 6], trendText: 'Urgent CRM' },
-              { label: 'Quotations Sent', val: statQuotesSent, theme: 'purple' as CameraLensTheme, filterValue: 'Quotation Sent', chartPoints: [12, 14, 18, 15, 21, 25, 22], trendText: 'Proposals Out' },
-              { label: 'Negotiations', val: statNegotiations, theme: 'blue' as CameraLensTheme, filterValue: 'Negotiation', chartPoints: [4, 9, 7, 12, 11, 15, 13], trendText: 'Contract Discussions' },
-              { label: 'Confirmed Orders', val: statConfirmedOrders, theme: 'cyan' as CameraLensTheme, filterValue: 'Order Confirmed', chartPoints: [8, 15, 12, 20, 16, 25, 24], trendText: 'Signed Reels' },
+              { label: 'Quote Sent', val: statQuotesSent, theme: 'purple' as CameraLensTheme, filterValue: 'Quote Sent', chartPoints: [12, 14, 18, 15, 21, 25, 22], trendText: 'Quotation Saved' },
+              { label: 'Quote Follow-up', val: statQuoteFollowups, theme: 'gold' as CameraLensTheme, filterValue: 'Quote Follow-up', chartPoints: [5, 12, 8, 15, 10, 19, 14], trendText: 'Scheduled CRM' },
+              { label: 'Confirm Order', val: statConfirmedOrders, theme: 'cyan' as CameraLensTheme, filterValue: 'Confirm Order', chartPoints: [8, 15, 12, 20, 16, 25, 24], trendText: 'To Operations' },
             ].map((card, idx) => (
               <CameraLensStatsCard
                 key={idx}
@@ -8905,7 +8906,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 val={card.val}
                 theme={card.theme}
                 trendText={card.trendText}
-                subText="CRM STATUS"
+                subText="SALES STATUS"
                 chartPoints={card.chartPoints}
                 activeFilterValue={filterStatus}
                 currentFilterValue={card.filterValue}

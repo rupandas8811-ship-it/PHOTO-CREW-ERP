@@ -6,6 +6,7 @@ export { INITIAL_PACKAGES };
 
 import { supabaseClient, updateDiagnosticMetric } from '../supabaseClient';
 import { serializeLeadEvents, deserializeLeadEvents } from '../utils';
+import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 
 interface RoleContextType {
   currentUser: User | null;
@@ -4118,9 +4119,31 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       nextStage = targetProd.editing_status as any;
     }
 
-    // Map strings to satisfy database constraints for orders & leads
-    if (nextStage === 'Project Closed' || (nextStage as any) === 'Completed') {
-      nextStage = 'Closed';
+    // Map strings & enforce Business Owner Review before closure
+    if (['Closed', 'Order Closed', 'Project Closed', 'Completed', 'Project Completed'].includes(nextStage as string)) {
+      const tgtLead = leads.find(l => l.lead_id === (tgtOrder?.lead_id || actualTrackingId));
+      const tgtPayment = payments.find(p => p.order_id === (tgtOrder?.order_id || actualTrackingId) || p.lead_id === (tgtLead?.lead_id));
+      
+      const validation = performBusinessOwnerReview(tgtOrder, tgtLead, targetProd, tgtPayment);
+      if (!validation.isValid) {
+        nextStage = 'Business Owner Review';
+        logActivity(
+          `Business Owner Review Pending for Order ${tgtOrder?.order_id || actualTrackingId}. Pending items: ${validation.pendingItems.join('; ')}`,
+          'Business Owner',
+          tgtOrder?.order_id || actualTrackingId,
+          previousStage,
+          'Business Owner Review'
+        );
+      } else {
+        nextStage = 'Order Closed';
+        logActivity(
+          `Business Owner Review Completed & Validated. Reviewed By: ${currentUserName || 'Business Owner'}, Review Date & Time: ${new Date().toISOString()}, Final Status: Order Closed. Notes: ${updates.remarks || 'None'}`,
+          'Business Owner',
+          tgtOrder?.order_id || actualTrackingId,
+          'Business Owner Review',
+          'Order Closed'
+        );
+      }
     } else if (nextStage === 'Project Delivered') {
       nextStage = 'Delivered';
     }
@@ -4413,8 +4436,36 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const previousStage = targetOrder ? targetOrder.current_stage : 'Order Confirmed';
     const timestamp = new Date().toISOString();
 
+    let targetStageToSave = stage;
+    if (['Closed', 'Order Closed', 'Project Closed', 'Completed'].includes(stage as string)) {
+      const tgtLead = leads.find(l => l.lead_id === targetOrder?.lead_id);
+      const tgtProd = production.find(p => p.tracking_id === orderId || p.production_id === orderId);
+      const tgtPayment = payments.find(p => p.order_id === orderId || p.lead_id === targetOrder?.lead_id);
+
+      const validation = performBusinessOwnerReview(targetOrder, tgtLead, tgtProd, tgtPayment);
+      if (!validation.isValid) {
+        targetStageToSave = 'Business Owner Review';
+        logActivity(
+          `Business Owner Review Pending for Order ${orderId}. Pending items: ${validation.pendingItems.join('; ')}`,
+          'Business Owner',
+          orderId,
+          previousStage,
+          'Business Owner Review'
+        );
+      } else {
+        targetStageToSave = 'Order Closed';
+        logActivity(
+          `Business Owner Review Completed & Validated. Reviewed By: ${currentUserName || 'Business Owner'}, Review Date & Time: ${timestamp}, Final Status: Order Closed.`,
+          'Business Owner',
+          orderId,
+          'Business Owner Review',
+          'Order Closed'
+        );
+      }
+    }
+
     const rOrd = await pushUpdate('orders', 'order_id', orderId, { 
-      current_stage: stage,
+      current_stage: targetStageToSave,
       updated_by: currentUserName,
       updated_at: timestamp
     });
@@ -4424,8 +4475,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (targetOrder) {
       const rLead = await pushUpdate('leads', 'lead_id', targetOrder.lead_id, { 
-        status: stage,
-        current_status: stage,
+        status: targetStageToSave,
+        current_status: targetStageToSave,
         updated_by: currentUserName,
         updated_at: timestamp
       });
@@ -4434,9 +4485,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    //  // Disabled to prevent full reload
-
-    logActivity(`Updated stage for Order ${orderId}`, 'Operations', orderId, previousStage, stage);
+    logActivity(`Updated stage for Order ${orderId}`, 'Operations', orderId, previousStage, targetStageToSave);
   };
 
   // 7. Mark Delivered (Action button)
@@ -5928,8 +5977,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const status = getLeadCurrentStatus(lead);
     
     const salesStatuses = ['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quote Sent', 'Quotation Sent', 'Quote Follow-up', 'Negotiation'];
-    const opsStatuses = ['Confirm Order', 'Order Confirmed', 'Operations Assigned', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Completed', 'Event Cancelled'];
-    const prodStatuses = ['Raw Footage Received', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Client Review Sent', 'Internal Review', 'Client Review', 'Revision Required', 'Revision In Progress', 'Revision', 'Final Approval', 'Ready for Delivery'];
+    const opsStatuses = ['Confirm Order', 'Order Confirmed', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Completed', 'Footage Handover Verified', 'Raw Footage Received', 'Event Cancelled'];
+    const prodStatuses = ['Footage Handover Verified', 'Raw Footage Received', 'Assigned Editor', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Customer Review', 'Client Review Sent', 'Internal Review', 'Client Review', 'Revision Required', 'Revision In Progress', 'Revision', 'Client Acceptance', 'Final Approval', 'Approved', 'Ready for Delivery'];
     
     if (status === 'Delivered' || status === 'Completed' || status === 'Closed' || status === 'Project Closed' || status === 'Project Delivered') return 'Completed';
     if (prodStatuses.includes(status)) return 'Production';
@@ -5946,11 +5995,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const isDepartmentAllowedToEdit = (role: UserRole, stage: CurrentStage): boolean => {
-    const stageDept = getDepartmentForStage(stage);
-    if (!stageDept) return false;
-    
-    const allowedDepts = ROLE_DEPARTMENT_MAP[role];
-    return allowedDepts.includes(stageDept);
+    const userDepts = ROLE_DEPARTMENT_MAP[role] || [];
+    return Object.entries(DEPARTMENT_STAGES).some(([dept, stages]) => {
+      return stages.includes(stage) && userDepts.includes(dept as Department);
+    });
   };
 
   const unlockRecord = (recordId: string, module: 'Sales' | 'Operations' | 'Production', reason: string) => {
@@ -6005,8 +6053,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
       const preRawFootageStages = [
-        'New Lead', 'Follow Up', 'Quotation Sent', 'Negotiation', 'Order Confirmed',
-        'New Order Received', 'Operations Assigned', 'Event Scheduled', 'Staff Assigned', 'Event Completed'
+        'New Lead', 'Follow Up', 'Quotation Sent', 'Negotiation', 'Confirm Order', 'Order Confirmed',
+        'New Order Received', 'Operations Assigned', 'Assigned Crew', 'Event Scheduled', 'Staff Assigned', 'Event Started', 'Event Completed',
+        'Footage Handover Verified', 'Raw Footage Received'
       ];
       return !preRawFootageStages.includes(order.current_stage);
     }
