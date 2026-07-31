@@ -2345,7 +2345,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [followUpForm, setFollowUpForm] = useState({
     call_notes: '',
     next_follow_up_date: '',
-    status: 'Follow Up' as CurrentStage,
+    status: 'Quote Follow-up' as CurrentStage,
     quotation_amount: 3500,
     negotiation_notes: '',
     event_date: '',
@@ -2353,6 +2353,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     reporting_time: '08:00',
     advance_received: 0,
     payment_mode: 'UPI',
+    transaction_id: '',
   });
 
   // Confirm Order Form State
@@ -6539,7 +6540,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     e.preventDefault();
     if (!selectedLead || isSaving) return;
 
-    if (followUpForm.status === 'Order Confirmed') {
+    if (followUpForm.status === 'Order Confirmed' || followUpForm.status === 'Confirm Order') {
       if (!followUpForm.event_date) {
         showToastMsg("Please select Confirmed Event Date.", "error");
         return;
@@ -6549,8 +6550,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         showToastMsg("Please enter Final Amount.", "error");
         return;
       }
-      if (followUpForm.advance_received === undefined || isNaN(followUpForm.advance_received)) {
+      if (followUpForm.advance_received === undefined || isNaN(followUpForm.advance_received) || Number(followUpForm.advance_received) <= 0) {
         showToastMsg("Please enter Advance Paid Amount.", "error");
+        return;
+      }
+      if (!followUpForm.transaction_id || !followUpForm.transaction_id.trim()) {
+        showToastMsg("Please enter Payment Tracking ID / Transaction Reference Number.", "error");
         return;
       }
 
@@ -6567,7 +6572,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           followUpForm.event_time,
           followUpForm.payment_mode || 'UPI',
           followUpForm.call_notes || 'Confirmed from CRM activity logger',
-          followUpForm.reporting_time || '08:00'
+          followUpForm.reporting_time || '08:00',
+          followUpForm.transaction_id
         );
 
         setSelectedLead(null);
@@ -6731,8 +6737,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       showToastMsg("Please enter Final Amount.", "error");
       return;
     }
-    if (confirmForm.advance_received === undefined || isNaN(confirmForm.advance_received)) {
+    if (confirmForm.advance_received === undefined || isNaN(confirmForm.advance_received) || Number(confirmForm.advance_received) <= 0) {
       showToastMsg("Please enter Advance Paid Amount.", "error");
+      return;
+    }
+    if (!confirmForm.transaction_id || !confirmForm.transaction_id.trim()) {
+      showToastMsg("Please enter Payment Tracking ID / Transaction Reference Number.", "error");
       return;
     }
 
@@ -7290,6 +7300,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             <option value="Card">Credit/Debit Card</option>
                             <option value="Cheque">Cheque Deposit</option>
                           </select>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            Payment Tracking ID / Transaction Reference Number *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Enter Transaction Ref / Tracking ID (e.g. TXN12345678)"
+                            value={followUpForm.transaction_id || ''}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, transaction_id: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+                          />
                         </div>
                       </div>
                     </div>
@@ -9456,17 +9479,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 </select>
               </div>
 
-              {/* Transaction ID (Optional) */}
+              {/* Payment Tracking ID / Transaction Reference Number */}
               <div>
                 <label className="block font-medium text-slate-400 mb-1">
-                  Transaction ID (Optional)
+                  Payment Tracking ID / Transaction Reference Number *
                 </label>
                 <input
                   type="text"
-                  placeholder="Enter Payment Transaction ID"
+                  required
+                  placeholder="Enter Payment Tracking ID / Reference Number (e.g. TXN12345678)"
                   value={confirmForm.transaction_id || ''}
                   onChange={(e) => setConfirmForm({ ...confirmForm, transaction_id: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
                 />
               </div>
 

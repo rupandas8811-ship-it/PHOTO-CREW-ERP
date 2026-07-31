@@ -91,8 +91,8 @@ export const PACKAGE_CATEGORIES = [
 export type Department = 'Sales' | 'Operations' | 'Production' | 'Editor' | 'Dispatch';
 
 export const DEPARTMENT_STAGES: Record<Department, CurrentStage[]> = {
-  Sales: ['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Order Confirmed', 'Lost Lead'],
-  Operations: ['Operations Assigned', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Completed', 'Event Cancelled'],
+  Sales: ['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quote Sent', 'Quotation Sent', 'Quote Follow-up', 'Negotiation', 'Confirm Order', 'Order Confirmed', 'Lost Lead'],
+  Operations: ['Operations Assigned', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Completed', 'Event Cancelled', 'Confirm Order', 'Order Confirmed'],
   Production: ['Raw Footage Received'],
   Editor: ['Editing Started', 'Customer Review', 'Revision Required', 'Approved'],
   Dispatch: ['Delivered', 'Payment Pending', 'Closed']
@@ -112,8 +112,11 @@ export type CurrentStage =
   | 'Contacted'
   | 'Follow Up'
   | 'Follow-up'
+  | 'Quote Sent'
   | 'Quotation Sent'
+  | 'Quote Follow-up'
   | 'Negotiation'
+  | 'Confirm Order'
   | 'Order Confirmed'
   | 'Lost Lead'
   | 'New Order Received'

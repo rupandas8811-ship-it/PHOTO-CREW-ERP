@@ -5897,9 +5897,27 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const getLeadCurrentStatus = (lead: Lead): string => {
     let rawStatus = lead.current_status || lead.status || 'New Lead';
 
-    if (rawStatus === 'Follow-up' || rawStatus === 'Follow-Up') {
-      return 'Follow Up';
+    if (rawStatus === 'Order Confirmed' || rawStatus === 'Confirm Order') {
+      return 'Confirm Order';
     }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const followUpDate = lead.next_follow_up_date || (lead as any).follow_up_date || '';
+
+    if (rawStatus === 'Quote Sent' || rawStatus === 'Quotation Sent' || rawStatus === 'Follow Up' || rawStatus === 'Follow-up' || rawStatus === 'Quote Follow-up') {
+      if (followUpDate && followUpDate <= todayStr) {
+        return 'Quote Follow-up';
+      }
+      return 'Quote Sent';
+    }
+
+    if (rawStatus === 'Follow-up' || rawStatus === 'Follow-Up' || rawStatus === 'Follow Up') {
+      if (followUpDate && followUpDate <= todayStr) {
+        return 'Quote Follow-up';
+      }
+      return 'Quote Follow-up';
+    }
+
     if (rawStatus === 'Sales - New Lead') {
       return 'New Lead';
     }
@@ -5909,8 +5927,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const getLeadCurrentStage = (lead: Lead): 'Sales' | 'Operations' | 'Production' | 'Completed' => {
     const status = getLeadCurrentStatus(lead);
     
-    const salesStatuses = ['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation'];
-    const opsStatuses = ['Order Confirmed', 'Operations Assigned', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Completed', 'Event Cancelled'];
+    const salesStatuses = ['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quote Sent', 'Quotation Sent', 'Quote Follow-up', 'Negotiation'];
+    const opsStatuses = ['Confirm Order', 'Order Confirmed', 'Operations Assigned', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Completed', 'Event Cancelled'];
     const prodStatuses = ['Raw Footage Received', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Client Review Sent', 'Internal Review', 'Client Review', 'Revision Required', 'Revision In Progress', 'Revision', 'Final Approval', 'Ready for Delivery'];
     
     if (status === 'Delivered' || status === 'Completed' || status === 'Closed' || status === 'Project Closed' || status === 'Project Delivered') return 'Completed';
