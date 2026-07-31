@@ -5944,7 +5944,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const getLeadCurrentStatus = (lead: Lead): string => {
-    let rawStatus = lead.current_status || lead.status || 'New Lead';
+    let rawStatus = lead.current_status || lead.status || 'Quote Sent';
 
     if (rawStatus === 'Order Confirmed' || rawStatus === 'Confirm Order') {
       return 'Confirm Order';
@@ -5953,23 +5953,14 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const todayStr = new Date().toISOString().split('T')[0];
     const followUpDate = lead.next_follow_up_date || (lead as any).follow_up_date || '';
 
-    if (rawStatus === 'Quote Sent' || rawStatus === 'Quotation Sent' || rawStatus === 'Follow Up' || rawStatus === 'Follow-up' || rawStatus === 'Quote Follow-up') {
+    const activeSalesStatuses = ['Quote Sent', 'Quotation Sent', 'Follow Up', 'Follow-up', 'Quote Follow-up', 'New Lead', 'Contacted', 'Negotiation'];
+    if (activeSalesStatuses.includes(rawStatus)) {
       if (followUpDate && followUpDate <= todayStr) {
         return 'Quote Follow-up';
       }
       return 'Quote Sent';
     }
 
-    if (rawStatus === 'Follow-up' || rawStatus === 'Follow-Up' || rawStatus === 'Follow Up') {
-      if (followUpDate && followUpDate <= todayStr) {
-        return 'Quote Follow-up';
-      }
-      return 'Quote Follow-up';
-    }
-
-    if (rawStatus === 'Sales - New Lead') {
-      return 'New Lead';
-    }
     return rawStatus;
   };
 

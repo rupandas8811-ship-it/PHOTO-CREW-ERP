@@ -10,13 +10,9 @@ export const ACTIVE_STAGE_GROUPS = [
     label: "Sales Statuses",
     colorClass: "text-emerald-400",
     options: [
-      { value: "New Lead", label: "New Lead" },
-      { value: "Lost Lead", label: "Lost Lead" },
-      { value: "Follow Up", label: "Followup" },
-      { value: "Overdue", label: "Overdue Followup" },
-      { value: "Quotation Sent", label: "Quotation Sent" },
-      { value: "Negotiation", label: "Negotiation" },
-      { value: "Order Confirmed", label: "Order Confirmed" }
+      { value: "Quote Sent", label: "Quote Sent" },
+      { value: "Quote Follow-up", label: "Quote Follow-up" },
+      { value: "Confirm Order", label: "Confirm Order" }
     ]
   },
   {
@@ -91,7 +87,7 @@ export const PACKAGE_CATEGORIES = [
 export type Department = 'Sales' | 'Operations' | 'Production' | 'Editor' | 'Dispatch';
 
 export const DEPARTMENT_STAGES: Record<Department, CurrentStage[]> = {
-  Sales: ['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quote Sent', 'Quotation Sent', 'Quote Follow-up', 'Negotiation', 'Confirm Order', 'Order Confirmed', 'Lost Lead'],
+  Sales: ['Quote Sent', 'Quote Follow-up', 'Confirm Order'],
   Operations: ['Confirm Order', 'Order Confirmed', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Completed', 'Footage Handover Verified', 'Raw Footage Received', 'Event Cancelled'],
   Production: ['Footage Handover Verified', 'Raw Footage Received', 'Assigned Editor', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Customer Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress', 'Client Acceptance', 'Final Approval', 'Approved', 'Project Delivered', 'Completed', 'Business Owner Review', 'Order Closed', 'Closed'],
   Editor: ['Assigned Editor', 'Editor Assigned', 'Editing Started', 'Customer Review', 'Client Review Sent', 'Client Acceptance', 'Revision Required', 'Approved', 'Completed'],
