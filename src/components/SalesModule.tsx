@@ -1453,7 +1453,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   // Role permissions gate
   const canEdit = (currentRole === 'Sales Team' || currentRole === 'Business Owner') && 
-                  isDepartmentAllowedToEdit(currentRole, 'New Lead');
+                  (isDepartmentAllowedToEdit(currentRole, 'Quote Sent') || isDepartmentAllowedToEdit(currentRole, 'New Lead'));
 
   // Toggle modes
   const [internalTab, setInternalTab] = useState<'list' | 'create' | 'profiles' | 'packages' | 'calendar'>('list');
