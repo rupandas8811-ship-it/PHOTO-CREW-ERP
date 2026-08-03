@@ -3273,7 +3273,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   React.useEffect(() => {
     if (showStep3Popup) {
-      triggerAutoScrollAndFocus('#modal_step3_proceed_status', 150);
+      triggerAutoScrollAndFocus('#step3_followup_modal', 150);
     }
   }, [showStep3Popup]);
 
@@ -4850,11 +4850,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           return;
         }
 
-        showToastMsg(`CRM Changes Saved.`, "success");
+        showToastMsg(`✅ Quotation & CRM changes saved.`, "success");
+        setStep3FollowUpDate(selectedLead?.next_follow_up_date || '');
+        setStep3FollowUpTime((selectedLead as any)?.next_follow_up_time || '');
+        setStep3FollowUpNotes(selectedLead?.follow_up_notes || '');
         setShowStep3Popup(true);
-        setStep3Option('negotiation');
         setIsSaving(false);
-        return; // Halt here to wait for popup selection!
+        return; // Open follow-up popup
       }
 
       if (step < 3) {
@@ -4896,33 +4898,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         suggestedFix: parsed.suggestedFix
       });
       showToastMsg(parsed.reason, "error");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleConfirmStep3Proceed = async () => {
-    if (!selectedLead) return;
-    setIsSaving(true);
-    try {
-      if (step3Option === 'negotiation') {
-        await updateLead(selectedLead.lead_id, {
-          status: 'Negotiation' as CurrentStage
-        });
-        showToastMsg("Lead status updated to Negotiation.", "success");
-        setShowStep3Popup(false);
-        setSelectedLead(null);
-      } else if (step3Option === 'quotation_send') {
-        await updateLead(selectedLead.lead_id, {
-          status: 'Quotation Sent' as CurrentStage
-        });
-        showToastMsg("Lead status updated to Quotation Sent.", "success");
-        setShowStep3Popup(false);
-        setSelectedLead(null);
-      }
-    } catch (err: any) {
-      console.error("Failed to proceed with Step 3 option:", err);
-      showToastMsg(err.message || String(err), "error");
     } finally {
       setIsSaving(false);
     }
@@ -5864,15 +5839,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-                          <div>
-                            <span className="text-slate-400">Guest Pax:</span>
-                            <span className="ml-1.5 font-semibold text-slate-200">{ev.guest_pax !== '' && ev.guest_pax !== null && ev.guest_pax !== undefined ? ev.guest_pax : 'N/A'}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400">Staff Pax:</span>
-                            <span className="ml-1.5 font-semibold text-slate-200">{ev.staff_pax !== '' && ev.staff_pax !== null && ev.staff_pax !== undefined ? ev.staff_pax : 'N/A'}</span>
-                          </div>
+                        <div>
+                          <span className="text-slate-400">Guest Pax:</span>
+                          <span className="ml-1.5 font-semibold text-slate-200">{ev.guest_pax !== '' && ev.guest_pax !== null && ev.guest_pax !== undefined ? ev.guest_pax : 'N/A'}</span>
                         </div>
 
                         <div className="border-t border-slate-800/40 pt-2.5 text-left">
@@ -6070,7 +6039,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   </div>
 
                   {/* Guest Pax */}
-                  <div className="text-left">
+                  <div className="sm:col-span-2 text-left">
                     <label className="block text-xs font-semibold text-slate-400 mb-1.5">
                       Guest Pax
                     </label>
@@ -6080,21 +6049,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       placeholder="e.g. 150"
                       value={eventForm.guest_pax}
                       onChange={(e) => setEventForm({ ...eventForm, guest_pax: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0) })}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono"
-                    />
-                  </div>
-
-                  {/* Staff Pax */}
-                  <div className="text-left">
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                      Staff Pax
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="e.g. 5"
-                      value={eventForm.staff_pax}
-                      onChange={(e) => setEventForm({ ...eventForm, staff_pax: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0) })}
                       className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono"
                     />
                   </div>
@@ -6400,7 +6354,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             next_follow_up_date: followUpDate || null,
             follow_up_notes: internalNotes || null,
           Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || '',
-          status: 'Created Quotation',
+          status: 'Create Quote',
           created_date: new Date().toISOString().split('T')[0],
           sales_person: finalUser?.name || currentUser?.name || 'Sales Team',
           created_by: finalUser?.name || currentUser?.name || 'Sales Team'
@@ -7028,7 +6982,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const statCreatedQuotation = leads.filter(l => {
     const st = getLeadCurrentStatus(l);
-    return st === 'Created Quotation' || st === 'New Lead';
+    return st === 'Create Quote' || st === 'Created Quotation' || st === 'New Lead';
   }).length;
   const statQuotesSent = leads.filter(l => {
     const st = getLeadCurrentStatus(l);
@@ -7067,8 +7021,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         : (() => {
             const statusLower = leadStatus.toLowerCase().trim();
             const filterLower = filterStatus.toLowerCase().trim();
-            if (filterLower === 'created quotation') {
-              return statusLower === 'created quotation' || statusLower === 'new lead';
+            if (filterLower === 'create quote' || filterLower === 'created quotation') {
+              return statusLower === 'create quote' || statusLower === 'created quotation' || statusLower === 'new lead';
             }
             if (filterLower === 'quote sent') {
               return statusLower === 'quote sent' || statusLower === 'quotation sent';
@@ -9106,7 +9060,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           {/* Sales Performance Dashboard Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 mt-2">
             {[
-              { label: 'Created Quotation', val: statCreatedQuotation, theme: 'blue' as CameraLensTheme, filterValue: 'Created Quotation', chartPoints: [10, 15, 12, 18, 14, 20, 16], trendText: 'Initial Lead' },
+              { label: 'Create Quote', val: statCreatedQuotation, theme: 'blue' as CameraLensTheme, filterValue: 'Create Quote', chartPoints: [10, 15, 12, 18, 14, 20, 16], trendText: 'Initial Lead' },
               { label: 'Quote Sent', val: statQuotesSent, theme: 'purple' as CameraLensTheme, filterValue: 'Quote Sent', chartPoints: [12, 14, 18, 15, 21, 25, 22], trendText: 'Quotation Saved' },
               { label: 'Quote Follow-up', val: statQuoteFollowups, theme: 'gold' as CameraLensTheme, filterValue: 'Quote Follow-up', chartPoints: [5, 12, 8, 15, 10, 19, 14], trendText: 'Scheduled CRM' },
               { label: 'Confirm Order', val: statConfirmedOrders, theme: 'cyan' as CameraLensTheme, filterValue: 'Confirm Order', chartPoints: [8, 15, 12, 20, 16, 25, 24], trendText: 'To Operations' },
@@ -11043,82 +10997,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         </div>
       )}
 
-      {/* MODAL: Proceed Status Pop-up */}
-      {showStep3Popup && (
-        <div id="modal_step3_proceed_status" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-4 animate-fade-in text-left">
-          <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-indigo-500/30 rounded-2xl w-full max-w-md shadow-2xl relative p-6 space-y-5">
-            <div className="absolute top-0 left-12 w-48 h-48 bg-indigo-500/[0.03] rounded-full blur-[60px] pointer-events-none" />
 
-            <div className="flex items-start justify-between border-b border-slate-800 pb-3 relative z-10">
-              <div>
-                <h3 className="text-sm font-bold text-white tracking-widest font-mono flex items-center gap-1.5 animate-pulse">
-                  <span>STATUS</span>
-                </h3>
-                <p className="text-[11px] text-indigo-300 mt-0.5 font-sans">
-                  How would you like to proceed?
-                </p>
-              </div>
-              <button 
-                onClick={() => setShowStep3Popup(false)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-4 relative z-10 text-slate-300">
-              <div className="space-y-3">
-                <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-800/80 bg-slate-950/20 hover:bg-slate-950/40 cursor-pointer transition-colors">
-                  <input
-                    type="radio"
-                    name="step3Option"
-                    value="negotiation"
-                    checked={step3Option === 'negotiation'}
-                    onChange={() => setStep3Option('negotiation')}
-                    className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-slate-750 bg-slate-900 cursor-pointer"
-                  />
-                  <div>
-                    <span className="text-sm font-bold text-white">Mark as Negotiation</span>
-                    <p className="text-[11px] text-zinc-400 mt-0.5 font-sans">Update lead status to Negotiation and return to Leads Directory.</p>
-                  </div>
-                </label>
-
-                <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-800/80 bg-slate-950/20 hover:bg-slate-950/40 cursor-pointer transition-colors">
-                  <input
-                    type="radio"
-                    name="step3Option"
-                    value="quotation_send"
-                    checked={step3Option === 'quotation_send'}
-                    onChange={() => setStep3Option('quotation_send')}
-                    className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-slate-750 bg-slate-900 cursor-pointer"
-                  />
-                  <div>
-                    <span className="text-sm font-bold text-white">Quotation Sent</span>
-                    <p className="text-[11px] text-zinc-400 mt-0.5 font-sans">Update lead status to Quotation Sent and return to Leads Directory.</p>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800/80 relative z-10">
-              <button
-                onClick={() => setShowStep3Popup(false)}
-                className="px-4 py-1.5 rounded bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmStep3Proceed}
-                disabled={isSaving}
-                className="px-4 py-1.5 rounded bg-indigo-650 hover:bg-indigo-600 text-white text-xs font-mono font-bold uppercase transition-all shadow-md flex items-center gap-1.5"
-              >
-                {isSaving && <span className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>}
-                <span>Continue</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
 {/* MODAL: Existing Customer Detection Pop-up */}
       {showDetectionPopup && detectedCustomer && (

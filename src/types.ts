@@ -10,7 +10,7 @@ export const ACTIVE_STAGE_GROUPS = [
     label: "Sales Statuses",
     colorClass: "text-emerald-400",
     options: [
-      { value: "Created Quotation", label: "Created Quotation" },
+      { value: "Create Quote", label: "Create Quote" },
       { value: "Quote Sent", label: "Quote Sent" },
       { value: "Quote Follow-up", label: "Quote Follow-up" },
       { value: "Confirm Order", label: "Confirm Order" },
@@ -89,7 +89,7 @@ export const PACKAGE_CATEGORIES = [
 export type Department = 'Sales' | 'Operations' | 'Production' | 'Editor' | 'Dispatch';
 
 export const DEPARTMENT_STAGES: Record<Department, CurrentStage[]> = {
-  Sales: ['Created Quotation', 'Quote Sent', 'Quote Follow-up', 'Confirm Order', 'Lead Lost', 'New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Order Confirmed', 'Lost Lead'],
+  Sales: ['Create Quote', 'Created Quotation', 'Quote Sent', 'Quote Follow-up', 'Confirm Order', 'Lead Lost', 'New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Order Confirmed', 'Lost Lead'],
   Operations: ['Confirm Order', 'Order Confirmed', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Completed', 'Footage Handover Verified', 'Raw Footage Received', 'Event Cancelled'],
   Production: ['Footage Handover Verified', 'Raw Footage Received', 'Assigned Editor', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Customer Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress', 'Client Acceptance', 'Final Approval', 'Approved', 'Project Delivered', 'Completed', 'Business Owner Review', 'Order Closed', 'Closed'],
   Editor: ['Assigned Editor', 'Editor Assigned', 'Editing Started', 'Customer Review', 'Client Review Sent', 'Client Acceptance', 'Revision Required', 'Approved', 'Completed'],
@@ -106,6 +106,7 @@ export const ROLE_DEPARTMENT_MAP: Record<UserRole, Department[]> = {
 };
 
 export type CurrentStage =
+  | 'Create Quote'
   | 'Created Quotation'
   | 'Quote Sent'
   | 'Quote Follow-up'
