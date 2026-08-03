@@ -1884,10 +1884,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [unlockReason, setUnlockReason] = useState('Data Correction');
   const [unlockCustomReason, setUnlockCustomReason] = useState('');
 
-  // Step 2 Follow-up and Lost Lead states
+  // Step 2 and Step 3 Follow-up states
   const [showStep2Popup, setShowStep2Popup] = useState(false);
   const [step2FollowUpDate, setStep2FollowUpDate] = useState('');
   const [step2FollowUpNotes, setStep2FollowUpNotes] = useState('');
+
+  const [step3FollowUpDate, setStep3FollowUpDate] = useState('');
+  const [step3FollowUpTime, setStep3FollowUpTime] = useState('');
+  const [step3FollowUpNotes, setStep3FollowUpNotes] = useState('');
 
   const [showLostModal, setShowLostModal] = useState(false);
   const [lostReason, setLostReason] = useState('Price too high');
@@ -4540,6 +4544,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       setIsPackageDetailsSaved(true);
       showToastMsg("✅ Package saved successfully.", "success");
+      setStep3FollowUpDate(selectedLead.next_follow_up_date || '');
+      setStep3FollowUpTime((selectedLead as any).next_follow_up_time || '');
+      setStep3FollowUpNotes(selectedLead.follow_up_notes || '');
+      setShowStep3Popup(true);
     } catch (err: any) {
       console.error("Save package only failed:", err);
       setSaveErrorPopup({
@@ -4681,15 +4689,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         }
 
 
-        // Open Step 2 Follow-up details modal before moving to Step 3
-        const currentId = selectedLead?.lead_id;
-        const savedDate = currentId ? (localStorage.getItem(`follow_up_date_${currentId}`) || selectedLead?.next_follow_up_date || '') : '';
-        const savedNotes = currentId ? (localStorage.getItem(`follow_up_notes_${currentId}`) || selectedLead?.follow_up_notes || '') : '';
-        setStep2FollowUpDate(savedDate);
-        setStep2FollowUpNotes(savedNotes);
-        setShowStep2Popup(true);
-        setIsSaving(false);
-        return; // Halt here. The rest of the Step 2 saving is handled in handleSaveStep2FollowUp
+        // Perform direct save for Step 2 without showing follow-up popup
+        await handleSaveStep2Direct();
+        return;
       } else if (step === 3) {
         if (!validateStep3Data('all')) {
           setIsSaving(false);
@@ -4921,6 +4923,185 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     } catch (err: any) {
       console.error("Failed to proceed with Step 3 option:", err);
       showToastMsg(err.message || String(err), "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Automatic background sync for Quote Sent -> Quote Follow-up when follow-up date is reached
+  React.useEffect(() => {
+    if (!leads || leads.length === 0) return;
+    const todayStr = new Date().toISOString().split('T')[0];
+    leads.forEach(async (ld) => {
+      const rawSt = ld.current_status || ld.status;
+      const fDate = ld.next_follow_up_date || (ld as any).follow_up_date;
+      if ((rawSt === 'Quote Sent' || rawSt === 'Quotation Sent') && fDate && fDate <= todayStr) {
+        try {
+          await updateLeadFollowUp(
+            ld.lead_id,
+            'Quote Follow-up' as CurrentStage,
+            'Auto updated: Follow-up date reached',
+            fDate,
+            Number(ld.budget || 0),
+            ld.follow_up_notes || 'Follow-up date reached'
+          );
+        } catch (e) {
+          // Silent auto sync
+        }
+      }
+    });
+  }, [leads]);
+
+  const handleSaveStep2Direct = async () => {
+    const isCreateFlow = activeTab === 'create';
+    const currentLeadId = isCreateFlow ? createdLeadId : selectedLead?.lead_id;
+    if (!currentLeadId) {
+      showToastMsg("Lead not initialized yet.", "error");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const finalEventsList = (isCreateFlow ? [...createEvents] : [...crmEvents]);
+      if (finalEventsList.length === 0) {
+        showToastMsg("Please add at least one event.", "error");
+        setIsSaving(false);
+        return;
+      }
+      const firstEvent = finalEventsList[0];
+
+      const formattedEventTime = validateAndFormatTime(firstEvent.event_start_time, "Event Start Time");
+      const formattedReportingTime = validateAndFormatTime(isCreateFlow ? reportingTime : wizardLeadData.reporting_time, "Reporting Time");
+
+      await updateLead(currentLeadId, {
+        event_type: firstEvent.event_type === 'Other' ? 'Other' : firstEvent.event_type,
+        custom_event_name: firstEvent.event_name,
+        custom_event_type: firstEvent.event_type === 'Other' ? firstEvent.event_name : undefined,
+        event_date: firstEvent.event_date,
+        Event_End_Date: firstEvent.event_end_date || (firstEvent as any).Event_End_Date || null,
+        event_time: formattedEventTime || null,
+        event_start_time: firstEvent.event_start_time || null,
+        event_end_time: firstEvent.event_end_time || null,
+        reporting_time: formattedReportingTime || null,
+        event_location: firstEvent.event_location,
+        google_maps_link: firstEvent.google_maps_link || '',
+        lead_source: isCreateFlow ? createForm.lead_source : wizardLeadData.lead_source,
+        shoot_type: firstEvent.event_shoot_type || 'CANDID PHOTOGRAPHY',
+        event_shoot_type: firstEvent.event_shoot_type || 'CANDID PHOTOGRAPHY',
+        desired_event_shoot_type: firstEvent.event_shoot_type || 'CANDID PHOTOGRAPHY',
+        client_residence_address: isCreateFlow ? createForm.client_residence_address : wizardLeadData.client_residence_address,
+        city: isCreateFlow ? createForm.city : wizardLeadData.city,
+        state: isCreateFlow ? createForm.state : wizardLeadData.state,
+        pincode: isCreateFlow ? createForm.pincode : wizardLeadData.pincode,
+        total_pax: firstEvent.guest_pax !== '' && firstEvent.guest_pax != null ? Number(firstEvent.guest_pax) : null,
+        guest_pax: firstEvent.guest_pax !== '' && firstEvent.guest_pax != null ? Number(firstEvent.guest_pax) : null,
+        staff_pax: firstEvent.staff_pax !== '' && firstEvent.staff_pax != null ? Number(firstEvent.staff_pax) : null,
+        reference_source: isCreateFlow ? createForm.reference_source : wizardLeadData.reference_source || '',
+        Select_Package_Option: isCreateFlow ? (createForm.Select_Package_Option || selectedPkgIds[0] || '') : (wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || ''),
+        events: finalEventsList
+      });
+
+      let reloadedEvents = finalEventsList;
+      if (supabaseClient) {
+        const { data: dbEvents, error: dbErr } = await supabaseClient
+          .from('lead_events')
+          .select('*')
+          .eq('lead_id', currentLeadId)
+          .order('created_at', { ascending: true });
+          
+        if (!dbErr && dbEvents && dbEvents.length > 0) {
+          reloadedEvents = dbEvents as LeadEvent[];
+          if (isCreateFlow) {
+            setCreateEvents(reloadedEvents);
+          } else {
+            setCrmEvents(reloadedEvents);
+          }
+        }
+      }
+
+      if (isCreateFlow) {
+        setWizardStep(3);
+      } else {
+        const newCompleted = Math.max(crmHighestStep, 2);
+        setCrmHighestStep(newCompleted);
+        if (selectedLead) {
+          localStorage.setItem(`crm_last_step_${selectedLead.lead_id}`, String(newCompleted));
+        }
+
+        setSelectedLead(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            events: reloadedEvents
+          };
+        });
+
+        setCrmWizardStep(3);
+      }
+
+      showToastMsg("✅ Event Details Saved Successfully", "success");
+    } catch (err: any) {
+      console.error("Step 2 direct save failed:", err);
+      showToastMsg(`Failed to save event details: ${err.message || err}`, "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveStep3FollowUp = async () => {
+    const isCreateFlow = activeTab === 'create';
+    const currentLeadId = isCreateFlow ? createdLeadId : selectedLead?.lead_id;
+
+    if (!currentLeadId) {
+      showToastMsg("Lead record not found.", "error");
+      return;
+    }
+    if (!step3FollowUpDate) {
+      showToastMsg("Follow-up Date is required.", "error");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const fullNotes = step3FollowUpTime
+        ? `[Time: ${step3FollowUpTime}] ${step3FollowUpNotes}`.trim()
+        : step3FollowUpNotes;
+
+      const currentPkgCost = Number(isCreateFlow ? (createForm.budget || finalTotal || 0) : (wizardLeadData.package_cost || selectedLead?.budget || 0));
+
+      await updateLeadFollowUp(
+        currentLeadId,
+        'Quote Sent' as CurrentStage,
+        fullNotes || 'Quotation created & follow-up scheduled',
+        step3FollowUpDate,
+        currentPkgCost,
+        fullNotes || 'Quotation sent'
+      );
+
+      localStorage.setItem(`follow_up_date_${currentLeadId}`, step3FollowUpDate);
+      localStorage.setItem(`follow_up_notes_${currentLeadId}`, fullNotes);
+
+      if (isCreateFlow) {
+        setSalesStatus('Quote Sent' as CurrentStage);
+        resetForm();
+        setActiveTab('list');
+      } else {
+        setSelectedLead(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            status: 'Quote Sent' as CurrentStage,
+            current_status: 'Quote Sent',
+            next_follow_up_date: step3FollowUpDate,
+            follow_up_notes: fullNotes
+          };
+        });
+      }
+
+      showToastMsg("✅ Quotation & Follow-up saved! Status updated to Quote Sent.", "success");
+      setShowStep3Popup(false);
+    } catch (err: any) {
+      console.error("Failed to save Step 3 follow-up:", err);
+      showToastMsg(`Failed to save follow-up: ${err.message || err}`, "error");
     } finally {
       setIsSaving(false);
     }
@@ -6341,14 +6522,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const firstEvent = finalEventsList[0];
 
       try {
-        // Open Step 2 Follow-up details modal before moving to Step 3
-        const currentId = createdLeadId;
-        const savedDate = currentId ? (localStorage.getItem(`follow_up_date_${currentId}`) || '') : '';
-        const savedNotes = currentId ? (localStorage.getItem(`follow_up_notes_${currentId}`) || '') : '';
-        setStep2FollowUpDate(savedDate);
-        setStep2FollowUpNotes(savedNotes);
-        setShowStep2Popup(true);
-        setIsSaving(false);
+        await handleSaveStep2Direct();
       } catch (err: any) {
         console.error("Step 2 saving failed:", err);
   
@@ -6428,9 +6602,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             follow_up_notes: internalNotes || null,
         Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
       });
-      showToastMsg("Quotation created successfully.", "success");
-      resetForm();
-      setActiveTab('list');
+      showToastMsg("✅ Quotation created successfully.", "success");
+      setStep3FollowUpDate(followUpDate || '');
+      setStep3FollowUpTime('');
+      setStep3FollowUpNotes(internalNotes || '');
+      setShowStep3Popup(true);
     } catch (err: any) {
       console.error("Step 5 status save failed:", err);
       const errMsg = err?.message || String(err);
@@ -9700,71 +9876,67 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         </div>
       )}
 
-      {/* Step 2 Mandatory Follow-up Popup Modal */}
-      {showStep2Popup && (selectedLead || activeTab === 'create') && (
+      {/* Step 3 Follow-up Popup Modal */}
+      {showStep3Popup && (selectedLead || activeTab === 'create') && (
         <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-4 backdrop-blur-md">
-          <div id="step2_followup_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+          <div id="step3_followup_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
-                <span>📅</span> Log Mandatory Follow-up Details
+                <span>📅</span> Follow-up Date &amp; Time
               </h4>
-              <button 
-                onClick={() => setShowStep2Popup(false)}
-                className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0"
-              >
-                <X className="w-4 h-4" />
-              </button>
             </div>
 
-            <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg text-xs text-amber-200">
-              Please schedule the next follow-up and add notes to progress the lead to <strong>Follow-up</strong> status.
+            <div className="bg-indigo-500/10 border border-indigo-500/20 p-3 rounded-lg text-xs text-indigo-200">
+              Please schedule the follow-up date to finalize quotation and set lead status to <strong>Quote Sent</strong>.
             </div>
 
             <div className="space-y-3.5 text-xs text-slate-300">
               <div>
-                <label className="block font-medium text-slate-400 mb-1">
-                  Next Follow-up Date * (Required)
+                <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono mb-1">
+                  Follow-up Date <span className="text-rose-400">* (Required)</span>
                 </label>
                 <input
                   type="date"
                   required
-                  value={step2FollowUpDate}
-                  min={new Date().toISOString().split('T')[0]}
-                  onChange={(e) => setStep2FollowUpDate(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  value={step3FollowUpDate}
+                  onChange={(e) => setStep3FollowUpDate(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-mono"
                 />
               </div>
 
               <div>
-                <label className="block font-medium text-slate-400 mb-1">
-                  Follow-up Notes * (Required)
+                <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono mb-1">
+                  Follow-up Time <span className="text-slate-500">(Optional)</span>
+                </label>
+                <input
+                  type="time"
+                  value={step3FollowUpTime}
+                  onChange={(e) => setStep3FollowUpTime(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono mb-1">
+                  Follow-up Notes <span className="text-slate-500">(Optional)</span>
                 </label>
                 <textarea
-                  required
                   rows={3}
-                  placeholder="Summarize the event discussion, client's vibe, key preferences..."
-                  value={step2FollowUpNotes}
-                  onChange={(e) => setStep2FollowUpNotes(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs"
+                  placeholder="Summarize key client preferences, expected decision timeline, or notes..."
+                  value={step3FollowUpNotes}
+                  onChange={(e) => setStep3FollowUpNotes(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
                 />
               </div>
 
               <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
                 <button
                   type="button"
-                  onClick={() => setShowStep2Popup(false)}
-                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs animate-none border-0"
+                  onClick={handleSaveStep3FollowUp}
+                  disabled={isSaving || !step3FollowUpDate}
+                  className="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-lg text-xs border-0"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveStep2FollowUp}
-                  disabled={isSaving || !step2FollowUpDate || !step2FollowUpNotes}
-                  className="px-4 py-2 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center gap-1.5 cursor-pointer shadow-lg text-xs border-0"
-                >
-                  {isSaving ? 'Saving...' : 'Save & Continue'}
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  {isSaving ? 'Saving...' : '💾 Save Follow-up & Set Quote Sent'}
                 </button>
               </div>
             </div>
