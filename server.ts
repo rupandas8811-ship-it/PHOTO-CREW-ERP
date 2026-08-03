@@ -200,15 +200,88 @@ async function startServer() {
     return healed ? nextPayload : null;
   };
 
+  const NUMERIC_DB_KEYS = new Set([
+    'budget', 'package_price', 'package_cost', 'quotation_amount',
+    'quotation_discount', 'Quotation_Discount', 'quotationdiscount',
+    'additional_services_cost', 'Additional_Services_Cost', 'additionalservicescost',
+    'final_quotation_amount', 'Final_Quotation_Amount', 'finalquotationamount',
+    'final_amount', 'final_package_amount', 'total_amount',
+    'advance_received', 'advance_collected', 'advance_payment', 'advance_paid',
+    'balance_amount', 'balance', 'total_pax', 'guest_pax', 'staff_pax',
+    'lead_value', 'lead_score', 'pincode', 'tax_amount', 'subtotal',
+    'grand_total', 'total_payment', 'contract_final_amount', 'advance_payment_received',
+    'pending_amount', 'number_of_team_members', 'event_duration', 'quantity', 'discount',
+    'price', 'cost', 'amount', 'rate', 'fee'
+  ]);
+
+  function isNumericDbKey(key: string): boolean {
+    if (!key || typeof key !== 'string') return false;
+    const k = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (NUMERIC_DB_KEYS.has(key) || NUMERIC_DB_KEYS.has(k)) return true;
+    return (
+      k.includes('amount') ||
+      k.includes('cost') ||
+      k.includes('price') ||
+      k.includes('discount') ||
+      k.includes('pax') ||
+      k.includes('budget') ||
+      k.includes('pincode') ||
+      k.includes('zipcode') ||
+      k.includes('balance') ||
+      k.includes('advance') ||
+      k.includes('score') ||
+      k.includes('tax') ||
+      k.includes('fee') ||
+      k.includes('rate') ||
+      k.includes('subtotal') ||
+      k.includes('total') ||
+      k.includes('duration') ||
+      k.includes('quantity') ||
+      k.endsWith('count')
+    );
+  }
+
+  function sanitizeRecordForDbServer(record: any, table?: string) {
+    if (!record || typeof record !== 'object') return record;
+    const clone = { ...record };
+    for (const key of Object.keys(clone)) {
+      const val = clone[key];
+      const isPhone = key.includes('mobile') || key.includes('whatsapp') || key.includes('phone');
+      if (isNumericDbKey(key)) {
+        if (val === '' || val === null || val === undefined || val === 'NaN' || val === 'null' || val === 'undefined') {
+          clone[key] = (key === 'total_pax' && table === 'leads') ? 0 : null;
+        } else if (typeof val === 'number') {
+          if (isNaN(val)) {
+            clone[key] = (key === 'total_pax' && table === 'leads') ? 0 : null;
+          }
+        } else if (typeof val === 'string') {
+          const trimmed = val.trim();
+          if (trimmed === '') {
+            clone[key] = (key === 'total_pax' && table === 'leads') ? 0 : null;
+          } else if (!isPhone) {
+            const num = Number(trimmed);
+            if (isNaN(num)) {
+              clone[key] = null;
+            } else {
+              clone[key] = num;
+            }
+          }
+        }
+      }
+    }
+    return clone;
+  }
+
   app.post('/api/db/insert', async (req, res) => {
     const { table, record } = req.body;
     try {
       const db = getServerSupabase();
-      console.log(`[Server DB Insert] Inserting into ${table}`, record);
-      let { data, error } = await db.from(table).insert(record).select();
+      const sanitizedRecord = sanitizeRecordForDbServer(record, table);
+      console.log(`[Server DB Insert] Inserting into ${table}`, sanitizedRecord);
+      let { data, error } = await db.from(table).insert(sanitizedRecord).select();
       if (error) {
         // Try healing the payload if it's a schema cache mismatch error
-        const healed = healPayload(table, record, error.message);
+        const healed = healPayload(table, sanitizedRecord, error.message);
         if (healed) {
           console.log(`[Server Self-Healing retry] Retrying insert with healed record:`, healed);
           const retryRes = await db.from(table).insert(healed).select();
@@ -236,11 +309,12 @@ async function startServer() {
     const { table, matchColumn, matchValue, updates } = req.body;
     try {
       const db = getServerSupabase();
-      console.log(`[Server DB Update] Updating ${table} where ${matchColumn}=${matchValue}`, updates);
-      let { data, error } = await db.from(table).update(updates).eq(matchColumn, matchValue).select();
+      const sanitizedUpdates = sanitizeRecordForDbServer(updates, table);
+      console.log(`[Server DB Update] Updating ${table} where ${matchColumn}=${matchValue}`, sanitizedUpdates);
+      let { data, error } = await db.from(table).update(sanitizedUpdates).eq(matchColumn, matchValue).select();
       if (error) {
         // Try healing the payload if it's a schema cache mismatch error
-        const healed = healPayload(table, updates, error.message);
+        const healed = healPayload(table, sanitizedUpdates, error.message);
         if (healed) {
           console.log(`[Server Self-Healing retry] Retrying update with healed updates:`, healed);
           const retryRes = await db.from(table).update(healed).eq(matchColumn, matchValue).select();
@@ -268,11 +342,12 @@ async function startServer() {
     const { table, record } = req.body;
     try {
       const db = getServerSupabase();
-      console.log(`[Server DB Upsert] Upserting into ${table}`, record);
-      let { data, error } = await db.from(table).upsert(record).select();
+      const sanitizedRecord = sanitizeRecordForDbServer(record, table);
+      console.log(`[Server DB Upsert] Upserting into ${table}`, sanitizedRecord);
+      let { data, error } = await db.from(table).upsert(sanitizedRecord).select();
       if (error) {
         // Try healing the payload if it's a schema cache mismatch error
-        const healed = healPayload(table, record, error.message);
+        const healed = healPayload(table, sanitizedRecord, error.message);
         if (healed) {
           console.log(`[Server Self-Healing retry] Retrying upsert with healed record:`, healed);
           const retryRes = await db.from(table).upsert(healed).select();

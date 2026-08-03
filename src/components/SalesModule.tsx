@@ -4499,18 +4499,23 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         assigned_staff_mobiles: ev.assigned_staff_mobiles || ''
       }));
 
+      const cleanPkgCost = wizardLeadData.package_cost !== "" && wizardLeadData.package_cost != null && !isNaN(Number(wizardLeadData.package_cost)) ? Number(wizardLeadData.package_cost) : null;
+      const cleanDiscount = quoteDiscount === "" || quoteDiscount == null || isNaN(Number(quoteDiscount)) ? null : Number(quoteDiscount);
+      const cleanAdditional = quoteAdditional === "" || quoteAdditional == null || isNaN(Number(quoteAdditional)) ? null : Number(quoteAdditional);
+      const cleanFinalAmt = Math.max(0, (cleanPkgCost || 0) + (cleanAdditional || 0) - (cleanDiscount || 0));
+
       await updateLead(selectedLead.lead_id, {
-        budget: Number(wizardLeadData.package_cost),
-        package_price: Number(wizardLeadData.package_cost),
+        budget: cleanPkgCost,
+        package_price: cleanPkgCost,
         deliverables_description: wizardLeadData.deliverables,
         notes_special_customizations: wizardLeadData.notes,
         remarks: updatedRemarks,
         Select_Package_Option: pkgId,
         sales_staff_name: salesStaffName,
         sales_staff_mobile: salesStaffMobile,
-        Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
-        Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
-        Final_Quotation_Amount: Math.max(0, Number(wizardLeadData.package_cost) + Number(quoteAdditional || 0) - Number(quoteDiscount || 0)),
+        Quotation_Discount: cleanDiscount,
+        Additional_Services_Cost: cleanAdditional,
+        Final_Quotation_Amount: cleanFinalAmt,
         events: updatedEvents
       });
 
@@ -4519,17 +4524,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         if (!prev) return null;
         return {
           ...prev,
-          budget: Number(wizardLeadData.package_cost),
-          package_price: Number(wizardLeadData.package_cost),
+          budget: cleanPkgCost || 0,
+          package_price: cleanPkgCost || 0,
           deliverables_description: wizardLeadData.deliverables,
           notes_special_customizations: wizardLeadData.notes,
           remarks: updatedRemarks,
           Select_Package_Option: pkgId,
           sales_staff_name: salesStaffName,
           sales_staff_mobile: salesStaffMobile,
-          Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
-          Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
-          Final_Quotation_Amount: Math.max(0, Number(wizardLeadData.package_cost) + Number(quoteAdditional || 0) - Number(quoteDiscount || 0)),
+          Quotation_Discount: cleanDiscount,
+          Additional_Services_Cost: cleanAdditional,
+          Final_Quotation_Amount: cleanFinalAmt,
         };
       });
 
@@ -4702,9 +4707,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           assigned_staff_mobiles: ev.assigned_staff_mobiles || ''
         }));
 
+        const cleanPkgCost = wizardLeadData.package_cost !== "" && wizardLeadData.package_cost != null && !isNaN(Number(wizardLeadData.package_cost)) ? Number(wizardLeadData.package_cost) : null;
+        const cleanDiscount = quoteDiscount === "" || quoteDiscount == null || isNaN(Number(quoteDiscount)) ? null : Number(quoteDiscount);
+        const cleanAdditional = quoteAdditional === "" || quoteAdditional == null || isNaN(Number(quoteAdditional)) ? null : Number(quoteAdditional);
+        const cleanFinalAmt = Math.max(0, (cleanPkgCost || 0) + (cleanAdditional || 0) - (cleanDiscount || 0));
+        const cleanPincode = wizardLeadData.pincode === "" || wizardLeadData.pincode == null ? null : wizardLeadData.pincode;
+
         await updateLead(selectedLead.lead_id, {
-          budget: Number(wizardLeadData.package_cost),
-          package_price: Number(wizardLeadData.package_cost),
+          budget: cleanPkgCost,
+          package_price: cleanPkgCost,
           deliverables_description: wizardLeadData.deliverables,
           notes_special_customizations: wizardLeadData.notes,
           remarks: updatedRemarks,
@@ -4712,12 +4723,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           client_residence_address: wizardLeadData.client_residence_address,
           city: wizardLeadData.city,
           state: wizardLeadData.state,
-          pincode: wizardLeadData.pincode,
+          pincode: cleanPincode,
           sales_staff_name: salesStaffName,
           sales_staff_mobile: salesStaffMobile,
-          Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
-          Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
-          Final_Quotation_Amount: Math.max(0, Number(wizardLeadData.package_cost) + Number(quoteAdditional || 0) - Number(quoteDiscount || 0)),
+          Quotation_Discount: cleanDiscount,
+          Additional_Services_Cost: cleanAdditional,
+          Final_Quotation_Amount: cleanFinalAmt,
           events: updatedEvents
         });
 

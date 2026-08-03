@@ -1225,6 +1225,47 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
+  const isNumericColumnKey = (key: string): boolean => {
+    if (!key || typeof key !== 'string') return false;
+    const k = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const knownKeys = new Set([
+      'budget', 'package_price', 'package_cost', 'quotation_amount',
+      'quotation_discount', 'quotationdiscount',
+      'additional_services_cost', 'additionalservicescost',
+      'final_quotation_amount', 'finalquotationamount',
+      'final_amount', 'final_package_amount', 'total_amount',
+      'advance_received', 'advance_collected', 'advance_payment', 'advance_paid',
+      'balance_amount', 'balance', 'total_pax', 'guest_pax', 'staff_pax',
+      'lead_value', 'lead_score', 'pincode', 'tax_amount', 'subtotal',
+      'grand_total', 'total_payment', 'contract_final_amount', 'advance_payment_received',
+      'pending_amount', 'number_of_team_members', 'event_duration', 'quantity', 'discount',
+      'price', 'cost', 'amount', 'rate', 'fee', 'whatsapp_number', 'mobile', 'alternate_mobile',
+      'sales_staff_mobile'
+    ]);
+    if (knownKeys.has(key) || knownKeys.has(k)) return true;
+    return (
+      k.includes('amount') ||
+      k.includes('cost') ||
+      k.includes('price') ||
+      k.includes('discount') ||
+      k.includes('pax') ||
+      k.includes('budget') ||
+      k.includes('pincode') ||
+      k.includes('zipcode') ||
+      k.includes('balance') ||
+      k.includes('advance') ||
+      k.includes('score') ||
+      k.includes('tax') ||
+      k.includes('fee') ||
+      k.includes('rate') ||
+      k.includes('subtotal') ||
+      k.includes('total') ||
+      k.includes('duration') ||
+      k.includes('quantity') ||
+      k.endsWith('count')
+    );
+  };
+
   const sanitizeTimeFieldsForDb = (record: any, table?: string) => {
     if (!record || typeof record !== 'object') return record;
     const clone = { ...record };
@@ -1241,13 +1282,30 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const timeFields = ['event_time', 'reporting_time', 'confirmed_event_time'];
     const dateFields = ['event_date', 'booking_date', 'event_start_date', 'event_end_date', 'delivery_target_date'];
-    const numericFields = ['whatsapp_number', 'package_price', 'quotation_amount', 'advance_received', 'balance_amount', 'total_pax', 'advance_collected', 'lead_value', 'lead_score', 'quotation_discount', 'additional_services_cost', 'tax_amount', 'final_amount'];
 
-    for (const field of numericFields) {
-      if (field in clone) {
-        const val = clone[field];
-        if (val === '') {
-          clone[field] = null;
+    // Comprehensive numeric sanitization to ensure empty strings are NEVER sent to NUMERIC/DECIMAL/INT columns
+    for (const key of Object.keys(clone)) {
+      if (isNumericColumnKey(key)) {
+        const val = clone[key];
+        const isPhone = key.includes('mobile') || key.includes('whatsapp') || key.includes('phone');
+        if (val === '' || val === null || val === undefined || val === 'NaN' || val === 'null' || val === 'undefined') {
+          clone[key] = (key === 'total_pax' && table === 'leads') ? 0 : null;
+        } else if (typeof val === 'number') {
+          if (isNaN(val)) {
+            clone[key] = (key === 'total_pax' && table === 'leads') ? 0 : null;
+          }
+        } else if (typeof val === 'string') {
+          const trimmed = val.trim();
+          if (trimmed === '') {
+            clone[key] = (key === 'total_pax' && table === 'leads') ? 0 : null;
+          } else if (!isPhone) {
+            const num = Number(trimmed);
+            if (isNaN(num)) {
+              clone[key] = null;
+            } else {
+              clone[key] = num;
+            }
+          }
         }
       }
     }
