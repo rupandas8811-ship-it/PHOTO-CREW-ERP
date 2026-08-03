@@ -14,10 +14,13 @@ export const getStatusColorClass = (status: string) => {
   if (s === 'negotiation') return 'text-purple-500';
   if (s === 'order confirmed') return 'text-green-500';
   if (s === 'operations' || s === 'operations assigned') return 'text-cyan-500';
-  if (s === 'staff assigned') return 'text-blue-600';
+  if (s === 'assigned crew' || s === 'staff assigned') return 'text-indigo-400 font-semibold';
   if (s === 'event scheduled') return 'text-orange-500';
-  if (s === 'event completed') return 'text-green-600';
-  if (s === 'raw footage received') return 'text-amber-900';
+  if (s === 'event started') return 'text-amber-400 font-semibold';
+  if (s === 'event ended' || s === 'event completed') return 'text-purple-400 font-semibold';
+  if (s === 'footage handover') return 'text-cyan-400 font-semibold';
+  if (s === 'verified footage' || s === 'footage handover verified') return 'text-emerald-400 font-semibold';
+  if (s === 'raw footage received') return 'text-amber-500';
   if (s === 'production') return 'text-sky-500';
   if (s === 'editing in progress' || s === 'editing started') return 'text-indigo-600';
   if (s === 'client review' || s === 'client review sent') return 'text-pink-500';

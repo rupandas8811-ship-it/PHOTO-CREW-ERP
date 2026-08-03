@@ -4629,8 +4629,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             return;
           }
 
-          if (isEventDateTimeInvalid(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time)) {
-            showToastMsg("Event End Date & Time must be later than Event Start Date & Time.", "error");
+          const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);
+          if (dateTimeErrMsg) {
+            showToastMsg(dateTimeErrMsg, "error");
             setIsSaving(false);
             return;
           }
@@ -5478,8 +5479,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return;
     }
 
-    if (isEventDateTimeInvalid(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time)) {
-      showToastMsg("Event End Date & Time must be later than Event Start Date & Time.", "error");
+    const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);
+    if (dateTimeErrMsg) {
+      showToastMsg(dateTimeErrMsg, "error");
       return;
     }
 
@@ -5761,22 +5763,59 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     return `${y}-${m}-${d}`;
   };
 
+  const getEventDateTimeErrorMessage = (
+    startDate: string | undefined | null,
+    endDate: string | undefined | null,
+    startTime: string | undefined | null,
+    endTime: string | undefined | null
+  ): string | null => {
+    if (!startDate || startDate.trim() === '') return null;
+
+    const startParts = parseDateParts(startDate);
+    if (!startParts) return null;
+
+    const effectiveEndDate = endDate && endDate.trim() !== '' ? endDate : startDate;
+    const endParts = parseDateParts(effectiveEndDate);
+    if (!endParts) return null;
+
+    // Rule 3 – Check if End Date is earlier than Start Date
+    if (
+      startParts.year > endParts.year ||
+      (startParts.year === endParts.year && startParts.month > endParts.month) ||
+      (startParts.year === endParts.year && startParts.month === endParts.month && startParts.day > endParts.day)
+    ) {
+      return "Event End Date cannot be earlier than Event Start Date.";
+    }
+
+    const isSameDate =
+      startParts.year === endParts.year &&
+      startParts.month === endParts.month &&
+      startParts.day === endParts.day;
+
+    // Rule 1 – If Start Date and End Date are the same date
+    if (isSameDate) {
+      const startT = parseTimeParts(startTime);
+      const endT = parseTimeParts(endTime);
+      if (startT && endT) {
+        const startMin = startT.hours * 60 + startT.minutes;
+        const endMin = endT.hours * 60 + endT.minutes;
+        if (endMin <= startMin) {
+          return "End Time must be later than Start Time when the Event Start Date and Event End Date are the same.";
+        }
+      }
+    }
+
+    // Rule 2 – Different Start Date & End Date (End Date > Start Date): any End Time allowed
+    return null;
+  };
+
   const isEventDateTimeInvalid = (
     startDate: string | undefined | null,
     endDate: string | undefined | null,
     startTime: string | undefined | null,
     endTime: string | undefined | null
   ): boolean => {
-    if (!startDate || startDate.trim() === '') return false;
-
-    const startDt = buildDateTime(startDate, startTime, { hours: 0, minutes: 0 });
-    if (!startDt) return false;
-
-    const effectiveEndDate = endDate && endDate.trim() !== '' ? endDate : startDate;
-    const endDt = buildDateTime(effectiveEndDate, endTime, { hours: 23, minutes: 59 });
-    if (!endDt) return false;
-
-    return endDt.getTime() <= startDt.getTime();
+    return getEventDateTimeErrorMessage(startDate, endDate, startTime, endTime) !== null;
   };
 
   const isTimeEarlier = (start: string | undefined | null, end: string | undefined | null): boolean => {
@@ -6038,11 +6077,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       }}
                       className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono cursor-pointer"
                     />
-                    {isEventDateTimeInvalid(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time) && (
-                      <p className="text-[11px] text-rose-400 mt-1 animate-fade-in font-medium">
-                        End Date & Time must be later than Start Date & Time.
-                      </p>
-                    )}
+                    {(() => {
+                      const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);
+                      return dateTimeErrMsg ? (
+                        <p className="text-[11px] text-rose-400 mt-1 animate-fade-in font-medium">
+                          {dateTimeErrMsg}
+                        </p>
+                      ) : null;
+                    })()}
                   </div>
 
                   {/* Event Location - Multiline Address */}
@@ -6458,8 +6500,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           showValidationError("input_event_location", "Please enter Event Location.");
           return;
         }
-        if (isEventDateTimeInvalid(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time)) {
-          showValidationError("input_event_end_time", "Event End Date & Time must be later than Event Start Date & Time.");
+        const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);
+        if (dateTimeErrMsg) {
+          showValidationError("input_event_end_time", dateTimeErrMsg);
           return;
         }
 

@@ -90,8 +90,8 @@ export type Department = 'Sales' | 'Operations' | 'Production' | 'Editor' | 'Dis
 
 export const DEPARTMENT_STAGES: Record<Department, CurrentStage[]> = {
   Sales: ['Create Quote', 'Created Quotation', 'Quote Sent', 'Quote Follow-up', 'Confirm Order', 'Lead Lost', 'New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Order Confirmed', 'Lost Lead'],
-  Operations: ['Confirm Order', 'Order Confirmed', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Completed', 'Footage Handover Verified', 'Raw Footage Received', 'Event Cancelled'],
-  Production: ['Footage Handover Verified', 'Raw Footage Received', 'Assigned Editor', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Customer Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress', 'Client Acceptance', 'Final Approval', 'Approved', 'Project Delivered', 'Completed', 'Business Owner Review', 'Order Closed', 'Closed'],
+  Operations: ['Confirm Order', 'Order Confirmed', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Completed', 'Event Ended', 'Footage Handover', 'Verified Footage', 'Footage Handover Verified', 'Raw Footage Received', 'Event Cancelled'],
+  Production: ['Verified Footage', 'Footage Handover Verified', 'Raw Footage Received', 'Assigned Editor', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Customer Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress', 'Client Acceptance', 'Final Approval', 'Approved', 'Project Delivered', 'Completed', 'Business Owner Review', 'Order Closed', 'Closed'],
   Editor: ['Assigned Editor', 'Editor Assigned', 'Editing Started', 'Customer Review', 'Client Review Sent', 'Client Acceptance', 'Revision Required', 'Approved', 'Completed'],
   Dispatch: ['Delivered', 'Payment Pending', 'Business Owner Review', 'Order Closed', 'Closed']
 };
@@ -130,6 +130,9 @@ export type CurrentStage =
   | 'Staff Assigned'
   | 'Event Started'
   | 'Event Completed'
+  | 'Event Ended'
+  | 'Footage Handover'
+  | 'Verified Footage'
   | 'Footage Handover Verified'
   | 'Raw Footage Received'
   | 'Assigned Editor'

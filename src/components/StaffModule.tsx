@@ -299,7 +299,7 @@ export const StaffModule: React.FC = () => {
             }
 
             const uniqueKey = `${orderId}_${ev.id || 'ev'}_${staffName.toLowerCase()}`;
-            const currentStaffStatus = staffStatuses[uniqueKey] || op?.event_status || 'Event Scheduled';
+            const currentStaffStatus = staffStatuses[uniqueKey] || op?.event_status || 'Assigned Crew';
 
             bookings.push({
               key: uniqueKey,
@@ -374,7 +374,7 @@ export const StaffModule: React.FC = () => {
           }
 
           const uniqueKey = `${orderId}_gen_${staffName.toLowerCase()}`;
-          const currentStaffStatus = staffStatuses[uniqueKey] || op?.event_status || 'Event Scheduled';
+          const currentStaffStatus = staffStatuses[uniqueKey] || op?.event_status || 'Assigned Crew';
 
           bookings.push({
             key: uniqueKey,
@@ -535,14 +535,16 @@ export const StaffModule: React.FC = () => {
       }
 
       // 9 & 10 & 11. Confirm the database update succeeded. Refresh/update local state. Change action.
-      // Update staff status - also save 'Equipment Received' or 'Equipment Handover'
-      let nextStatus = staffStatuses[booking.key] || 'Event Scheduled';
+      // Update staff status - also save 'Equipment Received', 'Event Started', 'Event Ended', or 'Footage Handover'
+      let nextStatus = staffStatuses[booking.key] || 'Assigned Crew';
       if (stage === 'Event Start') {
         nextStatus = 'Event Started';
       } else if (stage === 'Event Complete') {
-        nextStatus = 'Event Completed';
+        nextStatus = 'Event Ended';
+      } else if (stage === 'Equipment Handover') {
+        nextStatus = 'Footage Handover';
       } else {
-        nextStatus = stage; // 'Equipment Received' or 'Equipment Handover'
+        nextStatus = stage; // 'Equipment Received'
       }
 
       const nextStatuses = {
@@ -601,36 +603,36 @@ export const StaffModule: React.FC = () => {
           throw new Error(`No matching assignment found for Order ID: ${booking.orderId} and Staff: ${staffName}`);
         }
 
-        // Only sync global operations status if Event Start or Event Complete
-        if (stage === 'Event Start' || stage === 'Event Complete') {
-          const { data: allStaffAssignments } = await supabaseClient
-            .from('staff_assignments')
-            .select('task_status')
-            .eq('order_id', booking.orderId);
+        // Sync global operations and order status for workflow stages
+        if (stage === 'Event Start' || stage === 'Event Complete' || stage === 'Equipment Handover') {
+          let globalNextStatus: string | null = null;
+          if (stage === 'Event Start') {
+            globalNextStatus = 'Event Started';
+          } else if (stage === 'Event Complete') {
+            globalNextStatus = 'Event Ended';
+          } else if (stage === 'Equipment Handover') {
+            globalNextStatus = 'Footage Handover';
+          }
 
-          if (allStaffAssignments && allStaffAssignments.length > 0) {
-            const allReachedStarted = allStaffAssignments.every(a => ['Event Started', 'Event Completed'].includes(a.task_status));
-            const allReachedCompleted = allStaffAssignments.every(a => a.task_status === 'Event Completed');
-            
-            let globalNextStatus = null;
-            if (allReachedCompleted) {
-              globalNextStatus = 'Event Completed';
-            } else if (allReachedStarted) {
-              globalNextStatus = 'Event Started';
-            }
-            
-            if (globalNextStatus) {
-              await supabaseClient
-                .from('operations')
-                .update({ 
-                   event_status: globalNextStatus,
-                  remarks: `Updated by System: All staff reached ${globalNextStatus}`
-                })
-                .eq('order_id', booking.orderId);
+          if (globalNextStatus) {
+            await supabaseClient
+              .from('operations')
+              .update({ 
+                event_status: globalNextStatus,
+                remarks: `Updated by ${staffName}: Stage updated to ${globalNextStatus}`
+              })
+              .eq('order_id', booking.orderId);
 
-              if (booking.leadId) {
-                await updateLead(booking.leadId, { status: globalNextStatus as any });
-              }
+            await supabaseClient
+              .from('orders')
+              .update({ 
+                current_stage: globalNextStatus,
+                updated_at: timestamp
+              })
+              .eq('order_id', booking.orderId);
+
+            if (booking.leadId) {
+              await updateLead(booking.leadId, { status: globalNextStatus as any });
             }
           }
         }
@@ -982,17 +984,21 @@ export const StaffModule: React.FC = () => {
                           </span>
                         </td>
                         <td className="py-4 px-6">
-                          {isCompleted ? (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold uppercase">
-                              <CheckCircle className="w-3.5 h-3.5" /> Event Complete
+                          {b.taskStatus === 'Footage Handover' || b.taskStatus === 'Verified Footage' ? (
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs font-bold uppercase">
+                              <CheckCircle className="w-3.5 h-3.5" /> Footage Handover
                             </span>
-                          ) : isStarted ? (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs font-bold uppercase">
-                              <Play className="w-3.5 h-3.5" /> Event Start
+                          ) : isCompleted || b.taskStatus === 'Event Ended' || b.taskStatus === 'Event Completed' ? (
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-xs font-bold uppercase">
+                              <CheckCircle className="w-3.5 h-3.5" /> Event Ended
+                            </span>
+                          ) : isStarted || b.taskStatus === 'Event Started' ? (
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-bold uppercase">
+                              <Play className="w-3.5 h-3.5" /> Event Started
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-bold uppercase">
-                              <Clock className="w-3.5 h-3.5" /> Event Scheduled
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-bold uppercase">
+                              <User className="w-3.5 h-3.5" /> Assigned Crew
                             </span>
                           )}
                         </td>

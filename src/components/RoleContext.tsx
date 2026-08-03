@@ -3526,9 +3526,16 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Step 2 & 4: Only allow exact workflow statuses, throw custom error on spelling variations
     const allowedWorkflowStatuses = [
       'Order Confirmed',
+      'Operations Assigned',
+      'Assigned Crew',
       'Staff Assigned',
       'Event Scheduled',
+      'Event Started',
       'Event Completed',
+      'Event Ended',
+      'Footage Handover',
+      'Verified Footage',
+      'Footage Handover Verified',
       'Event Cancelled',
       'Raw Footage Received',
       'Assigned',
@@ -3543,6 +3550,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (
       targetStatus === 'Completed' || 
       targetStatus === 'Event Completed' || 
+      targetStatus === 'Event Ended' ||
+      targetStatus === 'Footage Handover' ||
+      targetStatus === 'Verified Footage' ||
+      targetStatus === 'Footage Handover Verified' ||
       targetStatus === 'Raw Footage Received'
     ) {
       dbEventStatus = 'Completed';
@@ -4322,7 +4333,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const targetOrder = augmentedOrders.find((o) => o.order_id === orderId);
     if (!targetOrder) return;
     const previousStage = targetOrder.current_stage;
-    const targetStage: CurrentStage = 'Raw Footage Received';
+    const targetStage: CurrentStage = 'Verified Footage';
 
     const resolvedLink = footageLink || `s3://photocrew-vault-production/2026/${orderId}-shoot/raw/`;
     const timestamp = new Date().toISOString();

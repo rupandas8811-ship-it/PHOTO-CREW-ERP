@@ -18,9 +18,9 @@ export const EventScheduling: React.FC = () => {
     return operations.find((o) => o.order_id === orderId);
   };
 
-  // Only show active orders that have been assigned crew or are locked for event scheduling
+  // Only show active orders that have been assigned crew or are in operations workflow
   const scheduledEvents = orders.filter(o => {
-    const isAvailableStage = ['Operations Assigned', 'Event Scheduled', 'Event Completed'].includes(o.current_stage);
+    const isAvailableStage = ['Operations Assigned', 'Assigned Crew', 'Event Scheduled', 'Event Started', 'Event Ended', 'Footage Handover', 'Verified Footage', 'Event Completed'].includes(o.current_stage);
     return isAvailableStage && o.current_stage !== 'Closed';
   });
 
@@ -29,7 +29,7 @@ export const EventScheduling: React.FC = () => {
     const op = getOpDetails(orderId);
     
     try {
-      // Merge existing details and lock stage as Event Scheduled
+      // Merge existing details and set stage to Assigned Crew
       await assignOperations(orderId, {
         photographer_assigned: op?.photographer_assigned || '',
         videographer_assigned: op?.videographer_assigned || '',
@@ -38,11 +38,11 @@ export const EventScheduling: React.FC = () => {
         equipment_kit: op?.equipment_kit || 'Standard Kit',
         reporting_time: reportingTime,
         remarks: remarks || op?.remarks || '',
-        current_stage: 'Event Scheduled' as CurrentStage
+        current_stage: 'Assigned Crew' as CurrentStage
       });
 
       setSchedulingId(null);
-      alert(`Shoot schedule successfully locked. Stage updated to [Event Scheduled]`);
+      alert(`Shoot schedule successfully locked. Stage updated to [Assigned Crew]`);
     } catch (err: any) {
       if (err.message && (
         err.message.includes('Invalid event status') ||

@@ -154,7 +154,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   const tomorrowStr = getLocalDateStr(tomorrowDate);
 
   const getEventHighlights = (ev: CalendarEvent) => {
-    const isCompleted = ['Event Completed', 'Raw Footage Received', 'Delivered', 'Paid', 'Closed'].includes(ev.currentStage);
+    const isCompleted = ['Verified Footage', 'Footage Handover Verified', 'Raw Footage Received', 'Event Ended', 'Event Completed', 'Delivered', 'Paid', 'Closed'].includes(ev.currentStage);
     const dateStr = ev.date;
 
     // Overdue Event = Red

@@ -160,12 +160,12 @@ export const OperationsAnalytics: React.FC = () => {
 
   // Exact Metric Definitions:
   const totalEvents = filteredOrders;
-  const eventsScheduled = filteredOrders.filter(o => ['Event Scheduled', 'Staff Assigned', 'Operations Assigned'].includes(o.current_stage));
-  const eventsCompleted = filteredOrders.filter(o => ['Event Completed', 'Raw Footage Received', 'Approved', 'Delivered'].includes(o.current_stage) || o.order_status === 'Completed');
-  const upcomingEvents = filteredOrders.filter(o => o.event_date >= todayStr && !['Event Completed', 'Raw Footage Received', 'Delivered', 'Closed'].includes(o.current_stage));
+  const eventsScheduled = filteredOrders.filter(o => ['Assigned Crew', 'Event Scheduled', 'Staff Assigned', 'Operations Assigned'].includes(o.current_stage));
+  const eventsCompleted = filteredOrders.filter(o => ['Event Ended', 'Footage Handover', 'Verified Footage', 'Event Completed', 'Raw Footage Received', 'Approved', 'Delivered'].includes(o.current_stage) || o.order_status === 'Completed');
+  const upcomingEvents = filteredOrders.filter(o => o.event_date >= todayStr && !['Event Ended', 'Footage Handover', 'Verified Footage', 'Event Completed', 'Raw Footage Received', 'Delivered', 'Closed'].includes(o.current_stage));
   const ongoingEvents = filteredOrders.filter(o => o.event_date === todayStr);
-  const overdueEvents = filteredOrders.filter(o => o.event_date < todayStr && !['Event Completed', 'Raw Footage Received', 'Approved', 'Delivered'].includes(o.current_stage));
-  const rawFootageEvents = filteredOrders.filter(o => ['Raw Footage Received', 'Editor Assigned', 'Editing Started', 'Customer Review', 'Revision Required', 'Approved', 'Delivered'].includes(o.current_stage));
+  const overdueEvents = filteredOrders.filter(o => o.event_date < todayStr && !['Event Ended', 'Footage Handover', 'Verified Footage', 'Event Completed', 'Raw Footage Received', 'Approved', 'Delivered'].includes(o.current_stage));
+  const rawFootageEvents = filteredOrders.filter(o => ['Footage Handover', 'Verified Footage', 'Raw Footage Received', 'Editor Assigned', 'Editing Started', 'Customer Review', 'Revision Required', 'Approved', 'Delivered'].includes(o.current_stage));
 
   const totalStaff = filteredStaff;
   const activeStaff = filteredStaff.filter(s => s.status === 'Active');
@@ -217,14 +217,21 @@ export const OperationsAnalytics: React.FC = () => {
     switch (stage) {
       case 'Order Confirmed':
         return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 border border-blue-500/20 text-blue-400 font-mono">Order Confirmed</span>;
-      case 'Event Scheduled':
-        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-500/10 border border-violet-500/20 text-violet-400 font-mono">Event Scheduled</span>;
+      case 'Assigned Crew':
       case 'Staff Assigned':
-        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 font-mono">Staff Assigned</span>;
+      case 'Event Scheduled':
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-mono">Assigned Crew</span>;
+      case 'Event Started':
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono">Event Started</span>;
+      case 'Event Ended':
       case 'Event Completed':
-        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono">Event Completed</span>;
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/10 border border-purple-500/20 text-purple-400 font-mono">Event Ended</span>;
+      case 'Footage Handover':
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 font-mono">Footage Handover</span>;
+      case 'Verified Footage':
+      case 'Footage Handover Verified':
       case 'Raw Footage Received':
-        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 border border-amber-500/20 text-amber-450 font-mono">Raw Footage Received</span>;
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono">Verified Footage</span>;
       default:
         return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-700/20 border border-zinc-650/30 text-zinc-300 font-mono">{stage}</span>;
     }

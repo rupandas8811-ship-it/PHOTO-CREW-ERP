@@ -825,7 +825,7 @@ export const OperationsLeads: React.FC = () => {
   };
 
   // Filter orders to show confirmed ones for Operations
-  const allowedStages = ['Confirm Order', 'Order Confirmed', 'New Order Received', 'Operations Assigned', 'Assigned Crew', 'Event Scheduled', 'Staff Assigned', 'Event Started', 'Event Completed', 'Footage Handover Verified', 'Raw Footage Received', 'Event Cancelled'];
+  const allowedStages = ['Confirm Order', 'Order Confirmed', 'New Order Received', 'Operations Assigned', 'Assigned Crew', 'Event Scheduled', 'Staff Assigned', 'Event Started', 'Event Completed', 'Event Ended', 'Footage Handover', 'Verified Footage', 'Footage Handover Verified', 'Raw Footage Received', 'Event Cancelled'];
   const operationsOrders = orders.filter(o => {
     if (!allowedStages.includes(o.current_stage)) return false;
     if (currentRole === 'Operation Staff') {
@@ -928,12 +928,16 @@ export const OperationsLeads: React.FC = () => {
         
         if (statusFilter === 'Order Confirmed' && o.current_stage !== 'Order Confirmed') return false;
         if (statusFilter === 'Operations Assigned' && o.current_stage !== 'Operations Assigned') return false;
+        if (statusFilter === 'Assigned Crew' && o.current_stage !== 'Assigned Crew' && o.current_stage !== 'Event Scheduled' && !isStaffAssigned) return false;
         if (statusFilter === 'Staff Assigned' && !isStaffAssigned) return false;
         if (statusFilter === 'Event Scheduled' && o.current_stage !== 'Event Scheduled') return false;
         if (statusFilter === 'Event Cancelled' && o.current_stage !== 'Event Cancelled') return false;
         if (statusFilter === 'Event Started' && o.current_stage !== 'Event Started') return false;
-        if (statusFilter === 'Event Completed' && o.current_stage !== 'Event Completed') return false;
-        if (statusFilter === 'Raw Footage Received' && o.current_stage !== 'Raw Footage Received') return false;
+        if (statusFilter === 'Event Ended' && o.current_stage !== 'Event Ended' && o.current_stage !== 'Event Completed') return false;
+        if (statusFilter === 'Footage Handover' && o.current_stage !== 'Footage Handover') return false;
+        if (statusFilter === 'Verified Footage' && o.current_stage !== 'Verified Footage' && o.current_stage !== 'Footage Handover Verified' && o.current_stage !== 'Raw Footage Received') return false;
+        if (statusFilter === 'Event Completed' && o.current_stage !== 'Event Completed' && o.current_stage !== 'Event Ended') return false;
+        if (statusFilter === 'Raw Footage Received' && o.current_stage !== 'Raw Footage Received' && o.current_stage !== 'Verified Footage') return false;
 
         // Custom stats click metrics
         if (statusFilter === 'New Orders') {
@@ -1451,8 +1455,10 @@ export const OperationsLeads: React.FC = () => {
       
       const matchedOrder = orders.find(o => o.order_id === assigningOrderId);
       
-      // Set status to Event Scheduled as requested
-      const currentOrderStage = matchedOrder?.current_stage || 'Operations Assigned'; const isStaffAssigned = finalAssignments.length > 0; const targetStage: CurrentStage = isStaffAssigned ? 'Event Scheduled' : (currentOrderStage as CurrentStage);
+      // Set status to Assigned Crew as requested for Status 1 workflow
+      const currentOrderStage = matchedOrder?.current_stage || 'Operations Assigned';
+      const isStaffAssigned = finalAssignments.length > 0;
+      const targetStage: CurrentStage = isStaffAssigned ? 'Assigned Crew' : (currentOrderStage as CurrentStage);
 
       console.log("Saving assignment for order:", assigningOrderId, {
         photographer,
@@ -1590,39 +1596,34 @@ export const OperationsLeads: React.FC = () => {
   };
 
   const stats = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
-
-    const newOrders = operationsOrders.filter(o => 
-      o.current_stage === 'Order Confirmed' || o.current_stage === 'New Order Received'
-    ).length;
-    
-    let todaysEvents = 0;
-    operationsOrders.forEach(o => {
-      const lead = leads.find(l => l.lead_id === o.lead_id);
-      if (lead && lead.events && lead.events.length > 0) {
-        todaysEvents += lead.events.filter((e: any) => e.event_date === todayStr).length;
-      } else {
-        if (o.event_date === todayStr) todaysEvents += 1;
-      }
-    });
-
-    const scheduled = operationsOrders.filter(o => o.current_stage === 'Event Scheduled').length;
-    
-    const pendingAssignments = operationsOrders.filter(o => 
-      o.current_stage === 'Operations Assigned' || 
-      (o.current_stage === 'Order Confirmed' && !staffAssignments?.some(x => x.order_id === o.order_id))
+    const assignedCrew = operationsOrders.filter(o => 
+      ['Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Operations Assigned'].includes(o.current_stage)
     ).length;
 
-    const completed = operationsOrders.filter(o => isCompletedEvent(o)).length;
+    const eventStarted = operationsOrders.filter(o => 
+      o.current_stage === 'Event Started'
+    ).length;
+
+    const eventEnded = operationsOrders.filter(o => 
+      ['Event Ended', 'Event Completed'].includes(o.current_stage)
+    ).length;
+
+    const footageHandover = operationsOrders.filter(o => 
+      o.current_stage === 'Footage Handover'
+    ).length;
+
+    const verifiedFootage = operationsOrders.filter(o => 
+      ['Verified Footage', 'Footage Handover Verified', 'Raw Footage Received'].includes(o.current_stage)
+    ).length;
 
     return {
-      newOrders,
-      todaysEvents,
-      scheduled,
-      pendingAssignments,
-      completed
+      assignedCrew,
+      eventStarted,
+      eventEnded,
+      footageHandover,
+      verifiedFootage
     };
-  }, [operationsOrders, rawFootage, operations, staffAssignments, leads]);
+  }, [operationsOrders]);
 
   const availableGearOptions = useMemo(() => {
     if (!equipment) return [];
@@ -1655,13 +1656,14 @@ export const OperationsLeads: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* 1. Results Summary Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
+      {/* 1. Results Summary Row - 5 Operations Statuses */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
         {[
-          { label: "New Orders Received", val: stats.newOrders, theme: 'purple' as CameraLensTheme, filterValue: 'New Orders', trendText: 'Fresh', chartPoints: [10, 18, 14, 25, 20, 31, 35] },
-          { label: "Today's Events", val: stats.todaysEvents, theme: 'cyan' as CameraLensTheme, filterValue: "Today's Events", trendText: 'Live', chartPoints: [5, 9, 7, 14, 11, 16, 15] },
-          { label: "Scheduled Events", val: stats.scheduled, theme: 'green' as CameraLensTheme, filterValue: 'Scheduled Events', trendText: 'Rostered', chartPoints: [8, 15, 12, 20, 16, 25, 24] },
-          { label: "Pending Assignments", val: stats.pendingAssignments, theme: 'red' as CameraLensTheme, filterValue: 'Pending Assignments', trendText: 'Action Req', chartPoints: [2, 4, 1, 5, 3, 6, 2] },
+          { label: "Assigned Crew", val: stats.assignedCrew, theme: 'purple' as CameraLensTheme, filterValue: 'Assigned Crew', trendText: 'Rostered', chartPoints: [10, 18, 14, 25, 20, 31, 35] },
+          { label: "Event Started", val: stats.eventStarted, theme: 'cyan' as CameraLensTheme, filterValue: "Event Started", trendText: 'Live On-Site', chartPoints: [5, 9, 7, 14, 11, 16, 15] },
+          { label: "Event Ended", val: stats.eventEnded, theme: 'purple' as CameraLensTheme, filterValue: 'Event Ended', trendText: 'Wrapped', chartPoints: [8, 15, 12, 20, 16, 25, 24] },
+          { label: "Footage Handover", val: stats.footageHandover, theme: 'red' as CameraLensTheme, filterValue: 'Footage Handover', trendText: 'Drive Upload', chartPoints: [2, 4, 1, 5, 3, 6, 2] },
+          { label: "Verified Footage", val: stats.verifiedFootage, theme: 'green' as CameraLensTheme, filterValue: 'Verified Footage', trendText: 'Verified', chartPoints: [12, 19, 22, 28, 30, 35, 40] },
         ].map((card, idx) => (
           <CameraLensStatsCard
             key={idx}
@@ -1739,11 +1741,12 @@ export const OperationsLeads: React.FC = () => {
             >
               <option value="All">All Statuses</option>
               <option value="Order Confirmed">Order Confirmed</option>
-              <option value="Event Scheduled">Event Scheduled</option>
+              <option value="Assigned Crew">Assigned Crew</option>
               <option value="Event Started">Event Started</option>
-              <option value="Event Completed">Event Completed</option>
+              <option value="Event Ended">Event Ended</option>
+              <option value="Footage Handover">Footage Handover</option>
+              <option value="Verified Footage">Verified Footage</option>
               <option value="Event Cancelled">Event Cancelled</option>
-              <option value="Raw Footage Received">Raw Footage Received</option>
             </select>
           </div>
         </div>
