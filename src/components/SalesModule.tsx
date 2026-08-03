@@ -2795,7 +2795,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         activePackages.forEach((lp) => {
           const pkgKey = lp.package_id || lp.lead_package_id || 'default';
           if (!newInclusions[pkgKey]) {
-            const pObj = (packages || []).find(p => String(p.package_id) === String(lp.package_id));
+            const pObj = (packages || []).find(p => p.package_id === lp.package_id);
             const incStr = pObj?.team_members || lp.team_members || '';
             const parsedInc = parseTeamMembers(incStr);
             newInclusions[pkgKey] = parsedInc.length > 0
@@ -2836,7 +2836,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         activePackages.forEach((lp) => {
           const pkgKey = lp.package_id || lp.lead_package_id || 'default';
           if (!newDeliverables[pkgKey]) {
-            const pObj = (packages || []).find(p => String(p.package_id) === String(lp.package_id));
+            const pObj = (packages || []).find(p => p.package_id === lp.package_id);
             const delStr = pObj?.deliverables || lp.deliverables || '';
             newDeliverables[pkgKey] = delStr
               ? delStr.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
@@ -2858,7 +2858,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   // Auto-load package details into Step 3 if a package is selected but inclusions/deliverables are empty
   React.useEffect(() => {
-    const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead?.Select_Package_Option || (selectedLead as any)?.selected_package_id || (leadPackages?.find(lp => lp.lead_id === selectedLead?.lead_id)?.package_id) || selectedPkgIds[0] || '';
+    const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
     if (pkgId && packages && packages.length > 0) {
       const pkg = packages.find((p) => String(p.package_id) === String(pkgId));
       if (pkg) {
@@ -4404,7 +4404,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       setEditableInclusions(newInclusions);
       setEditableDeliverables(newDeliverables);
-      setSelectedPkgIds([packageId]);
 
       // Immediately save the selected package with default inclusions and deliverables to Supabase
       saveStep3DataRealtime(newInclusions, newDeliverables, packageId);
@@ -4414,7 +4413,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         selected_package_id: '',
         Select_Package_Option: '',
       }));
-      setSelectedPkgIds([]);
     }
   };
 
@@ -6402,7 +6400,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             next_follow_up_date: followUpDate || null,
             follow_up_notes: internalNotes || null,
           Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || '',
-          status: 'New Lead',
+          status: 'Created Quotation',
           created_date: new Date().toISOString().split('T')[0],
           sales_person: finalUser?.name || currentUser?.name || 'Sales Team',
           created_by: finalUser?.name || currentUser?.name || 'Sales Team'
@@ -7028,6 +7026,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const todayStr = '2026-06-10';
 
+  const statCreatedQuotation = leads.filter(l => {
+    const st = getLeadCurrentStatus(l);
+    return st === 'Created Quotation' || st === 'New Lead';
+  }).length;
   const statQuotesSent = leads.filter(l => {
     const st = getLeadCurrentStatus(l);
     return st === 'Quote Sent' || st === 'Quotation Sent';
@@ -7039,6 +7041,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const statConfirmedOrders = leads.filter(l => {
     const st = getLeadCurrentStatus(l);
     return st === 'Confirm Order' || st === 'Order Confirmed';
+  }).length;
+  const statLeadLost = leads.filter(l => {
+    const st = getLeadCurrentStatus(l);
+    return st === 'Lead Lost' || st === 'Lost Lead';
   }).length;
 
   // Filter Leads List
@@ -7061,6 +7067,21 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         : (() => {
             const statusLower = leadStatus.toLowerCase().trim();
             const filterLower = filterStatus.toLowerCase().trim();
+            if (filterLower === 'created quotation') {
+              return statusLower === 'created quotation' || statusLower === 'new lead';
+            }
+            if (filterLower === 'quote sent') {
+              return statusLower === 'quote sent' || statusLower === 'quotation sent';
+            }
+            if (filterLower === 'quote follow-up') {
+              return statusLower === 'quote follow-up' || statusLower === 'follow up' || statusLower === 'follow-up';
+            }
+            if (filterLower === 'confirm order') {
+              return statusLower === 'confirm order' || statusLower === 'order confirmed';
+            }
+            if (filterLower === 'lead lost') {
+              return statusLower === 'lead lost' || statusLower === 'lost lead';
+            }
             if (filterLower === 'customer review') {
               return statusLower === 'customer review' || statusLower === 'client review' || statusLower === 'client review sent';
             }
@@ -8870,10 +8891,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       onChange={(e) => {
                         const val = e.target.value;
                         if (val) {
-                          handlePackageChange(val);
+                          setSelectedPkgIds([val]);
                         } else {
                           setSelectedPkgIds([]);
-                          setWizardLeadData(prev => ({ ...prev, selected_package_id: '', Select_Package_Option: '' }));
                         }
                       }}
                       className={`w-full bg-[#0F172A] border rounded-lg py-2.5 px-3.5 text-xs cursor-pointer focus:outline-none transition-all ${
@@ -8902,7 +8922,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     <div id="create_lead_pkg_summary_panel" className="bg-[#0F172A] border border-slate-800 rounded-xl p-4.5 space-y-4 animate-fade-in text-xs text-left">
                       <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-slate-350">Selected Package Details</span>
+                          <span className="text-xs font-bold text-slate-350">Selected Package</span>
                           <span className="bg-emerald-990/90 text-emerald-400 px-2 py-0.5 rounded-full font-mono text-[10px] font-bold border border-emerald-900/40">
                             {selectedPkgIds.length} Package
                           </span>
@@ -8919,78 +8939,34 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         )}
                       </div>
                       
-                      <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1">
+                      <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
                         {selectedPkgIds.map((id) => {
-                          const pkgObj = packages.find(p => String(p.package_id) === String(id)) || PACKAGES_LIST.flatMap(cat => cat.items).find(item => String(item.id) === String(id));
+                          const pkgObj = packages.find(p => p.package_id === id);
                           if (!pkgObj) return null;
-                          const pkgName = (pkgObj as any).package_name || (pkgObj as any).name;
-                          const pkgCategory = (pkgObj as any).category || 'Wedding';
-                          const pkgPrice = Number((pkgObj as any).price || (pkgObj as any).cost || 0);
-                          const pkgInclusions = (editableInclusions[id] && editableInclusions[id].length > 0)
-                            ? editableInclusions[id]
-                            : ((pkgObj as any).team_members ? parseTeamMembers((pkgObj as any).team_members) : ['1 Professional Photographer']);
-                          const pkgDeliverables = (editableDeliverables[id] && editableDeliverables[id].length > 0)
-                            ? editableDeliverables[id]
-                            : ((pkgObj as any).deliverables ? String((pkgObj as any).deliverables).split(/[,\n]/).map(s => s.trim()).filter(Boolean) : ['High Resolution Edited Photos']);
-
                           return (
-                            <div key={id} className="bg-slate-950/60 border border-slate-850 p-3.5 rounded-lg space-y-3">
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-2.5">
-                                <div className="space-y-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-extrabold text-white text-[13px]">{pkgName}</span>
-                                    <span className="text-[9px] bg-slate-800/80 text-slate-400 px-1.5 py-0.5 rounded font-mono uppercase">
-                                      {normalizeCategory(pkgCategory)}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                                    <span>Price:</span>
-                                    <span className="font-mono text-emerald-400 font-bold">₹{pkgPrice.toLocaleString('en-IN')}</span>
-                                  </div>
+                            <div key={id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950/60 border border-slate-850 p-3 rounded-lg hover:border-slate-800 transition-colors">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-extrabold text-white text-[12px]">{pkgObj.package_name}</span>
+                                  <span className="text-[9px] bg-slate-800/80 text-custom text-slate-400 px-1.5 py-0.5 rounded font-mono uppercase">
+                                    {normalizeCategory(pkgObj.category)}
+                                  </span>
                                 </div>
-                                
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const remaining = selectedPkgIds.filter(x => x !== id);
-                                      setSelectedPkgIds(remaining);
-                                      if (remaining.length > 0) {
-                                        handlePackageChange(remaining[0]);
-                                      } else {
-                                        setWizardLeadData(prev => ({ ...prev, selected_package_id: '', Select_Package_Option: '' }));
-                                      }
-                                    }}
-                                    className="px-2.5 py-1.5 bg-rose-950/20 hover:bg-rose-950/40 text-rose-400 border border-rose-900/30 hover:border-rose-900/50 rounded-lg font-semibold cursor-pointer transition-all flex items-center gap-1 text-[11px]"
-                                    title="Remove Package"
-                                  >
-                                    🗑️ Remove
-                                  </button>
+                                <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                                  <span>Price:</span>
+                                  <span className="font-mono text-emerald-400 font-bold">₹{pkgObj.price.toLocaleString('en-IN')}</span>
                                 </div>
                               </div>
-
-                              {/* Package Inclusions / Team Members */}
-                              <div className="space-y-1.5 bg-slate-900/40 p-2.5 rounded-lg border border-slate-850/60">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase font-mono tracking-wider block">👥 Team Members Included:</span>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {pkgInclusions.map((inc, i) => (
-                                    <span key={i} className="text-[11px] bg-slate-800/90 text-indigo-300 px-2 py-0.5 rounded font-mono border border-slate-700/60">
-                                      ✓ {inc}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-
-                              {/* Package Deliverables */}
-                              <div className="space-y-1.5 bg-slate-900/40 p-2.5 rounded-lg border border-slate-850/60">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase font-mono tracking-wider block">📦 Deliverables Included:</span>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {pkgDeliverables.map((del, i) => (
-                                    <span key={i} className="text-[11px] bg-slate-800/90 text-emerald-300 px-2 py-0.5 rounded font-mono border border-slate-700/60">
-                                      ✦ {del}
-                                    </span>
-                                  ))}
-                                </div>
+                              
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedPkgIds(selectedPkgIds.filter(x => x !== id))}
+                                  className="px-2.5 py-1.5 bg-rose-950/20 hover:bg-rose-950/40 text-rose-400 border border-rose-900/30 hover:border-rose-900/50 rounded-lg font-semibold cursor-pointer transition-all flex items-center gap-1 text-[11px]"
+                                  title="Remove Package"
+                                >
+                                  🗑️ Remove
+                                </button>
                               </div>
                             </div>
                           );
@@ -9128,11 +9104,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         <div className="space-y-4">
 
           {/* Sales Performance Dashboard Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 mt-2">
             {[
+              { label: 'Created Quotation', val: statCreatedQuotation, theme: 'blue' as CameraLensTheme, filterValue: 'Created Quotation', chartPoints: [10, 15, 12, 18, 14, 20, 16], trendText: 'Initial Lead' },
               { label: 'Quote Sent', val: statQuotesSent, theme: 'purple' as CameraLensTheme, filterValue: 'Quote Sent', chartPoints: [12, 14, 18, 15, 21, 25, 22], trendText: 'Quotation Saved' },
               { label: 'Quote Follow-up', val: statQuoteFollowups, theme: 'gold' as CameraLensTheme, filterValue: 'Quote Follow-up', chartPoints: [5, 12, 8, 15, 10, 19, 14], trendText: 'Scheduled CRM' },
               { label: 'Confirm Order', val: statConfirmedOrders, theme: 'cyan' as CameraLensTheme, filterValue: 'Confirm Order', chartPoints: [8, 15, 12, 20, 16, 25, 24], trendText: 'To Operations' },
+              { label: 'Lead Lost', val: statLeadLost, theme: 'red' as CameraLensTheme, filterValue: 'Lead Lost', chartPoints: [4, 6, 3, 7, 5, 8, 4], trendText: 'Opportunity Closed' },
             ].map((card, idx) => (
               <CameraLensStatsCard
                 key={idx}
@@ -9931,6 +9909,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
                 <span>📅</span> Follow-up Date &amp; Time
               </h4>
+              <button
+                type="button"
+                onClick={() => setShowStep3Popup(false)}
+                className="text-slate-500 hover:text-slate-300 cursor-pointer border-0 bg-transparent"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
             <div className="bg-indigo-500/10 border border-indigo-500/20 p-3 rounded-lg text-xs text-indigo-200">
@@ -9979,9 +9964,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
                 <button
                   type="button"
+                  onClick={() => setShowStep3Popup(false)}
+                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs border-0 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
                   onClick={handleSaveStep3FollowUp}
                   disabled={isSaving || !step3FollowUpDate}
-                  className="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-lg text-xs border-0"
+                  className="flex-1 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-lg text-xs border-0"
                 >
                   {isSaving ? 'Saving...' : '💾 Save Follow-up & Set Quote Sent'}
                 </button>
@@ -10397,20 +10389,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
  
                          {(() => {
                            const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
-                           const currentPkgId = wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option || (selectedLead as any)?.selected_package_id || (leadPackages?.find(lp => lp.lead_id === selectedLead?.lead_id)?.package_id) || (quotations?.find(q => q.lead_id === selectedLead?.lead_id)?.package_id) || selectedPkgIds[0] || '';
-                           let selectedPkg = availablePkgs.find(p => String(p.package_id) === String(currentPkgId));
-                           if (!selectedPkg && currentPkgId) {
-                             selectedPkg = { package_id: currentPkgId, package_name: `Package ${currentPkgId} (Legacy)`, price: wizardLeadData.package_cost || selectedLead?.Final_Quotation_Amount || 0, deliverables: wizardLeadData.deliverables || "", status: "Active" } as any;
-                           }
+                           const currentPkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option; let selectedPkg = availablePkgs.find(p => String(p.package_id) === String(currentPkgId)); if (!selectedPkg && currentPkgId) { selectedPkg = { package_id: currentPkgId, package_name: `Package ${currentPkgId} (Legacy)`, price: wizardLeadData.package_cost || 0, deliverables: wizardLeadData.deliverables || "", status: "Active" } as any; }
                            if (!selectedPkg) return null;
 
                           const selectedPkgId = selectedPkg.package_id;
-                          const inclusionsList = (editableInclusions[selectedPkgId] && editableInclusions[selectedPkgId].length > 0)
-                            ? editableInclusions[selectedPkgId]
-                            : (selectedPkg.team_members ? parseTeamMembers(selectedPkg.team_members) : ['1 Professional Photographer']);
-                          const deliverablesList = (editableDeliverables[selectedPkgId] && editableDeliverables[selectedPkgId].length > 0)
-                            ? editableDeliverables[selectedPkgId]
-                            : (selectedPkg.deliverables ? selectedPkg.deliverables.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean) : ['High Resolution Edited Photos']);
+                          const inclusionsList = editableInclusions[selectedPkgId] || [];
+                          const deliverablesList = editableDeliverables[selectedPkgId] || [];
 
                           return (
                             <div className="space-y-4 animate-fade-in">
@@ -10706,7 +10690,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 </button>
                               </div>
 
-                              {renderQuotationAndStep4Section(true)}
+                              {isPackageDetailsSaved && renderQuotationAndStep4Section(true)}
                             </div>
                           );
                         })()}

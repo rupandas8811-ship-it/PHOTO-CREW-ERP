@@ -2,9 +2,11 @@ import React from 'react';
 
 export const getStatusColorClass = (status: string) => {
   const s = status.toLowerCase().trim();
+  if (s === 'created quotation') return 'text-sky-400 font-semibold';
   if (s === 'quote sent') return 'text-purple-400 font-semibold';
   if (s === 'quote follow-up') return 'text-amber-400 font-semibold';
   if (s === 'confirm order' || s === 'order confirmed') return 'text-emerald-400 font-semibold';
+  if (s === 'lead lost' || s === 'lost lead') return 'text-rose-500 font-bold';
   if (s === 'new lead') return 'text-white';
   if (s === 'contacted') return 'text-blue-500';
   if (s === 'follow-up' || s === 'follow up') return 'text-amber-500';

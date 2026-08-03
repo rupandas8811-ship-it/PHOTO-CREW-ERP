@@ -2904,7 +2904,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       created_date: new Date().toISOString().split('T')[0],
       updated_at: new Date().toISOString(),
       sales_person: currentUserName,
-      status: 'New Lead',
+      status: (leadDetails as any).status || 'Created Quotation',
       created_by: currentUserName,
       total_pax: leadDetails.total_pax !== undefined ? Number(leadDetails.total_pax) : 0,
       reference_source: leadDetails.reference_source || '',
@@ -6002,7 +6002,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const getLeadCurrentStatus = (lead: Lead): string => {
-    let rawStatus = lead.current_status || lead.status || 'New Lead';
+    let rawStatus = lead.current_status || lead.status || 'Created Quotation';
+
+    if (rawStatus === 'Lost Lead' || rawStatus === 'Lead Lost') {
+      return 'Lead Lost';
+    }
 
     if (rawStatus === 'Order Confirmed' || rawStatus === 'Confirm Order') {
       return 'Confirm Order';
