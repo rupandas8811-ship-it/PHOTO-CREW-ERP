@@ -5693,24 +5693,83 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     return `${hh}:${minutes} ${period}`;
   };
 
-  const normalizeDateStr = (dStr: string | undefined | null): string => {
-    if (!dStr) return '';
-    const trimmed = dStr.trim();
-    if (!trimmed) return '';
-    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-    const parts = trimmed.split(/[-/]/);
-    if (parts.length === 3) {
-      if (parts[0].length === 4) return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-      if (parts[2].length === 4) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+  const parseDateParts = (dStr: string | undefined | null): { year: number; month: number; day: number } | null => {
+    if (!dStr) return null;
+    const clean = dStr.trim();
+    if (!clean) return null;
+
+    // YYYY-MM-DD or YYYY/MM/DD
+    const ymdMatch = clean.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (ymdMatch) {
+      const year = parseInt(ymdMatch[1], 10);
+      const month = parseInt(ymdMatch[2], 10);
+      const day = parseInt(ymdMatch[3], 10);
+      if (year > 1000 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        return { year, month, day };
+      }
     }
-    const parsed = new Date(trimmed);
+
+    // DD-MM-YYYY or DD/MM/YYYY
+    const dmyMatch = clean.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (dmyMatch) {
+      const day = parseInt(dmyMatch[1], 10);
+      const month = parseInt(dmyMatch[2], 10);
+      const year = parseInt(dmyMatch[3], 10);
+      if (year > 1000 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        return { year, month, day };
+      }
+    }
+
+    const parsed = new Date(clean);
     if (!isNaN(parsed.getTime())) {
-      const y = parsed.getFullYear();
-      const m = String(parsed.getMonth() + 1).padStart(2, '0');
-      const d = String(parsed.getDate()).padStart(2, '0');
-      return `${y}-${m}-${d}`;
+      return {
+        year: parsed.getFullYear(),
+        month: parsed.getMonth() + 1,
+        day: parsed.getDate()
+      };
     }
-    return trimmed;
+
+    return null;
+  };
+
+  const parseTimeParts = (tStr: string | undefined | null): { hours: number; minutes: number } | null => {
+    if (!tStr) return null;
+    const clean = tStr.trim();
+    if (!clean) return null;
+
+    const t24 = convertTo24Hour(clean);
+    if (!t24) return null;
+
+    const parts = t24.split(':');
+    if (parts.length >= 2) {
+      const hours = parseInt(parts[0], 10);
+      const minutes = parseInt(parts[1], 10);
+      if (!isNaN(hours) && !isNaN(minutes)) {
+        return { hours, minutes };
+      }
+    }
+    return null;
+  };
+
+  const buildDateTime = (
+    dateStr: string | undefined | null,
+    timeStr: string | undefined | null,
+    defaultTime: { hours: number; minutes: number }
+  ): Date | null => {
+    const dParts = parseDateParts(dateStr);
+    if (!dParts) return null;
+
+    const tParts = parseTimeParts(timeStr) || defaultTime;
+    return new Date(dParts.year, dParts.month - 1, dParts.day, tParts.hours, tParts.minutes, 0, 0);
+  };
+
+  const normalizeDateStr = (dStr: string | undefined | null): string => {
+    const parts = parseDateParts(dStr);
+    if (!parts) return dStr ? dStr.trim() : '';
+    const y = parts.year;
+    const m = String(parts.month).padStart(2, '0');
+    const d = String(parts.day).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   };
 
   const isEventDateTimeInvalid = (
@@ -5719,28 +5778,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     startTime: string | undefined | null,
     endTime: string | undefined | null
   ): boolean => {
-    if (!startDate) return false;
-    const startD = normalizeDateStr(startDate);
-    const endD = normalizeDateStr(endDate) || startD;
+    if (!startDate || startDate.trim() === '') return false;
 
-    if (startD && endD && endD < startD) {
-      return true; // End Date is earlier than Start Date
-    }
+    const startDt = buildDateTime(startDate, startTime, { hours: 0, minutes: 0 });
+    if (!startDt) return false;
 
-    if (startD && endD && endD > startD) {
-      return false; // End Date is strictly after Start Date, so any End Time is valid
-    }
+    const effectiveEndDate = endDate && endDate.trim() !== '' ? endDate : startDate;
+    const endDt = buildDateTime(effectiveEndDate, endTime, { hours: 23, minutes: 59 });
+    if (!endDt) return false;
 
-    // Same day case: compare start and end times if both are present
-    if (startTime && endTime) {
-      const start24 = convertTo24Hour(startTime);
-      const end24 = convertTo24Hour(endTime);
-      if (start24 && end24 && end24 <= start24) {
-        return true; // End Time is not later than Start Time on the same day
-      }
-    }
-
-    return false;
+    return endDt.getTime() <= startDt.getTime();
   };
 
   const isTimeEarlier = (start: string | undefined | null, end: string | undefined | null): boolean => {
