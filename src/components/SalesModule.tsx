@@ -2377,6 +2377,46 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [showFinalReportingModal, setShowFinalReportingModal] = useState(false);
   const [finalReportingForm, setFinalReportingForm] = useState<Record<string, { reporting_date: string, reporting_time: string }>>({});
 
+  const areReportingDetailsComplete = (lead: Lead | null | undefined): boolean => {
+    if (!lead) return false;
+
+    if (lead.events && Array.isArray(lead.events) && lead.events.length > 0) {
+      return lead.events.every((ev) => {
+        const rDate = ev.reporting_date || (ev as any).Reporting_date;
+        const rTime = ev.reporting_time;
+        return typeof rDate === 'string' && rDate.trim() !== '' && typeof rTime === 'string' && rTime.trim() !== '';
+      });
+    }
+
+    const leadRDate = lead.Reporting_date || (lead as any).reporting_date;
+    const leadRTime = lead.reporting_time;
+    return typeof leadRDate === 'string' && leadRDate.trim() !== '' && typeof leadRTime === 'string' && leadRTime.trim() !== '';
+  };
+
+  const openReportingDetailsModal = (lead: Lead, customMsg?: string) => {
+    setSelectedLead(lead);
+    const crmEvents = lead.events || [];
+    const initialFormState: Record<string, { reporting_date: string, reporting_time: string }> = {};
+
+    if (crmEvents.length > 0) {
+      crmEvents.forEach((ev) => {
+        initialFormState[ev.id] = {
+          reporting_date: ev.reporting_date || ev.event_date || lead.Reporting_date || lead.event_date || '',
+          reporting_time: ev.reporting_time || lead.reporting_time || ''
+        };
+      });
+    } else {
+      initialFormState['default'] = {
+        reporting_date: lead.Reporting_date || (lead as any).reporting_date || lead.event_date || '',
+        reporting_time: lead.reporting_time || ''
+      };
+    }
+
+    setFinalReportingForm(initialFormState);
+    setShowFinalReportingModal(true);
+    showToastMsg(customMsg || "Please complete and save the Reporting Details before confirming the order.", "error");
+  };
+
   // Quotation System State
   const [quotationTerms, setQuotationTerms] = useState(
     "1. Payments are non-refundable.\n" +
@@ -6682,6 +6722,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const handleOrderConfirmedSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (isSaving) return;
+
+    const targetLd = leads.find(l => l.lead_id === createdLeadId) || selectedLead;
+    if (targetLd && !areReportingDetailsComplete(targetLd)) {
+      openReportingDetailsModal(targetLd, "Please complete and save the Reporting Details before confirming the order.");
+      return;
+    }
+
     if (!confirmedEventDate) {
       showToastMsg("Please select Confirmed Event Date.", "error");
       return;
@@ -6761,6 +6808,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     if (!selectedLead || isSaving) return;
 
     if (followUpForm.status === 'Order Confirmed' || followUpForm.status === 'Confirm Order') {
+      if (!areReportingDetailsComplete(selectedLead)) {
+        openReportingDetailsModal(selectedLead, "Please complete and save the Reporting Details before confirming the order.");
+        return;
+      }
+
       if (!followUpForm.event_date) {
         showToastMsg("Please select Confirmed Event Date.", "error");
         return;
@@ -6907,7 +6959,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setIsSaving(true);
       
       const crmEvents = selectedLead.events || [];
+      let updatedLeadFields: any = {};
+
       if (crmEvents.length > 0) {
+        // Validate all events have required reporting details
+        for (const ev of crmEvents) {
+          const fd = finalReportingForm[ev.id] || { reporting_date: '', reporting_time: '' };
+          if (!fd.reporting_date || !fd.reporting_date.trim() || !fd.reporting_time || !fd.reporting_time.trim()) {
+            showToastMsg("Please complete Reporting Date and Reporting Time for all events.", "error");
+            setIsSaving(false);
+            return;
+          }
+        }
+
         // Save event-wise reporting details
         const updatedEvents = crmEvents.map(ev => {
           const fd = finalReportingForm[ev.id] || { reporting_date: '', reporting_time: '' };
@@ -6918,23 +6982,48 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           };
         });
         
-        await updateLead(selectedLead.lead_id, {
+        updatedLeadFields = {
           events: updatedEvents,
           Reporting_date: updatedEvents[0]?.reporting_date || '', // fallback
           reporting_time: updatedEvents[0]?.reporting_time || ''
-        });
+        };
+        await updateLead(selectedLead.lead_id, updatedLeadFields);
       } else {
         // Fallback for leads without explicit events
         const fd = finalReportingForm['default'] || { reporting_date: '', reporting_time: '' };
-        await updateLead(selectedLead.lead_id, {
+        if (!fd.reporting_date || !fd.reporting_date.trim() || !fd.reporting_time || !fd.reporting_time.trim()) {
+          showToastMsg("Please complete Reporting Date and Reporting Time.", "error");
+          setIsSaving(false);
+          return;
+        }
+
+        updatedLeadFields = {
           Reporting_date: fd.reporting_date,
           reporting_time: fd.reporting_time
-        });
+        };
+        await updateLead(selectedLead.lead_id, updatedLeadFields);
       }
 
+      const updatedLead = {
+        ...selectedLead,
+        ...updatedLeadFields
+      };
+
       setShowFinalReportingModal(false);
-      setSelectedLead(null);
+      setSelectedLead(updatedLead);
       showToastMsg("Reporting Details Saved Successfully.", "success");
+
+      // Auto-open Confirm Order modal once reporting details are saved
+      const today = new Date().toISOString().split('T')[0];
+      setConfirmForm(prev => ({
+        ...prev,
+        package_name: packages?.find((p) => String(p.package_id) === String(updatedLead.Select_Package_Option))?.package_name || updatedLead.Select_Package_Option || prev.package_name || '',
+        quotation_amount: Number(updatedLead.Final_Quotation_Amount) || Number((updatedLead as any).final_amount) || Number(updatedLead.budget) || prev.quotation_amount || 0,
+        advance_received: prev.advance_received || 0,
+        event_date: updatedLead.event_date || prev.event_date || today,
+        event_time: updatedLead.event_time || prev.event_time || ''
+      }));
+      setShowConfirmModal(true);
     } catch (err) {
       console.error(err);
       showToastMsg("Failed to save Reporting Details.", "error");
@@ -6947,6 +7036,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const handleConfirmOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedLead || isSaving) return;
+
+    if (!areReportingDetailsComplete(selectedLead)) {
+      setShowConfirmModal(false);
+      openReportingDetailsModal(selectedLead, "Please complete and save the Reporting Details before confirming the order.");
+      return;
+    }
 
     if (!confirmForm.event_date) {
       showToastMsg("Please select Confirmed Event Date.", "error");
@@ -6982,34 +7077,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       );
 
       setShowConfirmModal(false);
-      showToastMsg("Booking Confirmation saved successfully.", "success");
+      showToastMsg("Booking Confirmation saved successfully. Order transferred to Operations.", "success");
       setWizardLeadData(prev => ({
         ...prev,
         advance_received: Number(confirmForm.advance_received)
       }));
-      
-      const repDate = selectedLead.Reporting_date || confirmForm.event_date || '';
-      const repTime = selectedLead.reporting_time || confirmForm.event_time || '';
-      
-      const crmEvents = selectedLead.events || [];
-      const initialFormState: Record<string, { reporting_date: string, reporting_time: string }> = {};
-
-      if (crmEvents.length > 0) {
-        crmEvents.forEach((ev) => {
-          initialFormState[ev.id] = {
-            reporting_date: '',
-            reporting_time: ''
-          };
-        });
-      } else {
-        initialFormState['default'] = {
-          reporting_date: '',
-          reporting_time: ''
-        };
-      }
-
-      setFinalReportingForm(initialFormState);
-      setShowFinalReportingModal(true);
+      setSelectedLead(null);
     } catch (err: any) {
       console.error("Failed to convert order:", err);
       const errMsg = err?.message || String(err);
@@ -7371,6 +7444,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 <button
                   id="btn_confirm_order"
                   onClick={() => {
+                    if (!selectedLead) return;
+                    if (!areReportingDetailsComplete(selectedLead)) {
+                      openReportingDetailsModal(selectedLead, "Please complete and save the Reporting Details before confirming the order.");
+                      return;
+                    }
                     const today = new Date().toISOString().split('T')[0];
                     setConfirmForm({
                       ...confirmForm,
@@ -9520,9 +9598,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                               if (isConfirmOrderStatus) {
                                 return (
-                                  <span className="text-xs text-zinc-500 font-mono italic px-2">
-                                    In Operations
-                                  </span>
+                                  <button
+                                    type="button"
+                                    id={`btn_followup_${lead.lead_id}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSelectLead(lead);
+                                    }}
+                                    className="w-32 h-8 text-xs font-bold bg-sky-950/40 hover:bg-sky-900/60 text-sky-400 hover:text-white rounded-xl border border-sky-900/50 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow shrink-0"
+                                  >
+                                    <Eye className="w-3.5 h-3.5 shrink-0 text-sky-400" />
+                                    <span>View CRM</span>
+                                  </button>
                                 );
                               }
 
@@ -9602,6 +9689,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                           id={`btn_confirm_order_direct_${lead.lead_id}`}
                                           onClick={(e) => {
                                             e.stopPropagation();
+                                            setOpenDropdownLeadId(null);
+                                            handleSelectLead(lead);
+
+                                            if (!areReportingDetailsComplete(lead)) {
+                                              openReportingDetailsModal(lead, "Please complete and save the Reporting Details before confirming the order.");
+                                              return;
+                                            }
+
                                             const today = new Date().toISOString().split('T')[0];
                                             setConfirmForm({
                                               ...confirmForm,
@@ -9611,8 +9706,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                               event_date: lead.event_date || today,
                                               event_time: lead.event_time || ''
                                             });
-                                            setOpenDropdownLeadId(null);
-                                            handleSelectLead(lead);
                                             setShowConfirmModal(true);
                                           }}
                                           className="w-full h-8 px-3 text-xs font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-white rounded-lg border border-emerald-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
@@ -10364,11 +10457,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         >
             {/* Header: Sticky */}
             <div className="py-2.5 px-4 sm:px-5 border-b border-slate-850 flex items-center justify-between bg-slate-950/40 sticky top-0 z-10 backdrop-blur-sm shrink-0">
-              <div className="flex items-center gap-2 text-left">
+              <div className="flex items-center gap-2 text-left flex-wrap">
                 <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5 font-mono uppercase tracking-wider">
                   <span>💍</span> Digital Lead CRM Workspace — Client Board
                 </h3>
                 <span className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded font-mono font-bold">Code: {selectedLead.lead_id}</span>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
+                  getLeadCurrentStage(selectedLead) === 'Sales' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
+                  getLeadCurrentStage(selectedLead) === 'Operations' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' :
+                  getLeadCurrentStage(selectedLead) === 'Production' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
+                  'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                }`}>
+                  Stage: {getLeadCurrentStage(selectedLead)}
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight bg-zinc-800 text-zinc-300 border border-zinc-700">
+                  Status: {getLeadCurrentStatus(selectedLead)}
+                </span>
               </div>
               <button 
                 onClick={() => setSelectedLead(null)}
