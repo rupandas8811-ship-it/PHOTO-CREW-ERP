@@ -4139,6 +4139,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setCrmEvents(fullLead.events || []);
 
     // Always fetch fresh events to ensure no cached EV- IDs are used
+    let eventsForCheck = fullLead.events || [];
     if (supabaseClient && fullLead.lead_id && fullLead.lead_id !== 'DRAFT-LEAD') {
       try {
         const { data: freshEvents, error } = await supabaseClient
@@ -4149,6 +4150,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         
         if (!error && freshEvents && freshEvents.length > 0) {
           setCrmEvents(freshEvents as LeadEvent[]);
+          eventsForCheck = freshEvents as LeadEvent[];
           setSelectedLead(prev => prev ? { ...prev, events: freshEvents as LeadEvent[] } : prev);
         }
       } catch (err) {
@@ -4177,17 +4179,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       .filter(q => q.lead_id === lead.lead_id)
       .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0];
 
-    // Determine the target CRM step based on persisted data and status
-    const hasQuotationOrPackage = !!(
-      latestQuote ||
-      primaryLP?.package_id ||
-      (fullLead.Select_Package_Option && String(fullLead.Select_Package_Option).trim() !== '') ||
-      ['Quotation Sent', 'Negotiation', 'Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed', 'Lost Lead'].includes(fullLead.status || '') ||
-      ['Quotation Sent', 'Negotiation', 'Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed', 'Lost Lead'].includes((fullLead as any).current_status || '')
-    );
-
     const hasEventDetails = !!(
-      (fullLead.events && fullLead.events.length > 0) ||
+      (eventsForCheck && eventsForCheck.length > 0) ||
       (fullLead.event_type && String(fullLead.event_type).trim() !== '') ||
       (fullLead.event_date && String(fullLead.event_date).trim() !== '') ||
       (fullLead.event_location && String(fullLead.event_location).trim() !== '') ||
@@ -4203,18 +4196,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const remarksMatch = fullLead.remarks?.match(/\[CRM_COMPLETED_STEP:\s*(\d+)\]/);
     const explicitStep = localSavedStep ? parseInt(localSavedStep, 10) : (remarksMatch ? parseInt(remarksMatch[1], 10) : null);
 
+    // Navigation logic: always open first incomplete step. Never skip an incomplete step.
     let startStep = 1;
-    if (hasQuotationOrPackage || explicitStep === 3) {
-      startStep = 3;
-    } else if (hasEventDetails || explicitStep === 2) {
-      startStep = 2;
-    } else if (hasCustomerDetails || explicitStep === 1) {
-      startStep = 2; // Step 1 completed, proceed to Step 2
+    if (hasCustomerDetails) {
+      if (hasEventDetails) {
+        startStep = 3;
+      } else {
+        startStep = 2; // Customer details complete, but event details not
+      }
     } else {
-      startStep = 1;
+      startStep = 1; // Customer details not complete
     }
 
-    const completedStep = Math.max(startStep, explicitStep || 1);
+    const completedStep = Math.min(Math.max(startStep, explicitStep || 1), startStep);
     setCrmHighestStep(completedStep);
     setCrmWizardStep(startStep);
     
