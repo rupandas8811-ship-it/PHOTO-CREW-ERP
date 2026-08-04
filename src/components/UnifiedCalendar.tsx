@@ -101,6 +101,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
     deleteCalendarMemo,
     logs,
     staffAssignments,
+    payments,
     isDataLoading
   } = useRole();
 
@@ -1763,17 +1764,15 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
               <table className="w-full text-left text-xs border-collapse min-w-[1000px]">
                 <thead>
                   <tr className="bg-zinc-950/70 text-zinc-405 font-bold border-b border-zinc-850 text-[10px] uppercase font-mono tracking-wider">
-                    <th className="p-3.5 pl-5">Lead ID</th>
-                    <th className="p-3.5">Order ID</th>
+                    <th className="p-3.5 pl-5">Order ID</th>
                     <th className="p-3.5">Customer Name</th>
-                    <th className="p-3.5">Mobile Number</th>
                     <th className="p-3.5">Event Name</th>
-                    <th className="p-3.5">Event Date</th>
-                    <th className="p-3.5">Event Time</th>
-                    {/* Current Stage hidden as requested */}
-                    {false && <th className="p-3.5">Current Stage</th>}
                     <th className="p-3.5">Current Status</th>
-                    <th className="p-3.5 text-right pr-5 w-[120px] min-w-[120px]">Action</th>
+                    <th className="p-3.5">Assigned Staff</th>
+                    <th className="p-3.5">Assigned Editor</th>
+                    <th className="p-3.5">Payment Status</th>
+                    <th className="p-3.5 text-right">Outstanding Balance</th>
+                    <th className="p-3.5 text-right pr-5 w-[100px]">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900/60">
@@ -1783,7 +1782,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                       const found = leads.find(l => l.lead_id === popupLeadId);
                       if (found) leadsToShow = [found];
                     } else if (popupDate) {
-                      const popupEvs = filteredEvents.filter(e => e.date === popupDate && e.sourceType !== 'memo');
+                      const popupEvs = filteredEvents.filter(e => e.date === popupDate && e.sourceType !== "memo");
                       const leadIds = Array.from(new Set(popupEvs.map(e => e.raw?.lead_id || e.orderId).filter(Boolean)));
                       leadsToShow = leads.filter(l => leadIds.includes(l.lead_id));
                     }
@@ -1791,70 +1790,67 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                     if (leadsToShow.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={9} className="p-8 text-center text-zinc-500 font-mono">No specific lead data found.</td>
+                          <td colSpan={9} className="p-8 text-center text-zinc-500 font-mono">No specific event data found.</td>
                         </tr>
                       );
                     }
 
                     return leadsToShow.map(lead => {
-                      const leadStatus = lead.status || 'New Lead';
-                      const currentStage = lead.current_stage || 'Sales';
                       const linkedOrder = orders.find((o) => o.lead_id === lead.lead_id);
+                      const orderIdDisplay = linkedOrder?.order_id || lead.lead_id;
+                      const prodRecord = production?.find(p => p.tracking_id === lead.lead_id || p.order_id === lead.lead_id || p.tracking_id === orderIdDisplay || (p as any).order_id === orderIdDisplay);
+                      const paymentRecord = payments?.find(p => p.order_id === orderIdDisplay || p.lead_id === lead.lead_id);
+                      const assigns = staffAssignments ? staffAssignments.filter(x => x.order_id === lead.lead_id || x.order_id === orderIdDisplay) : [];
+
+                      const currentStatus = linkedOrder?.current_stage || prodRecord?.editing_status || lead.status || "Active";
+                      const staffNames = assigns.filter(a => a.speciality !== "Lead Editor" && a.speciality !== "Editor").map(a => `${a.staff_name} (${a.speciality || "Staff"})`).join(", ") || "Unassigned";
+                      const editorName = prodRecord?.editor_assigned || prodRecord?.editor_name || assigns.find(a => a.speciality === "Lead Editor" || a.speciality === "Editor" || a.role === "Production")?.staff_name || "Unassigned";
                       
+                      const paymentStatus = paymentRecord?.payment_status || (paymentRecord && paymentRecord.balance_due === 0 ? "Fully Paid" : "Pending");
+                      const balanceDue = paymentRecord?.balance_due ?? linkedOrder?.balance_amount ?? 0;
+
                       return (
                         <tr key={lead.lead_id} className="hover:bg-zinc-900/30 text-zinc-300 transition-all">
-                          <td className="p-3.5 pl-5 font-mono text-[11px] font-bold text-indigo-400">
-                            {lead.lead_id}
-                          </td>
-                          <td className="p-3.5 font-mono text-[11px] text-violet-400 font-bold">
-                            {linkedOrder ? linkedOrder.order_id : 'N/A'}
+                          <td className="p-3.5 pl-5 font-mono text-[11px] font-bold text-amber-400">
+                            {orderIdDisplay}
                           </td>
                           <td className="p-3.5 font-bold text-white">
                             {lead.customer_name}
                           </td>
-                          <td className="p-3.5 font-mono text-zinc-400">
-                            {lead.mobile}
-                          </td>
                           <td className="p-3.5 text-zinc-300 font-sans">
-                            {lead.events && lead.events.length > 0 ? lead.events.map((ev, idx) => (
-                              <div key={idx} className="line-clamp-1 py-0.5">{ev.event_name || '-'}</div>
-                            )) : (lead.event_name || '-')}
+                            {lead.custom_event_name || lead.event_type || (lead.events && lead.events[0]?.event_name) || "Shoot Event"}
                           </td>
-                          <td className="p-3.5 font-mono text-zinc-350">
-                            {lead.events && lead.events.length > 0 ? lead.events.map((ev, idx) => (
-                              <div key={idx} className="py-0.5">{ev.event_date || '—'}</div>
-                            )) : '—'}
-                          </td>
-                          <td className="p-3.5 font-mono text-zinc-350">
-                            {lead.events && lead.events.length > 0 ? lead.events.map((ev, idx) => (
-                              <div key={idx} className="py-0.5">{ev.event_start_time || '—'}</div>
-                            )) : '—'}
-                          </td>
-                          {/* Current Stage td hidden as requested */}
-                          {false && (
                           <td className="p-3.5">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
-                              currentStage === 'Sales' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
-                              currentStage === 'Operations' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' :
-                              currentStage === 'Production' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
-                              'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                            }`}>
-                              {currentStage}
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight bg-zinc-800 text-amber-300 border border-zinc-700">
+                              {currentStatus}
                             </span>
                           </td>
-                          )}
-                          <td className="p-3.5">
-                             <span className="font-bold text-[11px] text-zinc-300">{leadStatus}</span>
+                          <td className="p-3.5 text-zinc-300 text-[11px]">
+                            {staffNames}
+                          </td>
+                          <td className="p-3.5 text-amber-300 font-medium text-[11px]">
+                            {editorName}
+                          </td>
+                          <td className="p-3.5 font-mono text-[11px]">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              paymentStatus === "Fully Paid" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                              "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                            }`}>
+                              {paymentStatus}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-right font-mono text-[11px] font-bold text-zinc-200">
+                            ₹{Number(balanceDue).toLocaleString("en-IN")}
                           </td>
                           <td className="p-3.5 text-right pr-5">
                             <button 
                               onClick={() => {
-                                window.dispatchEvent(new CustomEvent('calendar-action-click', { detail: { leadId: lead.lead_id, role, orderId: linkedOrder?.order_id } }));
-                                window.dispatchEvent(new CustomEvent('calendar-action-click-deferred', { detail: { leadId: lead.lead_id, role, orderId: linkedOrder?.order_id } }));
+                                window.dispatchEvent(new CustomEvent("calendar-action-click", { detail: { leadId: lead.lead_id, role, orderId: orderIdDisplay } }));
+                                window.dispatchEvent(new CustomEvent("calendar-action-click-deferred", { detail: { leadId: lead.lead_id, role, orderId: orderIdDisplay } }));
                                 setPopupDate(null);
                                 setPopupLeadId(null);
                               }}
-                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-bold text-xs cursor-pointer shadow whitespace-nowrap"
+                              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs rounded transition shadow whitespace-nowrap"
                             >
                               Details
                             </button>

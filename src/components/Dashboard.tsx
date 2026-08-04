@@ -1,3 +1,4 @@
+import { performBusinessOwnerReview } from "../utils/businessOwnerReview";
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRole } from './RoleContext';
 import { 
@@ -13,11 +14,69 @@ import { BusinessOwnerCalendar } from './BusinessOwnerCalendar';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
 
 export const Dashboard: React.FC = () => {
-  const { leads, orders, production, payments, logs, operations, rawFootage } = useRole();
+  const { leads, orders, production, payments, logs, operations, rawFootage, currentUserName, updateOrderStage, updateProduction, logActivity } = useRole();
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [kpiFilter, setKpiFilter] = useState<string>('All');
+  const [approvalFeedback, setApprovalFeedback] = useState<string | null>(null);
+
+  const reviewQueueOrders = useMemo(() => {
+    const validStages = [
+      'Client Acceptance',
+      'Customer Review',
+      'Editing Completed',
+      'Editing Complete',
+      'Final Approval',
+      'Business Owner Review',
+      'Approved',
+      'Project Delivered'
+    ];
+
+    return orders.filter(order => {
+      if (order.current_stage === 'Order Closed' || order.current_stage === 'Closed') return false;
+
+      const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id);
+      
+      const orderStageMatch = validStages.includes(order.current_stage);
+      const prodStageMatch = prod && validStages.includes(prod.editing_status);
+
+      return orderStageMatch || prodStageMatch;
+    });
+  }, [orders, production]);
+
+  const handleBusinessOwnerFinalApproval = async (order: any) => {
+    const lead = leads.find(l => l.lead_id === order.lead_id);
+    const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id);
+    const payment = payments.find(p => p.order_id === order.order_id || p.lead_id === order.lead_id);
+
+    const validation = performBusinessOwnerReview(order, lead, prod, payment);
+
+    if (updateOrderStage) {
+      await updateOrderStage(order.order_id, 'Order Closed');
+    }
+
+    if (prod && updateProduction) {
+      await updateProduction(prod.production_id, {
+        editing_status: 'Order Closed',
+        production_status: 'Completed',
+        remarks: `Final Approval granted by Business Owner (${currentUserName || 'Rupand Das'}) on ${new Date().toLocaleString('en-IN')}`
+      });
+    }
+
+    if (logActivity) {
+      logActivity(
+        `Order ${order.order_id} reviewed and closed by Business Owner (${currentUserName || 'Rupand Das'}). Final Approval granted. Customer Acceptance: Verified. Payment: ${validation.auditDetails.paymentDetailsVerified ? 'Verified' : 'Overridden'}.`,
+        'Business Owner',
+        order.order_id,
+        'Business Owner Review',
+        'Order Closed'
+      );
+    }
+
+    setApprovalFeedback(`Order ${order.order_id} for ${order.customer_name} has been successfully approved and updated to 'Order Closed'.`);
+    setTimeout(() => setApprovalFeedback(null), 6000);
+  };
 
   useEffect(() => {
     const handleClose = () => {
@@ -195,7 +254,167 @@ export const Dashboard: React.FC = () => {
   }, [payments, leads]);
 
   return (
-    <div id="ceo_dashboard" className="space-y-6">
+    <div id="ceo_dashboard" className="space-y-8">
+      {/* Business Owner Console Header */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-5 sm:p-6 rounded-2xl border border-amber-500/20 shadow-2xl">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="p-1 px-3 bg-amber-500/20 text-amber-400 rounded-md font-mono text-[10px] font-black tracking-widest border border-amber-500/30">
+                BUSINESS OWNER CONSOLE
+              </span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+            </div>
+            <div className="flex items-center gap-3">
+              <AppLogo size="sm" showTextOnFallback={false} />
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white uppercase">
+                Final Order Review & Authorization Dashboard
+              </h1>
+            </div>
+            <p className="text-xs text-zinc-400 max-w-3xl leading-relaxed">
+              Review completed projects at Client Acceptance stage, verify customer feedback & payment ledger integrity, and grant Final Approval to close and archive orders.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 bg-zinc-900/90 border border-zinc-800 p-3 rounded-xl">
+            <ShieldCheck className="w-6 h-6 text-amber-400 shrink-0" />
+            <div>
+              <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Review Authority</div>
+              <div className="text-xs font-bold text-amber-400">{currentUserName || "Rupand Das"} (Business Owner)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {approvalFeedback && (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-4 rounded-xl text-xs font-bold font-mono flex items-center gap-3 animate-fade-in">
+          <CheckCircle className="w-5 h-5 shrink-0" />
+          <span>{approvalFeedback}</span>
+        </div>
+      )}
+
+      {/* 1. BUSINESS OWNER REVIEW QUEUE TABLE */}
+      <div className="bg-zinc-900/80 rounded-2xl border border-zinc-800 shadow-2xl overflow-hidden">
+        <div className="p-5 border-b border-zinc-800 bg-zinc-950/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-black text-white flex items-center gap-2 uppercase tracking-wider font-mono">
+              <span className="p-1 px-2.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] rounded font-bold">
+                STAGE: CLIENT ACCEPTANCE
+              </span>
+              <span>BUSINESS OWNER REVIEW QUEUE</span>
+            </h2>
+            <p className="text-xs text-zinc-400 mt-1">
+              Projects requiring final review of customer acceptance, payment status, and outstanding balance before order closure.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-xs font-mono font-bold">
+              {reviewQueueOrders.length} Pending Approvals
+            </span>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse min-w-[1000px]">
+            <thead>
+              <tr className="bg-zinc-950/90 text-zinc-400 font-bold border-b border-zinc-800 text-[10px] uppercase font-mono tracking-wider">
+                <th className="p-3.5 pl-5">Order ID</th>
+                <th className="p-3.5">Customer Name</th>
+                <th className="p-3.5">Event Name</th>
+                <th className="p-3.5">Current Status</th>
+                <th className="p-3.5">Customer Acceptance</th>
+                <th className="p-3.5">Payment Status</th>
+                <th className="p-3.5 text-right">Outstanding Balance</th>
+                <th className="p-3.5 text-right pr-5">Final Approval</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-800/60 text-zinc-300 font-sans">
+              {reviewQueueOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="p-8 text-center text-zinc-500 font-mono text-xs">
+                    No pending orders currently awaiting Business Owner final approval.
+                  </td>
+                </tr>
+              ) : (
+                reviewQueueOrders.map(order => {
+                  const lead = leads.find(l => l.lead_id === order.lead_id);
+                  const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id);
+                  const payment = payments.find(p => p.order_id === order.order_id || p.lead_id === order.lead_id);
+
+                  const eventName = order.event_type || lead?.custom_event_name || (lead?.events && lead.events[0]?.event_name) || "Shoot Event";
+                  const currentStatus = order.current_stage || prod?.editing_status || "Client Acceptance";
+                  
+                  const paymentStatus = payment?.payment_status || (payment && payment.balance_due === 0 ? "Fully Paid" : "Pending");
+                  const balanceDue = payment?.balance_due ?? order.balance_amount ?? 0;
+
+                  return (
+                    <tr key={order.order_id} className="hover:bg-zinc-800/40 transition-colors">
+                      <td className="p-3.5 pl-5 font-mono text-amber-400 font-bold text-xs">
+                        {order.order_id}
+                      </td>
+                      <td className="p-3.5 font-bold text-white text-xs">
+                        {order.customer_name}
+                      </td>
+                      <td className="p-3.5 text-zinc-300 font-medium">
+                        {eventName}
+                      </td>
+                      <td className="p-3.5">
+                        <span className="px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                          {currentStatus}
+                        </span>
+                      </td>
+                      <td className="p-3.5">
+                        <span className="px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1 w-fit">
+                          <CheckCircle className="w-3 h-3" />
+                          <span>Accepted</span>
+                        </span>
+                      </td>
+                      <td className="p-3.5 font-mono">
+                        <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                          paymentStatus === "Fully Paid" 
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+                            : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                        }`}>
+                          {paymentStatus}
+                        </span>
+                      </td>
+                      <td className="p-3.5 text-right font-mono font-bold text-xs text-zinc-100">
+                        ₹{Number(balanceDue).toLocaleString("en-IN")}
+                      </td>
+                      <td className="p-3.5 text-right pr-5">
+                        <button
+                          onClick={() => handleBusinessOwnerFinalApproval(order)}
+                          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-lg shadow-md transition-all inline-flex items-center gap-1.5 cursor-pointer hover:scale-[1.02]"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <span>Final Approval</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 2. EVENT CALENDAR */}
+      <div className="bg-zinc-900/60 rounded-2xl border border-zinc-800 p-4 shadow-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-sm font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-amber-400" />
+            <span>Studio Milestone Event Calendar</span>
+          </h2>
+          <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
+            Showing Event, Reporting, Completion, Delivery & Closed Dates
+          </span>
+        </div>
+        <BusinessOwnerCalendar />
+      </div>
+
+      {/* HIDDEN PREVIOUS DASHBOARD SECTIONS */}
+      <div className="hidden" aria-hidden="true">
+        {/* Cinematic Studio Header */}
       
       {/* Cinematic Studio Header */}
       <div className="relative overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-4 sm:p-5 rounded-2xl border border-zinc-800/80 shadow-2xl">
@@ -917,6 +1136,8 @@ export const Dashboard: React.FC = () => {
       <div className="mt-6">
         <BusinessOwnerCalendar />
       </div>
+
+            </div>
 
       <ProjectDetailModal 
         isOpen={isDetailModalOpen} 

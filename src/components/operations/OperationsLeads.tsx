@@ -73,7 +73,8 @@ export const OperationsLeads: React.FC = () => {
     addLeadEquipmentHistory,
     getLeadCurrentStatus,
     packages,
-    quotations
+    quotations,
+    pushUpdate
   } = useRole();
 
   useEffect(() => {
@@ -316,6 +317,8 @@ export const OperationsLeads: React.FC = () => {
 
   // Raw Footage Modal State
   const [receivingFootageOrderId, setReceivingFootageOrderId] = useState<string | null>(null);
+  const [consolidatedDriveLink, setConsolidatedDriveLink] = useState('');
+  const [verifiedCrewMap, setVerifiedCrewMap] = useState<Record<string, boolean>>({});
   const [footageForm, setFootageForm] = useState({
     footage_link: '',
     storage_type: 'Google Drive',
@@ -2049,22 +2052,6 @@ export const OperationsLeads: React.FC = () => {
                               label: 'View Details',
                               onClick: handleViewDetails
                             });
-                            actionItems.push({
-                              label: 'Event Started',
-                              onClick: async () => {
-                                try {
-                                  setIsSaving(true);
-                                  await updateOrderStage(ord.order_id, 'Event Started');
-                                  alert("Event Started status updated successfully");
-                                } catch (err: any) {
-                                  alert(`Failed to update status: ${err.message}`);
-                                } finally {
-                                  setIsSaving(false);
-                                  refreshData();
-                                  setActiveMenuOrderId(null);
-                                }
-                              }
-                            });
                             if (assignedStaffNames.length > 0) {
                               actionItems.push({
                                 label: 'Reassign Crew',
@@ -2078,36 +2065,9 @@ export const OperationsLeads: React.FC = () => {
                               label: 'View Details',
                               onClick: handleViewDetails
                             });
-                            actionItems.push({
-                              label: 'Event Ended',
-                              onClick: async () => {
-                                try {
-                                  setIsSaving(true);
-                                  await updateOrderStage(ord.order_id, 'Event Completed');
-                                  alert("Event Ended status updated successfully");
-                                } catch (err: any) {
-                                  alert(`Failed to update status: ${err.message}`);
-                                } finally {
-                                  setIsSaving(false);
-                                  refreshData();
-                                  setActiveMenuOrderId(null);
-                                }
-                              }
-                            });
                           }
-                          // 4. When Current Status = Event Ended
-                          else if (isEventEnded) {
-                            actionItems.push({
-                              label: 'View Details',
-                              onClick: handleViewDetails
-                            });
-                            actionItems.push({
-                              label: 'Footage Handover',
-                              onClick: handleFootageModal
-                            });
-                          }
-                          // 5. When Current Status = Footage Handover
-                          else if (isFootageHandover) {
+                          // 4. When Current Status = Event Ended or Footage Handover
+                          else if (isEventEnded || isFootageHandover) {
                             actionItems.push({
                               label: 'View Details',
                               onClick: handleViewDetails
@@ -3201,181 +3161,464 @@ export const OperationsLeads: React.FC = () => {
         </div>
       )}
 
-      {/* Raw Footage Received Modal */}
-      {receivingFootageOrderId && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div id="raw_footage_modal" className="bg-zinc-900 border border-zinc-805 rounded-2xl w-full max-w-lg shadow-2xl relative p-5 max-h-[90vh] overflow-y-auto space-y-4 scrollbar-thin">
-            <h3 className="text-sm font-bold text-purple-400 font-mono uppercase flex items-center gap-1.5 border-b border-zinc-800 pb-2">
-              <span>💿</span> Receive Raw Footage
-            </h3>
-            <div className="text-[11px] text-zinc-400 leading-relaxed">
-              Upon confirmation, this order transitions to **Raw Footage Received** and escalates automatically to the Production Dashboard.
-            </div>
+      {/* Verify Raw Footage Modal */}
+      {receivingFootageOrderId && (() => {
+        const currentOp = operations?.find(o => o.order_id === receivingFootageOrderId);
+        const currentOrder = orders?.find(o => o.order_id === receivingFootageOrderId);
+        const currentLead = leads?.find(l => l.lead_id === currentOrder?.lead_id);
 
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              if (isSaving) return;
+        // Filter history records for this order/lead
+        const orderHistory = (leadEquipmentHistory || []).filter(h => 
+          (h.order_id && h.order_id === receivingFootageOrderId) ||
+          (currentOrder?.lead_id && h.lead_id === currentOrder.lead_id)
+        );
 
-              if (!footageForm.footage_link) {
-                alert("Please provide the Raw Footage Drive Link.");
-                return;
+        // Helper to extract photo & info from history items
+        const parseProof = (item: any) => {
+          let photoUrl = '';
+          let rawLink = '';
+          let proofType = item?.equipment_status || '';
+          if (item?.remarks) {
+            try {
+              const parsed = typeof item.remarks === 'string' ? JSON.parse(item.remarks) : item.remarks;
+              photoUrl = parsed.photo_url || photoUrl;
+              rawLink = parsed.raw_footage_link || rawLink;
+              proofType = parsed.proof_type || proofType;
+            } catch (e) {}
+          }
+          return { photoUrl, rawLink, proofType, status: item?.equipment_status, returnedBy: item?.returned_by, returnedAt: item?.returned_at };
+        };
+
+        // Find proofs
+        const assetCollectionRecord = orderHistory.find(h => h.equipment_name === 'Asset Collection Photo Proof' || h.equipment_name === 'Asset Collection');
+        const assetCollectionProof = parseProof(assetCollectionRecord);
+
+        const eventStartRecord = orderHistory.find(h => h.equipment_name === 'Event Start Photo Proof' || h.equipment_name === 'Event Start');
+        const eventStartProof = parseProof(eventStartRecord);
+
+        const eventCompletionRecord = orderHistory.find(h => h.equipment_name === 'Event Completion Photo Proof' || h.equipment_name === 'Event Completion' || h.equipment_name === 'Event Complete');
+        const eventCompletionProof = parseProof(eventCompletionRecord);
+
+        const equipmentHandoverRecord = orderHistory.find(h => h.equipment_name === 'Equipment Handover Photo Proof' || h.equipment_name === 'Asset Return Photo Proof' || h.equipment_status === 'Equipment Handover Completed');
+        const equipmentHandoverProof = parseProof(equipmentHandoverRecord);
+
+        const rawFootageLink = currentOp?.raw_footage_drive_link || footageForm.footage_link || assetCollectionProof.rawLink || eventStartProof.rawLink || eventCompletionProof.rawLink || equipmentHandoverProof.rawLink;
+
+        // Construct assigned crew list
+        const orderStaffAssignments = (staffAssignments || []).filter(sa => sa.order_id === receivingFootageOrderId && sa.assignment_status !== 'Cancelled');
+
+        let assignedCrewList: Array<{ staff_name: string; staff_role: string; raw_footage_link?: string }> = [];
+
+        if (orderStaffAssignments.length > 0) {
+          assignedCrewList = orderStaffAssignments.map(sa => {
+            let link = sa.raw_footage_link || '';
+            if (!link) {
+              const hist = (leadEquipmentHistory || []).find(h => 
+                ((h.order_id && h.order_id === receivingFootageOrderId) || (currentOrder?.lead_id && h.lead_id === currentOrder.lead_id)) &&
+                h.returned_by?.toLowerCase() === sa.staff_name.toLowerCase() &&
+                h.remarks
+              );
+              if (hist?.remarks) {
+                try {
+                  const parsed = typeof hist.remarks === 'string' ? JSON.parse(hist.remarks) : hist.remarks;
+                  link = parsed.raw_footage_link || link;
+                } catch (e) {}
               }
+            }
+            if (!link && currentOp?.raw_footage_drive_link) {
+              link = currentOp.raw_footage_drive_link;
+            }
 
-              if (Object.keys(footageHandoverStates).length === 0) {
-                alert("Equipment verification is mandatory. Please ensure at least one equipment item is assigned and verified.");
-                return;
+            return {
+              staff_name: sa.staff_name,
+              staff_role: sa.assigned_task || sa.staff_role || 'Operations Staff',
+              raw_footage_link: link
+            };
+          });
+        } else if (currentLead?.events && currentLead.events.length > 0) {
+          currentLead.events.forEach((ev: any) => {
+            const names = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((s: string) => s.trim()) : [];
+            names.forEach((name: string) => {
+              if (name && !assignedCrewList.some(c => c.staff_name.toLowerCase() === name.toLowerCase())) {
+                assignedCrewList.push({
+                  staff_name: name,
+                  staff_role: 'Operations Staff',
+                  raw_footage_link: currentOp?.raw_footage_drive_link || ''
+                });
               }
+            });
+          });
+        }
 
-              try {
-                setIsSaving(true);
-                // Save equipment handovers/verifications to Supabase & state
-                const handoversToSave = (Object.entries(footageHandoverStates) as [string, any][]).map(([equipName, details]) => ({
-                  order_id: receivingFootageOrderId,
-                  equipment_name: equipName,
-                  return_status: details.return_status,
-                  return_date: details.return_date,
-                  returned_by: details.returned_by,
-                  notes: details.notes
-                }));
-                
-                if (handoversToSave.length > 0) {
-                  await addEquipmentHandovers(handoversToSave);
-                  if (equipment && updateEquipment) {
-                    for (const ho of handoversToSave) {
-                      const found = equipment.find(eq => 
-                        eq.name === ho.equipment_name || 
-                        `${eq.name} [${eq.brand} ${eq.model}]` === ho.equipment_name
-                      );
-                      if (found) {
-                        await updateEquipment(found.equipment_id, { status: 'Available' });
-                      }
-                    }
-                  }
-                }
+        if (assignedCrewList.length === 0 && currentOp?.assigned_staff) {
+          const names = currentOp.assigned_staff.split(',').map((s: string) => s.trim());
+          names.forEach(name => {
+            if (name) {
+              assignedCrewList.push({
+                staff_name: name,
+                staff_role: 'Operations Staff',
+                raw_footage_link: currentOp?.raw_footage_drive_link || ''
+              });
+            }
+          });
+        }
 
-                await confirmRawFootageReceived(
-                  receivingFootageOrderId,
-                  footageForm.footage_link,
-                  'Google Drive',
-                  footageForm.upload_notes,
-                  undefined,
-                  undefined,
-                  undefined
-                );
-                
-                setReceivingFootageOrderId(null);
-                setFootageForm({ footage_link: '', storage_type: 'Google Drive', upload_notes: '' });
-                alert("Raw Footage Handover Complete");
-              } catch (err: any) {
-                console.error("Failed to receive raw footage:", err);
-                alert("Failed to save and move raw footage. Error: " + (err.message || "Please try again."));
-              } finally {
-                setIsSaving(false);
-              }
-            }} className="space-y-4 text-left">
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
-                  Raw Footage Drive Link (Google Drive / cloud)
-                </label>
-                <input
-                  type="url"
-                  value={footageForm.footage_link}
-                  onChange={(e) => setFootageForm({ ...footageForm, footage_link: e.target.value })}
-                  placeholder="e.g. https://drive.google.com/drive/folders/..."
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 font-mono placeholder:text-zinc-600"
-                />
-              </div>
+        const allCrewVerified = assignedCrewList.length > 0 ? assignedCrewList.every(c => verifiedCrewMap[`${receivingFootageOrderId}_${c.staff_name}`] === true) : true;
 
-
-
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase font-mono mb-1">
-                  Upload Notes / Remarks
-                </label>
-                <textarea
-                  value={footageForm.upload_notes}
-                  onChange={(e) => setFootageForm({ ...footageForm, upload_notes: e.target.value })}
-                  placeholder="e.g. Drone clips are in separate subfolder..."
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-100 font-sans"
-                  rows={2}
-                />
-              </div>
-
-              {/* Equipment Handover/Verification section matching exact user request */}
-              {Object.keys(footageHandoverStates).length > 0 && (
-                <div className="space-y-3 border-t border-zinc-800 pt-3">
-                  <h4 className="text-[10px] font-mono font-bold uppercase text-purple-400 tracking-wider flex items-center gap-1.5">
-                    ⚙️ Equipment Verification
-                  </h4>
-                  <p className="text-[10px] text-zinc-500">
-                    Verify and select condition for all assigned equipment before saving raw footage.
+        return (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div id="raw_footage_modal" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl shadow-2xl relative p-6 max-h-[90vh] overflow-y-auto space-y-5 scrollbar-thin">
+              
+              {/* Header */}
+              <div className="border-b border-zinc-800 pb-3 flex justify-between items-start">
+                <div>
+                  <h3 className="text-base font-bold text-purple-400 font-mono uppercase flex items-center gap-2">
+                    <span>🎬</span> Verify Raw Footage
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    Order ID: <strong className="text-zinc-200">{receivingFootageOrderId}</strong> | Customer: <strong className="text-zinc-200">{currentOrder?.customer_name || currentLead?.customer_name || 'N/A'}</strong>
                   </p>
-                  <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
-                    {(Object.entries(footageHandoverStates) as [string, any][]).map(([kitName, details]) => (
-                      <div key={kitName} className="bg-zinc-955 p-2.5 rounded-xl border border-zinc-900 space-y-2">
-                        <div className="font-sans font-bold text-zinc-300 text-[11px] break-words flex items-center justify-between">
-                          <span>🛠️ {kitName}</span>
-                          <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
-                            details.return_status === 'Returned' ? 'bg-emerald-500/10 text-emerald-400' :
-                            details.return_status === 'Damaged' ? 'bg-rose-500/10 text-rose-450 border border-rose-500/20' :
-                            details.return_status === 'Missing' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/25' :
-                            'bg-zinc-800 text-zinc-200'
-                          }`}>
-                            {details.return_status}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                          {(['Returned', 'Missing', 'Damaged', 'Not Returned'] as const).map(statusOpt => (
-                            <button
-                              key={statusOpt}
-                              type="button"
-                              onClick={() => {
-                                setFootageHandoverStates(prev => ({
-                                  ...prev,
-                                  [kitName]: { ...prev[kitName], return_status: statusOpt }
-                                }));
-                              }}
-                              className={`py-1 text-[9px] rounded font-mono font-bold text-center border transition-all ${
-                                details.return_status === statusOpt
-                                  ? statusOpt === 'Returned' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 font-black'
-                                    : statusOpt === 'Damaged' ? 'bg-rose-500/10 border-rose-500/30 text-rose-450 font-black'
-                                    : statusOpt === 'Missing' ? 'bg-amber-500/10 border-amber-500/35 text-amber-400 font-black'
-                                    : 'bg-zinc-800 border-zinc-700 text-zinc-200 font-black'
-                                  : 'bg-zinc-905 border-zinc-850 text-zinc-500 hover:text-zinc-350'
-                              }`}
-                            >
-                              {statusOpt}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
                 </div>
+                <button
+                  onClick={() => {
+                    setReceivingFootageOrderId(null);
+                    setConsolidatedDriveLink('');
+                  }}
+                  className="text-zinc-400 hover:text-white p-1 rounded-lg bg-zinc-800 text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="text-xs text-zinc-400 leading-relaxed bg-purple-500/10 border border-purple-500/20 rounded-xl p-3">
+                Verify each assigned crew member's Raw Footage link below. Once all crew footages are verified, enter the <strong>Final Consolidated Raw Footage Drive Link</strong> to complete verification and transfer the order to Production.
+              </div>
+
+              {/* ASSIGNED TEAM MEMBERS VERIFICATION SECTION */}
+              <div className="space-y-3 bg-zinc-950 p-4 rounded-xl border border-zinc-800">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                  <h4 className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>👥</span> Assigned Team Members & Raw Footage Verification
+                  </h4>
+                  <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
+                    Verified: {assignedCrewList.filter(c => verifiedCrewMap[`${receivingFootageOrderId}_${c.staff_name}`]).length} / {assignedCrewList.length}
+                  </span>
+                </div>
+
+                {assignedCrewList.length === 0 ? (
+                  <div className="text-xs text-zinc-500 italic py-2">No assigned crew members found for this order.</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-zinc-900 border-b border-zinc-800 text-[10px] font-mono uppercase text-zinc-400">
+                          <th className="py-2.5 px-3">Staff Name</th>
+                          <th className="py-2.5 px-3">Assigned Role</th>
+                          <th className="py-2.5 px-3">Raw Footage Link</th>
+                          <th className="py-2.5 px-3">Verification Status</th>
+                          <th className="py-2.5 px-3 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-800/60">
+                        {assignedCrewList.map((c) => {
+                          const isVerified = !!verifiedCrewMap[`${receivingFootageOrderId}_${c.staff_name}`];
+                          return (
+                            <tr key={c.staff_name} className="hover:bg-zinc-900/50">
+                              <td className="py-2.5 px-3 font-bold text-white">{c.staff_name}</td>
+                              <td className="py-2.5 px-3 text-zinc-300 font-mono text-[11px]">{c.staff_role}</td>
+                              <td className="py-2.5 px-3">
+                                {c.raw_footage_link ? (
+                                  <a
+                                    href={c.raw_footage_link}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 text-purple-400 hover:text-purple-300 underline font-mono text-[11px]"
+                                  >
+                                    Open Drive Link ↗
+                                  </a>
+                                ) : (
+                                  <span className="text-zinc-500 italic text-[11px]">Not Provided</span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3">
+                                {isVerified ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold">
+                                    ✅ Verified
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-bold">
+                                    ❌ Not Verified
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3 text-right">
+                                {!isVerified ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setVerifiedCrewMap(prev => ({
+                                        ...prev,
+                                        [`${receivingFootageOrderId}_${c.staff_name}`]: true
+                                      }));
+                                    }}
+                                    className="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white font-bold text-[11px] rounded transition-colors shadow-sm cursor-pointer"
+                                  >
+                                    Verify
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setVerifiedCrewMap(prev => ({
+                                        ...prev,
+                                        [`${receivingFootageOrderId}_${c.staff_name}`]: false
+                                      }));
+                                    }}
+                                    className="text-[10px] text-zinc-400 hover:text-zinc-200 underline cursor-pointer"
+                                  >
+                                    Undo
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* PROOF REVIEWS SECTION */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5 border-b border-zinc-800 pb-1">
+                  📷 Staff Uploaded Proofs & Link Review
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  
+                  {/* 1. Asset Collection Photo Proof */}
+                  <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-2">
+                    <div className="text-[11px] font-bold text-zinc-300 flex justify-between items-center">
+                      <span>Asset Collection Photo Proof</span>
+                      {assetCollectionProof.photoUrl ? (
+                        <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">Uploaded</span>
+                      ) : (
+                        <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded font-mono">Not Uploaded</span>
+                      )}
+                    </div>
+                    {assetCollectionProof.photoUrl ? (
+                      <div className="space-y-1">
+                        <a href={assetCollectionProof.photoUrl} target="_blank" rel="noreferrer" className="block relative group overflow-hidden rounded-lg border border-zinc-800 h-28 bg-zinc-900">
+                          <img src={assetCollectionProof.photoUrl} alt="Asset Collection" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity">
+                            View Full Photo ↗
+                          </div>
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
+                        No proof photo found
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. Event Start Photo Proof */}
+                  <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-2">
+                    <div className="text-[11px] font-bold text-zinc-300 flex justify-between items-center">
+                      <span>Event Start Photo Proof</span>
+                      {eventStartProof.photoUrl ? (
+                        <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">Uploaded</span>
+                      ) : (
+                        <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded font-mono">Not Uploaded</span>
+                      )}
+                    </div>
+                    {eventStartProof.photoUrl ? (
+                      <div className="space-y-1">
+                        <a href={eventStartProof.photoUrl} target="_blank" rel="noreferrer" className="block relative group overflow-hidden rounded-lg border border-zinc-800 h-28 bg-zinc-900">
+                          <img src={eventStartProof.photoUrl} alt="Event Start" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity">
+                            View Full Photo ↗
+                          </div>
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
+                        No proof photo found
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 3. Event Completion Photo Proof */}
+                  <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-2">
+                    <div className="text-[11px] font-bold text-zinc-300 flex justify-between items-center">
+                      <span>Event Completion Photo Proof</span>
+                      {eventCompletionProof.photoUrl ? (
+                        <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">Uploaded</span>
+                      ) : (
+                        <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded font-mono">Not Uploaded</span>
+                      )}
+                    </div>
+                    {eventCompletionProof.photoUrl ? (
+                      <div className="space-y-1">
+                        <a href={eventCompletionProof.photoUrl} target="_blank" rel="noreferrer" className="block relative group overflow-hidden rounded-lg border border-zinc-800 h-28 bg-zinc-900">
+                          <img src={eventCompletionProof.photoUrl} alt="Event Completion" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity">
+                            View Full Photo ↗
+                          </div>
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
+                        No proof photo found
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 4. Equipment Handover Photo Proof (Optional) */}
+                  <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-2">
+                    <div className="text-[11px] font-bold text-zinc-300 flex justify-between items-center">
+                      <span>Equipment Handover Photo <span className="text-zinc-500 font-normal">(Optional)</span></span>
+                      {equipmentHandoverProof.photoUrl ? (
+                        <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">Handover Completed</span>
+                      ) : (
+                        <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded font-mono">Equipment Not Handover</span>
+                      )}
+                    </div>
+                    {equipmentHandoverProof.photoUrl ? (
+                      <div className="space-y-1">
+                        <a href={equipmentHandoverProof.photoUrl} target="_blank" rel="noreferrer" className="block relative group overflow-hidden rounded-lg border border-zinc-800 h-28 bg-zinc-900">
+                          <img src={equipmentHandoverProof.photoUrl} alt="Equipment Handover" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity">
+                            View Full Photo ↗
+                          </div>
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex flex-col items-center justify-center text-[11px] text-zinc-500 p-2 text-center">
+                        <span>Equipment Not Handover</span>
+                        <span className="text-[9px] text-zinc-600 mt-0.5">(Optional for verification)</span>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              </div>
+
+              {/* UPLOAD FINAL CONSOLIDATED RAW FOOTAGE STEP */}
+              {!allCrewVerified ? (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-amber-300 text-xs flex items-center gap-2">
+                  <span>⚠️</span> Please verify each assigned crew member's Raw Footage link before uploading the final raw footage.
+                </div>
+              ) : (
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (isSaving) return;
+
+                  if (!consolidatedDriveLink || !consolidatedDriveLink.trim()) {
+                    alert("Please provide the Consolidated Drive Link before verifying.");
+                    return;
+                  }
+
+                  try {
+                    setIsSaving(true);
+                    const timestamp = new Date().toISOString();
+
+                    // Save Consolidated Link & update operation status
+                    await pushUpdate('operations', 'order_id', receivingFootageOrderId, {
+                      consolidated_drive_link: consolidatedDriveLink,
+                      raw_footage_drive_link: rawFootageLink || consolidatedDriveLink,
+                      event_status: 'Verified Footage',
+                      remarks: `Verified by ${currentUserName || 'Operations Manager'} on ${new Date().toLocaleDateString()}`,
+                      updated_by: currentUserName || 'Operations Manager'
+                    });
+
+                    // Call confirmRawFootageReceived to move to Verified Footage and Production
+                    await confirmRawFootageReceived(
+                      receivingFootageOrderId,
+                      rawFootageLink || consolidatedDriveLink,
+                      'Google Drive',
+                      `Verified Footage with Consolidated Link: ${consolidatedDriveLink}`,
+                      undefined,
+                      undefined,
+                      undefined
+                    );
+
+                    // Also explicitly update orders and leads
+                    await pushUpdate('orders', 'order_id', receivingFootageOrderId, {
+                      current_stage: 'Verified Footage',
+                      updated_by: currentUserName || 'Operations Manager',
+                      updated_at: timestamp
+                    });
+
+                    if (currentOrder?.lead_id) {
+                      await updateLead(currentOrder.lead_id, {
+                        status: 'Verified Footage' as any,
+                        current_status: 'Verified Footage' as any,
+                        updated_by: currentUserName || 'Operations Manager'
+                      });
+                    }
+
+                    setReceivingFootageOrderId(null);
+                    setConsolidatedDriveLink('');
+                    setFootageForm({ footage_link: '', storage_type: 'Google Drive', upload_notes: '' });
+                    
+                    await refreshData();
+                    alert("✅ Raw Footage Verified Successfully! Order transferred to Production Dashboard.");
+                  } catch (err: any) {
+                    console.error("Failed to verify raw footage:", err);
+                    alert("Failed to verify raw footage: " + (err.message || "Please try again."));
+                  } finally {
+                    setIsSaving(false);
+                  }
+                }} className="space-y-4 pt-3 border-t border-zinc-800">
+
+                  <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-xs font-bold text-purple-300">
+                      <span>🎬</span> Upload Final Consolidated Raw Footage
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-300 uppercase font-mono mb-1.5 flex items-center justify-between">
+                        <span>Final Consolidated Drive Link <span className="text-rose-400">*</span></span>
+                        <span className="text-[10px] text-zinc-500 font-sans font-normal">Required for Production Team</span>
+                      </label>
+                      <input
+                        type="url"
+                        required
+                        value={consolidatedDriveLink}
+                        onChange={(e) => setConsolidatedDriveLink(e.target.value)}
+                        placeholder="https://drive.google.com/drive/folders/..."
+                        className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800/80">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReceivingFootageOrderId(null);
+                          setConsolidatedDriveLink('');
+                        }}
+                        className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-lg cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSaving || !consolidatedDriveLink.trim()}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-bold rounded-lg cursor-pointer shadow-lg shadow-purple-600/20 flex items-center gap-2"
+                      >
+                        {isSaving ? 'Saving & Transferring...' : 'Upload Final Raw Footage & Move to Production 🚀'}
+                      </button>
+                    </div>
+                  </div>
+                </form>
               )}
 
-
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-zinc-850">
-                <button
-                  type="button"
-                  onClick={() => setReceivingFootageOrderId(null)}
-                  className="px-4 py-2 bg-zinc-800 text-zinc-300 text-xs rounded-xl cursor-pointer hover:bg-zinc-700 transition w-full sm:w-auto"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-4 py-2 bg-purple-650 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold text-xs rounded-xl cursor-pointer flex justify-center items-center gap-1.5 w-full sm:w-auto"
-                >
-                  {isSaving ? 'Saving...' : 'Save & Move to Production'}
-                </button>
-              </div>
-            </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Staff Assignment Success Modal */}
       {successModalData && (

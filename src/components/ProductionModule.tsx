@@ -2458,14 +2458,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-505 font-mono cursor-pointer"
                 >
                   <option value="All">All Statuses</option>
-                  <option value="Raw Footage Received">Raw Footage Received</option>
-                  <option value="Editor Assigned">Editor Assigned</option>
+                  <option value="Assigned Editor">Assigned Editor</option>
                   <option value="Editing Started">Editing Started</option>
-                  <option value="Client Review">Client Review</option>
-                  <option value="Client Review Sent">Client Review Sent</option>
-                  <option value="Editing Complete">Editing Complete</option>
-                  <option value="Project Completed">Project Completed</option>
-                  <option value="Project Cancelled">Project Cancelled</option>
+                  <option value="Customer Review">Customer Review</option>
+                  <option value="Editing Completed">Editing Completed</option>
+                  <option value="Client Acceptance">Client Acceptance</option>
                 </select>
               </div>
 
@@ -3180,10 +3177,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     className="w-full text-zinc-100 bg-zinc-950 border border-zinc-800 hover:border-zinc-750 text-[10.5px] font-sans font-medium py-1 px-1.5 rounded focus:outline-none focus:ring-1 focus:ring-violet-500 cursor-pointer"
                                   >
                                     
-                                    <option value="Editor Assigned">Editor Assigned</option>
-                                    <option value="Client Review Sent">Client Review</option>
-                                    <option value="Project Completed">Project Completed</option>
-                                    <option value="Project Cancelled">Project Cancelled</option>
+                                    <option value="Assigned Editor">Assigned Editor</option>
+<option value="Editing Started">Editing Started</option>
+<option value="Customer Review">Customer Review</option>
+<option value="Editing Completed">Editing Completed</option>
+<option value="Client Acceptance">Client Acceptance</option>
                                   </select>
                                 </div>
                               )}
@@ -5897,10 +5895,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 px-4 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono font-black border-l-2 border-violet-500"
                             >
                               
-                              <option value="Editor Assigned">Editor Assigned</option>
-                              <option value="Client Review Sent">Client Review</option>
-                              <option value="Project Completed">Project Completed</option>
-                              <option value="Project Cancelled">Project Cancelled</option>
+                              <option value="Assigned Editor">Assigned Editor</option>
+<option value="Editing Started">Editing Started</option>
+<option value="Customer Review">Customer Review</option>
+<option value="Editing Completed">Editing Completed</option>
+<option value="Client Acceptance">Client Acceptance</option>
                             </select>
                           </div>
 
@@ -6514,10 +6513,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2 px-3 text-xs font-black text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono"
                           >
                             
-                            <option value="Editor Assigned">Editor Assigned</option>
-                            <option value="Client Review Sent">Client Review</option>
-                            <option value="Project Completed">Project Completed</option>
-                            <option value="Project Cancelled">Project Cancelled</option>
+                            <option value="Assigned Editor">Assigned Editor</option>
+<option value="Editing Started">Editing Started</option>
+<option value="Customer Review">Customer Review</option>
+<option value="Editing Completed">Editing Completed</option>
+<option value="Client Acceptance">Client Acceptance</option>
                           </select>
                         </div>
 
@@ -7528,10 +7528,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               onChange={(e) => setSelectedStage(e.target.value as EditingStatus)}
                               className="w-full bg-zinc-900 border border-zinc-850 rounded-xl py-2.5 px-3 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono cursor-pointer"
                             >
-                              <option value="Editor Assigned">Editor Assigned</option>
-                              <option value="Client Review Sent">Client Review</option>
-                              <option value="Project Completed">Project Completed</option>
-                              <option value="Project Cancelled">Project Cancelled</option>
+                              <option value="Assigned Editor">Assigned Editor</option>
+<option value="Editing Started">Editing Started</option>
+<option value="Customer Review">Customer Review</option>
+<option value="Editing Completed">Editing Completed</option>
+<option value="Client Acceptance">Client Acceptance</option>
                             </select>
                           </div>
 
@@ -7856,10 +7857,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             required
                           >
                             <option value="" disabled>Select status...</option>
-                            <option value="Editor Assigned">Editor Assigned</option>
-                            <option value="Client Review Sent">Client Review</option>
-                            <option value="Project Completed">Project Completed</option>
-                            <option value="Project Cancelled">Project Cancelled</option>
+                            <option value="Assigned Editor">Assigned Editor</option>
+<option value="Editing Started">Editing Started</option>
+<option value="Customer Review">Customer Review</option>
+<option value="Editing Completed">Editing Completed</option>
+<option value="Client Acceptance">Client Acceptance</option>
                           </select>
                         </div>
                         <div>
