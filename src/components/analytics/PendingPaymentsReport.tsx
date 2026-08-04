@@ -118,26 +118,53 @@ export const PendingPaymentsReport: React.FC = () => {
       const order = orders.find(o => o.lead_id === lead.lead_id);
       const payment = order ? payments.find(p => p.order_id === order.order_id) : null;
       
-      const finalPackageAmount = order ? order.quotation_amount : lead.budget;
+      const finalPackageAmount = order ? order.quotation_amount : (Number((lead as any).final_amount) || Number(lead.Final_Quotation_Amount) || Number(lead.budget) || 0);
       const advanceReceived = order ? (Number(order.advance_received) || 0) : 0;
       
       const totalPaidAmount = payment ? ((Number(payment.advance_received) || 0) + (Number(payment.final_payment_received) || 0) + (Number(payment.additional_received) || 0)) : advanceReceived;
       
-      const remainingAmount = finalPackageAmount - totalPaidAmount;
-      const rawPaymentStatus = payment ? payment.payment_status : (advanceReceived > 0 ? 'Partially Paid' : 'Pending');
+      const remainingAmount = Math.max(0, finalPackageAmount - totalPaidAmount);
+      const rawPaymentStatus = payment ? payment.payment_status : (advanceReceived > 0 ? (advanceReceived >= finalPackageAmount ? 'Fully Paid' : 'Partially Paid') : 'Pending');
       
       // Standardize status labels
       let paymentStatus: 'Pending' | 'Partial' | 'Fully Paid' = 'Pending';
-      if (rawPaymentStatus === 'Partially Paid' || rawPaymentStatus === 'Partial') {
+      if (remainingAmount <= 0 && finalPackageAmount > 0) {
+        paymentStatus = 'Fully Paid';
+      } else if (rawPaymentStatus === 'Partially Paid' || rawPaymentStatus === 'Partial' || (totalPaidAmount > 0 && remainingAmount > 0)) {
         paymentStatus = 'Partial';
       } else if (rawPaymentStatus === 'Fully Paid') {
         paymentStatus = 'Fully Paid';
       }
 
+      // Determine payment completion date
+      let paymentCompletionDate = '';
+      if (paymentStatus === 'Fully Paid') {
+        if (payment?.payment_date) {
+          paymentCompletionDate = payment.payment_date;
+        } else {
+          const orderIdStr = order?.order_id || `MOCK-${lead.lead_id.slice(-4)}`;
+          const historyKey = `payment_history_${orderIdStr}`;
+          const existingHistoryStr = typeof window !== 'undefined' ? localStorage.getItem(historyKey) : null;
+          if (existingHistoryStr) {
+            try {
+              const hist = JSON.parse(existingHistoryStr);
+              if (Array.isArray(hist) && hist.length > 0) {
+                const lastEntry = hist[hist.length - 1];
+                if (lastEntry && lastEntry.date) {
+                  paymentCompletionDate = String(lastEntry.date).split('T')[0];
+                }
+              }
+            } catch (e) {}
+          }
+        }
+        if (!paymentCompletionDate) {
+          paymentCompletionDate = (lead.updated_at || lead.created_date || TODAY_STR).split('T')[0];
+        }
+      }
+
       const isOverdue = lead.event_date && lead.event_date < TODAY_STR && remainingAmount > 0;
       
       // Get the semantic stage of the lead
-      // We'll use the logic directly here or via context if available
       const status = lead.current_status || lead.status || 'New Lead';
       const salesStatuses = ['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Lost Lead', 'Cancelled', 'Lost'];
       const opsStatuses = ['Order Confirmed', 'Operations Assigned', 'Staff Assigned', 'Event Scheduled', 'Event Completed', 'New Order Received'];
@@ -158,6 +185,7 @@ export const PendingPaymentsReport: React.FC = () => {
         mobileNumber: lead.mobile,
         eventType: lead.event_type,
         eventDate: lead.event_date || '',
+        paymentCompletionDate,
         finalPackageAmount,
         advanceReceived,
         totalPaidAmount,
@@ -180,9 +208,7 @@ export const PendingPaymentsReport: React.FC = () => {
       const explicitExclusions = ['Lost', 'Cancelled', 'Lost Lead', 'New Lead', 'Contacted', 'Follow-up', 'Follow Up', 'Quotation Sent', 'Negotiation'];
       if (explicitExclusions.includes(rec.currentProjectStatus)) return false;
 
-      // 2. Pending Amount > 0
-      if (rec.remainingAmount <= 0) return false;
-
+      // Keep fully paid orders visible in report
       return true;
     });
   }, [leads, orders, payments]);
@@ -197,7 +223,7 @@ export const PendingPaymentsReport: React.FC = () => {
     const finalPackageAmount = order ? order.quotation_amount : lead.budget;
     const advanceReceived = order ? (Number(order.advance_received) || 0) : 0;
     const totalPaidAmount = payment ? ((Number(payment.advance_received) || 0) + (Number(payment.final_payment_received) || 0) + (Number(payment.additional_received) || 0)) : advanceReceived;
-    const remainingAmount = finalPackageAmount - totalPaidAmount;
+    const remainingAmount = Math.max(0, finalPackageAmount - totalPaidAmount);
     
     return {
       finalPackageAmount,
@@ -208,12 +234,13 @@ export const PendingPaymentsReport: React.FC = () => {
 
   // Compute metrics for the Pending Payment Analytics Cards
   const stats = useMemo(() => {
-    const totalPendingOrders = allPendingRecords.length;
-    const totalPendingAmount = allPendingRecords.reduce((acc, r) => acc + r.remainingAmount, 0);
+    const totalPendingOrders = allPendingRecords.filter(r => r.remainingAmount > 0).length;
+    const fullyPaidOrders = allPendingRecords.filter(r => r.paymentStatus === 'Fully Paid').length;
+    const totalPendingAmount = allPendingRecords.reduce((acc, r) => acc + (r.paymentStatus === 'Fully Paid' ? 0 : r.remainingAmount), 0);
     const partialPaymentOrders = allPendingRecords.filter(r => r.paymentStatus === 'Partial').length;
     const overduePendingPayments = allPendingRecords.filter(r => r.isOverdue).length;
     const overdueAmount = allPendingRecords.filter(r => r.isOverdue).reduce((acc, r) => acc + r.remainingAmount, 0);
-    const upcomingPaymentDue = allPendingRecords.filter(r => !r.isOverdue).length;
+    const upcomingPaymentDue = allPendingRecords.filter(r => !r.isOverdue && r.remainingAmount > 0).length;
     const averageOutstandingAmount = totalPendingOrders > 0 ? totalPendingAmount / totalPendingOrders : 0;
     
     // Calculate Due Today and Due This Week
@@ -225,15 +252,16 @@ export const PendingPaymentsReport: React.FC = () => {
     const endOfWeekStr = endOfWeek.toISOString().split('T')[0];
 
     const dueTodayAmount = allPendingRecords
-      .filter(r => r.eventDate === todayStr)
+      .filter(r => r.eventDate === todayStr && r.remainingAmount > 0)
       .reduce((acc, r) => acc + r.remainingAmount, 0);
 
     const dueThisWeekAmount = allPendingRecords
-      .filter(r => r.eventDate >= todayStr && r.eventDate <= endOfWeekStr)
+      .filter(r => r.eventDate >= todayStr && r.eventDate <= endOfWeekStr && r.remainingAmount > 0)
       .reduce((acc, r) => acc + r.remainingAmount, 0);
 
     return {
       totalPendingOrders,
+      fullyPaidOrders,
       totalPendingAmount,
       partialPaymentOrders,
       overduePendingPayments,
@@ -262,7 +290,7 @@ export const PendingPaymentsReport: React.FC = () => {
       // Payment Status Filter
       if (paymentStatusFilter !== 'All') {
         if (paymentStatusFilter === 'Pending' && rec.paymentStatus !== 'Pending') return false;
-        if (paymentStatusFilter === 'Partial' && rec.paymentStatus !== 'Partial') return false;
+        if ((paymentStatusFilter === 'Partially Paid' || paymentStatusFilter === 'Partial') && rec.paymentStatus !== 'Partial') return false;
         if (paymentStatusFilter === 'Fully Paid' && rec.paymentStatus !== 'Fully Paid') return false;
       }
 
@@ -270,7 +298,7 @@ export const PendingPaymentsReport: React.FC = () => {
       if (activeCardFilter === 'Pending' && rec.paymentStatus !== 'Pending') return false;
       if (activeCardFilter === 'Partial' && rec.paymentStatus !== 'Partial') return false;
       if (activeCardFilter === 'Overdue' && !rec.isOverdue) return false;
-      if (activeCardFilter === 'Upcoming' && rec.isOverdue) return false;
+      if (activeCardFilter === 'Upcoming' && (rec.isOverdue || rec.remainingAmount <= 0)) return false;
 
       return true;
     });
@@ -296,17 +324,18 @@ export const PendingPaymentsReport: React.FC = () => {
 
   // Export functions (PDF, CSV, Excel, Print)
   const downloadCSV = () => {
-    const headers = ['Order ID', 'Customer Name', 'Mobile Number', 'Event Type', 'Event Date', 'Final Package Amount', 'Total Paid Amount', 'Remaining Amount', 'Payment Status', 'Project Status', 'Last Updated'];
+    const headers = ['Order ID', 'Customer Name', 'Mobile Number', 'Event Type', 'Event Date', 'Completion Date', 'Final Package Amount', 'Total Paid Amount', 'Remaining Amount', 'Payment Status', 'Project Status', 'Last Updated'];
     const rows = filteredRecords.map(r => [
       r.orderId,
       r.customerName,
       r.mobileNumber,
       r.eventType,
       r.eventDate,
+      r.paymentStatus === 'Fully Paid' ? (r.paymentCompletionDate || 'N/A') : 'N/A',
       r.finalPackageAmount,
       r.totalPaidAmount,
-      r.remainingAmount,
-      r.paymentStatus === 'Partial' ? 'Partial' : 'Pending',
+      r.paymentStatus === 'Fully Paid' ? 0 : r.remainingAmount,
+      r.paymentStatus === 'Fully Paid' ? 'Fully Paid' : (r.paymentStatus === 'Partial' ? 'Partially Paid' : 'Pending'),
       r.currentProjectStatus,
       new Date(r.lastUpdatedDate).toLocaleDateString()
     ]);
@@ -325,9 +354,11 @@ export const PendingPaymentsReport: React.FC = () => {
 
   const downloadExcelMock = () => {
     // Generate simple tab-separated content mimicking XLS format
-    let excelContent = "Order ID\tCustomer Name\tMobile Number\tEvent Type\tEvent Date\tFinal Package Amount\tTotal Paid Amount\tRemaining Amount\tPayment Status\tProject Status\tLast Updated\n";
+    let excelContent = "Order ID\tCustomer Name\tMobile Number\tEvent Type\tEvent Date\tCompletion Date\tFinal Package Amount\tTotal Paid Amount\tRemaining Amount\tPayment Status\tProject Status\tLast Updated\n";
     filteredRecords.forEach(r => {
-      excelContent += `${r.orderId}\t${r.customerName}\t${r.mobileNumber}\t${r.eventType}\t${r.eventDate}\t${r.finalPackageAmount}\t${r.totalPaidAmount}\t${r.remainingAmount}\t${r.paymentStatus}\t${r.currentProjectStatus}\t${new Date(r.lastUpdatedDate).toLocaleDateString()}\n`;
+      const statusStr = r.paymentStatus === 'Fully Paid' ? 'Fully Paid' : (r.paymentStatus === 'Partial' ? 'Partially Paid' : 'Pending');
+      const compDateStr = r.paymentStatus === 'Fully Paid' ? (r.paymentCompletionDate || 'N/A') : 'N/A';
+      excelContent += `${r.orderId}\t${r.customerName}\t${r.mobileNumber}\t${r.eventType}\t${r.eventDate}\t${compDateStr}\t${r.finalPackageAmount}\t${r.totalPaidAmount}\t${r.paymentStatus === 'Fully Paid' ? 0 : r.remainingAmount}\t${statusStr}\t${r.currentProjectStatus}\t${new Date(r.lastUpdatedDate).toLocaleDateString()}\n`;
     });
 
     const blob = new Blob([excelContent], { type: 'application/vnd.ms-excel' });
@@ -363,7 +394,7 @@ export const PendingPaymentsReport: React.FC = () => {
 
     doc.setFontSize(11);
     doc.setTextColor(230, 230, 230);
-    doc.text('PENDING PAYMENTS & OUTSTANDING BALANCES REPORT', 15, 21);
+    doc.text('PENDING & FULLY PAID PAYMENTS REPORT', 15, 21);
 
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
@@ -426,13 +457,21 @@ export const PendingPaymentsReport: React.FC = () => {
       doc.text(`INR ${rec.totalPaidAmount.toLocaleString('en-IN')}`, 210, currentY + 5);
       
       doc.setFont('helvetica', 'bold');
-      doc.setTextColor(185, 28, 28); // red for outstanding
-      doc.text(`INR ${rec.remainingAmount.toLocaleString('en-IN')}`, 240, currentY + 5);
+      if (rec.paymentStatus === 'Fully Paid') {
+        doc.setTextColor(16, 185, 129); // emerald for fully paid
+        doc.text('INR 0', 240, currentY + 5);
+      } else {
+        doc.setTextColor(185, 28, 28); // red for outstanding
+        doc.text(`INR ${rec.remainingAmount.toLocaleString('en-IN')}`, 240, currentY + 5);
+      }
       
       doc.setFont('helvetica', 'normal');
-      if (rec.paymentStatus === 'Partial') {
+      if (rec.paymentStatus === 'Fully Paid') {
+        doc.setTextColor(16, 185, 129); // emerald
+        doc.text('Fully Paid', 270, currentY + 5);
+      } else if (rec.paymentStatus === 'Partial') {
         doc.setTextColor(180, 83, 9); // amber
-        doc.text('Partial', 270, currentY + 5);
+        doc.text('Partially Paid', 270, currentY + 5);
       } else {
         doc.setTextColor(185, 28, 28); // red
         doc.text('Pending', 270, currentY + 5);
@@ -463,7 +502,7 @@ export const PendingPaymentsReport: React.FC = () => {
     
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(185, 28, 28);
-    const sumVal = filteredRecords.reduce((ax, rx) => ax + rx.remainingAmount, 0);
+    const sumVal = filteredRecords.reduce((ax, rx) => ax + (rx.paymentStatus === 'Fully Paid' ? 0 : rx.remainingAmount), 0);
     doc.text(`Total Outstanding Balance: INR ${sumVal.toLocaleString('en-IN')}`, 185, currentY + 20);
 
     doc.save(`Pending_Payments_Report_${new Date().toISOString().split('T')[0]}.pdf`);
@@ -721,9 +760,9 @@ export const PendingPaymentsReport: React.FC = () => {
               className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-bold"
             >
               <option value="All">All Statuses</option>
-              <option value="Pending">Pending Payment Only</option>
-              <option value="Partial">Partially Paid Only</option>
-              <option value="Fully Paid">Fully Paid Only</option>
+              <option value="Pending">Pending</option>
+              <option value="Partially Paid">Partially Paid</option>
+              <option value="Fully Paid">Fully Paid</option>
             </select>
           </div>
 
@@ -751,7 +790,7 @@ export const PendingPaymentsReport: React.FC = () => {
       <div className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden shadow-2xl">
         <div className="p-4 border-b border-zinc-850 flex items-center justify-between">
           <span className="text-xs uppercase font-mono font-extrabold tracking-widest text-zinc-400">
-            PENDING ACCOUNT CORES
+            PAYMENT ACCOUNT CORES
           </span>
           <span className="bg-zinc-900 border border-zinc-800 text-[10px] font-mono uppercase font-black tracking-wider text-zinc-400 px-2.5 py-1 rounded-lg">
             Active Records displayed: {filteredRecords.length}
@@ -759,7 +798,7 @@ export const PendingPaymentsReport: React.FC = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[1100px]">
+          <table className="w-full text-left border-collapse min-w-[1200px]">
             <thead>
               <tr className="border-b border-zinc-850 bg-zinc-900/30">
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-left">Order ID</th>
@@ -769,6 +808,7 @@ export const PendingPaymentsReport: React.FC = () => {
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-right">Paid Amount</th>
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-rose-450 font-mono text-right">Pending Amount</th>
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Event Date</th>
+                <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-emerald-400 font-mono text-center">Completion Date</th>
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Overdue Since</th>
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Days Overdue</th>
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Payment Status</th>
@@ -779,9 +819,9 @@ export const PendingPaymentsReport: React.FC = () => {
             <tbody>
               {filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-12 text-zinc-500 font-medium">
+                  <td colSpan={13} className="text-center py-12 text-zinc-500 font-medium">
                     <AlertTriangle className="w-8 h-8 text-zinc-750 mx-auto mb-2" />
-                    <span>No pending payments fit the selected parameters.</span>
+                    <span>No payments fit the selected parameters.</span>
                   </td>
                 </tr>
               ) : (
@@ -821,8 +861,12 @@ export const PendingPaymentsReport: React.FC = () => {
                     </td>
 
                     {/* Pending Amount */}
-                    <td className="px-4 py-4 text-xs font-black text-rose-400 text-right font-mono bg-rose-500/5">
-                      {formatPercentageOrINR(rec.remainingAmount)}
+                    <td className="px-4 py-4 text-xs font-black text-right font-mono bg-zinc-900/20">
+                      {rec.paymentStatus === 'Fully Paid' ? (
+                        <span className="text-emerald-400 font-mono font-bold">₹0</span>
+                      ) : (
+                        <span className="text-rose-400 font-mono font-bold">{formatPercentageOrINR(rec.remainingAmount)}</span>
+                      )}
                     </td>
 
                     {/* Event Date */}
@@ -830,14 +874,21 @@ export const PendingPaymentsReport: React.FC = () => {
                       {formattedEventDate}
                     </td>
 
+                    {/* Completion Date */}
+                    <td className="px-4 py-4 text-xs text-center font-mono text-emerald-400 font-semibold">
+                      {rec.paymentStatus === 'Fully Paid' ? (rec.paymentCompletionDate ? formatEventDate(rec.paymentCompletionDate) : 'Completed') : '-'}
+                    </td>
+
                     {/* Overdue Since */}
                     <td className="px-4 py-4 text-xs text-center font-mono text-zinc-300">
-                      {rec.eventDate ? formattedEventDate : 'N/A'}
+                      {rec.paymentStatus === 'Fully Paid' ? '-' : (rec.eventDate ? formattedEventDate : 'N/A')}
                     </td>
 
                     {/* Days Overdue */}
                     <td className="px-4 py-4 text-xs text-center font-mono font-bold">
-                      {daysOverdue > 0 ? (
+                      {rec.paymentStatus === 'Fully Paid' ? (
+                        <span className="text-zinc-500">-</span>
+                      ) : daysOverdue > 0 ? (
                         <span className="text-rose-500 bg-rose-500/10 px-2 py-0.5 rounded">{daysOverdue} Days</span>
                       ) : (
                         <span className="text-emerald-500">-</span>
@@ -846,17 +897,17 @@ export const PendingPaymentsReport: React.FC = () => {
 
                     {/* Payment Status Label */}
                     <td className="px-4 py-4 text-xs text-center">
-                      {rec.remainingAmount <= 0 ? (
+                      {rec.paymentStatus === 'Fully Paid' ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                           🟢 Fully Paid
                         </span>
-                      ) : rec.totalPaidAmount > 0 ? (
+                      ) : rec.paymentStatus === 'Partial' ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
                           🟡 Partially Paid
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                          🟠 Pending Payment
+                          🟠 Pending
                         </span>
                       )}
                     </td>

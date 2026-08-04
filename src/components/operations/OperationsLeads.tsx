@@ -8,6 +8,7 @@ import {
 import { Order, CurrentStage, Staff, Equipment } from '../../types';
 import { StatusText } from '../ui/StatusText';
 import { ProjectDetailModal } from '../ProjectDetailModal';
+import { ViewDetailsModal } from './ViewDetailsModal';
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
 import { convertTimeToDbFormat, triggerAutoScrollAndFocus, convertTo12Hour } from '../../utils';
 import { supabaseClient } from '../../supabaseClient';
@@ -2038,10 +2039,68 @@ export const OperationsLeads: React.FC = () => {
                           actionItems.push({
                             label: 'View Details',
                             onClick: () => {
-                              startAssigning(ord);
+                              setProjectDossierId(ord.order_id);
                               setActiveMenuOrderId(null);
                             }
                           });
+
+                          // 2b. Event Started
+                          if (['Order Confirmed', 'Staff Assigned', 'Operations Assigned', 'Event Scheduled'].includes(currentStage)) {
+                            actionItems.push({
+                              label: 'Event Started',
+                              onClick: async () => {
+                                try {
+                                  setIsSaving(true);
+                                  await updateOrderStage(ord.order_id, 'Event Started');
+                                  alert("Event Started status updated successfully");
+                                } catch (err: any) {
+                                  alert(`Failed to update status: ${err.message}`);
+                                } finally {
+                                  setIsSaving(false);
+                                  refreshData();
+                                  setActiveMenuOrderId(null);
+                                }
+                              }
+                            });
+                          }
+
+                          // 2c. Event Ended
+                          if (currentStage === 'Event Started') {
+                            actionItems.push({
+                              label: 'Event Ended',
+                              onClick: async () => {
+                                try {
+                                  setIsSaving(true);
+                                  await updateOrderStage(ord.order_id, 'Event Completed');
+                                  alert("Event Ended status updated successfully");
+                                } catch (err: any) {
+                                  alert(`Failed to update status: ${err.message}`);
+                                } finally {
+                                  setIsSaving(false);
+                                  refreshData();
+                                  setActiveMenuOrderId(null);
+                                }
+                              }
+                            });
+                          }
+
+                          // 2d. Footage Handover
+                          if (['Event Completed', 'Event Ended', 'Raw Footage Received', 'Footage Handover'].includes(currentStage)) {
+                            actionItems.push({
+                              label: 'Footage Handover',
+                              onClick: () => {
+                                setReceivingFootageOrderId(ord.order_id);
+                                const op = getOpDetails(ord.order_id);
+                                const existingRf = rawFootage?.find(f => f.order_id === ord.order_id);
+                                setFootageForm({
+                                  footage_link: op?.Raw_Footage_Drive_Link || op?.raw_footage_drive_link || (existingRf?.server_path || ''),
+                                  storage_type: 'Google Drive',
+                                  upload_notes: ''
+                                });
+                                setActiveMenuOrderId(null);
+                              }
+                            });
+                          }
 
                           // 3. Share via WhatsApp
                           if (assignedStaffNames.length > 0) {
@@ -3947,171 +4006,12 @@ export const OperationsLeads: React.FC = () => {
         );
       })()}
 
-      {/* Project Dossier Modal */}
-      {projectDossierId && (() => {
-        const ord = orders.find(o => o.order_id === projectDossierId);
-        if (!ord) return null;
-        const lead = leads.find(l => l.lead_id === ord.lead_id);
-        const op = getOpDetails(ord.order_id);
-        const assignedStaffNames = getAssignedStaffNamesForOrder(ord);
-        const existingPay = payments?.find(p => p.order_id === ord.order_id);
-
-        return createPortal(
-          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col overflow-hidden max-h-[90vh] animate-in zoom-in-95 duration-200">
-              <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-900/50">
-                <h3 className="text-sm font-bold text-white font-mono uppercase tracking-widest flex items-center gap-2">
-                  <span className="text-indigo-400">📋</span> View Details: {ord.order_id}
-                </h3>
-                <button onClick={() => setProjectDossierId(null)} className="text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1">✕</button>
-              </div>
-              <div className="p-5 overflow-y-auto space-y-8">
-                
-                {/* Lead Details */}
-                <div>
-                  <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Lead Details</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                     <div className="bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50">
-                        <span className="block text-[10px] text-zinc-500 font-mono mb-1">Order ID</span>
-                        <span className="text-xs text-zinc-200 font-bold font-mono">{ord.order_id}</span>
-                     </div>
-                     <div className="bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50">
-                        <span className="block text-[10px] text-zinc-500 font-mono mb-1">Customer Name</span>
-                        <span className="text-xs text-zinc-200 font-bold">{ord.customer_name}</span>
-                     </div>
-                     <div className="bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50">
-                        <span className="block text-[10px] text-zinc-500 font-mono mb-1">Customer Mobile</span>
-                        <span className="text-xs text-zinc-200">{ord.mobile || lead?.mobile || 'N/A'}</span>
-                     </div>
-                     <div className="bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50">
-                        <span className="block text-[10px] text-zinc-500 font-mono mb-1">Customer WhatsApp</span>
-                        <span className="text-xs text-zinc-200">{lead?.whatsapp_number || 'N/A'}</span>
-                     </div>
-                     <div className="bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50">
-                        <span className="block text-[10px] text-zinc-500 font-mono mb-1">Reporting Date</span>
-                        <span className="text-xs text-zinc-200 font-mono">{lead?.Reporting_date || ord.event_date || 'N/A'}</span>
-                     </div>
-                     <div className="bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50">
-                        <span className="block text-[10px] text-zinc-500 font-mono mb-1">Reporting Time</span>
-                        <span className="text-xs text-zinc-200 font-mono">{lead?.reporting_time || op?.reporting_time || 'N/A'}</span>
-                     </div>
-                     <div className="bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50">
-                        <span className="block text-[10px] text-zinc-500 font-mono mb-1">Reporting Location</span>
-                        <span className="text-xs text-zinc-200 break-words">{lead?.event_location || ord.event_location || 'N/A'}</span>
-                     </div>
-                     <div className="bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50 lg:col-span-3">
-                        <span className="block text-[10px] text-zinc-500 font-mono mb-1">Google Maps Location</span>
-                        {lead?.google_maps_link ? (
-                          <a href={lead.google_maps_link} target="_blank" rel="noopener noreferrer" className="text-xs text-indigo-400 hover:underline break-all">
-                            {lead.google_maps_link}
-                          </a>
-                        ) : (
-                          <span className="text-xs text-zinc-500">N/A</span>
-                        )}
-                     </div>
-                  </div>
-                  
-                  {lead?.events && lead.events.length > 0 ? (
-                    <div className="mt-3 space-y-2">
-                       <span className="block text-[10px] text-zinc-500 font-mono">Event(s)</span>
-                       {lead.events.map((ev: any, idx: number) => (
-                          <div key={idx} className="bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50 flex flex-wrap gap-4 text-xs">
-                             <div className="min-w-[120px]"><span className="text-zinc-500 block text-[9px] uppercase tracking-wider mb-1">Name</span> <span className="text-zinc-200 font-bold">{ev.event_name || ev.event_type}</span></div>
-                             <div className="font-mono min-w-[100px]"><span className="text-zinc-500 block text-[9px] uppercase tracking-wider mb-1">Date</span> <span className="text-zinc-200">{ev.event_date}</span></div>
-                             <div className="font-mono min-w-[100px]"><span className="text-zinc-500 block text-[9px] uppercase tracking-wider mb-1">Time</span> <span className="text-zinc-200">{ev.event_start_time || 'N/A'}</span></div>
-                          </div>
-                       ))}
-                    </div>
-                  ) : (
-                    <div className="mt-3 bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50 flex flex-wrap gap-4 text-xs">
-                       <div className="min-w-[120px]"><span className="text-zinc-500 block text-[9px] uppercase tracking-wider mb-1">Name</span> <span className="text-zinc-200 font-bold">{ord.event_type}</span></div>
-                       <div className="font-mono min-w-[100px]"><span className="text-zinc-500 block text-[9px] uppercase tracking-wider mb-1">Date</span> <span className="text-zinc-200">{ord.event_date}</span></div>
-                       <div className="font-mono min-w-[100px]"><span className="text-zinc-500 block text-[9px] uppercase tracking-wider mb-1">Time</span> <span className="text-zinc-200">{ord.event_start_time || 'N/A'}</span></div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Assigned Team */}
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Assigned Team</h4>
-                    <button
-                      onClick={() => {
-                        setProjectDossierId(null);
-                        startAssigning(ord);
-                      }}
-                      className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-lg text-[10px] font-bold cursor-pointer transition-colors flex items-center gap-1.5"
-                    >
-                      ✏️ Edit Assignment
-                    </button>
-                  </div>
-                  <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50">
-                     <div className="mb-4 pb-4 border-b border-zinc-800/50">
-                        <span className="block text-[10px] text-zinc-500 font-mono mb-2 uppercase tracking-wider">Team Member Included</span>
-                        <div className="text-xs text-zinc-300 whitespace-pre-wrap">{lead?.Team_Members || 'N/A'}</div>
-                     </div>
-                     <table className="w-full text-left text-xs text-zinc-300">
-                        <thead>
-                           <tr className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider border-b border-zinc-800/50">
-                              <th className="pb-2 font-normal">Assigned Staff</th>
-                              <th className="pb-2 font-normal">Staff Type</th>
-                              <th className="pb-2 font-normal">Mobile Number</th>
-                           </tr>
-                        </thead>
-                        <tbody>
-                           {assignedStaffNames.length > 0 ? (
-                              assignedStaffNames.map((name, i) => {
-                                 const staffObj = staff?.find(s => s.name === name);
-                                 return (
-                                    <tr key={i} className="border-b border-zinc-800/20 last:border-0 hover:bg-zinc-800/20 transition-colors">
-                                       <td className="py-2.5 font-bold text-indigo-300">{name}</td>
-                                       <td className="py-2.5">{staffObj?.staff_type || 'N/A'}</td>
-                                       <td className="py-2.5 font-mono">{staffObj?.mobile || 'N/A'}</td>
-                                    </tr>
-                                 );
-                              })
-                           ) : (
-                              <tr>
-                                 <td colSpan={3} className="py-4 text-center italic text-zinc-500">No staff assigned yet</td>
-                              </tr>
-                           )}
-                        </tbody>
-                     </table>
-                  </div>
-                </div>
-
-                {/* Project Information */}
-                <div>
-                  <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Project Information</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                     <div className="bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50">
-                        <span className="block text-[10px] text-zinc-500 font-mono mb-1">Current Status</span>
-                        <span className="text-xs text-emerald-400 font-bold inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>{ord.current_stage || lead?.status || 'N/A'}</span>
-                     </div>
-                     <div className="bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50">
-                        <span className="block text-[10px] text-zinc-500 font-mono mb-1">Event Status</span>
-                        <span className="text-xs text-zinc-200">{op?.event_status || 'N/A'}</span>
-                     </div>
-                     <div className="bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50">
-                        <span className="block text-[10px] text-zinc-500 font-mono mb-1">Payment Status</span>
-                        <span className="text-xs text-zinc-200">{existingPay?.payment_status || 'Pending'}</span>
-                     </div>
-                     <div className="bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50">
-                        <span className="block text-[10px] text-zinc-500 font-mono mb-1">Advance Payment</span>
-                        <span className="text-xs text-zinc-200 font-mono">₹{existingPay?.advance_payment || lead?.quotation_discount || 0}</span>
-                     </div>
-                     <div className="bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50">
-                        <span className="block text-[10px] text-zinc-500 font-mono mb-1">Pending Payment</span>
-                        <span className="text-xs text-zinc-200 font-mono">₹{existingPay?.pending_payment || 0}</span>
-                     </div>
-                  </div>
-                </div>
-                
-              </div>
-            </div>
-          </div>, document.body
-        );
-      })()}
+      {/* View Details Modal */}
+      <ViewDetailsModal
+        isOpen={!!projectDossierId}
+        onClose={() => setProjectDossierId(null)}
+        orderId={projectDossierId}
+      />
 
       {/* Floating Action Menu */}
       {activeMenuOrderId && createPortal(
