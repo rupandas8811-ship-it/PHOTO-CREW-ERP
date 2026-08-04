@@ -3,6 +3,7 @@ import { useRole } from './RoleContext';
 import { MapPin, Calendar, Clock, Briefcase, Camera, User, Phone, MessageSquare, Eye, CheckCircle, AlertCircle, Upload, X, Play, ShieldCheck, ChevronRight, ChevronLeft, Video } from 'lucide-react';
 import { Lead, Order, Operation, StaffAssignment, EquipmentHandover } from '../types';
 import { supabaseClient } from '../supabaseClient';
+import { getCalculatedOrderStage, getStageRank, getAllStaffStatusesForOrder } from '../utils/orderStageCalculator';
 import { ViewDetailsModal } from './operations/ViewDetailsModal';
 
 const StaffActionDropdown: React.FC<{
@@ -827,22 +828,37 @@ export const StaffModule: React.FC = () => {
             });
           }
 
-          await pushUpdate('operations', 'order_id', booking.orderId, {
-            event_status: 'Event Started',
-            remarks: `Event Started by ${staffName} on ${timestamp}`
-          });
+          // Calculate overall stage across ALL assigned staff members
+          const allStaffStatuses = getAllStaffStatusesForOrder(booking.orderId, staffName, 'Event Started', nextStatuses, orders, leads, staffAssignments);
+          const currentOrd = orders?.find(o => o.order_id === booking.orderId);
+          const currentLead = leads?.find(l => l.lead_id === (currentOrd?.lead_id || booking.leadId || booking.orderId));
+          const calculatedOverallStage = getCalculatedOrderStage(
+            currentOrd?.current_stage || currentLead?.current_status || currentLead?.status || 'Assigned Crew',
+            allStaffStatuses
+          );
 
-          await pushUpdate('orders', 'order_id', booking.orderId, {
-            current_stage: 'Event Started',
-            updated_by: staffName,
-            updated_at: timestamp
-          });
+          if (getStageRank(calculatedOverallStage) >= 1) {
+            await pushUpdate('operations', 'order_id', booking.orderId, {
+              event_status: calculatedOverallStage,
+              remarks: `Event Started by ${staffName} on ${timestamp}`
+            });
 
-          if (booking.leadId) {
-            await updateLead(booking.leadId, {
-              status: 'Event Started' as any,
-              current_status: 'Event Started' as any,
-              updated_by: staffName
+            await pushUpdate('orders', 'order_id', booking.orderId, {
+              current_stage: calculatedOverallStage,
+              updated_by: staffName,
+              updated_at: timestamp
+            });
+
+            if (booking.leadId) {
+              await updateLead(booking.leadId, {
+                status: calculatedOverallStage as any,
+                current_status: calculatedOverallStage as any,
+                updated_by: staffName
+              });
+            }
+          } else {
+            await pushUpdate('operations', 'order_id', booking.orderId, {
+              remarks: `Event Started by ${staffName} on ${timestamp} (Waiting for remaining assigned crew)`
             });
           }
         }
@@ -1046,22 +1062,36 @@ export const StaffModule: React.FC = () => {
           await pushUpdate('staff_assignments', 'order_id', booking.orderId, updateAssignmentPayload);
         }
 
+        const allStaffStatuses = getAllStaffStatusesForOrder(booking.orderId, staffName, nextStatus, nextStatuses, orders, leads, staffAssignments);
+        const currentOrd = orders?.find(o => o.order_id === booking.orderId);
+        const currentLead = leads?.find(l => l.lead_id === (currentOrd?.lead_id || booking.leadId || booking.orderId));
+        const calculatedOverallStage = getCalculatedOrderStage(
+          currentOrd?.current_stage || currentLead?.current_status || currentLead?.status || 'Assigned Crew',
+          allStaffStatuses
+        );
+
         let globalNextStatus: string | null = null;
         if (stage === 'Event Complete') {
           globalNextStatus = 'Event Ended';
         } else if (stage === 'Equipment Handover') {
           globalNextStatus = 'Footage Handover';
+        } else {
+          globalNextStatus = calculatedOverallStage;
         }
 
-        if (globalNextStatus) {
-          const opsPayload: any = {
-            event_status: globalNextStatus,
-            equipment_status: effectiveEquipmentStatus,
-            remarks: `Updated by ${staffName}: Stage updated to ${globalNextStatus}`
-          };
-          if (modalRawFootageLink) {
-            opsPayload.raw_footage_drive_link = modalRawFootageLink;
-          }
+        const targetRank = stage === 'Event Complete' ? 2 : stage === 'Equipment Handover' ? 3 : getStageRank(calculatedOverallStage);
+        const shouldAdvanceOverall = getStageRank(calculatedOverallStage) >= targetRank;
+
+        const opsPayload: any = {
+          equipment_status: effectiveEquipmentStatus,
+          remarks: `Updated by ${staffName}: Stage updated to ${nextStatus}${!shouldAdvanceOverall ? ' (Waiting for remaining assigned crew)' : ''}`
+        };
+        if (modalRawFootageLink) {
+          opsPayload.raw_footage_drive_link = modalRawFootageLink;
+        }
+
+        if (shouldAdvanceOverall && globalNextStatus) {
+          opsPayload.event_status = globalNextStatus;
 
           await pushUpdate('operations', 'order_id', booking.orderId, opsPayload);
 
@@ -1078,6 +1108,8 @@ export const StaffModule: React.FC = () => {
               updated_by: staffName
             });
           }
+        } else {
+          await pushUpdate('operations', 'order_id', booking.orderId, opsPayload);
         }
       }
 

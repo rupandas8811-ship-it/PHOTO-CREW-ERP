@@ -12,6 +12,7 @@ import { ViewDetailsModal } from './ViewDetailsModal';
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
 import { convertTimeToDbFormat, triggerAutoScrollAndFocus, convertTo12Hour } from '../../utils';
 import { supabaseClient } from '../../supabaseClient';
+import { getCalculatedOrderStage, getStageRank } from '../../utils/orderStageCalculator';
 
 const OperationsActionColumn = ({ ord, actionItems, isOpen, setActiveMenuOrderId, setMenuCoords, setActiveMenuItems }: any) => {
   return (
@@ -873,7 +874,10 @@ export const OperationsLeads: React.FC = () => {
       // 1. Status Dropdown filter
       if (statusFilter !== 'All') {
         const isStaffAssigned = staffAssignments ? staffAssignments.some(x => x.order_id === o.order_id) : false;
-        const stageNorm = (o.current_stage || '').trim();
+        const assignedStaffDetails = getAssignedStaffDetailsForOrder(o);
+        const staffStatuses = assignedStaffDetails.map(s => s.staff_status);
+        const calculatedStage = getCalculatedOrderStage(o.current_stage, staffStatuses);
+        const stageNorm = (calculatedStage || o.current_stage || '').trim();
         
         if (statusFilter === 'Order Confirmed' && !['Order Confirmed', 'Confirm Order', 'New Order Received'].includes(stageNorm)) return false;
         if (statusFilter === 'Operations Assigned' && stageNorm !== 'Operations Assigned') return false;
@@ -1545,25 +1549,29 @@ export const OperationsLeads: React.FC = () => {
   };
 
   const stats = useMemo(() => {
-    const assignedCrew = operationsOrders.filter(o => 
-      ['Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Operations Assigned'].includes(o.current_stage)
-    ).length;
+    let assignedCrew = 0;
+    let eventStarted = 0;
+    let eventEnded = 0;
+    let footageHandover = 0;
+    let verifiedFootage = 0;
 
-    const eventStarted = operationsOrders.filter(o => 
-      ['Event Started', 'Event Start'].includes(o.current_stage)
-    ).length;
+    operationsOrders.forEach(o => {
+      const assignedStaffDetails = getAssignedStaffDetailsForOrder(o);
+      const staffStatuses = assignedStaffDetails.map(s => s.staff_status);
+      const calculatedStage = getCalculatedOrderStage(o.current_stage, staffStatuses);
 
-    const eventEnded = operationsOrders.filter(o => 
-      ['Event Ended', 'Event End', 'Event Completed', 'Event Complete'].includes(o.current_stage)
-    ).length;
-
-    const footageHandover = operationsOrders.filter(o => 
-      ['Footage Handover', 'Equipment Handover'].includes(o.current_stage)
-    ).length;
-
-    const verifiedFootage = operationsOrders.filter(o => 
-      ['Verified Footage', 'Footage Handover Verified', 'Raw Footage Received'].includes(o.current_stage)
-    ).length;
+      if (['Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Operations Assigned'].includes(calculatedStage)) {
+        assignedCrew++;
+      } else if (['Event Started', 'Event Start'].includes(calculatedStage)) {
+        eventStarted++;
+      } else if (['Event Ended', 'Event End', 'Event Completed', 'Event Complete'].includes(calculatedStage)) {
+        eventEnded++;
+      } else if (['Footage Handover', 'Equipment Handover'].includes(calculatedStage)) {
+        footageHandover++;
+      } else if (['Verified Footage', 'Footage Handover Verified', 'Raw Footage Received'].includes(calculatedStage)) {
+        verifiedFootage++;
+      }
+    });
 
     return {
       assignedCrew,
@@ -1572,7 +1580,7 @@ export const OperationsLeads: React.FC = () => {
       footageHandover,
       verifiedFootage
     };
-  }, [operationsOrders]);
+  }, [operationsOrders, staffAssignments, leads]);
 
   const availableGearOptions = useMemo(() => {
     if (!equipment) return [];
@@ -1828,7 +1836,10 @@ export const OperationsLeads: React.FC = () => {
                 });
 
                 const lead = leads.find(l => l.lead_id === ord.lead_id);
-                const currentStage = lead ? getLeadCurrentStatus(lead) : (ord.current_stage || 'Order Confirmed');
+                const assignedStaffDetails = getAssignedStaffDetailsForOrder(ord);
+                const staffStatuses = assignedStaffDetails.map(s => s.staff_status);
+                const baseStage = ord.current_stage || (lead ? getLeadCurrentStatus(lead) : 'Order Confirmed');
+                const currentStage = getCalculatedOrderStage(baseStage, staffStatuses);
                 const isLocked = currentStage === 'Raw Footage Received';
 
                 return (
