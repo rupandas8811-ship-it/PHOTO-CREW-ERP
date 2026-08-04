@@ -4179,12 +4179,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       .filter(q => q.lead_id === lead.lead_id)
       .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0];
 
-    const hasEventDetails = !!(
-      (eventsForCheck && eventsForCheck.length > 0) ||
-      (fullLead.event_type && String(fullLead.event_type).trim() !== '') ||
-      (fullLead.event_date && String(fullLead.event_date).trim() !== '') ||
-      (fullLead.event_location && String(fullLead.event_location).trim() !== '') ||
-      (fullLead.desired_event_shoot_type && String(fullLead.desired_event_shoot_type).trim() !== '')
+    // Determine the target CRM step based on persisted data and status
+    const hasQuotationOrPackage = !!(
+      latestQuote ||
+      primaryLP?.package_id ||
+      (fullLead.Select_Package_Option && String(fullLead.Select_Package_Option).trim() !== '') ||
+      ['Quotation Sent', 'Negotiation', 'Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed', 'Lost Lead'].includes(fullLead.status || '') ||
+      ['Quotation Sent', 'Negotiation', 'Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed', 'Lost Lead'].includes((fullLead as any).current_status || '')
     );
 
     const hasCustomerDetails = !!(
@@ -4198,17 +4199,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     // Navigation logic: always open first incomplete step. Never skip an incomplete step.
     let startStep = 1;
-    if (hasCustomerDetails) {
-      if (hasEventDetails) {
-        startStep = 3;
-      } else {
-        startStep = 2; // Customer details complete, but event details not
-      }
+    if (explicitStep) {
+      if (explicitStep >= 2) startStep = 3;
+      else if (explicitStep === 1) startStep = 2;
     } else {
-      startStep = 1; // Customer details not complete
+      if (hasQuotationOrPackage) startStep = 3;
+      else if (hasCustomerDetails) startStep = 2;
+      else startStep = 1;
     }
 
-    const completedStep = Math.min(Math.max(startStep, explicitStep || 1), startStep);
+    const completedStep = Math.max(startStep === 3 ? (hasQuotationOrPackage ? 3 : 2) : startStep - 1, explicitStep || 1);
     setCrmHighestStep(completedStep);
     setCrmWizardStep(startStep);
     
@@ -4703,6 +4703,31 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
         // Pre-validate and format all events in the finalEventsList
         for (const ev of finalEventsList) {
+          if (!ev.event_type || ev.event_type.trim() === '') {
+            showToastMsg("Please select Event Type for all events.", "error");
+            setIsSaving(false); return;
+          }
+          if (ev.event_type === 'Other' && (!ev.event_name || ev.event_name.trim() === '')) {
+            showToastMsg("Please enter Event Name for 'Other' event types.", "error");
+            setIsSaving(false); return;
+          }
+          if (!ev.event_date || ev.event_date.trim() === '') {
+            showToastMsg("Please select Event Date for all events.", "error");
+            setIsSaving(false); return;
+          }
+          if (!ev.event_start_time || ev.event_start_time.trim() === '') {
+            showToastMsg("Please select Event Start Time for all events.", "error");
+            setIsSaving(false); return;
+          }
+          if (!ev.event_end_time || ev.event_end_time.trim() === '') {
+            showToastMsg("Please select Event End Time for all events.", "error");
+            setIsSaving(false); return;
+          }
+          if (!ev.event_location || ev.event_location.trim() === '') {
+            showToastMsg("Please enter Event Location for all events.", "error");
+            setIsSaving(false); return;
+          }
+          
           try {
             ev.event_start_time = validateAndFormatTime(ev.event_start_time, "Event Start Time") || '';
           } catch (err: any) {
@@ -4714,6 +4739,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             ev.event_end_time = validateAndFormatTime(ev.event_end_time, "Event End Time") || '';
           } catch (err: any) {
             showToastMsg(err.message, "error");
+            setIsSaving(false);
+            return;
+          }
+          
+          const dateTimeErrMsg = getEventDateTimeErrorMessage(ev.event_date, ev.event_end_date, ev.event_start_time, ev.event_end_time);
+          if (dateTimeErrMsg) {
+            showToastMsg(dateTimeErrMsg, "error");
             setIsSaving(false);
             return;
           }
@@ -4973,6 +5005,54 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         setIsSaving(false);
         return;
       }
+      
+      // Pre-validate and format all events in the finalEventsList
+      for (const ev of finalEventsList) {
+        if (!ev.event_type || ev.event_type.trim() === '') {
+          showToastMsg("Please select Event Type for all events.", "error");
+          setIsSaving(false); return;
+        }
+        if (ev.event_type === 'Other' && (!ev.event_name || ev.event_name.trim() === '')) {
+          showToastMsg("Please enter Event Name for 'Other' event types.", "error");
+          setIsSaving(false); return;
+        }
+        if (!ev.event_date || ev.event_date.trim() === '') {
+          showToastMsg("Please select Event Date for all events.", "error");
+          setIsSaving(false); return;
+        }
+        if (!ev.event_start_time || ev.event_start_time.trim() === '') {
+          showToastMsg("Please select Event Start Time for all events.", "error");
+          setIsSaving(false); return;
+        }
+        if (!ev.event_end_time || ev.event_end_time.trim() === '') {
+          showToastMsg("Please select Event End Time for all events.", "error");
+          setIsSaving(false); return;
+        }
+        if (!ev.event_location || ev.event_location.trim() === '') {
+          showToastMsg("Please enter Event Location for all events.", "error");
+          setIsSaving(false); return;
+        }
+        
+        try {
+          ev.event_start_time = validateAndFormatTime(ev.event_start_time, "Event Start Time") || '';
+        } catch (err: any) {
+          showToastMsg(err.message, "error");
+          setIsSaving(false); return;
+        }
+        try {
+          ev.event_end_time = validateAndFormatTime(ev.event_end_time, "Event End Time") || '';
+        } catch (err: any) {
+          showToastMsg(err.message, "error");
+          setIsSaving(false); return;
+        }
+        
+        const dateTimeErrMsg = getEventDateTimeErrorMessage(ev.event_date, ev.event_end_date, ev.event_start_time, ev.event_end_time);
+        if (dateTimeErrMsg) {
+          showToastMsg(dateTimeErrMsg, "error");
+          setIsSaving(false); return;
+        }
+      }
+
       const firstEvent = finalEventsList[0];
 
       const formattedEventTime = validateAndFormatTime(firstEvent.event_start_time, "Event Start Time");
@@ -5125,6 +5205,54 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         setIsSaving(false);
         return;
       }
+      
+      // Pre-validate and format all events in the finalEventsList
+      for (const ev of finalEventsList) {
+        if (!ev.event_type || ev.event_type.trim() === '') {
+          showToastMsg("Please select Event Type for all events.", "error");
+          setIsSaving(false); return;
+        }
+        if (ev.event_type === 'Other' && (!ev.event_name || ev.event_name.trim() === '')) {
+          showToastMsg("Please enter Event Name for 'Other' event types.", "error");
+          setIsSaving(false); return;
+        }
+        if (!ev.event_date || ev.event_date.trim() === '') {
+          showToastMsg("Please select Event Date for all events.", "error");
+          setIsSaving(false); return;
+        }
+        if (!ev.event_start_time || ev.event_start_time.trim() === '') {
+          showToastMsg("Please select Event Start Time for all events.", "error");
+          setIsSaving(false); return;
+        }
+        if (!ev.event_end_time || ev.event_end_time.trim() === '') {
+          showToastMsg("Please select Event End Time for all events.", "error");
+          setIsSaving(false); return;
+        }
+        if (!ev.event_location || ev.event_location.trim() === '') {
+          showToastMsg("Please enter Event Location for all events.", "error");
+          setIsSaving(false); return;
+        }
+        
+        try {
+          ev.event_start_time = validateAndFormatTime(ev.event_start_time, "Event Start Time") || '';
+        } catch (err: any) {
+          showToastMsg(err.message, "error");
+          setIsSaving(false); return;
+        }
+        try {
+          ev.event_end_time = validateAndFormatTime(ev.event_end_time, "Event End Time") || '';
+        } catch (err: any) {
+          showToastMsg(err.message, "error");
+          setIsSaving(false); return;
+        }
+        
+        const dateTimeErrMsg = getEventDateTimeErrorMessage(ev.event_date, ev.event_end_date, ev.event_start_time, ev.event_end_time);
+        if (dateTimeErrMsg) {
+          showToastMsg(dateTimeErrMsg, "error");
+          setIsSaving(false); return;
+        }
+      }
+
       const firstEvent = finalEventsList[0];
 
       const formattedEventTime = validateAndFormatTime(firstEvent.event_start_time, "Event Start Time");
@@ -6572,6 +6700,31 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       // Pre-validate and format all events in the finalEventsList
       for (const ev of finalEventsList) {
+        if (!ev.event_type || ev.event_type.trim() === '') {
+          showToastMsg("Please select Event Type for all events.", "error");
+          return;
+        }
+        if (ev.event_type === 'Other' && (!ev.event_name || ev.event_name.trim() === '')) {
+          showToastMsg("Please enter Event Name for 'Other' event types.", "error");
+          return;
+        }
+        if (!ev.event_date || ev.event_date.trim() === '') {
+          showToastMsg("Please select Event Date for all events.", "error");
+          return;
+        }
+        if (!ev.event_start_time || ev.event_start_time.trim() === '') {
+          showToastMsg("Please select Event Start Time for all events.", "error");
+          return;
+        }
+        if (!ev.event_end_time || ev.event_end_time.trim() === '') {
+          showToastMsg("Please select Event End Time for all events.", "error");
+          return;
+        }
+        if (!ev.event_location || ev.event_location.trim() === '') {
+          showToastMsg("Please enter Event Location for all events.", "error");
+          return;
+        }
+        
         try {
           ev.event_start_time = validateAndFormatTime(ev.event_start_time, "Event Start Time") || '';
         } catch (err: any) {
@@ -6582,6 +6735,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           ev.event_end_time = validateAndFormatTime(ev.event_end_time, "Event End Time") || '';
         } catch (err: any) {
           showToastMsg(err.message, "error");
+          return;
+        }
+        
+        const dateTimeErrMsg = getEventDateTimeErrorMessage(ev.event_date, ev.event_end_date, ev.event_start_time, ev.event_end_time);
+        if (dateTimeErrMsg) {
+          showToastMsg(dateTimeErrMsg, "error");
           return;
         }
       }
