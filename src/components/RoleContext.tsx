@@ -679,7 +679,7 @@ export const mapProductionStaffToDb = async (member: Staff | Partial<Staff>) => 
     }
   }
 
-  const standardFields = ['email', 'role', 'department', 'status', 'joining_date', 'profile_photo'];
+  const standardFields = ['email', 'role', 'department', 'status', 'joining_date', 'profile_photo', 'auth_user_id'];
   for (const field of standardFields) {
     if ((member as any)[field] !== undefined) {
       if (cols.includes(field)) {

@@ -484,6 +484,7 @@ export interface Staff {
   updated_by?: string;
   created_at?: string;
   updated_at?: string;
+  auth_user_id?: string;
 }
 
 export interface ProductionSpeciality {

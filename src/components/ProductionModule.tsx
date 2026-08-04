@@ -3,7 +3,7 @@ import { useRole } from './RoleContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabaseClient } from '../supabaseClient';
 import { 
-  Play, CheckCircle2, UserCheck, Eye, Calendar, Lock, Layers, AlertCircle, Ban, RefreshCw, Clock,
+  Play, CheckCircle2, UserCheck, Eye, EyeOff, Calendar, Lock, Layers, AlertCircle, Ban, RefreshCw, Clock,
   PlusSquare, ArrowRight, CheckSquare, AlertTriangle, Truck, Users, BarChart3, TrendingUp, Sparkles, UserPlus, ChevronRight,
   Aperture, Camera, Sliders, ShieldCheck, Image, Download, Printer, FileSpreadsheet, FileText, Search,
   Trash2, X, Mail, MessageSquare, Edit3, MapPin, Plus, Phone
@@ -1768,6 +1768,9 @@ _Please acknowledge receipt of this task assignment._`;
   const [newStaffType, setNewStaffType] = useState('');
   const [newStaffMobile, setNewStaffMobile] = useState('');
   const [newStaffWhatsapp, setNewStaffWhatsapp] = useState('');
+  const [newStaffEmail, setNewStaffEmail] = useState('');
+  const [newStaffPassword, setNewStaffPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [newStaffSkills, setNewStaffSkills] = useState<string[]>([]);
   const [newSkillText, setNewSkillText] = useState('');
   const [addStaffError, setAddStaffError] = useState('');
@@ -4653,6 +4656,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           const name = newStaffName.trim();
           const mobile = newStaffMobile.trim();
           const whatsapp = newStaffWhatsapp.trim();
+          const email = newStaffEmail.trim();
+          const password = newStaffPassword;
 
           if (!name) {
             setAddStaffError('Staff Full Name is required.');
@@ -4669,15 +4674,68 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             setIsSubmittingStaff(false);
             return;
           }
+          if (!email) {
+            setAddStaffError('Email is required.');
+            setIsSubmittingStaff(false);
+            return;
+          }
+          if (!editingStaffId && !password) {
+            setAddStaffError('Password is required.');
+            setIsSubmittingStaff(false);
+            return;
+          }
 
           // Comma-separated skills
           const skillsArray = newStaffSkills;
 
           try {
             if (editingStaffId) {
+              const currentStaff = productionStaff?.find(s => s.staff_id === editingStaffId);
+              
+              if (password && currentStaff?.auth_user_id) {
+                const res = await fetch('/api/auth/update-user', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    auth_id: currentStaff.auth_user_id,
+                    email,
+                    password,
+                    name,
+                    role: 'Editor',
+                  })
+                });
+                
+                if (!res.ok) {
+                   const errData = await res.json();
+                   throw new Error(errData.error || 'Failed to update authentication credentials');
+                }
+              } else if (password && !currentStaff?.auth_user_id) {
+                 // Fallback if they were never created in auth system
+                 const res = await fetch('/api/auth/create-user', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    email,
+                    password,
+                    name,
+                    role: 'Editor',
+                  })
+                });
+                if (!res.ok) {
+                   const errData = await res.json();
+                   throw new Error(errData.error || 'Failed to create authentication credentials');
+                }
+                const resData = await res.json();
+                
+                await updateProductionStaff(editingStaffId, {
+                  auth_user_id: resData.data.user.id
+                });
+              }
+
               // Update explicit record being edited
               await updateProductionStaff(editingStaffId, {
                 name,
+                email,
                 mobile,
                 whatsapp_number: whatsapp,
                 Skill: skillsArray as any,
@@ -4686,6 +4744,26 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               });
               setAddStaffSuccess('✅ Staff details updated successfully.');
             } else {
+              // Create new auth user
+              const authRes = await fetch('/api/auth/create-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  email,
+                  password,
+                  name,
+                  role: 'Editor',
+                })
+              });
+              
+              if (!authRes.ok) {
+                 const errData = await authRes.json();
+                 throw new Error(errData.error || 'Failed to create authentication credentials');
+              }
+              
+              const authData = await authRes.json();
+              const authUserId = authData.data.user.id;
+
               // Check if duplicate exists (name or mobile matching)
               const existingStaff = (productionStaff || []).find(
                 (s) =>
@@ -4697,10 +4775,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 // Update existing staff
                 await updateProductionStaff(existingStaff.staff_id, {
                   mobile,
+                  email,
                   whatsapp_number: whatsapp,
                   Skill: skillsArray as any,
                   staff_type: newStaffType as any,
-                  Staff_Type: newStaffType as any
+                  Staff_Type: newStaffType as any,
+                  auth_user_id: authUserId
                 });
                 setAddStaffSuccess('✅ Staff details updated successfully.');
               } else {
@@ -4708,14 +4788,15 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 await addProductionStaff({
                   name,
                   mobile,
+                  email,
                   whatsapp_number: whatsapp,
                   Skill: skillsArray as any,
                   staff_type: newStaffType as any,
-                  email: `${name.toLowerCase().replace(/\s+/g, '')}@photocrew.com`,
                   role: 'Editor',
                   department: 'Post-Production',
                   status: 'Active',
-                  joining_date: new Date().toISOString().split('T')[0]
+                  joining_date: new Date().toISOString().split('T')[0],
+                  auth_user_id: authUserId
                 });
                 setAddStaffSuccess('✅ Staff details updated successfully.');
               }
@@ -4731,10 +4812,15 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             setNewStaffType('');
             setNewStaffMobile('');
             setNewStaffWhatsapp('');
+            setNewStaffEmail('');
+            setNewStaffPassword('');
+            setNewStaffType('');
+            setNewStaffMobile('');
+            setNewStaffWhatsapp('');
             setNewStaffSkills([]);
             setEditingStaffId(null);
           } catch (err: any) {
-            setAddStaffError('❌ Failed to update staff details.');
+            setAddStaffError('❌ ' + (err.message || 'Failed to update staff details.'));
           } finally {
             setIsSubmittingStaff(false);
           }
@@ -4872,6 +4958,41 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       />
                     </div>
 
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
+                        Email Address <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={newStaffEmail}
+                        onChange={(e) => setNewStaffEmail(e.target.value)}
+                        placeholder="e.g. rahul@photocrew.com"
+                        className="w-full bg-zinc-900 border border-zinc-850 px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
+                        Password {editingStaffId ? '(Leave blank to keep existing)' : <span className="text-rose-500">*</span>}
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          required={!editingStaffId}
+                          value={newStaffPassword}
+                          onChange={(e) => setNewStaffPassword(e.target.value)}
+                          placeholder={editingStaffId ? "Enter new password" : "••••••••"}
+                          className="w-full bg-zinc-900 border border-zinc-850 pl-4 pr-10 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white focus:outline-none cursor-pointer"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
                     {/* Tag-based Skills input field */}
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
@@ -4951,6 +5072,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         setNewStaffType('');
                         setNewStaffMobile('');
                         setNewStaffWhatsapp('');
+                        setNewStaffEmail('');
+                        setNewStaffPassword('');
                         setNewStaffSkills([]);
                       }}
                       className="w-full mt-2 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
@@ -5150,6 +5273,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       setNewStaffType(member.Staff_Type || member.staff_type || '');
                                       setNewStaffMobile(member.mobile);
                                       setNewStaffWhatsapp(member.whatsapp_number || '');
+                                      setNewStaffEmail(member.email || '');
+                                      setNewStaffPassword('');
                                       setNewStaffSkills(Array.isArray(member.Skill) ? member.Skill : member.Skill ? member.Skill.split(',').map((s: string) => s.trim()).filter(Boolean) : member.production_role_speciality ? member.production_role_speciality.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
                                     }}
                                     className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-amber-500 hover:text-amber-400 border border-zinc-850 rounded font-bold cursor-pointer transition-colors text-[10px] font-mono"

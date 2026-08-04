@@ -135,6 +135,7 @@ export const OperationsLeads: React.FC = () => {
   const [activeMenuOrderId, setActiveMenuOrderId] = useState<string | null>(null);
   const [selectedEquipmentStatus, setSelectedEquipmentStatus] = useState<{ staffName: string, eqReceived: any, eqHandover: any } | null>(null);
   const [selectedEventImages, setSelectedEventImages] = useState<{ staffName: string, assetCollection: any, evStart: any, evEnd: any } | null>(null);
+  const [imagePreviewModal, setImagePreviewModal] = useState<{ url: string, date: string, time: string, staffName: string, stage: string } | null>(null);
   const [activeMenuItems, setActiveMenuItems] = useState<{ label: string; onClick: () => void }[]>([]);
   const [menuCoords, setMenuCoords] = useState<{ x: number, y: number, openUpward: boolean }>({ x: 0, y: 0, openUpward: false });
 
@@ -3057,7 +3058,7 @@ export const OperationsLeads: React.FC = () => {
                           <td className="py-3 px-3 text-center">
                             {recMeta.url ? (
                               <button
-                                onClick={() => window.open(recMeta.url, '_blank')}
+                                onClick={() => setImagePreviewModal({ url: recMeta.url, date: recMeta.date, time: recMeta.time, staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Received' })}
                                 className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                               >
                                 View Image
@@ -3074,7 +3075,7 @@ export const OperationsLeads: React.FC = () => {
                           <td className="py-3 px-3 text-center">
                             {handMeta.url ? (
                               <button
-                                onClick={() => window.open(handMeta.url, '_blank')}
+                                onClick={() => setImagePreviewModal({ url: handMeta.url, date: handMeta.date, time: handMeta.time, staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Handover' })}
                                 className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                               >
                                 View Image
@@ -3133,34 +3134,16 @@ export const OperationsLeads: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
                   {(() => {
-                    const assetMeta = getRecordMeta(selectedEventImages.assetCollection);
                     const startMeta = getRecordMeta(selectedEventImages.evStart);
                     const endMeta = getRecordMeta(selectedEventImages.evEnd);
                     return (
                       <>
                         <tr className="hover:bg-zinc-800/20">
-                          <td className="py-3 px-3 text-white font-bold">Asset Collection</td>
-                          <td className="py-3 px-3 text-center">
-                            {assetMeta.url ? (
-                              <button
-                                onClick={() => window.open(assetMeta.url, '_blank')}
-                                className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                              >
-                                View Image
-                              </button>
-                            ) : (
-                              <span className="text-zinc-600 italic text-[11px]">Pending</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{assetMeta.date}</td>
-                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{assetMeta.time}</td>
-                        </tr>
-                        <tr className="hover:bg-zinc-800/20">
                           <td className="py-3 px-3 text-white font-bold">Event Start</td>
                           <td className="py-3 px-3 text-center">
                             {startMeta.url ? (
                               <button
-                                onClick={() => window.open(startMeta.url, '_blank')}
+                                onClick={() => setImagePreviewModal({ url: startMeta.url, date: startMeta.date, time: startMeta.time, staffName: selectedEventImages.staffName, stage: 'Event Start' })}
                                 className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                               >
                                 View Image
@@ -3177,7 +3160,7 @@ export const OperationsLeads: React.FC = () => {
                           <td className="py-3 px-3 text-center">
                             {endMeta.url ? (
                               <button
-                                onClick={() => window.open(endMeta.url, '_blank')}
+                                onClick={() => setImagePreviewModal({ url: endMeta.url, date: endMeta.date, time: endMeta.time, staffName: selectedEventImages.staffName, stage: 'Event Complete' })}
                                 className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                               >
                                 View Image
@@ -3951,7 +3934,6 @@ export const OperationsLeads: React.FC = () => {
                               <tr className="bg-zinc-950/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
                                 <th className="py-2.5 px-3.5 font-bold whitespace-nowrap">Staff Name</th>
                                 <th className="py-2.5 px-3.5 font-bold whitespace-nowrap">Assigned Task</th>
-                                <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Current Status</th>
                                 <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Equipment Status</th>
                                 <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Event Images</th>
                                 <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Raw Footage</th>
@@ -4120,9 +4102,6 @@ export const OperationsLeads: React.FC = () => {
                                         {member.assigned_task || member.staff_role}
                                       </span>
                                     </td>
-                                    <td className="py-3 px-3.5 text-center font-mono whitespace-nowrap">
-                                      {statusBadge}
-                                    </td>
                                     <td className="py-3 px-3.5 text-center whitespace-nowrap">
                                       <span 
                                         onClick={() => setSelectedEquipmentStatus({ staffName: member.staff_name, eqReceived: assetCollection, eqHandover })}
@@ -4153,17 +4132,8 @@ export const OperationsLeads: React.FC = () => {
                                           <div className="flex items-center gap-2">
                                             {verificationStatus === 'Verified' ? (
                                               <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">✅ Verified</span>
-                                            ) : verificationStatus === 'Not Verified' ? (
-                                              <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">❌ Not Verified</span>
                                             ) : (
-                                              <span className="text-[10px] text-zinc-500 italic">Pending</span>
-                                            )}
-                                            
-                                            {verificationStatus !== 'Verified' && (
-                                              <button type="button" onClick={() => handleVerifyFootage(ord, member.staff_name, memberEvId, 'Verified')} className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 px-1.5 rounded bg-emerald-500/10">✔ Verify</button>
-                                            )}
-                                            {verificationStatus !== 'Not Verified' && (
-                                              <button type="button" onClick={() => handleVerifyFootage(ord, member.staff_name, memberEvId, 'Not Verified')} className="text-[10px] font-bold text-rose-400 hover:text-rose-300 border border-rose-500/30 px-1.5 rounded bg-rose-500/10">✖</button>
+                                              <button type="button" onClick={() => handleVerifyFootage(ord, member.staff_name, memberEvId, 'Verified')} className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 px-1.5 rounded bg-emerald-500/10 cursor-pointer transition-colors">✔ Verify</button>
                                             )}
                                           </div>
                                         </div>
@@ -4345,6 +4315,51 @@ export const OperationsLeads: React.FC = () => {
                 No actions available
               </div>
             )}
+          </div>
+        </div>
+      , document.body)}
+
+      {/* Image Preview Modal */}
+      {imagePreviewModal && createPortal(
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex flex-col items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-zinc-800">
+              <div>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">{imagePreviewModal.stage}</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Uploaded by <strong className="text-indigo-400">{imagePreviewModal.staffName}</strong> • {imagePreviewModal.date} {imagePreviewModal.time}
+                </p>
+              </div>
+              <button 
+                onClick={() => setImagePreviewModal(null)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-zinc-800 hover:bg-zinc-700 text-white transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 bg-zinc-950 overflow-hidden relative min-h-[300px] flex items-center justify-center">
+              {imagePreviewModal.url ? (
+                <img 
+                  src={imagePreviewModal.url} 
+                  alt={imagePreviewModal.stage} 
+                  className="max-w-full max-h-full object-contain"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                    target.parentElement?.classList.add('flex', 'items-center', 'justify-center');
+                    const errDiv = document.createElement('div');
+                    errDiv.className = 'text-center p-8';
+                    errDiv.innerHTML = '<span class="text-3xl mb-2 block">⚠️</span><p class="text-zinc-400 font-mono text-sm">Image not found. Please verify the uploaded image URL.</p>';
+                    target.parentElement?.appendChild(errDiv);
+                  }}
+                />
+              ) : (
+                <div className="text-center p-8">
+                  <span className="text-3xl mb-2 block">⚠️</span>
+                  <p className="text-zinc-400 font-mono text-sm">Image not found. Please verify the uploaded image URL.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       , document.body)}
