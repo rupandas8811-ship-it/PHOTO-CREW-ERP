@@ -13,73 +13,9 @@ import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
 import { convertTimeToDbFormat, triggerAutoScrollAndFocus, convertTo12Hour } from '../../utils';
 import { supabaseClient } from '../../supabaseClient';
 
-const OperationsActionColumn = ({ ord, assignedStaffNames, startAssigning, actionItems, isOpen, setActiveMenuOrderId, setMenuCoords, setActiveMenuItems }: any) => {
-  const [dbStatus, setDbStatus] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    const fetchStatus = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        if (!supabaseClient) throw new Error("Supabase client not available");
-        // Check order status first, then lead status if order not found
-        const { data: orderData, error: orderError } = await supabaseClient
-          .from('orders')
-          .select('current_stage')
-          .eq('order_id', ord.order_id)
-          .maybeSingle();
-
-        if (orderError && orderError.code !== 'PGRST116') throw orderError;
-        
-        let status = orderData?.current_stage;
-        
-        if (!status) {
-            const { data: leadData, error: leadError } = await supabaseClient
-              .from('leads')
-              .select('current_status')
-              .eq('lead_id', ord.lead_id)
-              .maybeSingle();
-            
-            if (leadError && leadError.code !== 'PGRST116') throw leadError;
-            status = leadData?.current_status;
-        }
-
-        if (isMounted) {
-          setDbStatus(status || ord.current_stage);
-        }
-      } catch (err: any) {
-        if (isMounted) {
-          setError(err.message || "Failed to fetch status");
-          setDbStatus(ord.current_stage); // fallback
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-    fetchStatus();
-    return () => { isMounted = false; };
-  }, [ord.lead_id, ord.order_id, ord.current_stage]);
-
+const OperationsActionColumn = ({ ord, actionItems, isOpen, setActiveMenuOrderId, setMenuCoords, setActiveMenuItems }: any) => {
   return (
-    <div className="flex items-center justify-end gap-2 relative actions-menu-container">
-      {loading ? (
-         <span className="text-zinc-500 text-[10px] italic">Loading...</span>
-      ) : error ? (
-         <span className="text-red-400 text-[10px] italic" title={error}>Error</span>
-      ) : (dbStatus === 'Order Confirmed' && assignedStaffNames.length === 0) ? (
-        <button
-          type="button"
-          onClick={() => startAssigning(ord)}
-          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-sans font-black border border-emerald-500/50 shadow-lg shadow-emerald-500/20 cursor-pointer transition-all inline-flex items-center gap-1.5 outline-none"
-        >
-          Assign Staff
-        </button>
-      ) : null}
+    <div className="flex items-center justify-end relative actions-menu-container">
       <div className="relative inline-block text-left">
         <button
           type="button"
@@ -89,7 +25,7 @@ const OperationsActionColumn = ({ ord, assignedStaffNames, startAssigning, actio
             } else {
               const rect = e.currentTarget.getBoundingClientRect();
               const spaceBelow = window.innerHeight - rect.bottom;
-              const openUpward = spaceBelow < 250;
+              const openUpward = spaceBelow < 280;
               setMenuCoords({
                 x: rect.right,
                 y: openUpward ? rect.top : rect.bottom,
@@ -2024,28 +1960,95 @@ export const OperationsLeads: React.FC = () => {
                           const actionItems: { label: string; onClick: () => void }[] = [];
                           const assignedStaffNames = getAssignedStaffNamesForOrder(ord);
 
-                          // 1. Assign Staff (Only for Order Confirmed and no staff assigned)
-                          if (currentStage === 'Order Confirmed' && assignedStaffNames.length === 0) {
-                            actionItems.push({
-                              label: 'Assign Staff',
-                              onClick: () => {
-                                startAssigning(ord);
-                                setActiveMenuOrderId(null);
+                          const stageNorm = (currentStage || '').toLowerCase().trim();
+
+                          const isConfirmOrder = ['confirm order', 'order confirmed', 'new order received'].includes(stageNorm);
+                          const isAssignedCrew = ['assigned crew', 'staff assigned', 'operations assigned', 'event scheduled'].includes(stageNorm);
+                          const isEventStarted = ['event started'].includes(stageNorm);
+                          const isEventEnded = ['event ended', 'event completed'].includes(stageNorm);
+                          const isFootageHandover = ['footage handover', 'raw footage received'].includes(stageNorm);
+                          const isVerifiedFootage = ['verified footage', 'footage handover verified', 'production handover', 'delivered', 'completed'].includes(stageNorm);
+
+                          // Common Handlers
+                          const handleAssignCrew = () => {
+                            startAssigning(ord);
+                            setActiveMenuOrderId(null);
+                          };
+
+                          const handleViewDetails = () => {
+                            setProjectDossierId(ord.order_id);
+                            setActiveMenuOrderId(null);
+                          };
+
+                          const handleFootageModal = () => {
+                            setReceivingFootageOrderId(ord.order_id);
+                            const op = getOpDetails(ord.order_id);
+                            const existingRf = rawFootage?.find(f => f.order_id === ord.order_id);
+                            setFootageForm({
+                              footage_link: op?.Raw_Footage_Drive_Link || op?.raw_footage_drive_link || ((existingRf && (existingRf.raw_received || existingRf.status === 'Received')) ? (existingRf.server_path || '') : ''),
+                              storage_type: 'Google Drive',
+                              upload_notes: ''
+                            });
+
+                            const kits = op?.equipment_kit ? op.equipment_kit.split(',').map((sName: string) => sName.trim()).filter(Boolean) : [];
+                            const initialHandovers: Record<string, {
+                              return_status: 'Returned' | 'Not Returned' | 'Damaged' | 'Missing';
+                              returned_by: string;
+                              return_date: string;
+                              notes: string;
+                            }> = {};
+                            kits.forEach((k: string) => {
+                              initialHandovers[k] = {
+                                return_status: 'Returned',
+                                returned_by: currentUserName || 'Operations Team',
+                                return_date: new Date().toISOString().split('T')[0],
+                                notes: ''
+                              };
+                            });
+                            setFootageHandoverStates(initialHandovers);
+
+                            setHardDiskReceived(false);
+                            setMemoryCardReceived(false);
+
+                            const existingPay = payments?.find(p => p.order_id === ord.order_id);
+                            if (existingPay) {
+                              if (existingPay.payment_collection_status) {
+                                setPaymentCollectionStatus(existingPay.payment_collection_status as any);
+                              } else {
+                                if (existingPay.payment_status === 'Fully Paid') {
+                                  setPaymentCollectionStatus('Full Payment Received');
+                                } else if (existingPay.payment_status === 'Partially Paid') {
+                                  setPaymentCollectionStatus('Partial Payment Received');
+                                } else {
+                                  setPaymentCollectionStatus('Payment Pending');
+                                }
                               }
+                              setAdditionalReceived(existingPay.additional_received || existingPay.final_payment_received || 0);
+                            } else {
+                              setPaymentCollectionStatus('Payment Pending');
+                              setAdditionalReceived(0);
+                            }
+
+                            setActiveMenuOrderId(null);
+                          };
+
+                          // 1. When Current Status = Confirm Order
+                          if (isConfirmOrder || (assignedStaffNames.length === 0 && !isEventStarted && !isEventEnded && !isFootageHandover && !isVerifiedFootage)) {
+                            actionItems.push({
+                              label: 'Assign Crew',
+                              onClick: handleAssignCrew
+                            });
+                            actionItems.push({
+                              label: 'View CRM',
+                              onClick: handleViewDetails
                             });
                           }
-
-                          // 2. View Details
-                          actionItems.push({
-                            label: 'View Details',
-                            onClick: () => {
-                              setProjectDossierId(ord.order_id);
-                              setActiveMenuOrderId(null);
-                            }
-                          });
-
-                          // 2b. Event Started
-                          if (['Order Confirmed', 'Staff Assigned', 'Operations Assigned', 'Event Scheduled'].includes(currentStage)) {
+                          // 2. When Current Status = Assigned Crew
+                          else if (isAssignedCrew) {
+                            actionItems.push({
+                              label: 'View Details',
+                              onClick: handleViewDetails
+                            });
                             actionItems.push({
                               label: 'Event Started',
                               onClick: async () => {
@@ -2062,10 +2065,19 @@ export const OperationsLeads: React.FC = () => {
                                 }
                               }
                             });
+                            if (assignedStaffNames.length > 0) {
+                              actionItems.push({
+                                label: 'Reassign Crew',
+                                onClick: handleAssignCrew
+                              });
+                            }
                           }
-
-                          // 2c. Event Ended
-                          if (currentStage === 'Event Started') {
+                          // 3. When Current Status = Event Started
+                          else if (isEventStarted) {
+                            actionItems.push({
+                              label: 'View Details',
+                              onClick: handleViewDetails
+                            });
                             actionItems.push({
                               label: 'Event Ended',
                               onClick: async () => {
@@ -2083,27 +2095,56 @@ export const OperationsLeads: React.FC = () => {
                               }
                             });
                           }
-
-                          // 2d. Footage Handover
-                          if (['Event Completed', 'Event Ended', 'Raw Footage Received', 'Footage Handover'].includes(currentStage)) {
+                          // 4. When Current Status = Event Ended
+                          else if (isEventEnded) {
+                            actionItems.push({
+                              label: 'View Details',
+                              onClick: handleViewDetails
+                            });
                             actionItems.push({
                               label: 'Footage Handover',
+                              onClick: handleFootageModal
+                            });
+                          }
+                          // 5. When Current Status = Footage Handover
+                          else if (isFootageHandover) {
+                            actionItems.push({
+                              label: 'View Details',
+                              onClick: handleViewDetails
+                            });
+                            actionItems.push({
+                              label: 'Verify Footage',
+                              onClick: handleFootageModal
+                            });
+                          }
+                          // 6. When Current Status = Verified Footage
+                          else if (isVerifiedFootage) {
+                            actionItems.push({
+                              label: 'View Details',
+                              onClick: handleViewDetails
+                            });
+                            actionItems.push({
+                              label: 'Transfer to Production (Automatic)',
                               onClick: () => {
-                                setReceivingFootageOrderId(ord.order_id);
-                                const op = getOpDetails(ord.order_id);
-                                const existingRf = rawFootage?.find(f => f.order_id === ord.order_id);
-                                setFootageForm({
-                                  footage_link: op?.Raw_Footage_Drive_Link || op?.raw_footage_drive_link || (existingRf?.server_path || ''),
-                                  storage_type: 'Google Drive',
-                                  upload_notes: ''
-                                });
+                                alert("This project has been automatically transferred to Production upon footage verification.");
                                 setActiveMenuOrderId(null);
                               }
                             });
+                            actionItems.push({
+                              label: 'View History',
+                              onClick: handleViewDetails
+                            });
+                          }
+                          // Fallback for any other status
+                          else {
+                            actionItems.push({
+                              label: 'View Details',
+                              onClick: handleViewDetails
+                            });
                           }
 
-                          // 3. Share via WhatsApp
-                          if (assignedStaffNames.length > 0) {
+                          // Extra utilities if applicable
+                          if (assignedStaffNames.length > 0 && !actionItems.some(i => i.label === 'Share via WhatsApp')) {
                             actionItems.push({
                               label: 'Share via WhatsApp',
                               onClick: () => {
@@ -2117,90 +2158,24 @@ export const OperationsLeads: React.FC = () => {
                             });
                           }
 
-                          // 3. Update Raw Footage
-                          if (canEdit && (currentStage === 'Event Completed' || currentStage === 'Raw Footage Received' || currentStage === 'Event Scheduled' || currentStage === 'Staff Assigned')) {
+                          if (canEdit && !isLocked && currentStage !== 'Event Cancelled' && !actionItems.some(i => i.label === 'Cancel Event')) {
                             actionItems.push({
-                              label: 'Update Raw Footage',
-                              onClick: () => {
-                                const staffAssignmentsForOrder = staffAssignments?.filter(sa => sa.order_id === ord.order_id && sa.assignment_status !== 'Cancelled') || [];
-                                const allCompleted = staffAssignmentsForOrder.length > 0 && staffAssignmentsForOrder.every(sa => sa.assignment_status === 'Event Completed' || (sa as any).task_status === 'Event Completed');
-                                if (!allCompleted) {
-                                  alert('Operation staff have not completed the event yet.');
-                                  return;
-                                }
-                                setReceivingFootageOrderId(ord.order_id);
-                                const existingRf = rawFootage?.find(f => f.order_id === ord.order_id);
-                                const op = getOpDetails(ord.order_id);
-                                setFootageForm({
-                                  footage_link: op?.Raw_Footage_Drive_Link || op?.raw_footage_drive_link || ((existingRf && (existingRf.raw_received || existingRf.status === 'Received')) ? (existingRf.server_path || '') : ''),
-                                  storage_type: 'Google Drive',
-                                  upload_notes: ''
-                                });
-
-                                // Initialize footageHandoverStates for each assigned equipment item
-                                const kits = op?.equipment_kit ? op.equipment_kit.split(',').map((sName: string) => sName.trim()).filter(Boolean) : [];
-                                const initialHandovers: Record<string, {
-                                  return_status: 'Returned' | 'Not Returned' | 'Damaged' | 'Missing';
-                                  returned_by: string;
-                                  return_date: string;
-                                  notes: string;
-                                }> = {};
-                                kits.forEach((k: string) => {
-                                  initialHandovers[k] = {
-                                    return_status: 'Returned',
-                                    returned_by: currentUserName || 'Operations Team',
-                                    return_date: new Date().toISOString().split('T')[0],
-                                    notes: ''
-                                  };
-                                });
-                                setFootageHandoverStates(initialHandovers);
-
-                                setHardDiskReceived(false);
-                                setMemoryCardReceived(false);
-
-                                const existingPay = payments?.find(p => p.order_id === ord.order_id);
-                                if (existingPay) {
-                                  if (existingPay.payment_collection_status) {
-                                    setPaymentCollectionStatus(existingPay.payment_collection_status as any);
-                                  } else {
-                                    if (existingPay.payment_status === 'Fully Paid') {
-                                      setPaymentCollectionStatus('Full Payment Received');
-                                    } else if (existingPay.payment_status === 'Partially Paid') {
-                                      setPaymentCollectionStatus('Partial Payment Received');
-                                    } else {
-                                      setPaymentCollectionStatus('Payment Pending');
-                                    }
+                              label: 'Cancel Event',
+                              onClick: async () => {
+                                if (confirm("Are you sure you want to cancel this event?")) {
+                                  try {
+                                    setIsSaving(true);
+                                    await updateOrderStage(ord.order_id, 'Event Cancelled');
+                                    alert("Event Cancelled successfully");
+                                  } catch (error: any) {
+                                    alert(`Failed to cancel event: ${error.message}`);
+                                  } finally {
+                                    setIsSaving(false);
+                                    refreshData();
                                   }
-                                  setAdditionalReceived(existingPay.additional_received || existingPay.final_payment_received || 0);
-                                } else {
-                                  setPaymentCollectionStatus('Payment Pending');
-                                  setAdditionalReceived(0);
                                 }
-
                                 setActiveMenuOrderId(null);
                               }
-                            });
-                          }
-
-                          // 4. Cancel Event
-                          if (canEdit && !isLocked && currentStage !== 'Event Cancelled') {
-                            actionItems.push({
-                               label: 'Cancel Event',
-                               onClick: async () => {
-                                   if (confirm("Are you sure you want to cancel this event?")) {
-                                       try {
-                                           setIsSaving(true);
-                                           await updateOrderStage(ord.order_id, 'Event Cancelled');
-                                           alert("Event Cancelled successfully");
-                                       } catch (error: any) {
-                                           alert(`Failed to cancel event: ${error.message}`);
-                                       } finally {
-                                           setIsSaving(false);
-                                           refreshData();
-                                       }
-                                   }
-                                   setActiveMenuOrderId(null);
-                               }
                             });
                           }
 
@@ -2208,8 +2183,6 @@ export const OperationsLeads: React.FC = () => {
                           return (
                             <OperationsActionColumn
                               ord={ord}
-                              assignedStaffNames={assignedStaffNames}
-                              startAssigning={startAssigning}
                               actionItems={actionItems}
                               isOpen={isOpen}
                               setActiveMenuOrderId={setActiveMenuOrderId}
@@ -4016,28 +3989,37 @@ export const OperationsLeads: React.FC = () => {
       {/* Floating Action Menu */}
       {activeMenuOrderId && createPortal(
         <div 
-          className="fixed z-[9999] min-w-[150px] max-w-[200px] w-max bg-zinc-950/95 backdrop-blur-md border border-zinc-800/80 rounded-xl shadow-2xl py-1 text-left animate-in fade-in zoom-in-95 duration-150 flex flex-col overflow-hidden actions-menu-container"
+          className="fixed z-[9999] min-w-[200px] max-w-[260px] w-[220px] bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 rounded-2xl shadow-2xl p-2 text-left animate-in fade-in zoom-in-95 duration-150 flex flex-col overflow-hidden actions-menu-container"
           style={{
             left: `${menuCoords.x}px`,
             transform: `translateX(-100%) ${menuCoords.openUpward ? 'translateY(-100%)' : ''}`,
             top: menuCoords.openUpward ? `${menuCoords.y - 4}px` : `${menuCoords.y + 4}px`
           }}
         >
-          <div className="px-3 py-1 border-b border-zinc-900/60 mb-1 flex-shrink-0">
-            <span className="text-[9px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Options</span>
+          <div className="px-3 py-1.5 border-b border-zinc-800/60 mb-1.5 flex justify-between items-center flex-shrink-0">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-indigo-400 font-extrabold flex items-center gap-1.5">
+              <span>🎯</span> Available Actions
+            </span>
+            <button
+              onClick={() => setActiveMenuOrderId(null)}
+              className="text-zinc-500 hover:text-white text-xs p-0.5 rounded cursor-pointer"
+            >
+              ✕
+            </button>
           </div>
-          <div className="max-h-44 overflow-y-auto divide-y divide-zinc-900/40">
+          <div className="max-h-64 overflow-y-auto space-y-1 pr-0.5">
             {activeMenuItems.map((act, aIdx) => (
               <button
                 key={aIdx}
+                type="button"
                 onClick={act.onClick}
-                className="w-full text-left px-3 py-2 text-[11px] text-zinc-300 hover:bg-indigo-600/10 hover:text-indigo-400 active:bg-indigo-600/20 transition-all cursor-pointer block font-mono whitespace-nowrap"
+                className="w-full text-left px-3.5 py-2.5 text-xs font-bold text-zinc-200 hover:bg-indigo-600/20 hover:text-indigo-300 active:bg-indigo-600/30 border border-transparent hover:border-indigo-500/30 transition-all cursor-pointer block whitespace-nowrap rounded-xl shadow-sm"
               >
-                ⚡ {act.label}
+                {act.label}
               </button>
             ))}
             {activeMenuItems.length === 0 && (
-              <div className="px-3 py-1.5 text-[11px] text-zinc-500 italic font-mono">
+              <div className="px-3 py-2 text-xs text-zinc-500 italic font-mono text-center">
                 No actions available
               </div>
             )}
