@@ -569,28 +569,80 @@ export const StaffModule: React.FC = () => {
     if (!base64Url || !base64Url.startsWith('data:image')) {
       return base64Url;
     }
+    
     try {
-      const uploadRes = await fetch('/api/upload-proof', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base64: base64Url, fileName, contentType: 'image/jpeg' })
-      });
-      
-      const text = await uploadRes.text();
-      let uploadData: any = null;
+      // 1. Try server API first (useful for bypassing CORS/RLS if configured)
       try {
-        uploadData = JSON.parse(text);
-      } catch {
-        throw new Error("Server returned non-JSON response: " + text.substring(0, 100));
+        const uploadRes = await fetch('/api/upload-proof', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ base64: base64Url, fileName, contentType: 'image/jpeg' })
+        });
+        
+        if (uploadRes.ok) {
+          const text = await uploadRes.text();
+          try {
+            const uploadData = JSON.parse(text);
+            if (uploadData && uploadData.success && uploadData.publicUrl) {
+              return uploadData.publicUrl;
+            }
+          } catch (e) {
+            console.warn("[UploadProof] Server returned non-JSON response, falling back to client-side upload.");
+          }
+        } else {
+          console.warn(`[UploadProof] Server returned ${uploadRes.status}, falling back to client-side upload.`);
+        }
+      } catch (proxyErr) {
+        console.warn("[UploadProof] Proxy failed, falling back to client-side Supabase upload", proxyErr);
+      }
+      
+      // 2. Fallback to client-side direct upload
+      console.log("[UploadProof] Using client-side Supabase upload as fallback...");
+      
+      // Convert base64 to Blob
+      const base64Data = base64Url.replace(/^data:image\/\w+;base64,/, '');
+      const byteCharacters = atob(base64Data);
+      const byteArrays = [];
+      
+      for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+        const slice = byteCharacters.slice(offset, offset + 512);
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {
+          byteNumbers[i] = slice.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        byteArrays.push(byteArray);
+      }
+      
+      const blob = new Blob(byteArrays, { type: 'image/jpeg' });
+
+      // Upload directly to Supabase storage
+      if (!supabaseClient) throw new Error("Supabase client is not initialized.");
+      
+      const { data, error } = await supabaseClient.storage
+        .from('proofs')
+        .upload(fileName, blob, {
+          contentType: 'image/jpeg',
+          upsert: true
+        });
+
+      if (error) {
+        throw new Error("Supabase Storage Error: " + (error.message || JSON.stringify(error)));
       }
 
-      if (uploadData && uploadData.success && uploadData.publicUrl) {
-        return uploadData.publicUrl;
-      } else {
-        throw new Error(uploadData?.error || "Upload failed without a specific error message.");
+      // Get public URL
+      const { data: publicData } = supabaseClient.storage
+        .from('proofs')
+        .getPublicUrl(fileName);
+
+      if (!publicData || !publicData.publicUrl) {
+        throw new Error("Failed to generate public URL for uploaded proof.");
       }
+
+      return publicData.publicUrl;
+
     } catch (err: any) {
-      console.warn("[UploadProof] Upload exception:", err);
+      console.error("[UploadProof] Upload exception:", err);
       throw new Error(err.message || String(err));
     }
   };
