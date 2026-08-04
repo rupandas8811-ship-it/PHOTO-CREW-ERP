@@ -144,7 +144,8 @@ export const OperationsLeads: React.FC = () => {
     };
     window.addEventListener('staff_status_updated', handleStaffUpdate);
     return () => window.removeEventListener('staff_status_updated', handleStaffUpdate);
-  }, [refreshData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!activeMenuOrderId) return;
@@ -371,7 +372,33 @@ export const OperationsLeads: React.FC = () => {
     if (viewingStaffOrderId) {
       refreshData();
     }
-  }, [viewingStaffOrderId, refreshData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewingStaffOrderId]);
+
+  const handleVerifyFootage = async (ord: Order, staffName: string, eventId: string | undefined, status: 'Verified' | 'Not Verified') => {
+    try {
+      if (!currentUserName || !ord) return;
+      
+      const res = await addLeadEquipmentHistory({
+        lead_id: ord.lead_id || ord.order_id,
+        order_id: ord.order_id,
+        equipment_name: 'Raw Footage Verification',
+        equipment_status: status,
+        returned_by: staffName,
+        returned_at: new Date().toISOString(),
+        remarks: JSON.stringify({
+          event_id: eventId,
+          verified_by: currentUserName,
+          verified_at: new Date().toISOString()
+        })
+      });
+
+      refreshData();
+    } catch (e) {
+      console.error("Failed to update verification status:", e);
+      alert("Failed to update verification status.");
+    }
+  };
 
   const getRecordMeta = (record: any) => {
     if (!record) return { url: null, date: '-', time: '-' };
@@ -461,33 +488,15 @@ export const OperationsLeads: React.FC = () => {
     if (!staffName) return 'Pending';
     const nameLower = staffName.trim().toLowerCase();
     
-    try {
-      const saved = localStorage.getItem('staff_event_statuses_v2');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const keysToTry = [
-          `${orderId}_${eventId || 'ev'}_${nameLower}`,
-          `${orderId}_${eventIndex}_${nameLower}`,
-          `${orderId}_gen_${nameLower}`,
-          `${orderId}_${nameLower}`
-        ];
-        for (const k of keysToTry) {
-          if (parsed[k]) return parsed[k];
-        }
-      }
-    } catch (e) {
-      console.error('Error reading staff_event_statuses_v2:', e);
-    }
-
     const sa = staffAssignments?.find(s => s.order_id === orderId && s.staff_name?.toLowerCase() === nameLower);
-    if (sa && sa.task_status && !['Assigned', 'Unassigned'].includes(sa.task_status)) {
+    if (sa && sa.task_status && sa.task_status !== 'Pending') {
       return sa.task_status;
     }
     if (sa && sa.assignment_status && !['Assigned', 'Unassigned'].includes(sa.assignment_status)) {
       return sa.assignment_status;
     }
 
-    return 'Pending';
+    return 'Assigned Crew';
   };
 
   const isStaffBusyOnDate = (staffName: string, targetDate: string, currentOrderId?: string) => {
@@ -3958,28 +3967,32 @@ export const OperationsLeads: React.FC = () => {
                                   if (!leadEquipmentHistory || leadEquipmentHistory.length === 0) return null;
                                   return leadEquipmentHistory.find(h => {
                                     if (h.order_id && h.order_id !== ord.order_id) return false;
-                                    const retBy = (h.returned_by || h.staff_name || '').trim().toLowerCase();
+                                    
+                                    let parsed: any = {};
+                                    if (h.remarks) {
+                                      try { parsed = JSON.parse(h.remarks); } catch(e) {}
+                                    }
+
+                                    const retBy = (h.returned_by || parsed.staff_name || '').trim().toLowerCase();
                                     if (retBy && retBy !== normStaffName) return false;
 
-                                    if (memberEvId && h.event_id && h.event_id !== memberEvId) return false;
+                                    const hEventId = parsed.event_id;
+                                    const hEventName = parsed.event_name;
+                                    const hProofType = parsed.proof_type;
+                                    const hPhotoUrl = parsed.photo_url;
                                     
-                                    if (equipName && h.equipment_name && h.equipment_name === equipName) return true;
+                                    if (memberEvId && hEventId && hEventId !== memberEvId) return false;
+                                    if (normEvName && hEventName && hEventName.trim().toLowerCase() !== normEvName) return false;
+                                    
+                                    if (equipName && h.equipment_name && h.equipment_name === equipName) {
+                                      if (hPhotoUrl) return true;
+                                      return true; 
+                                    }
 
-                                    const eqStatus = (h.equipment_status || h.proof_type || '').trim();
+                                    const eqStatus = (h.equipment_status || hProofType || '').trim();
                                     const stageMatch = stages.some(s => s.toLowerCase() === eqStatus.toLowerCase());
                                     if (!stageMatch) return false;
 
-                                    if (memberEvId && h.event_id) {
-                                      if (h.event_id !== memberEvId) return false;
-                                    } else if (h.event_name) {
-                                      if (h.event_name.trim().toLowerCase() !== normEvName) return false;
-                                    } else if (h.remarks) {
-                                      try {
-                                        const parsed = JSON.parse(h.remarks);
-                                        if (parsed.event_id && memberEvId && parsed.event_id !== memberEvId) return false;
-                                        if (parsed.event_name && parsed.event_name.trim().toLowerCase() !== normEvName) return false;
-                                      } catch (e) {}
-                                    }
                                     return true;
                                   });
                                 };
@@ -4023,14 +4036,12 @@ export const OperationsLeads: React.FC = () => {
                                 }
 
                                 // 2. Equipment Status Text
-                                let equipmentStatusText = 'Pending';
-                                if (eqHandover) equipmentStatusText = 'Equipment Handover';
-                                else if (assetCollection) equipmentStatusText = 'Equipment Received';
+                                let equipmentStatusText = '❌ Pending';
+                                if (eqHandover) equipmentStatusText = '✅ Uploaded';
 
                                 // 3. Event Image Status Text
-                                let eventImageStatusText = 'Pending';
-                                if (evEnd) eventImageStatusText = 'Event Completed';
-                                else if (evStart) eventImageStatusText = 'Event Started';
+                                let eventImageStatusText = '❌ Pending';
+                                if (assetCollection || evStart || evEnd) eventImageStatusText = '✅ Uploaded';
 
                                 // 4. Raw Footage Link
                                 let rawFootageLink: string | null = null;
@@ -4068,14 +4079,14 @@ export const OperationsLeads: React.FC = () => {
                                 if (!rawFootageLink && leadEquipmentHistory && leadEquipmentHistory.length > 0) {
                                   const hMatch = leadEquipmentHistory.find(h => {
                                     if (h.order_id !== ord.order_id) return false;
-                                    if ((h.returned_by || '').trim().toLowerCase() !== normStaffName) return false;
+                                    let parsed: any = {};
                                     if (h.remarks) {
-                                      try {
-                                        const parsed = JSON.parse(h.remarks);
-                                        return !!(parsed.raw_footage_link || parsed.drive_link);
-                                      } catch (e) { return false; }
+                                      try { parsed = JSON.parse(h.remarks); } catch(e) {}
                                     }
-                                    return false;
+                                    const retBy = (h.returned_by || parsed.staff_name || '').trim().toLowerCase();
+                                    if (retBy !== normStaffName) return false;
+                                    
+                                    return !!(parsed.raw_footage_link || parsed.drive_link);
                                   });
                                   if (hMatch && hMatch.remarks) {
                                     try {
@@ -4084,6 +4095,14 @@ export const OperationsLeads: React.FC = () => {
                                     } catch (e) {}
                                   }
                                 }
+
+                                const rfVerification = leadEquipmentHistory?.find(h => 
+                                  h.order_id === ord.order_id && 
+                                  h.equipment_name === 'Raw Footage Verification' && 
+                                  (h.returned_by || '').trim().toLowerCase() === normStaffName &&
+                                  (!memberEvId || (() => { try { return JSON.parse(h.remarks || '{}').event_id === memberEvId; } catch(e) { return false; } })())
+                                );
+                                const verificationStatus = rfVerification?.equipment_status || 'Pending Verification';
 
                                 return (
                                   <tr key={mIdx} className="hover:bg-zinc-800/30 transition-colors">
@@ -4114,18 +4133,36 @@ export const OperationsLeads: React.FC = () => {
                                         {eventImageStatusText}
                                       </span>
                                     </td>
-                                    <td className="py-3 px-3.5 text-center font-mono whitespace-nowrap">
+                                    <td className="py-3 px-3.5 text-center whitespace-nowrap">
                                       {rawFootageLink ? (
-                                        <a
-                                          href={rawFootageLink.startsWith('http') ? rawFootageLink : `https://${rawFootageLink}`}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300 underline font-bold text-xs"
-                                        >
-                                          Uploaded ↗
-                                        </a>
+                                        <div className="flex flex-col items-center gap-1.5">
+                                          <a
+                                            href={rawFootageLink.startsWith('http') ? rawFootageLink : `https://${rawFootageLink}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300 underline font-bold text-xs font-mono"
+                                          >
+                                            ✅ Uploaded ↗
+                                          </a>
+                                          <div className="flex items-center gap-2">
+                                            {verificationStatus === 'Verified' ? (
+                                              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">✅ Verified</span>
+                                            ) : verificationStatus === 'Not Verified' ? (
+                                              <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">❌ Not Verified</span>
+                                            ) : (
+                                              <span className="text-[10px] text-zinc-500 italic">Pending</span>
+                                            )}
+                                            
+                                            {verificationStatus !== 'Verified' && (
+                                              <button type="button" onClick={() => handleVerifyFootage(ord, member.staff_name, memberEvId, 'Verified')} className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 px-1.5 rounded bg-emerald-500/10">✔ Verify</button>
+                                            )}
+                                            {verificationStatus !== 'Not Verified' && (
+                                              <button type="button" onClick={() => handleVerifyFootage(ord, member.staff_name, memberEvId, 'Not Verified')} className="text-[10px] font-bold text-rose-400 hover:text-rose-300 border border-rose-500/30 px-1.5 rounded bg-rose-500/10">✖</button>
+                                            )}
+                                          </div>
+                                        </div>
                                       ) : (
-                                        <span className="text-zinc-600 italic text-[11px]">Pending</span>
+                                        <span className="text-zinc-600 font-bold text-[11px]">❌ Pending</span>
                                       )}
                                     </td>
                                   </tr>

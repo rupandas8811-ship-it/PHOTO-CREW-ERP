@@ -358,6 +358,16 @@ export const StaffModule: React.FC = () => {
       'completed', 'closed', 'order closed', 'delivered'
     ];
 
+    const getVerificationStatus = (orderId: string, eventId: string) => {
+      const rfVerification = leadEquipmentHistory?.find(h => 
+        h.order_id === orderId && 
+        h.equipment_name === 'Raw Footage Verification' && 
+        (h.returned_by || '').trim().toLowerCase() === staffName.toLowerCase() &&
+        (!eventId || eventId === 'gen' || (() => { try { return JSON.parse(h.remarks || '{}').event_id === eventId; } catch(e) { return false; } })())
+      );
+      return rfVerification?.equipment_status || 'Pending Verification';
+    };
+
     (leads || []).forEach((lead) => {
       const order = (orders || []).find(o => o.lead_id === lead.lead_id);
       const op = operations.find(o => o.order_id === (order?.order_id || lead.lead_id));
@@ -464,6 +474,7 @@ export const StaffModule: React.FC = () => {
                 guestPax: ev.guest_pax || (lead as any).guest_pax || 'N/A',
                 equipmentItems: assignedEqItems,
                 taskStatus: currentStaffStatus,
+                rawFootageVerificationStatus: getVerificationStatus(orderId, ev.id || 'ev'),
                 coordinator: op?.operations_coordinator || 'Unassigned'
               });
             }
@@ -542,6 +553,7 @@ export const StaffModule: React.FC = () => {
               guestPax: (lead as any).guest_pax || 'N/A',
               equipmentItems: assignedEqItems,
               taskStatus: currentStaffStatus,
+              rawFootageVerificationStatus: getVerificationStatus(orderId, 'gen'),
               coordinator: op?.operations_coordinator || 'Unassigned'
             });
           }
@@ -837,12 +849,20 @@ export const StaffModule: React.FC = () => {
             allStaffStatuses
           );
 
-          if (getStageRank(calculatedOverallStage) >= 1) {
-            await pushUpdate('operations', 'order_id', booking.orderId, {
-              event_status: calculatedOverallStage,
-              remarks: `Event Started by ${staffName} on ${timestamp}`
-            });
+          const currentStage = currentOrd?.current_stage || currentLead?.current_status || currentLead?.status || 'Assigned Crew';
+          const payload: any = {
+            remarks: `Event Started by ${staffName} on ${timestamp}`
+          };
+          if (calculatedOverallStage !== currentStage) {
+             payload.event_status = calculatedOverallStage;
+             payload.remarks += ` (Parent status updated to ${calculatedOverallStage})`;
+          } else {
+             payload.remarks += ` (Waiting for remaining assigned crew to start)`;
+          }
 
+          await pushUpdate('operations', 'order_id', booking.orderId, payload);
+
+          if (calculatedOverallStage !== currentStage) {
             await pushUpdate('orders', 'order_id', booking.orderId, {
               current_stage: calculatedOverallStage,
               updated_by: staffName,
@@ -856,10 +876,6 @@ export const StaffModule: React.FC = () => {
                 updated_by: staffName
               });
             }
-          } else {
-            await pushUpdate('operations', 'order_id', booking.orderId, {
-              remarks: `Event Started by ${staffName} on ${timestamp} (Waiting for remaining assigned crew)`
-            });
           }
         }
 
@@ -1070,45 +1086,36 @@ export const StaffModule: React.FC = () => {
           allStaffStatuses
         );
 
-        let globalNextStatus: string | null = null;
-        if (stage === 'Event Complete') {
-          globalNextStatus = 'Event Ended';
-        } else if (stage === 'Equipment Handover') {
-          globalNextStatus = 'Footage Handover';
-        } else {
-          globalNextStatus = calculatedOverallStage;
-        }
-
-        const targetRank = stage === 'Event Complete' ? 2 : stage === 'Equipment Handover' ? 3 : getStageRank(calculatedOverallStage);
-        const shouldAdvanceOverall = getStageRank(calculatedOverallStage) >= targetRank;
-
         const opsPayload: any = {
           equipment_status: effectiveEquipmentStatus,
-          remarks: `Updated by ${staffName}: Stage updated to ${nextStatus}${!shouldAdvanceOverall ? ' (Waiting for remaining assigned crew)' : ''}`
+          remarks: `Updated by ${staffName}: Stage updated to ${nextStatus}`
         };
         if (modalRawFootageLink) {
           opsPayload.raw_footage_drive_link = modalRawFootageLink;
         }
 
-        if (shouldAdvanceOverall && globalNextStatus) {
-          opsPayload.event_status = globalNextStatus;
+        const currentStage = currentOrd?.current_stage || currentLead?.current_status || currentLead?.status || 'Assigned Crew';
+        if (calculatedOverallStage !== currentStage) {
+          opsPayload.event_status = calculatedOverallStage;
+          opsPayload.remarks += ` (Parent status updated to ${calculatedOverallStage})`;
 
           await pushUpdate('operations', 'order_id', booking.orderId, opsPayload);
 
           await pushUpdate('orders', 'order_id', booking.orderId, { 
-            current_stage: globalNextStatus,
+            current_stage: calculatedOverallStage,
             updated_by: staffName,
             updated_at: timestamp
           });
 
           if (booking.leadId) {
             await updateLead(booking.leadId, { 
-              status: globalNextStatus as any,
-              current_status: globalNextStatus as any,
+              status: calculatedOverallStage as any,
+              current_status: calculatedOverallStage as any,
               updated_by: staffName
             });
           }
         } else {
+          opsPayload.remarks += ' (Waiting for remaining assigned crew)';
           await pushUpdate('operations', 'order_id', booking.orderId, opsPayload);
         }
       }
@@ -1461,23 +1468,34 @@ export const StaffModule: React.FC = () => {
                             {b.assignedRole}
                           </span>
                         </td>
-                        <td className="py-4 px-6">
+                        <td className="py-4 px-6 flex flex-col gap-2 items-start">
                           {b.taskStatus === 'Footage Handover' || b.taskStatus === 'Verified Footage' ? (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs font-bold uppercase">
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs font-bold uppercase whitespace-nowrap">
                               <CheckCircle className="w-3.5 h-3.5" /> Footage Handover
                             </span>
                           ) : isCompleted || b.taskStatus === 'Event Ended' || b.taskStatus === 'Event Completed' ? (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-xs font-bold uppercase">
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-xs font-bold uppercase whitespace-nowrap">
                               <CheckCircle className="w-3.5 h-3.5" /> Event Ended
                             </span>
                           ) : isStarted || b.taskStatus === 'Event Started' ? (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-bold uppercase">
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-bold uppercase whitespace-nowrap">
                               <Play className="w-3.5 h-3.5" /> Event Started
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-bold uppercase">
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-bold uppercase whitespace-nowrap">
                               <User className="w-3.5 h-3.5" /> Assigned Crew
                             </span>
+                          )}
+                          {(b.taskStatus === 'Footage Handover' || b.taskStatus === 'Verified Footage' || b.rawFootageVerificationStatus === 'Verified' || b.rawFootageVerificationStatus === 'Not Verified') && (
+                            <div className="text-[10px] font-bold">
+                              {b.rawFootageVerificationStatus === 'Verified' ? (
+                                <span className="text-emerald-400">✅ Verified by Ops</span>
+                              ) : b.rawFootageVerificationStatus === 'Not Verified' ? (
+                                <span className="text-rose-400">❌ Footage Rejected</span>
+                              ) : (
+                                <span className="text-zinc-500 italic">Verification Pending</span>
+                              )}
+                            </div>
                           )}
                         </td>
                         <td className="py-4 px-6 text-right">
