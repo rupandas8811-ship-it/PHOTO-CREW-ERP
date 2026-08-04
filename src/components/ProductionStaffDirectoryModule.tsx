@@ -189,9 +189,19 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
               })
             });
             
+            if (!authRes.ok) {
+              const text = await authRes.text();
+              let errData;
+              try { errData = JSON.parse(text); } catch (e) { throw new Error(`Server returned status ${authRes.status}: ${text.substring(0, 100)}`); }
+              throw new Error(errData.error || 'Failed to create authentication credentials');
+            }
+
             const authData = await authRes.json();
             if (!authData.success) {
                throw new Error(authData.error);
+            }
+            if (authData.data?.user?.id) {
+               (payload as any).auth_user_id = authData.data.user.id;
             }
         } else {
             alert('Password is required for new staff to enable login.');
