@@ -134,7 +134,7 @@ export const OperationsLeads: React.FC = () => {
   // Track which order's action dropdown is open
   const [activeMenuOrderId, setActiveMenuOrderId] = useState<string | null>(null);
   const [selectedEquipmentStatus, setSelectedEquipmentStatus] = useState<{ staffName: string, eqReceived: any, eqHandover: any } | null>(null);
-  const [selectedEventImages, setSelectedEventImages] = useState<{ staffName: string, evStart: any, evEnd: any } | null>(null);
+  const [selectedEventImages, setSelectedEventImages] = useState<{ staffName: string, assetCollection: any, evStart: any, evEnd: any } | null>(null);
   const [activeMenuItems, setActiveMenuItems] = useState<{ label: string; onClick: () => void }[]>([]);
   const [menuCoords, setMenuCoords] = useState<{ x: number, y: number, openUpward: boolean }>({ x: 0, y: 0, openUpward: false });
 
@@ -3124,10 +3124,28 @@ export const OperationsLeads: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
                   {(() => {
+                    const assetMeta = getRecordMeta(selectedEventImages.assetCollection);
                     const startMeta = getRecordMeta(selectedEventImages.evStart);
                     const endMeta = getRecordMeta(selectedEventImages.evEnd);
                     return (
                       <>
+                        <tr className="hover:bg-zinc-800/20">
+                          <td className="py-3 px-3 text-white font-bold">Asset Collection</td>
+                          <td className="py-3 px-3 text-center">
+                            {assetMeta.url ? (
+                              <button
+                                onClick={() => window.open(assetMeta.url, '_blank')}
+                                className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                View Image
+                              </button>
+                            ) : (
+                              <span className="text-zinc-600 italic text-[11px]">Pending</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{assetMeta.date}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{assetMeta.time}</td>
+                        </tr>
                         <tr className="hover:bg-zinc-800/20">
                           <td className="py-3 px-3 text-white font-bold">Event Start</td>
                           <td className="py-3 px-3 text-center">
@@ -3936,12 +3954,16 @@ export const OperationsLeads: React.FC = () => {
                                 const normEvName = (evName || '').trim().toLowerCase();
                                 const memberEvId = member.event_id;
 
-                                const getRecordForStage = (stages: string[]) => {
+                                const getRecordForStage = (stages: string[], equipName?: string) => {
                                   if (!leadEquipmentHistory || leadEquipmentHistory.length === 0) return null;
                                   return leadEquipmentHistory.find(h => {
                                     if (h.order_id && h.order_id !== ord.order_id) return false;
                                     const retBy = (h.returned_by || h.staff_name || '').trim().toLowerCase();
                                     if (retBy && retBy !== normStaffName) return false;
+
+                                    if (memberEvId && h.event_id && h.event_id !== memberEvId) return false;
+                                    
+                                    if (equipName && h.equipment_name && h.equipment_name === equipName) return true;
 
                                     const eqStatus = (h.equipment_status || h.proof_type || '').trim();
                                     const stageMatch = stages.some(s => s.toLowerCase() === eqStatus.toLowerCase());
@@ -3962,46 +3984,40 @@ export const OperationsLeads: React.FC = () => {
                                   });
                                 };
 
-                                const eqReceived = getRecordForStage(['Equipment Received']);
-                                const eqHandover = getRecordForStage(['Equipment Handover']);
-                                const evStart = getRecordForStage(['Event Start', 'Event Started']);
-                                const evEnd = getRecordForStage(['Event Complete', 'Event Completed', 'Event End', 'Event Ended']);
+                                const assetCollection = getRecordForStage(['Equipment Received', 'Asset Collection Photo Proof'], 'Asset Collection Photo Proof');
+                                const evStart = getRecordForStage(['Event Start', 'Event Started', 'Event Start Photo Proof'], 'Event Start Photo Proof');
+                                const evEnd = getRecordForStage(['Event Complete', 'Event Completed', 'Event End', 'Event Ended', 'Event Completion Photo Proof'], 'Event Completion Photo Proof');
+                                const eqHandover = getRecordForStage(['Equipment Handover', 'Equipment Handover Photo Proof'], 'Equipment Handover Photo Proof');
 
                                 // 1. Real-time individual staff status for this event (Event Workflow)
-                                let staffStatusText = 'Pending';
-                                if (evEnd) {
-                                  staffStatusText = 'Event Completed';
-                                } else if (evStart) {
-                                  staffStatusText = 'Event Started';
-                                } else {
-                                  const rawTaskStatus = getStaffTaskStatus(ord.order_id, memberEvId, evIdx, member.staff_name, ord);
-                                  if (rawTaskStatus && (rawTaskStatus.toLowerCase().includes('complete') || rawTaskStatus.toLowerCase().includes('ended'))) {
-                                    staffStatusText = 'Event Completed';
-                                  } else if (rawTaskStatus && (rawTaskStatus.toLowerCase().includes('start') || rawTaskStatus.toLowerCase().includes('progress'))) {
-                                    staffStatusText = 'Event Started';
-                                  } else {
-                                    staffStatusText = 'Pending';
-                                  }
-                                }
+                                const rawTaskStatus = getStaffTaskStatus(ord.order_id, memberEvId, evIdx, member.staff_name, ord);
+                                const staffStatusText = rawTaskStatus && rawTaskStatus !== 'Pending' ? rawTaskStatus : 'Assigned Crew';
 
                                 let statusBadge = (
                                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold text-[11px]">
                                     <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
-                                    Pending
+                                    {staffStatusText}
                                   </span>
                                 );
-                                if (staffStatusText === 'Event Completed') {
+                                if (staffStatusText.toLowerCase().includes('complete') || staffStatusText.toLowerCase().includes('ended')) {
                                   statusBadge = (
                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold text-[11px]">
                                       <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
-                                      Event Completed
+                                      {staffStatusText}
                                     </span>
                                   );
-                                } else if (staffStatusText === 'Event Started') {
+                                } else if (staffStatusText.toLowerCase().includes('start') || staffStatusText.toLowerCase().includes('progress')) {
                                   statusBadge = (
                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold text-[11px]">
                                       <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
-                                      Event Started
+                                      {staffStatusText}
+                                    </span>
+                                  );
+                                } else if (staffStatusText.toLowerCase().includes('handover') || staffStatusText.toLowerCase().includes('verified')) {
+                                  statusBadge = (
+                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 font-bold text-[11px]">
+                                      <span className="w-1.5 h-1.5 bg-purple-400 rounded-full" />
+                                      {staffStatusText}
                                     </span>
                                   );
                                 }
@@ -4009,7 +4025,7 @@ export const OperationsLeads: React.FC = () => {
                                 // 2. Equipment Status Text
                                 let equipmentStatusText = 'Pending';
                                 if (eqHandover) equipmentStatusText = 'Equipment Handover';
-                                else if (eqReceived) equipmentStatusText = 'Equipment Received';
+                                else if (assetCollection) equipmentStatusText = 'Equipment Received';
 
                                 // 3. Event Image Status Text
                                 let eventImageStatusText = 'Pending';
@@ -4084,7 +4100,7 @@ export const OperationsLeads: React.FC = () => {
                                     </td>
                                     <td className="py-3 px-3.5 text-center whitespace-nowrap">
                                       <span 
-                                        onClick={() => setSelectedEquipmentStatus({ staffName: member.staff_name, eqReceived, eqHandover })}
+                                        onClick={() => setSelectedEquipmentStatus({ staffName: member.staff_name, eqReceived: assetCollection, eqHandover })}
                                         className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline font-bold text-xs"
                                       >
                                         {equipmentStatusText}
@@ -4092,7 +4108,7 @@ export const OperationsLeads: React.FC = () => {
                                     </td>
                                     <td className="py-3 px-3.5 text-center whitespace-nowrap">
                                       <span 
-                                        onClick={() => setSelectedEventImages({ staffName: member.staff_name, evStart, evEnd })}
+                                        onClick={() => setSelectedEventImages({ staffName: member.staff_name, assetCollection, evStart, evEnd })}
                                         className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline font-bold text-xs"
                                       >
                                         {eventImageStatusText}
