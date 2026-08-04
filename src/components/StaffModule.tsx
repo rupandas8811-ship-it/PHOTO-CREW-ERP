@@ -655,7 +655,7 @@ export const StaffModule: React.FC = () => {
       if (!supabaseClient) throw new Error("Supabase client is not initialized.");
       
       const { data, error } = await supabaseClient.storage
-        .from('proofs')
+        .from('img')
         .upload(fileName, blob, {
           contentType: 'image/jpeg',
           upsert: true
@@ -667,7 +667,7 @@ export const StaffModule: React.FC = () => {
 
       // Get public URL
       const { data: publicData } = supabaseClient.storage
-        .from('proofs')
+        .from('img')
         .getPublicUrl(fileName);
 
       if (!publicData || !publicData.publicUrl) {
@@ -1511,7 +1511,7 @@ export const StaffModule: React.FC = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse min-w-[1000px]">
                 <thead>
                   <tr className="bg-zinc-950/60 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
                     <th className="py-4 px-6">Order ID</th>

@@ -610,7 +610,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
       {/* STAFF DIRECTORY TABLE */}
       <div className="bg-zinc-950 border border-zinc-900 rounded-2xl overflow-hidden shadow-2xl">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
+          <table className="w-full text-left border-collapse text-xs min-w-[1000px]">
             <thead className="bg-[#0c0d10] text-[10px] font-mono text-zinc-500 uppercase tracking-widest border-b border-zinc-900">
               <tr>
                 <th className="py-4.5 px-5 font-black">Staff Member</th>

@@ -11521,8 +11521,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </button>
             </div>
 
-            <div className="space-y-4 relative z-10 text-slate-300">
-              <table className="w-full text-left border-collapse text-xs">
+            <div className="space-y-4 relative z-10 text-slate-300 overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs min-w-[600px]">
                 <thead>
                   <tr className="bg-slate-900 text-slate-400 font-mono text-[9px] uppercase">
                     <th className="p-2 border border-slate-800">Customer Name</th>

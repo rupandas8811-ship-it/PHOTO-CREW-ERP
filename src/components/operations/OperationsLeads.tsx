@@ -1993,6 +1993,8 @@ export const OperationsLeads: React.FC = () => {
                           const actionItems: { label: string; onClick: () => void }[] = [];
                           const assignedStaffNames = getAssignedStaffNamesForOrder(ord);
 
+                          const hasWorkStarted = staffAssignments?.some(sa => sa.order_id === ord.order_id && sa.task_status && !['Assigned', 'Assigned Crew', 'Pending'].includes(sa.task_status)) || leadEquipmentHistory?.some(leh => leh.order_id === ord.order_id);
+
                           const stageNorm = (currentStage || '').toLowerCase().trim();
 
                           const isConfirmOrder = ['confirm order', 'order confirmed', 'new order received'].includes(stageNorm);
@@ -2067,10 +2069,12 @@ export const OperationsLeads: React.FC = () => {
 
                           // 1. When Current Status = Confirm Order
                           if (isConfirmOrder || (assignedStaffNames.length === 0 && !isEventStarted && !isEventEnded && !isFootageHandover && !isVerifiedFootage)) {
-                            actionItems.push({
-                              label: 'Assign Crew',
-                              onClick: handleAssignCrew
-                            });
+                            if (!hasWorkStarted) {
+                              actionItems.push({
+                                label: 'Assign Crew',
+                                onClick: handleAssignCrew
+                              });
+                            }
                             actionItems.push({
                               label: 'View CRM',
                               onClick: handleViewDetails
@@ -2082,7 +2086,7 @@ export const OperationsLeads: React.FC = () => {
                               label: 'View Details',
                               onClick: handleViewDetails
                             });
-                            if (assignedStaffNames.length > 0) {
+                            if (assignedStaffNames.length > 0 && !hasWorkStarted) {
                               actionItems.push({
                                 label: 'Reassign Crew',
                                 onClick: handleAssignCrew

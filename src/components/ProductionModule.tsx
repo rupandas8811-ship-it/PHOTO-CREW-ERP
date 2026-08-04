@@ -8066,8 +8066,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               </button>
             </div>
             
-            <div className="p-5 overflow-y-auto font-sans flex-1">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="p-5 overflow-y-auto font-sans flex-1 overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse min-w-[600px]">
                 <thead>
                   <tr className="border-b border-zinc-900 bg-zinc-950/70 text-zinc-500 font-mono text-[9px] uppercase tracking-wider">
                     <th className="p-3 font-bold">Staff Name</th>
@@ -8800,7 +8800,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   </div>
                 ) : (
                   <div className="overflow-x-auto w-full">
-                    <table className="w-full text-left border-collapse text-xs text-zinc-300 font-mono">
+                    <table className="w-full text-left border-collapse text-xs text-zinc-300 font-mono min-w-[700px]">
                       <thead>
                         <tr className="border-b border-zinc-900 text-zinc-500 uppercase pb-2 text-[9px] tracking-widest bg-zinc-950/40">
                           <th className="py-3 px-3 font-bold">Project ID</th>
