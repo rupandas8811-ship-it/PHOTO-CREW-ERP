@@ -581,17 +581,18 @@ export const StaffModule: React.FC = () => {
       try {
         uploadData = JSON.parse(text);
       } catch {
-        console.warn("[UploadProof] Server returned non-JSON response:", text.substring(0, 100));
-        return base64Url;
+        throw new Error("Server returned non-JSON response: " + text.substring(0, 100));
       }
 
       if (uploadData && uploadData.success && uploadData.publicUrl) {
         return uploadData.publicUrl;
+      } else {
+        throw new Error(uploadData?.error || "Upload failed without a specific error message.");
       }
-    } catch (err) {
-      console.warn("[UploadProof] Upload exception, falling back to data URL:", err);
+    } catch (err: any) {
+      console.warn("[UploadProof] Upload exception:", err);
+      throw new Error(err.message || String(err));
     }
-    return base64Url;
   };
 
   // Open Equipment Photo Verification Modal

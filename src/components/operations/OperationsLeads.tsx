@@ -3979,13 +3979,17 @@ export const OperationsLeads: React.FC = () => {
                                     const hEventId = parsed.event_id;
                                     const hEventName = parsed.event_name;
                                     const hProofType = parsed.proof_type;
-                                    const hPhotoUrl = parsed.photo_url;
+                                    const hPhotoUrl = parsed.photo_url || h.photo_url;
                                     
-                                    if (memberEvId && hEventId && hEventId !== memberEvId) return false;
-                                    if (normEvName && hEventName && hEventName.trim().toLowerCase() !== normEvName) return false;
+                                    // Match event Id strictly if both exist and neither is 'gen'
+                                    if (memberEvId && hEventId && memberEvId !== 'gen' && hEventId !== 'gen' && hEventId !== memberEvId) return false;
+                                    
+                                    // If we don't have matching event IDs, we can try matching by name
+                                    if (!memberEvId || !hEventId || hEventId === 'gen' || memberEvId === 'gen') {
+                                      if (normEvName && hEventName && hEventName.trim().toLowerCase() !== normEvName && normEvName !== 'general event' && hEventName.trim().toLowerCase() !== 'general event') return false;
+                                    }
                                     
                                     if (equipName && h.equipment_name && h.equipment_name === equipName) {
-                                      if (hPhotoUrl) return true;
                                       return true; 
                                     }
 
@@ -4037,11 +4041,13 @@ export const OperationsLeads: React.FC = () => {
 
                                 // 2. Equipment Status Text
                                 let equipmentStatusText = '❌ Pending';
-                                if (eqHandover) equipmentStatusText = '✅ Uploaded';
+                                if (eqHandover && getRecordMeta(eqHandover).url) equipmentStatusText = '✅ Handed Over';
+                                else if (assetCollection && getRecordMeta(assetCollection).url) equipmentStatusText = '✅ Received';
 
                                 // 3. Event Image Status Text
                                 let eventImageStatusText = '❌ Pending';
-                                if (assetCollection || evStart || evEnd) eventImageStatusText = '✅ Uploaded';
+                                if (evEnd && getRecordMeta(evEnd).url) eventImageStatusText = '✅ Event End';
+                                else if (evStart && getRecordMeta(evStart).url) eventImageStatusText = '✅ Event Start';
 
                                 // 4. Raw Footage Link
                                 let rawFootageLink: string | null = null;
