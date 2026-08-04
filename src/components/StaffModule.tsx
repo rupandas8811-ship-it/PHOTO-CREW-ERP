@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useRole } from './RoleContext';
-import { MapPin, Calendar, Clock, Briefcase, Camera, User, Phone, MessageSquare, Eye, CheckCircle, AlertCircle, Upload, X, Play, ShieldCheck, ChevronRight, ChevronLeft } from 'lucide-react';
+import { MapPin, Calendar, Clock, Briefcase, Camera, User, Phone, MessageSquare, Eye, CheckCircle, AlertCircle, Upload, X, Play, ShieldCheck, ChevronRight, ChevronLeft, Video } from 'lucide-react';
 import { Lead, Order, Operation, StaffAssignment, EquipmentHandover } from '../types';
 import { supabaseClient } from '../supabaseClient';
 import { ViewDetailsModal } from './operations/ViewDetailsModal';
@@ -330,8 +330,9 @@ export const StaffModule: React.FC = () => {
     stage: 'Equipment Received' | 'Event Start' | 'Equipment Handover' | 'Event Complete';
   } | null>(null);
 
-  // Photos attached in modal
+  // Photos attached in modal & raw footage link
   const [modalPhotos, setModalPhotos] = useState<Record<string, string>>({});
+  const [modalRawFootageLink, setModalRawFootageLink] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -537,6 +538,7 @@ export const StaffModule: React.FC = () => {
   // Open Equipment Photo Verification Modal
   const openPhotoModal = (booking: any, stage: 'Equipment Received' | 'Event Start' | 'Equipment Handover' | 'Event Complete') => {
     setModalPhotos({});
+    setModalRawFootageLink(booking?.rawFootageLink || '');
     setPhotoModalData({ booking, stage });
   };
 
@@ -562,17 +564,26 @@ export const StaffModule: React.FC = () => {
     const { booking, stage } = photoModalData;
     
     let reqItems: { name: string; assetId: string }[] = [];
-    if (stage === 'Equipment Received') {
-      reqItems = [{ name: 'Equipment Received Photo', assetId: 'Verification' }];
-    } else if (stage === 'Event Start') {
-      reqItems = [{ name: 'Event Start Photo', assetId: 'Verification' }];
-    } else if (stage === 'Equipment Handover') {
-      reqItems = [{ name: 'Equipment Handover Photo', assetId: 'Verification' }];
+    if (stage === 'Event Start') {
+      reqItems = [
+        { name: 'Asset Collection Photo Proof', assetId: 'Asset Collection' },
+        { name: 'Event Start Photo Proof', assetId: 'Event Start' }
+      ];
     } else if (stage === 'Event Complete') {
-      reqItems = []; // No photo needed
+      reqItems = [
+        { name: 'Event Completion Photo Proof', assetId: 'Event Completion' }
+      ];
+    } else if (stage === 'Equipment Handover') {
+      reqItems = [
+        { name: 'Asset Return Photo Proof', assetId: 'Asset Return' }
+      ];
+    } else if (stage === 'Equipment Received') {
+      reqItems = [
+        { name: 'Asset Collection Photo Proof', assetId: 'Asset Collection' }
+      ];
     }
 
-    // 1. Validate photo exists
+    // 1. Validate required photos exist
     for (const item of reqItems) {
       if (!modalPhotos[item.name]) {
         showToast(`⚠️ Please capture/upload a photo for ${item.name}`);
@@ -580,21 +591,28 @@ export const StaffModule: React.FC = () => {
       }
     }
 
+    // Validate Raw Footage Drive Link if Footage Handover
+    if (stage === 'Equipment Handover') {
+      if (!modalRawFootageLink || !modalRawFootageLink.trim()) {
+        showToast('⚠️ Please enter the Raw Footage Drive Link');
+        return;
+      }
+    }
+
     try {
-      // 2. Set loading = true
       setIsSubmitting(true);
       const timestamp = new Date().toISOString();
-      console.log("[EquipmentReceived] START - Confirm clicked");
+      console.log("[StatusUpdate] START - Confirm clicked for stage:", stage);
       const uploadedProofs: EquipmentProofItem[] = [];
 
-      // 3. Upload the selected image to the existing Supabase Storage bucket
+      // 2. Upload images to /api/upload-proof (Supabase Storage bucket)
       for (const item of reqItems) {
         let finalUrl = modalPhotos[item.name];
         
         if (finalUrl && finalUrl.startsWith('data:image')) {
-          const fileName = `proofs/${booking.orderId}_${stage.replace(/\s+/g, '_')}_${Date.now()}.jpg`;
+          const fileName = `proofs/${booking.orderId || booking.leadId}_${stage.replace(/\s+/g, '_')}_${Date.now()}_${Math.floor(Math.random() * 1000)}.jpg`;
           
-          console.log("[EquipmentReceived] uploading image to /api/upload-proof");
+          console.log("[StatusUpdate] uploading image to /api/upload-proof:", fileName);
           const uploadRes = await fetch('/api/upload-proof', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -602,11 +620,9 @@ export const StaffModule: React.FC = () => {
           });
           const uploadData = await uploadRes.json();
           
-          console.log("[EquipmentReceived] storage result", uploadData);
-          
-          if (!uploadRes.ok || !uploadData.success) {
+          if (!uploadRes.ok || !uploadData.success || !uploadData.publicUrl) {
             console.error("Storage upload error:", uploadData.error || uploadData);
-            throw new Error(uploadData.error || 'Failed to upload proof to storage');
+            throw new Error(uploadData.error || `Failed to upload ${item.name} to storage`);
           }
           
           finalUrl = uploadData.publicUrl;
@@ -622,47 +638,12 @@ export const StaffModule: React.FC = () => {
 
       const newProofs: EquipmentProofItem[] = uploadedProofs;
 
-      // 6 & 7. Save Equipment Received verification state & Save Equipment Received timestamp.
-      if (supabaseClient) {
-        for (const p of newProofs) {
-          console.log("[EquipmentReceived] saving verification to lead_equipment_history");
-          const { data: addData, error: dbErr } = await supabaseClient.from('lead_equipment_history').insert([{
-            lead_id: booking.leadId,
-            order_id: booking.orderId,
-            equipment_name: p.equipmentName,
-            equipment_status: stage,
-            returned_by: staffName,
-            returned_at: timestamp,
-            remarks: JSON.stringify({
-              asset_id: p.assetId,
-              proof_type: stage,
-              staff_name: staffName,
-              photo_url: p.photoUrl,
-              event_id: booking.eventId,
-              event_name: booking.eventName
-            }),
-            photo_url: p.photoUrl,
-            event_id: booking.eventId,
-            event_name: booking.eventName,
-            asset_id: p.assetId,
-            proof_type: stage
-          }]).select();
+      // 3. Save to database lead_equipment_history table
+      const effectiveEquipmentStatus = 
+        stage === 'Event Start' ? 'Event Started' :
+        stage === 'Event Complete' ? 'Event Ended' :
+        stage === 'Equipment Handover' ? 'Footage Handover' : stage;
 
-          console.log("[EquipmentReceived] DB lead_equipment_history result", addData, dbErr);
-          if (dbErr) {
-            console.error('[EquipmentReceived] lead_equipment_history ERROR:', {
-              message: dbErr?.message,
-              code: dbErr?.code,
-              details: dbErr?.details,
-              hint: dbErr?.hint
-            });
-            throw new Error(`Database save failed: ${dbErr.message}`);
-          }
-        }
-      }
-
-      // 9 & 10 & 11. Confirm the database update succeeded. Refresh/update local state. Change action.
-      // Update staff status - also save 'Equipment Received', 'Event Started', 'Event Ended', or 'Footage Handover'
       let nextStatus = staffStatuses[booking.key] || 'Assigned Crew';
       if (stage === 'Event Start') {
         nextStatus = 'Event Started';
@@ -671,9 +652,63 @@ export const StaffModule: React.FC = () => {
       } else if (stage === 'Equipment Handover') {
         nextStatus = 'Footage Handover';
       } else {
-        nextStatus = stage; // 'Equipment Received'
+        nextStatus = stage;
       }
 
+      if (supabaseClient) {
+        for (const p of newProofs) {
+          console.log("[StatusUpdate] saving record to lead_equipment_history");
+          const historyRecord = {
+            lead_id: booking.leadId || null,
+            order_id: booking.orderId || null,
+            equipment_name: p.equipmentName,
+            equipment_status: effectiveEquipmentStatus,
+            returned_by: staffName,
+            returned_at: timestamp,
+            remarks: JSON.stringify({
+              asset_id: p.assetId,
+              proof_type: stage,
+              staff_name: staffName,
+              photo_url: p.photoUrl,
+              event_id: booking.eventId,
+              event_name: booking.eventName,
+              order_id: booking.orderId,
+              lead_id: booking.leadId,
+              raw_footage_link: modalRawFootageLink || null,
+              uploaded_at: timestamp,
+              uploaded_by: staffName,
+              current_status: nextStatus
+            })
+          };
+
+          const { error: dbErr } = await supabaseClient
+            .from('lead_equipment_history')
+            .insert([historyRecord]);
+
+          if (dbErr) {
+            console.error('[StatusUpdate] lead_equipment_history ERROR:', dbErr);
+            throw new Error(`Database save failed for ${p.equipmentName}: ${dbErr.message}`);
+          }
+        }
+      }
+
+      // 4. Save Raw Footage Link to raw_footage table if present
+      if (modalRawFootageLink && supabaseClient && booking.orderId) {
+        try {
+          await supabaseClient.from('raw_footage').upsert({
+            order_id: booking.orderId,
+            server_path: modalRawFootageLink,
+            uploaded_by: staffName,
+            uploaded_date: timestamp,
+            raw_received: true,
+            status: 'Received'
+          });
+        } catch (rfErr) {
+          console.warn('[StatusUpdate] raw_footage upsert warning:', rfErr);
+        }
+      }
+
+      // 5. Update local statuses & local storage
       const nextStatuses = {
         ...staffStatuses,
         [booking.key]: nextStatus
@@ -681,7 +716,6 @@ export const StaffModule: React.FC = () => {
       setStaffStatuses(nextStatuses);
       localStorage.setItem('staff_event_statuses_v2', JSON.stringify(nextStatuses));
 
-      // Update local proof storage so UI updates instantly
       const existingProofs = staffProofs[booking.key] || {};
       const proofField = stage === 'Equipment Received' ? 'equipmentReceivedProofs' :
                          stage === 'Event Start' ? 'eventStartProofs' :
@@ -702,80 +736,76 @@ export const StaffModule: React.FC = () => {
         window.dispatchEvent(new CustomEvent('staff_status_updated'));
       }
 
+      // 6. Update staff_assignments, operations, orders, leads
       if (supabaseClient && booking.orderId) {
-        // Update the individual staff assignment task_status
-        console.log("[EquipmentReceived] updating assignment in staff_assignments for order:", booking.orderId, "staff:", staffName);
-        const { data: updateData, error: updateErr } = await supabaseClient
+        const updateAssignmentPayload: any = {
+          task_status: nextStatus,
+          updated_at: timestamp
+        };
+        if (modalRawFootageLink) {
+          updateAssignmentPayload.raw_footage_link = modalRawFootageLink;
+        }
+
+        const { error: saErr } = await supabaseClient
           .from('staff_assignments')
-          .update({
-            task_status: nextStatus,
-            updated_at: timestamp
-          })
+          .update(updateAssignmentPayload)
           .eq('order_id', booking.orderId)
-          .ilike('staff_name', staffName)
-          .select();
+          .ilike('staff_name', staffName);
 
-        console.log("[EquipmentReceived] assignment result", updateData, updateErr);
-        if (updateErr) {
-          console.error('[EquipmentReceived] staff_assignments ERROR:', {
-            message: updateErr?.message,
-            code: updateErr?.code,
-            details: updateErr?.details,
-            hint: updateErr?.hint
-          });
-          throw new Error(`Failed to update assignment: ${updateErr.message}`);
-        }
-        
-        if (!updateData || updateData.length === 0) {
-          throw new Error(`No matching assignment found for Order ID: ${booking.orderId} and Staff: ${staffName}`);
+        if (saErr) {
+          console.warn('[StatusUpdate] staff_assignments update warning:', saErr);
         }
 
-        // Sync global operations and order status for workflow stages
-        if (stage === 'Event Start' || stage === 'Event Complete' || stage === 'Equipment Handover') {
-          let globalNextStatus: string | null = null;
-          if (stage === 'Event Start') {
-            globalNextStatus = 'Event Started';
-          } else if (stage === 'Event Complete') {
-            globalNextStatus = 'Event Ended';
-          } else if (stage === 'Equipment Handover') {
-            globalNextStatus = 'Footage Handover';
+        let globalNextStatus: string | null = null;
+        if (stage === 'Event Start') {
+          globalNextStatus = 'Event Started';
+        } else if (stage === 'Event Complete') {
+          globalNextStatus = 'Event Ended';
+        } else if (stage === 'Equipment Handover') {
+          globalNextStatus = 'Footage Handover';
+        }
+
+        if (globalNextStatus) {
+          const opsPayload: any = {
+            event_status: globalNextStatus,
+            remarks: `Updated by ${staffName}: Stage updated to ${globalNextStatus}`
+          };
+          if (modalRawFootageLink) {
+            opsPayload.raw_footage_drive_link = modalRawFootageLink;
           }
 
-          if (globalNextStatus) {
-            await supabaseClient
-              .from('operations')
-              .update({ 
-                event_status: globalNextStatus,
-                remarks: `Updated by ${staffName}: Stage updated to ${globalNextStatus}`
-              })
-              .eq('order_id', booking.orderId);
+          await supabaseClient
+            .from('operations')
+            .update(opsPayload)
+            .eq('order_id', booking.orderId);
 
-            await supabaseClient
-              .from('orders')
-              .update({ 
-                current_stage: globalNextStatus,
-                updated_at: timestamp
-              })
-              .eq('order_id', booking.orderId);
+          await supabaseClient
+            .from('orders')
+            .update({ 
+              current_stage: globalNextStatus,
+              updated_at: timestamp
+            })
+            .eq('order_id', booking.orderId);
 
-            if (booking.leadId) {
-              await updateLead(booking.leadId, { status: globalNextStatus as any });
-            }
+          if (booking.leadId) {
+            await updateLead(booking.leadId, { status: globalNextStatus as any });
           }
         }
       }
 
-      console.log("[EquipmentReceived] SUCCESS");
-      // 13. CLOSE the Equipment Verification popup automatically.
+      // 7. Refresh global app state so all dashboards sync!
+      await refreshData();
+
+      // 8. Close modal & notify
       setPhotoModalData(null);
       setModalPhotos({});
-      showToast(`✅ ${stage} saved successfully!`);
+      setModalRawFootageLink('');
+      showToast(`✅ ${stage} proof uploaded & saved successfully!`);
 
     } catch (error: any) {
       console.error('Error updating status:', error);
       showToast(`❌ ${error.message || 'Failed to update status.'}`);
     } finally {
-      // 12. Set loading = false.
       setIsSubmitting(false);
     }
   };
@@ -1189,13 +1219,22 @@ export const StaffModule: React.FC = () => {
 
               {/* Equipment Items list with photo inputs */}
               <div className="space-y-4">
-                {(photoModalData.stage === 'Equipment Received' 
-                  ? [{ name: 'Equipment Received Photo', assetId: 'Verification' }]
-                  : photoModalData.stage === 'Event Start'
-                  ? [{ name: 'Event Start Photo', assetId: 'Verification' }]
+                {(photoModalData.stage === 'Event Start'
+                  ? [
+                      { name: 'Asset Collection Photo Proof', assetId: 'Asset Collection' },
+                      { name: 'Event Start Photo Proof', assetId: 'Event Start' }
+                    ]
+                  : photoModalData.stage === 'Event Complete'
+                  ? [
+                      { name: 'Event Completion Photo Proof', assetId: 'Event Completion' }
+                    ]
                   : photoModalData.stage === 'Equipment Handover'
-                  ? [{ name: 'Equipment Handover Photo', assetId: 'Verification' }]
-                  : []
+                  ? [
+                      { name: 'Asset Return Photo Proof', assetId: 'Asset Return' }
+                    ]
+                  : [
+                      { name: 'Asset Collection Photo Proof', assetId: 'Asset Collection' }
+                    ]
                 ).map((item: any, idx: number) => {
                   const currentPhoto = modalPhotos[item.name];
 
@@ -1240,7 +1279,7 @@ export const StaffModule: React.FC = () => {
                             <Camera className="w-5 h-5" />
                           </div>
                           <span className="text-xs font-bold text-zinc-300 group-hover:text-amber-400 transition-colors">
-                            Capture or Upload Equipment Photo
+                            Capture or Upload {item.name}
                           </span>
                           <span className="text-[10px] text-zinc-500 font-mono">Use phone camera or choose file</span>
                           <input
@@ -1255,6 +1294,37 @@ export const StaffModule: React.FC = () => {
                     </div>
                   );
                 })}
+
+                {/* Raw Footage Link Input for Footage Handover stage */}
+                {photoModalData.stage === 'Equipment Handover' && (
+                  <div className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-4 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="font-bold text-white text-sm flex items-center gap-2">
+                          <Video className="w-4 h-4 text-indigo-400" />
+                          Raw Footage Drive Link
+                        </div>
+                        <div className="text-[10px] font-mono text-zinc-400">Google Drive / Cloud folder URL for raw footage handover</div>
+                      </div>
+                      {modalRawFootageLink.trim() ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                          <CheckCircle className="w-3.5 h-3.5" /> Link Provided
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
+                          <AlertCircle className="w-3.5 h-3.5" /> Link Required
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="url"
+                      value={modalRawFootageLink}
+                      onChange={(e) => setModalRawFootageLink(e.target.value)}
+                      placeholder="https://drive.google.com/drive/folders/..."
+                      className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 font-mono"
+                    />
+                  </div>
+                )}
               </div>
             </div>
 

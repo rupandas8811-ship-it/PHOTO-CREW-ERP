@@ -73,7 +73,7 @@ async function startServer() {
     try {
       const { base64, fileName, contentType } = req.body;
       if (!base64 || !fileName) {
-        return res.status(400).json({ error: 'Missing base64 or fileName' });
+        return res.status(400).json({ success: false, error: 'Missing base64 or fileName' });
       }
 
       const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -81,6 +81,17 @@ async function startServer() {
       const base64Data = base64.replace(/^data:image\/\w+;base64,/, '');
       const buffer = Buffer.from(base64Data, 'base64');
       
+      // Ensure bucket 'img' exists and is public
+      try {
+        const { data: buckets } = await supabaseAdmin.storage.listBuckets();
+        if (buckets && !buckets.some(b => b.name === 'img')) {
+          console.log('[Server Storage] Creating public bucket img...');
+          await supabaseAdmin.storage.createBucket('img', { public: true });
+        }
+      } catch (bErr) {
+        console.warn('[Server Storage] Bucket list/create check warning:', bErr);
+      }
+
       const { data, error } = await supabaseAdmin.storage.from('img').upload(fileName, buffer, {
         contentType: contentType || 'image/jpeg',
         upsert: true
@@ -88,15 +99,16 @@ async function startServer() {
       
       if (error) {
         console.error('Storage upload error (Admin):', error);
-        return res.status(500).json({ error: error.message, details: error });
+        return res.status(500).json({ success: false, error: error.message, details: error });
       }
       
       const { data: { publicUrl } } = supabaseAdmin.storage.from('img').getPublicUrl(data.path);
       
+      console.log('[Server Storage] File uploaded successfully:', data.path, publicUrl);
       res.json({ success: true, publicUrl });
-    } catch (err) {
-      console.error('Upload proof error:', err);
-      res.status(500).json({ error: err.message });
+    } catch (err: any) {
+      console.error('Upload proof exception:', err);
+      res.status(500).json({ success: false, error: err.message || String(err) });
     }
   });
 

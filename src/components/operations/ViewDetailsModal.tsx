@@ -27,7 +27,8 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
     staffAssignments, 
     equipment, 
     leadPackages, 
-    packages 
+    packages,
+    leadEquipmentHistory
   } = useRole();
 
   if (!isOpen || (!orderId && !booking)) return null;
@@ -80,6 +81,35 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
   // Order & Financial details (Only for Manager/Admin view)
   const currentStage = order?.current_stage || lead?.status || booking?.currentStage || 'Operations';
   const currentStatus = lead?.current_status || order?.order_status || operation?.event_status || booking?.taskStatus || 'Confirm Order';
+
+  // Extract Proof Records for this order
+  const proofRecords = (leadEquipmentHistory || []).filter(h => {
+    if (h.order_id && finalOrderId && h.order_id === finalOrderId) return true;
+    if (h.lead_id && lead?.lead_id && h.lead_id === lead.lead_id) return true;
+    return false;
+  }).map(h => {
+    let photoUrl = '';
+    let rawFootageLink = '';
+    let proofType = h.equipment_status || 'Proof';
+    if (h.remarks) {
+      try {
+        const parsed = JSON.parse(h.remarks);
+        photoUrl = parsed.photo_url || photoUrl;
+        rawFootageLink = parsed.raw_footage_link || rawFootageLink;
+        proofType = parsed.proof_type || proofType;
+      } catch (e) {}
+    }
+    return {
+      id: h.id,
+      equipmentName: h.equipment_name,
+      status: h.equipment_status,
+      proofType,
+      uploadedBy: h.returned_by || 'Staff',
+      uploadedAt: h.returned_at ? new Date(h.returned_at).toLocaleString() : 'N/A',
+      photoUrl,
+      rawFootageLink
+    };
+  });
 
   return createPortal(
     <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
@@ -221,6 +251,63 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
                 <span className="text-xs font-semibold text-zinc-200 break-words">{reportingLocation}</span>
               </div>
             </div>
+          </div>
+
+          {/* Section 4: Uploaded Verification Proof Images & Handover Docs */}
+          <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4 sm:p-5 space-y-4">
+            <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2 border-b border-zinc-800 pb-2">
+              <Camera className="w-4 h-4 text-emerald-400" /> Uploaded Proofs & Handover Docs ({proofRecords.length})
+            </h4>
+            
+            {proofRecords.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {proofRecords.map((rec, idx) => (
+                  <div key={rec.id || idx} className="bg-zinc-950/80 p-3 rounded-lg border border-zinc-800/80 space-y-2">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="block text-[11px] font-bold text-white">{rec.equipmentName}</span>
+                        <span className="text-[10px] text-zinc-400">By: {rec.uploadedBy} • {rec.uploadedAt}</span>
+                      </div>
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-mono">
+                        {rec.status}
+                      </span>
+                    </div>
+
+                    {rec.photoUrl && (
+                      <a 
+                        href={rec.photoUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="block relative rounded-lg overflow-hidden border border-zinc-800 group h-32 bg-zinc-900"
+                      >
+                        <img src={rec.photoUrl} alt={rec.equipmentName} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                        <span className="absolute bottom-1 right-1 bg-black/80 text-[9px] font-bold text-zinc-200 px-1.5 py-0.5 rounded backdrop-blur">
+                          View Full Image
+                        </span>
+                      </a>
+                    )}
+
+                    {rec.rawFootageLink && (
+                      <div className="p-2 bg-indigo-950/40 border border-indigo-800/50 rounded-lg">
+                        <span className="block text-[9px] font-mono text-indigo-300 font-bold uppercase mb-0.5">Raw Footage Link</span>
+                        <a 
+                          href={rec.rawFootageLink.startsWith('http') ? rec.rawFootageLink : `https://${rec.rawFootageLink}`}
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-xs text-indigo-400 hover:underline font-mono break-all inline-flex items-center gap-1"
+                        >
+                          <Video className="w-3 h-3 shrink-0" /> Open Cloud Folder
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-4 text-center border border-zinc-800/60 rounded-lg bg-zinc-950/40 text-xs text-zinc-500 italic">
+                No proof images or handover links uploaded for this event yet.
+              </div>
+            )}
           </div>
 
         </div>
