@@ -9872,73 +9872,83 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       {/* Final Reporting Details Popup */}
       {showFinalReportingModal && selectedLead && (
-        <div className="fixed inset-0 bg-black/85 z-[70] flex items-center justify-center p-4 backdrop-blur-md">
-          <div id="final_reporting_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4">
-             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
-                <span>⏰</span> Final Reporting Details
+        <div className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center p-4 sm:p-6 backdrop-blur-md overflow-y-auto">
+          <div id="final_reporting_modal" className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden max-w-2xl w-full shadow-2xl space-y-0 my-auto animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4 bg-slate-900/90">
+              <h4 className="font-bold text-slate-100 text-base flex items-center gap-2.5 font-sans leading-none m-0">
+                <span className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-sm">⏰</span>
+                <span>Final Reporting Details</span>
               </h4>
               <button 
+                type="button"
                 onClick={() => {
                   setShowFinalReportingModal(false);
                   setSelectedLead(null);
                 }}
-                className="text-slate-500 hover:text-slate-350 cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer border-0 bg-transparent flex items-center justify-center"
+                aria-label="Close modal"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
             
-            <form onSubmit={handleFinalReportingSubmit} className="space-y-4 text-xs max-h-[70vh] overflow-y-auto pr-2">
+            {/* Form Body */}
+            <form onSubmit={handleFinalReportingSubmit} className="p-6 space-y-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
               {(selectedLead.events && selectedLead.events.length > 0) ? (
                 selectedLead.events.map((ev, idx) => {
                   const evData = finalReportingForm[ev.id] || { reporting_date: '', reporting_time: '' };
                   return (
-                    <div key={ev.id} className="bg-slate-900/50 p-4 rounded-lg border border-slate-750 mb-3 space-y-3">
-                      <h5 className="font-bold text-slate-200 border-b border-slate-700/50 pb-1.5 mb-2 flex items-center justify-between">
-                        <span>Event {idx + 1}</span>
-                      </h5>
+                    <div key={ev.id} className="bg-slate-950/60 p-5 rounded-xl border border-slate-800 space-y-4">
+                      {selectedLead.events.length > 1 && (
+                        <h5 className="font-bold text-indigo-400 text-xs uppercase tracking-wider font-mono border-b border-slate-800/80 pb-2.5 flex items-center justify-between">
+                          <span>Event #{idx + 1}</span>
+                        </h5>
+                      )}
                       
-                      <div>
-                        <label className="block font-medium text-slate-400 mb-1">
+                      {/* Row 1: Event Name (Full Width) */}
+                      <div className="w-full">
+                        <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                           Event Name
                         </label>
                         <input
                           type="text"
                           readOnly
-                          value={ev.event_name || ''}
-                          className="w-full bg-slate-950/50 border border-slate-800 rounded-lg py-1.5 px-2 text-slate-300 font-mono text-[11px] cursor-not-allowed"
+                          value={ev.event_name || ev.event_type || ''}
+                          className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
                         />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
+                      {/* Row 2: Event Date & Event Start Time */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <label className="block font-medium text-slate-400 mb-1">
+                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                             Event Date *
                           </label>
                           <input
                             type="date"
                             readOnly
                             value={ev.event_date || ''}
-                            className="w-full bg-slate-950/50 border border-slate-800 rounded-lg py-1.5 px-2 text-slate-300 font-mono text-[11px] cursor-not-allowed"
+                            className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
                           />
                         </div>
                         <div>
-                          <label className="block font-medium text-slate-400 mb-1">
+                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                             Event Start Time *
                           </label>
                           <input
                             type="time"
                             readOnly
                             value={ev.event_start_time || ev.event_time || ''}
-                            className="w-full bg-slate-950/50 border border-slate-800 rounded-lg py-1.5 px-2 text-slate-300 font-mono text-[11px] cursor-not-allowed"
+                            className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
                           />
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-3">
+                      {/* Row 3: Reporting Date, Reporting End Date, Reporting Time */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
                         <div>
-                          <label className="block font-medium text-slate-400 mb-1">
+                          <label className="block text-xs font-semibold text-slate-300 mb-1.5 whitespace-nowrap">
                             Reporting Date *
                           </label>
                           <input
@@ -9949,22 +9959,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               ...finalReportingForm, 
                               [ev.id]: { ...evData, reporting_date: e.target.value } 
                             })}
-                            className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-2 text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-[11px]"
+                            className="w-full h-10 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 text-xs text-slate-100 font-mono transition-all"
                           />
                         </div>
                         <div>
-                          <label className="block font-medium text-slate-400 mb-1">
+                          <label className="block text-xs font-semibold text-slate-300 mb-1.5 whitespace-nowrap">
                             Reporting End Date
                           </label>
                           <input
                             type="date"
                             readOnly
                             value={ev.event_end_date || ev.Event_End_Date || (selectedLead?.Event_End_Date && selectedLead?.events?.length === 1 ? selectedLead.Event_End_Date : '') || ''}
-                            className="w-full bg-slate-950/60 border border-slate-800 rounded-lg py-1.5 px-2 text-slate-300 font-mono text-[11px] cursor-not-allowed"
+                            className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
                           />
                         </div>
                         <div>
-                          <label className="block font-medium text-slate-400 mb-1">
+                          <label className="block text-xs font-semibold text-slate-300 mb-1.5 whitespace-nowrap">
                             Reporting Time *
                           </label>
                           <input
@@ -9975,7 +9985,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               ...finalReportingForm, 
                               [ev.id]: { ...evData, reporting_time: e.target.value } 
                             })}
-                            className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-2 text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-[11px]"
+                            className="w-full h-10 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 text-xs text-slate-100 font-mono transition-all"
                           />
                         </div>
                       </div>
@@ -9983,46 +9993,99 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   );
                 })
               ) : (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block font-medium text-slate-400 mb-1">
-                      Reporting Date *
+                <div className="bg-slate-950/60 p-5 rounded-xl border border-slate-800 space-y-4">
+                  {/* Row 1: Event Name (Full Width) */}
+                  <div className="w-full">
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Event Name
                     </label>
                     <input
-                      type="date"
-                      required
-                      value={finalReportingForm['default']?.reporting_date || ''}
-                      onChange={(e) => setFinalReportingForm({ 
-                        ...finalReportingForm, 
-                        'default': { ...finalReportingForm['default'], reporting_date: e.target.value } 
-                      })}
-                      className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                      type="text"
+                      readOnly
+                      value={selectedLead.event_type || selectedLead.customer_name || 'Event'}
+                      className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
                     />
                   </div>
 
-                  <div>
-                    <label className="block font-medium text-slate-400 mb-1">
-                      Reporting Time *
-                    </label>
-                    <input
-                      type="time"
-                      required
-                      value={finalReportingForm['default']?.reporting_time || ''}
-                      onChange={(e) => setFinalReportingForm({ 
-                        ...finalReportingForm, 
-                        'default': { ...finalReportingForm['default'], reporting_time: e.target.value } 
-                      })}
-                      className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
-                    />
+                  {/* Row 2: Event Date & Event Start Time */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                        Event Date *
+                      </label>
+                      <input
+                        type="date"
+                        readOnly
+                        value={selectedLead.event_date || selectedLead.Reporting_date || ''}
+                        className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                        Event Start Time *
+                      </label>
+                      <input
+                        type="time"
+                        readOnly
+                        value={selectedLead.event_time || selectedLead.reporting_time || ''}
+                        className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row 3: Reporting Date, Reporting End Date, Reporting Time */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5 whitespace-nowrap">
+                        Reporting Date *
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={finalReportingForm['default']?.reporting_date || ''}
+                        onChange={(e) => setFinalReportingForm({ 
+                          ...finalReportingForm, 
+                          'default': { ...finalReportingForm['default'], reporting_date: e.target.value } 
+                        })}
+                        className="w-full h-10 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 text-xs text-slate-100 font-mono transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5 whitespace-nowrap">
+                        Reporting End Date
+                      </label>
+                      <input
+                        type="date"
+                        readOnly
+                        value={selectedLead.Event_End_Date || ''}
+                        className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5 whitespace-nowrap">
+                        Reporting Time *
+                      </label>
+                      <input
+                        type="time"
+                        required
+                        value={finalReportingForm['default']?.reporting_time || ''}
+                        onChange={(e) => setFinalReportingForm({ 
+                          ...finalReportingForm, 
+                          'default': { ...finalReportingForm['default'], reporting_time: e.target.value } 
+                        })}
+                        className="w-full h-10 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 text-xs text-slate-100 font-mono transition-all"
+                      />
+                    </div>
                   </div>
                 </div>
               )}
                 
-              <div className="flex justify-end pt-2 sticky bottom-0 bg-slate-850 pb-1">
+              {/* Button: Centered */}
+              <div className="flex justify-center items-center pt-4 border-t border-slate-800/80">
                  <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold shadow-lg shadow-indigo-900/20 transition-all cursor-pointer"
+                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all cursor-pointer inline-flex items-center justify-center min-w-[200px]"
                 >
                   {isSaving ? 'Saving...' : 'Save Reporting Details'}
                 </button>
