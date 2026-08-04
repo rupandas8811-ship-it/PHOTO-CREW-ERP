@@ -126,6 +126,8 @@ interface RoleContextType {
   ) => Promise<void>;
   resetAllData: () => Promise<void>;
   refreshData: () => void;
+  pushInsert: (table: string, record: any) => Promise<{ success: boolean; error?: string; localFallback?: boolean }>;
+  pushUpdate: (table: string, matchColumn: string, matchValue: any, updates: any) => Promise<{ success: boolean; error?: string; localFallback?: boolean }>;
   statusHistory: any[];
   getLeadCurrentStatus: (lead: Lead) => string;
   getLeadCurrentStage: (lead: Lead) => 'Sales' | 'Operations' | 'Production' | 'Completed';
@@ -1182,6 +1184,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ],
       lead_staff_assignment_history: [
         'history_id', 'lead_id', 'order_id', 'assigned_role', 'assigned_staff', 'assigned_by', 'assigned_at'
+      ],
+      lead_equipment_history: [
+        'id', 'lead_id', 'order_id', 'equipment_name', 'equipment_status', 'returned_by', 'returned_at', 'remarks'
       ],
       notifications: [
         'notification_id', 'title', 'message', 'sender_name', 'sender_role', 'timestamp', 
@@ -5828,15 +5833,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addLeadEquipmentHistory = async (history: Omit<LeadEquipmentHistory, 'id'>) => {
-    if (!supabaseClient) return;
-    const { data, error } = await supabaseClient.from('lead_equipment_history').insert([history]).select();
-    if (error) {
-      console.error('Error adding lead equipment history:', error);
-      throw error;
+    const res = await pushInsert('lead_equipment_history', history);
+    if (!res.success) {
+      console.error('Error adding lead equipment history:', res.error);
+      throw new Error(res.error || 'Failed to insert lead equipment history');
     }
-    if (data) {
-      setLeadEquipmentHistory(prev => [data[0] as LeadEquipmentHistory, ...prev]);
-    }
+    setLeadEquipmentHistory(prev => [{ ...history, id: `LEH-${Date.now()}-${Math.floor(Math.random()*1000)}` } as LeadEquipmentHistory, ...prev]);
   };
 
   const updateLead = async (leadId: string, updates: Partial<Lead>) => {
@@ -6631,6 +6633,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         recordPayment,
         resetAllData,
         refreshData,
+        pushInsert,
+        pushUpdate,
         statusHistory,
         getLeadCurrentStatus,
         getLeadCurrentStage,

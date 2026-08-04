@@ -212,7 +212,7 @@ interface EventProofData {
 }
 
 export const StaffModule: React.FC = () => {
-  const { currentUser, staff, leads, orders, operations, staffAssignments, equipment, leadEquipmentHistory, addLeadEquipmentHistory, refreshData, updateLead } = useRole();
+  const { currentUser, staff, leads, orders, operations, staffAssignments, equipment, leadEquipmentHistory, addLeadEquipmentHistory, refreshData, updateLead, pushInsert, pushUpdate } = useRole();
 
   // Resolve staff member
   const staffMember = staff.find(s => 
@@ -655,47 +655,42 @@ export const StaffModule: React.FC = () => {
         nextStatus = stage;
       }
 
-      if (supabaseClient) {
-        for (const p of newProofs) {
-          console.log("[StatusUpdate] saving record to lead_equipment_history");
-          const historyRecord = {
-            lead_id: booking.leadId || null,
-            order_id: booking.orderId || null,
-            equipment_name: p.equipmentName,
-            equipment_status: effectiveEquipmentStatus,
-            returned_by: staffName,
-            returned_at: timestamp,
-            remarks: JSON.stringify({
-              asset_id: p.assetId,
-              proof_type: stage,
-              staff_name: staffName,
-              photo_url: p.photoUrl,
-              event_id: booking.eventId,
-              event_name: booking.eventName,
-              order_id: booking.orderId,
-              lead_id: booking.leadId,
-              raw_footage_link: modalRawFootageLink || null,
-              uploaded_at: timestamp,
-              uploaded_by: staffName,
-              current_status: nextStatus
-            })
-          };
+      for (const p of newProofs) {
+        console.log("[StatusUpdate] saving record to lead_equipment_history via pushInsert");
+        const historyRecord = {
+          lead_id: booking.leadId || null,
+          order_id: booking.orderId || null,
+          equipment_name: p.equipmentName,
+          equipment_status: effectiveEquipmentStatus,
+          returned_by: staffName,
+          returned_at: timestamp,
+          remarks: JSON.stringify({
+            asset_id: p.assetId,
+            proof_type: stage,
+            staff_name: staffName,
+            photo_url: p.photoUrl,
+            event_id: booking.eventId,
+            event_name: booking.eventName,
+            order_id: booking.orderId,
+            lead_id: booking.leadId,
+            raw_footage_link: modalRawFootageLink || null,
+            uploaded_at: timestamp,
+            uploaded_by: staffName,
+            current_status: nextStatus
+          })
+        };
 
-          const { error: dbErr } = await supabaseClient
-            .from('lead_equipment_history')
-            .insert([historyRecord]);
-
-          if (dbErr) {
-            console.error('[StatusUpdate] lead_equipment_history ERROR:', dbErr);
-            throw new Error(`Database save failed for ${p.equipmentName}: ${dbErr.message}`);
-          }
+        const resHist = await pushInsert('lead_equipment_history', historyRecord);
+        if (!resHist?.success) {
+          console.error('[StatusUpdate] lead_equipment_history ERROR:', resHist?.error);
+          throw new Error(`Database save failed for ${p.equipmentName}: ${resHist?.error || 'Insert failed'}`);
         }
       }
 
       // 4. Save Raw Footage Link to raw_footage table if present
-      if (modalRawFootageLink && supabaseClient && booking.orderId) {
+      if (modalRawFootageLink && booking.orderId) {
         try {
-          await supabaseClient.from('raw_footage').upsert({
+          await pushInsert('raw_footage', {
             order_id: booking.orderId,
             server_path: modalRawFootageLink,
             uploaded_by: staffName,
@@ -704,7 +699,7 @@ export const StaffModule: React.FC = () => {
             status: 'Received'
           });
         } catch (rfErr) {
-          console.warn('[StatusUpdate] raw_footage upsert warning:', rfErr);
+          console.warn('[StatusUpdate] raw_footage insert warning:', rfErr);
         }
       }
 
@@ -737,7 +732,7 @@ export const StaffModule: React.FC = () => {
       }
 
       // 6. Update staff_assignments, operations, orders, leads
-      if (supabaseClient && booking.orderId) {
+      if (booking.orderId) {
         const updateAssignmentPayload: any = {
           task_status: nextStatus,
           updated_at: timestamp
@@ -746,14 +741,18 @@ export const StaffModule: React.FC = () => {
           updateAssignmentPayload.raw_footage_link = modalRawFootageLink;
         }
 
-        const { error: saErr } = await supabaseClient
-          .from('staff_assignments')
-          .update(updateAssignmentPayload)
-          .eq('order_id', booking.orderId)
-          .ilike('staff_name', staffName);
+        const matchingSA = staffAssignments?.find(sa => 
+          sa.order_id === booking.orderId && 
+          sa.staff_name.toLowerCase() === staffName.toLowerCase()
+        );
 
-        if (saErr) {
-          console.warn('[StatusUpdate] staff_assignments update warning:', saErr);
+        if (matchingSA?.assignment_id) {
+          await pushUpdate('staff_assignments', 'assignment_id', matchingSA.assignment_id, {
+            ...updateAssignmentPayload,
+            assignment_status: 'Assigned'
+          });
+        } else {
+          await pushUpdate('staff_assignments', 'order_id', booking.orderId, updateAssignmentPayload);
         }
 
         let globalNextStatus: string | null = null;
@@ -774,21 +773,20 @@ export const StaffModule: React.FC = () => {
             opsPayload.raw_footage_drive_link = modalRawFootageLink;
           }
 
-          await supabaseClient
-            .from('operations')
-            .update(opsPayload)
-            .eq('order_id', booking.orderId);
+          await pushUpdate('operations', 'order_id', booking.orderId, opsPayload);
 
-          await supabaseClient
-            .from('orders')
-            .update({ 
-              current_stage: globalNextStatus,
-              updated_at: timestamp
-            })
-            .eq('order_id', booking.orderId);
+          await pushUpdate('orders', 'order_id', booking.orderId, { 
+            current_stage: globalNextStatus,
+            updated_by: staffName,
+            updated_at: timestamp
+          });
 
           if (booking.leadId) {
-            await updateLead(booking.leadId, { status: globalNextStatus as any });
+            await updateLead(booking.leadId, { 
+              status: globalNextStatus as any,
+              current_status: globalNextStatus as any,
+              updated_by: staffName
+            });
           }
         }
       }
@@ -800,10 +798,12 @@ export const StaffModule: React.FC = () => {
       setPhotoModalData(null);
       setModalPhotos({});
       setModalRawFootageLink('');
+      alert(`✅ ${stage} confirmed and saved successfully!`);
       showToast(`✅ ${stage} proof uploaded & saved successfully!`);
 
     } catch (error: any) {
       console.error('Error updating status:', error);
+      alert(`❌ Failed to submit ${stage}: ${error.message || 'Unknown error'}`);
       showToast(`❌ ${error.message || 'Failed to update status.'}`);
     } finally {
       setIsSubmitting(false);
