@@ -249,79 +249,114 @@ export const StaffModule: React.FC = () => {
   useEffect(() => {
     if (!staffName) return;
 
+    const newStatuses: Record<string, string> = {};
+    const newProofs: Record<string, EventProofData> = {};
+
     // 1. Restore staff task status from staffAssignments
     if (staffAssignments && staffAssignments.length > 0) {
-      setStaffStatuses(prev => {
-        const restored = { ...prev };
-        staffAssignments.forEach(sa => {
-          if (sa.staff_name && sa.staff_name.toLowerCase() === staffName.toLowerCase()) {
-            const statusVal = (sa as any).task_status || sa.assignment_status;
-            if (statusVal && statusVal !== 'Assigned') {
-              const key = `${sa.order_id}_gen_${staffName.toLowerCase()}`;
-              restored[key] = statusVal;
-            }
+      staffAssignments.forEach(sa => {
+        if (sa.staff_name && sa.staff_name.toLowerCase() === staffName.toLowerCase()) {
+          const statusVal = (sa as any).task_status || sa.assignment_status;
+          if (statusVal && statusVal !== 'Assigned') {
+            const key = `${sa.order_id}_gen_${staffName.toLowerCase()}`;
+            newStatuses[key] = statusVal;
           }
-        });
-        return restored;
+        }
       });
     }
 
-        // 2. Restore equipment verification photo proofs from leadEquipmentHistory
+    // 2. Restore equipment verification photo proofs and precise task statuses from leadEquipmentHistory
     if (leadEquipmentHistory && leadEquipmentHistory.length > 0) {
-      setStaffProofs(prev => {
-        const restored = { ...prev };
-        leadEquipmentHistory.forEach(leh => {
-          if (
-            leh.returned_by &&
-            leh.returned_by.toLowerCase() === staffName.toLowerCase()
-          ) {
-            let eventId = 'gen';
-            let photoUrl = (leh as any).photo_url || '';
-            let assetId = (leh as any).asset_id || '';
-            
-            if (leh.remarks) {
-              try {
-                const parsed = JSON.parse(leh.remarks);
-                photoUrl = parsed.photo_url || photoUrl;
-                assetId = parsed.asset_id || assetId;
-                if (parsed.event_id) {
-                  eventId = parsed.event_id;
-                }
-              } catch (e) {}
-            }
-            
-            const key = `${leh.order_id}_${eventId}_${staffName.toLowerCase()}`;
-
-            if (photoUrl) {
-              const stage = leh.equipment_status;
-              const proofField = stage === 'Equipment Received' ? 'equipmentReceivedProofs' :
-                                 stage === 'Event Start' ? 'eventStartProofs' :
-                                 stage === 'Equipment Handover' ? 'equipmentHandoverProofs' :
-                                 stage === 'Event Complete' ? 'completeProofs' : 'startProofs';
-              
-              const existing = restored[key] || {};
-              const proofArr = existing[proofField] ? [...existing[proofField]!] : [];
-              const proofItem: EquipmentProofItem = {
-                equipmentName: leh.equipment_name,
-                assetId: assetId || `EQ-${leh.equipment_name}`,
-                photoUrl: photoUrl,
-                capturedAt: leh.returned_at || new Date().toISOString()
-              };
-
-              if (!proofArr.some(p => p.equipmentName === proofItem.equipmentName)) {
-                proofArr.push(proofItem);
+      // Sort history to process older ones first, then newer ones can override status
+      const sortedHistory = [...leadEquipmentHistory].sort((a, b) => 
+        new Date(a.returned_at || 0).getTime() - new Date(b.returned_at || 0).getTime()
+      );
+      
+      sortedHistory.forEach(leh => {
+        if (
+          leh.returned_by &&
+          leh.returned_by.toLowerCase() === staffName.toLowerCase()
+        ) {
+          let eventId = 'gen';
+          let photoUrl = (leh as any).photo_url || '';
+          let assetId = (leh as any).asset_id || '';
+          let parsedStatus = '';
+          
+          if (leh.remarks) {
+            try {
+              const parsed = JSON.parse(leh.remarks);
+              photoUrl = parsed.photo_url || photoUrl;
+              assetId = parsed.asset_id || assetId;
+              if (parsed.event_id) {
+                eventId = parsed.event_id;
               }
-
-              restored[key] = {
-                ...existing,
-                [proofField]: proofArr
-              };
-            }
+              if (parsed.current_status) {
+                parsedStatus = parsed.current_status;
+              }
+            } catch (e) {}
           }
-        });
-        return restored;
+          
+          const key = `${leh.order_id}_${eventId}_${staffName.toLowerCase()}`;
+
+          // Status restoration: If parsedStatus exists, override the status for this specific event key
+          if (parsedStatus && parsedStatus !== 'Assigned Crew') {
+             newStatuses[key] = parsedStatus;
+          } else if (leh.equipment_status === 'Event Started') {
+             newStatuses[key] = 'Event Started';
+          } else if (leh.equipment_status === 'Event Complete') {
+             newStatuses[key] = 'Event Ended';
+          } else if (leh.equipment_status === 'Equipment Handover') {
+             newStatuses[key] = 'Footage Handover';
+          }
+
+          if (photoUrl) {
+            const stage = leh.equipment_status;
+            const proofField = stage === 'Equipment Received' ? 'equipmentReceivedProofs' :
+                               stage === 'Event Start' || stage === 'Event Started' ? 'eventStartProofs' :
+                               stage === 'Equipment Handover' ? 'equipmentHandoverProofs' :
+                               stage === 'Event Complete' || stage === 'Event Ended' ? 'completeProofs' : 'startProofs';
+            
+            const existing = newProofs[key] || {};
+            const proofArr = existing[proofField] ? [...existing[proofField]!] : [];
+            const proofItem: EquipmentProofItem = {
+              equipmentName: leh.equipment_name,
+              assetId: assetId || `EQ-${leh.equipment_name}`,
+              photoUrl: photoUrl,
+              capturedAt: leh.returned_at || new Date().toISOString()
+            };
+
+            // Only add if not already present (using equipmentName to dedup)
+            if (!proofArr.some(p => p.equipmentName === proofItem.equipmentName)) {
+              proofArr.push(proofItem);
+            }
+
+            newProofs[key] = {
+              ...existing,
+              [proofField]: proofArr
+            };
+          }
+        }
       });
     }
+
+    // Merge with local storage state to preserve anything that hasn't been synced (or override with DB state)
+    setStaffStatuses(prev => {
+       const merged = { ...prev, ...newStatuses };
+       localStorage.setItem('staff_event_statuses_v2', JSON.stringify(merged));
+       return merged;
+    });
+    setStaffProofs(prev => {
+       const merged = { ...prev };
+       for (const key of Object.keys(newProofs)) {
+          merged[key] = {
+             ...(merged[key] || {}),
+             ...newProofs[key]
+          };
+       }
+       localStorage.setItem('staff_equipment_proofs_v2', JSON.stringify(merged));
+       return merged;
+    });
+
   }, [leadEquipmentHistory, staffAssignments, staffName]);
 
   // Modal states
