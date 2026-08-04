@@ -856,9 +856,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const augmentedOrders = useMemo(() => {
     // Post-sales stages that should produce active orders
     const postSalesStages = [
-      'New Order Received', 'Order Confirmed', 'Operations Assigned', 'Event Scheduled', 'Staff Assigned', 'Event Completed', 'Raw Footage Received',
-      'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress', 'Final Approval', 'Project Delivered', 'Project Closed',
-      'Customer Review', 'Approved', 'Delivered', 'Payment Pending', 'Closed'
+      'New Order Received', 'Confirm Order', 'Order Confirmed', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned', 'Event Scheduled',
+      'Event Started', 'Event Start', 'Event Ended', 'Event End', 'Event Completed', 'Event Complete',
+      'Footage Handover', 'Equipment Handover', 'Footage Handover Verified', 'Verified Footage', 'Raw Footage Received',
+      'Editor Assigned', 'Assigned Editor', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Client Review Sent', 'Internal Review', 'Client Review', 'Revision Required', 'Revision In Progress', 'Revision', 'Final Approval', 'Project Delivered', 'Project Closed',
+      'Customer Review', 'Approved', 'Delivered', 'Payment Pending', 'Closed', 'Business Owner Review', 'Order Closed'
     ];
     
     // Start with existing booked/restored orders from DB
@@ -6087,8 +6089,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     const status = getLeadCurrentStatus(lead);
     
     const salesStatuses = ['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quote Sent', 'Quotation Sent', 'Quote Follow-up', 'Negotiation'];
-    const opsStatuses = ['Confirm Order', 'Order Confirmed', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Completed', 'Footage Handover Verified', 'Raw Footage Received', 'Event Cancelled'];
-    const prodStatuses = ['Footage Handover Verified', 'Raw Footage Received', 'Assigned Editor', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Customer Review', 'Client Review Sent', 'Internal Review', 'Client Review', 'Revision Required', 'Revision In Progress', 'Revision', 'Client Acceptance', 'Final Approval', 'Approved', 'Ready for Delivery'];
+    const opsStatuses = ['Confirm Order', 'Order Confirmed', 'New Order Received', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Start', 'Event Ended', 'Event End', 'Event Completed', 'Event Complete', 'Footage Handover', 'Equipment Handover', 'Verified Footage', 'Footage Handover Verified', 'Raw Footage Received', 'Event Cancelled'];
+    const prodStatuses = ['Assigned Editor', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Customer Review', 'Client Review Sent', 'Internal Review', 'Client Review', 'Revision Required', 'Revision In Progress', 'Revision', 'Client Acceptance', 'Final Approval', 'Approved', 'Ready for Delivery'];
     
     if (status === 'Delivered' || status === 'Completed' || status === 'Closed' || status === 'Project Closed' || status === 'Project Delivered') return 'Completed';
     if (prodStatuses.includes(status)) return 'Production';

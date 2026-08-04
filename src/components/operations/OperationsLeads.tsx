@@ -765,7 +765,15 @@ export const OperationsLeads: React.FC = () => {
   };
 
   // Filter orders to show confirmed ones for Operations
-  const allowedStages = ['Confirm Order', 'Order Confirmed', 'New Order Received', 'Operations Assigned', 'Assigned Crew', 'Event Scheduled', 'Staff Assigned', 'Event Started', 'Event Completed', 'Event Ended', 'Footage Handover', 'Verified Footage', 'Footage Handover Verified', 'Raw Footage Received', 'Event Cancelled'];
+  const allowedStages = [
+    'Confirm Order', 'Order Confirmed', 'New Order Received', 'Operations Assigned',
+    'Assigned Crew', 'Staff Assigned', 'Event Scheduled',
+    'Event Started', 'Event Start',
+    'Event Ended', 'Event End', 'Event Completed', 'Event Complete',
+    'Footage Handover', 'Equipment Handover',
+    'Verified Footage', 'Footage Handover Verified', 'Raw Footage Received',
+    'Event Cancelled'
+  ];
   const operationsOrders = orders.filter(o => {
     if (!allowedStages.includes(o.current_stage)) return false;
     if (currentRole === 'Operation Staff') {
@@ -865,19 +873,20 @@ export const OperationsLeads: React.FC = () => {
       // 1. Status Dropdown filter
       if (statusFilter !== 'All') {
         const isStaffAssigned = staffAssignments ? staffAssignments.some(x => x.order_id === o.order_id) : false;
+        const stageNorm = (o.current_stage || '').trim();
         
-        if (statusFilter === 'Order Confirmed' && o.current_stage !== 'Order Confirmed') return false;
-        if (statusFilter === 'Operations Assigned' && o.current_stage !== 'Operations Assigned') return false;
-        if (statusFilter === 'Assigned Crew' && o.current_stage !== 'Assigned Crew' && o.current_stage !== 'Event Scheduled' && !isStaffAssigned) return false;
+        if (statusFilter === 'Order Confirmed' && !['Order Confirmed', 'Confirm Order', 'New Order Received'].includes(stageNorm)) return false;
+        if (statusFilter === 'Operations Assigned' && stageNorm !== 'Operations Assigned') return false;
+        if (statusFilter === 'Assigned Crew' && !['Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Operations Assigned'].includes(stageNorm) && !isStaffAssigned) return false;
         if (statusFilter === 'Staff Assigned' && !isStaffAssigned) return false;
-        if (statusFilter === 'Event Scheduled' && o.current_stage !== 'Event Scheduled') return false;
-        if (statusFilter === 'Event Cancelled' && o.current_stage !== 'Event Cancelled') return false;
-        if (statusFilter === 'Event Started' && o.current_stage !== 'Event Started') return false;
-        if (statusFilter === 'Event Ended' && o.current_stage !== 'Event Ended' && o.current_stage !== 'Event Completed') return false;
-        if (statusFilter === 'Footage Handover' && o.current_stage !== 'Footage Handover') return false;
-        if (statusFilter === 'Verified Footage' && o.current_stage !== 'Verified Footage' && o.current_stage !== 'Footage Handover Verified' && o.current_stage !== 'Raw Footage Received') return false;
-        if (statusFilter === 'Event Completed' && o.current_stage !== 'Event Completed' && o.current_stage !== 'Event Ended') return false;
-        if (statusFilter === 'Raw Footage Received' && o.current_stage !== 'Raw Footage Received' && o.current_stage !== 'Verified Footage') return false;
+        if (statusFilter === 'Event Scheduled' && stageNorm !== 'Event Scheduled') return false;
+        if (statusFilter === 'Event Cancelled' && stageNorm !== 'Event Cancelled') return false;
+        if (statusFilter === 'Event Started' && !['Event Started', 'Event Start'].includes(stageNorm)) return false;
+        if (statusFilter === 'Event Ended' && !['Event Ended', 'Event End', 'Event Completed', 'Event Complete'].includes(stageNorm)) return false;
+        if (statusFilter === 'Footage Handover' && !['Footage Handover', 'Equipment Handover'].includes(stageNorm)) return false;
+        if (statusFilter === 'Verified Footage' && !['Verified Footage', 'Footage Handover Verified', 'Raw Footage Received'].includes(stageNorm)) return false;
+        if (statusFilter === 'Event Completed' && !['Event Completed', 'Event Complete', 'Event Ended', 'Event End'].includes(stageNorm)) return false;
+        if (statusFilter === 'Raw Footage Received' && !['Raw Footage Received', 'Verified Footage', 'Footage Handover Verified'].includes(stageNorm)) return false;
 
         // Custom stats click metrics
         if (statusFilter === 'New Orders') {
@@ -1541,15 +1550,15 @@ export const OperationsLeads: React.FC = () => {
     ).length;
 
     const eventStarted = operationsOrders.filter(o => 
-      o.current_stage === 'Event Started'
+      ['Event Started', 'Event Start'].includes(o.current_stage)
     ).length;
 
     const eventEnded = operationsOrders.filter(o => 
-      ['Event Ended', 'Event Completed'].includes(o.current_stage)
+      ['Event Ended', 'Event End', 'Event Completed', 'Event Complete'].includes(o.current_stage)
     ).length;
 
     const footageHandover = operationsOrders.filter(o => 
-      o.current_stage === 'Footage Handover'
+      ['Footage Handover', 'Equipment Handover'].includes(o.current_stage)
     ).length;
 
     const verifiedFootage = operationsOrders.filter(o => 
@@ -1967,10 +1976,10 @@ export const OperationsLeads: React.FC = () => {
 
                           const isConfirmOrder = ['confirm order', 'order confirmed', 'new order received'].includes(stageNorm);
                           const isAssignedCrew = ['assigned crew', 'staff assigned', 'operations assigned', 'event scheduled'].includes(stageNorm);
-                          const isEventStarted = ['event started'].includes(stageNorm);
-                          const isEventEnded = ['event ended', 'event completed'].includes(stageNorm);
-                          const isFootageHandover = ['footage handover', 'raw footage received'].includes(stageNorm);
-                          const isVerifiedFootage = ['verified footage', 'footage handover verified', 'production handover', 'delivered', 'completed'].includes(stageNorm);
+                          const isEventStarted = ['event started', 'event start'].includes(stageNorm);
+                          const isEventEnded = ['event ended', 'event end', 'event completed', 'event complete'].includes(stageNorm);
+                          const isFootageHandover = ['footage handover', 'equipment handover'].includes(stageNorm);
+                          const isVerifiedFootage = ['verified footage', 'footage handover verified', 'raw footage received', 'production handover', 'delivered', 'completed'].includes(stageNorm);
 
                           // Common Handlers
                           const handleAssignCrew = () => {

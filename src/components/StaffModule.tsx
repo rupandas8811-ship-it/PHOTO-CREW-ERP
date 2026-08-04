@@ -347,6 +347,16 @@ export const StaffModule: React.FC = () => {
 
     const bookings: any[] = [];
 
+    const finishedStatuses = [
+      'footage handover', 'verified footage', 'footage handover verified',
+      'raw footage received', 'editor assigned', 'assigned editor',
+      'editing started', 'editing in progress', 'internal qc review',
+      'client review sent', 'internal review', 'client review',
+      'revision required', 'revision in progress', 'revision',
+      'final approval', 'project delivered', 'project closed',
+      'completed', 'closed', 'order closed', 'delivered'
+    ];
+
     (leads || []).forEach((lead) => {
       const order = (orders || []).find(o => o.lead_id === lead.lead_id);
       const op = operations.find(o => o.order_id === (order?.order_id || lead.lead_id));
@@ -429,30 +439,33 @@ export const StaffModule: React.FC = () => {
             const uniqueKey = `${orderId}_${ev.id || 'ev'}_${staffName.toLowerCase()}`;
             const currentStaffStatus = staffStatuses[uniqueKey] || op?.event_status || 'Assigned Crew';
 
-            bookings.push({
-              key: uniqueKey,
-              orderId: orderId,
-              leadId: lead.lead_id,
-              eventId: ev.id || 'ev',
-              eventName: ev.event_type === 'Other' ? (ev.event_name || 'Other Event') : (ev.event_type || 'N/A'),
-              customerName: lead.customer_name || order?.customer_name || 'N/A',
-              customerMobile: lead.mobile || order?.mobile || 'N/A',
-              customerWhatsapp: lead.whatsapp_number || lead.mobile || order?.whatsapp_number || order?.mobile || 'N/A',
-              customerAddress: lead.address || lead.client_residence_address || lead.city || 'N/A',
-              shootType: ev.event_shoot_type || lead.shoot_type || 'N/A',
-              assignedRole: assignedRole,
-              eventDate: ev.event_date || lead.event_date || 'N/A',
-              eventStartTime: ev.event_start_time || lead.event_time || 'N/A',
-              eventEndTime: ev.event_end_time || 'N/A',
-              reportingDate: ev.reporting_date || ev.event_date || lead.Reporting_date || lead.event_date || 'N/A',
-              reportingTime: ev.reporting_time || lead.reporting_time || 'N/A',
-              venue: ev.event_location || lead.event_location || 'N/A',
-              googleMapsLink: ev.google_maps_link || lead.google_maps_link || 'N/A',
-              guestPax: ev.guest_pax || (lead as any).guest_pax || 'N/A',
-              equipmentItems: assignedEqItems,
-              taskStatus: currentStaffStatus,
-              coordinator: op?.operations_coordinator || 'Unassigned'
-            });
+            // Only remove from staff active bookings AFTER Footage Handover has been submitted
+            if (!finishedStatuses.includes((currentStaffStatus || '').trim().toLowerCase())) {
+              bookings.push({
+                key: uniqueKey,
+                orderId: orderId,
+                leadId: lead.lead_id,
+                eventId: ev.id || 'ev',
+                eventName: ev.event_type === 'Other' ? (ev.event_name || 'Other Event') : (ev.event_type || 'N/A'),
+                customerName: lead.customer_name || order?.customer_name || 'N/A',
+                customerMobile: lead.mobile || order?.mobile || 'N/A',
+                customerWhatsapp: lead.whatsapp_number || lead.mobile || order?.whatsapp_number || order?.mobile || 'N/A',
+                customerAddress: lead.address || lead.client_residence_address || lead.city || 'N/A',
+                shootType: ev.event_shoot_type || lead.shoot_type || 'N/A',
+                assignedRole: assignedRole,
+                eventDate: ev.event_date || lead.event_date || 'N/A',
+                eventStartTime: ev.event_start_time || lead.event_time || 'N/A',
+                eventEndTime: ev.event_end_time || 'N/A',
+                reportingDate: ev.reporting_date || ev.event_date || lead.Reporting_date || lead.event_date || 'N/A',
+                reportingTime: ev.reporting_time || lead.reporting_time || 'N/A',
+                venue: ev.event_location || lead.event_location || 'N/A',
+                googleMapsLink: ev.google_maps_link || lead.google_maps_link || 'N/A',
+                guestPax: ev.guest_pax || (lead as any).guest_pax || 'N/A',
+                equipmentItems: assignedEqItems,
+                taskStatus: currentStaffStatus,
+                coordinator: op?.operations_coordinator || 'Unassigned'
+              });
+            }
           }
         });
       }
@@ -504,30 +517,33 @@ export const StaffModule: React.FC = () => {
           const uniqueKey = `${orderId}_gen_${staffName.toLowerCase()}`;
           const currentStaffStatus = staffStatuses[uniqueKey] || op?.event_status || 'Assigned Crew';
 
-          bookings.push({
-            key: uniqueKey,
-            orderId: orderId,
-            leadId: lead.lead_id,
-            eventId: 'gen',
-            eventName: lead.event_name || lead.shoot_type || 'General Event',
-            customerName: lead.customer_name || order?.customer_name || 'N/A',
-            customerMobile: lead.mobile || order?.mobile || 'N/A',
-            customerWhatsapp: lead.whatsapp_number || lead.mobile || order?.whatsapp_number || order?.mobile || 'N/A',
-            customerAddress: lead.address || lead.client_residence_address || lead.city || 'N/A',
-            shootType: lead.shoot_type || 'N/A',
-            assignedRole: assignedRole,
-            eventDate: lead.event_date || 'N/A',
-            eventStartTime: lead.event_time || 'N/A',
-            eventEndTime: 'N/A',
-            reportingDate: lead.Reporting_date || lead.event_date || 'N/A',
-            reportingTime: lead.reporting_time || 'N/A',
-            venue: lead.event_location || 'N/A',
-            googleMapsLink: lead.google_maps_link || 'N/A',
-            guestPax: (lead as any).guest_pax || 'N/A',
-            equipmentItems: assignedEqItems,
-            taskStatus: currentStaffStatus,
-            coordinator: op?.operations_coordinator || 'Unassigned'
-          });
+          // Only remove from staff active bookings AFTER Footage Handover has been submitted
+          if (!finishedStatuses.includes((currentStaffStatus || '').trim().toLowerCase())) {
+            bookings.push({
+              key: uniqueKey,
+              orderId: orderId,
+              leadId: lead.lead_id,
+              eventId: 'gen',
+              eventName: lead.event_name || lead.shoot_type || 'General Event',
+              customerName: lead.customer_name || order?.customer_name || 'N/A',
+              customerMobile: lead.mobile || order?.mobile || 'N/A',
+              customerWhatsapp: lead.whatsapp_number || lead.mobile || order?.whatsapp_number || order?.mobile || 'N/A',
+              customerAddress: lead.address || lead.client_residence_address || lead.city || 'N/A',
+              shootType: lead.shoot_type || 'N/A',
+              assignedRole: assignedRole,
+              eventDate: lead.event_date || 'N/A',
+              eventStartTime: lead.event_time || 'N/A',
+              eventEndTime: 'N/A',
+              reportingDate: lead.Reporting_date || lead.event_date || 'N/A',
+              reportingTime: lead.reporting_time || 'N/A',
+              venue: lead.event_location || 'N/A',
+              googleMapsLink: lead.google_maps_link || 'N/A',
+              guestPax: (lead as any).guest_pax || 'N/A',
+              equipmentItems: assignedEqItems,
+              taskStatus: currentStaffStatus,
+              coordinator: op?.operations_coordinator || 'Unassigned'
+            });
+          }
         }
       }
     });
