@@ -4711,11 +4711,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 }
               } else if (password && !currentStaff?.auth_user_id) {
                  // Fallback if they were never created in auth system
+                 const computedEmail = email || `${mobile}@photocrew.com`;
                  const res = await fetch('/api/auth/create-user', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                    email,
+                    email: computedEmail,
                     password,
                     name,
                     role: 'Editor',
@@ -4745,11 +4746,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               setAddStaffSuccess('✅ Staff details updated successfully.');
             } else {
               // Create new auth user
+              const computedEmail = email || `${mobile}@photocrew.com`;
               const authRes = await fetch('/api/auth/create-user', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  email,
+                  email: computedEmail,
                   password,
                   name,
                   role: 'Editor',

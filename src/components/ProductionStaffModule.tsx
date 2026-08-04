@@ -298,7 +298,7 @@ export const ProductionStaffModule: React.FC = () => {
       const timestamp = new Date().toISOString();
       const b = editingCompletedModal;
 
-      await updateEditorAssignmentStatus(b.assignmentId, 'Editing Complete' as any);
+      await updateEditorAssignmentStatus(b.assignmentId, 'Editing Completed' as any);
 
       await pushUpdate('editor_assignments', 'assignment_id', b.assignmentId, {
         customer_confirmation_proof: editingCompletedForm.confirmation_proof,
@@ -308,19 +308,19 @@ export const ProductionStaffModule: React.FC = () => {
 
       if (b.prodObj?.production_id) {
         await updateProduction(b.prodObj.production_id, {
-          editing_status: 'Editing Complete' as any,
-          production_status: 'Approved' as any,
+          editing_status: 'Editing Completed' as any,
+          production_status: 'Editing Completed' as any,
           remarks: `Editing Completed with Customer Proof by ${staffName} on ${new Date().toLocaleDateString()}`
         });
       }
 
       if (b.orderId) {
-        await updateOrderStage(b.orderId, 'Editing Complete' as any);
+        await updateOrderStage(b.orderId, 'Editing Completed' as any);
       }
       if (b.leadId) {
         await updateLead(b.leadId, {
-          status: 'Editing Complete' as any,
-          current_status: 'Editing Complete' as any
+          status: 'Editing Completed' as any,
+          current_status: 'Editing Completed' as any
         });
       }
 
@@ -367,7 +367,7 @@ export const ProductionStaffModule: React.FC = () => {
       if (b.prodObj?.production_id) {
         await updateProduction(b.prodObj.production_id, {
           editing_status: 'Client Acceptance' as any,
-          production_status: 'Approved' as any,
+          production_status: 'Client Acceptance' as any,
           actual_delivery_date: timestamp.split('T')[0],
           remarks: `Client Acceptance verified by ${staffName} on ${new Date().toLocaleDateString()}`
         });
@@ -375,12 +375,12 @@ export const ProductionStaffModule: React.FC = () => {
 
       // System Action: Transfer project to Business Owner Dashboard for final review
       if (b.orderId) {
-        await updateOrderStage(b.orderId, 'Business Owner Review' as any);
+        await updateOrderStage(b.orderId, 'Client Acceptance' as any);
       }
       if (b.leadId) {
         await updateLead(b.leadId, {
-          status: 'Business Owner Review' as any,
-          current_status: 'Business Owner Review' as any
+          status: 'Client Acceptance' as any,
+          current_status: 'Client Acceptance' as any
         });
       }
 

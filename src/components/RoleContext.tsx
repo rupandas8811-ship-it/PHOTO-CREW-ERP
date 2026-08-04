@@ -2520,11 +2520,23 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
       // Fallback: Check in-memory staff list if not found in database directly
       if (!dbUser) {
-        const matchingStaff = staff.find(s => 
+        let matchingStaff = staff.find(s => 
           (s.email && s.email.toLowerCase() === cleanInput.toLowerCase()) ||
           (s.mobile && s.mobile === cleanInput) ||
           (s.name && (s.name.toLowerCase().replace(/\s+/g, '') + '@photocrew.com' === cleanInput.toLowerCase()))
         );
+        let fallbackRole = 'Operation Staff';
+
+        if (!matchingStaff) {
+          matchingStaff = productionStaff.find(s => 
+            (s.email && s.email.toLowerCase() === cleanInput.toLowerCase()) ||
+            (s.mobile && s.mobile === cleanInput) ||
+            (s.name && (s.name.toLowerCase().replace(/\s+/g, '') + '@photocrew.com' === cleanInput.toLowerCase()))
+          );
+          if (matchingStaff) {
+            fallbackRole = 'Production Staff';
+          }
+        }
 
         if (matchingStaff) {
           const staffEmail = matchingStaff.email || `${matchingStaff.name.toLowerCase().replace(/\s+/g, '')}@photocrew.com`;
@@ -2534,7 +2546,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             email: staffEmail,
             username: staffEmail,
             mobile: matchingStaff.mobile || '',
-            role: 'Operation Staff',
+            role: fallbackRole,
             active: matchingStaff.status !== 'Inactive',
             password: password
           };
@@ -2547,7 +2559,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
               email: dbUser.email,
               username: dbUser.username,
               mobile: dbUser.mobile,
-              role: 'Operation Staff',
+              role: fallbackRole,
               active: dbUser.active,
               password: password,
               created_at: new Date().toISOString()

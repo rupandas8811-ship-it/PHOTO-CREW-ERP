@@ -177,11 +177,12 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
         // New Staff Mode
         // 1. Create auth user
         if (formPassword.trim()) {
+            const computedEmail = formEmail.trim() || `${formMobile.trim()}@photocrew.com`;
             const authRes = await fetch('/api/auth/create-user', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                email: formEmail.trim(),
+                email: computedEmail,
                 password: formPassword.trim(),
                 name: formName.trim(),
                 role: 'production staff',
