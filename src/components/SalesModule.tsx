@@ -2528,10 +2528,27 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           }
         ];
 
-    // Generate plain-text newline-separated list for deliverables_description based on updatedDeliverables
+    // Generate JSON for deliverables_description based on updatedDeliverables
     const deliverablesList = updatedDeliverables[pkgId] || [];
-    const deliverablesJson = deliverablesList.filter(Boolean);
-    const deliverablesText = deliverablesJson.join('\n');
+    const deliverablesJson = (crmEvents && crmEvents.length > 0)
+      ? crmEvents.map(event => {
+          const eventKey = `${pkgId}_${event.id}`;
+          const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
+          const list = updatedDeliverables[eventKey] !== undefined 
+            ? updatedDeliverables[eventKey] 
+            : (updatedDeliverables[nameKey] !== undefined ? updatedDeliverables[nameKey] : deliverablesList);
+          return {
+            event_name: event.event_name || event.event_type || 'Unnamed Event',
+            deliverables: list.filter(Boolean)
+          };
+        })
+      : [
+          {
+            event_name: "General",
+            deliverables: deliverablesList.filter(Boolean)
+          }
+        ];
+    const deliverablesText = JSON.stringify(deliverablesJson);
 
     const teamMembersText = JSON.stringify(teamMembersJson);
 
@@ -10981,7 +10998,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
  
                          {(() => {
                            const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
-                           const currentPkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option; let selectedPkg = availablePkgs.find(p => String(p.package_id) === String(currentPkgId)); if (!selectedPkg && currentPkgId) { selectedPkg = { package_id: currentPkgId, package_name: `Package ${currentPkgId} (Legacy)`, price: wizardLeadData.package_cost || 0, deliverables: wizardLeadData.deliverables || "", status: "Active" } as any; }
+                           const currentPkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option; let selectedPkg = availablePkgs.find(p => String(p.package_id) === String(currentPkgId)); if (!selectedPkg && currentPkgId) { selectedPkg = { package_id: currentPkgId, package_name: (currentPkgId === 'custom_package' || currentPkgId === 'Custom Package') ? 'Custom Package' : `Package ${currentPkgId} (Legacy)`, price: wizardLeadData.package_cost || 0, deliverables: wizardLeadData.deliverables || "", status: "Active" } as any; }
                            if (!selectedPkg) return null;
 
                           const selectedPkgId = selectedPkg.package_id;
@@ -11027,59 +11044,58 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 </div>
                               </div>
 
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 hidden">
-                                <div>
-                                  <label className="block text-[10px] font-bold text-slate-450 mb-1 uppercase font-mono tracking-wider">Package Name</label>
-                                  <input
-                                    type="text"
-                                    value={selectedPkg.package_name || ''}
-                                    disabled
-                                    className="w-full bg-slate-900 border border-slate-800 rounded-lg py-1.5 px-3 text-xs text-slate-400 font-medium cursor-not-allowed"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-[10px] font-bold text-slate-455 mb-1 uppercase font-mono tracking-wider">Package Category</label>
-                                  <input
-                                    type="text"
-                                    value={normalizeCategory(selectedPkg.category) || 'Wedding'}
-                                    disabled
-                                    className="w-full bg-slate-900 border border-slate-800 rounded-lg py-1.5 px-3 text-xs text-slate-400 font-medium cursor-not-allowed"
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="hidden">
-                                <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Package Price (Editable) *</label>
+                              {/* Single Package Cost (₹) Field */}
+                              <div className="bg-slate-900/50 border border-slate-800/80 rounded-lg p-3 space-y-2 shadow-sm">
+                                <label className="block text-[11px] font-bold text-amber-400 uppercase tracking-wide font-mono flex items-center gap-1.5">
+                                  <span>💰</span> Package Cost (₹) *
+                                </label>
                                 <input
                                   type="number"
-                                  value={wizardLeadData.package_cost !== undefined ? wizardLeadData.package_cost : selectedPkg.price}
-                                  onChange={(e) => setWizardLeadData({ ...wizardLeadData, package_cost: Math.max(0, parseInt(e.target.value) || 0) })}
-                                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-amber-400 font-mono font-bold"
+                                  value={wizardLeadData.package_cost !== undefined && wizardLeadData.package_cost !== null ? wizardLeadData.package_cost : (selectedPkg.price || '')}
+                                  onChange={(e) => {
+                                    const val = e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0);
+                                    const numVal = val === '' ? 0 : Number(val);
+                                    setWizardLeadData(prev => ({
+                                      ...prev,
+                                      package_cost: val === '' ? 0 : val,
+                                      package_price: val === '' ? 0 : val,
+                                      budget: numVal,
+                                      final_quoted_amount: numVal
+                                    }));
+                                  }}
+                                  placeholder="Enter package cost..."
+                                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-amber-300 font-mono font-bold"
                                   required
                                 />
                               </div>
 
+                              {/* Event-Wise Configuration or Single Configuration */}
                               <div>
                                 {crmEvents && crmEvents.length > 0 ? (
-                                  crmEvents.map((event) => {
+                                  crmEvents.map((event, eventIdx) => {
                                     const eventKey = `${selectedPkgId}_${event.id}`;
                                     const nameKey = `${selectedPkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
+
                                     const eventInclusions = editableInclusions[eventKey] !== undefined
                                       ? editableInclusions[eventKey]
                                       : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList);
 
+                                    const eventDeliverables = editableDeliverables[eventKey] !== undefined
+                                      ? editableDeliverables[eventKey]
+                                      : (editableDeliverables[nameKey] !== undefined ? editableDeliverables[nameKey] : deliverablesList);
+
                                     return (
-                                      <div key={event.id} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-3 mt-3 mb-4">
-                                        <div className="border-b border-slate-800/40 pb-2 mb-3">
-                                          <div className="text-xs sm:text-sm font-bold text-slate-100 uppercase tracking-wider font-mono flex items-center justify-between mb-1">
-                                            <span>Event Name: {event.event_name || event.event_type || 'Unnamed Event'}</span>
+                                      <div key={event.id || eventIdx} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-4 mt-3 mb-4">
+                                        <div className="border-b border-slate-800/40 pb-2">
+                                          <div className="text-xs sm:text-sm font-bold text-indigo-300 uppercase tracking-wider font-mono flex items-center justify-between">
+                                            <span>Event {eventIdx + 1}: {event.event_name || event.event_type || 'Unnamed Event'}</span>
                                           </div>
                                         </div>
+
+                                        {/* Team Members Included */}
                                         <div>
                                           <div className="mb-2">
-                                            <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">
-                                              Team Members Included
-                                            </label>
+                                            <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Team Members Included</label>
                                           </div>
                                           {eventInclusions.length === 0 ? (
                                             <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
@@ -11087,7 +11103,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                               <button
                                                 type="button"
                                                 onClick={() => {
-                                                  const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList))];
+                                                  const currentList = [...eventInclusions];
                                                   currentList.push('');
                                                   const updated = {
                                                     ...editableInclusions,
@@ -11114,7 +11130,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                                     options={activeMasterRoles}
                                                     placeholder="Type or select Role / Team Member..."
                                                     onChange={(newVal) => {
-                                                      const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList))];
+                                                      const currentList = [...eventInclusions];
                                                       currentList[idx] = newVal;
                                                       const updated = {
                                                         ...editableInclusions,
@@ -11130,7 +11146,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                                     <button
                                                       type="button"
                                                       onClick={() => {
-                                                        const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList))];
+                                                        const currentList = [...eventInclusions];
                                                         currentList.splice(idx + 1, 0, '');
                                                         const updated = {
                                                           ...editableInclusions,
@@ -11147,7 +11163,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                                     <button
                                                       type="button"
                                                       onClick={() => {
-                                                        const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList))];
+                                                        const currentList = [...eventInclusions];
                                                         currentList.splice(idx, 1);
                                                         const updated = {
                                                           ...editableInclusions,
@@ -11167,152 +11183,204 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                             </div>
                                           )}
                                         </div>
+
+                                        {/* Deliverables Description / Base Package Deliverables */}
+                                        <div>
+                                          <div className="mb-2">
+                                            <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Deliverables Description / Base Package Deliverables</label>
+                                          </div>
+                                          {eventDeliverables.length === 0 ? (
+                                            <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
+                                              <p className="text-xs text-zinc-500 italic">No deliverables added yet.</p>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  const currentList = [...eventDeliverables];
+                                                  currentList.push('');
+                                                  const updated = {
+                                                    ...editableDeliverables,
+                                                    [eventKey]: currentList,
+                                                    [nameKey]: currentList
+                                                  };
+                                                  setEditableDeliverables(updated);
+                                                  saveStep3DataRealtime(editableInclusions, updated);
+                                                }}
+                                                className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
+                                              >
+                                                + Add Deliverable
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <div className="space-y-2.5">
+                                              {eventDeliverables.map((item, idx) => (
+                                                <div key={idx} className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl space-y-2">
+                                                  <div className="text-xs font-bold text-emerald-400 font-mono">
+                                                    Deliverable {idx + 1}
+                                                  </div>
+                                                  <LocalEditableInput
+                                                    value={item}
+                                                    options={activeMasterDeliverables}
+                                                    placeholder="Type or select Deliverable..."
+                                                    onChange={(newVal) => {
+                                                      const currentList = [...eventDeliverables];
+                                                      currentList[idx] = newVal;
+                                                      const updated = {
+                                                        ...editableDeliverables,
+                                                        [eventKey]: currentList,
+                                                        [nameKey]: currentList
+                                                      };
+                                                      setEditableDeliverables(updated);
+                                                      saveStep3DataRealtime(editableInclusions, updated);
+                                                    }}
+                                                    className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-slate-100 font-medium"
+                                                  />
+                                                  <div className="flex items-center justify-end gap-2 pt-0.5">
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        const currentList = [...eventDeliverables];
+                                                        currentList.splice(idx + 1, 0, '');
+                                                        const updated = {
+                                                          ...editableDeliverables,
+                                                          [eventKey]: currentList,
+                                                          [nameKey]: currentList
+                                                        };
+                                                        setEditableDeliverables(updated);
+                                                        saveStep3DataRealtime(editableInclusions, updated);
+                                                      }}
+                                                      className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 border border-emerald-500/20"
+                                                    >
+                                                      + Add Deliverable
+                                                    </button>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        const currentList = [...eventDeliverables];
+                                                        currentList.splice(idx, 1);
+                                                        const updated = {
+                                                          ...editableDeliverables,
+                                                          [eventKey]: currentList,
+                                                          [nameKey]: currentList
+                                                        };
+                                                        setEditableDeliverables(updated);
+                                                        saveStep3DataRealtime(editableInclusions, updated);
+                                                      }}
+                                                      className="text-[11px] text-rose-400 hover:text-rose-300 font-bold font-mono bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 border border-rose-500/20"
+                                                    >
+                                                      Delete
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
                                     );
                                   })
                                 ) : (
-                                  <div>
-                                    <div className="mb-2">
-                                      <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Team Members Included</label>
-                                    </div>
-                                    {inclusionsList.length === 0 ? (
-                                      <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
-                                        <p className="text-xs text-zinc-500 italic">No team members added yet.</p>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const currentList = [...(editableInclusions[selectedPkgId] || [])];
-                                            currentList.push('');
-                                            const updated = {
-                                              ...editableInclusions,
-                                              [selectedPkgId]: currentList
-                                            };
-                                            setEditableInclusions(updated);
-                                            saveStep3DataRealtime(updated, editableDeliverables);
-                                          }}
-                                          className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
-                                        >
-                                          + Add Member
-                                        </button>
+                                  <div className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-4 mt-3 mb-4">
+                                    {/* Single Team Members Included */}
+                                    <div>
+                                      <div className="mb-2">
+                                        <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Team Members Included</label>
                                       </div>
-                                    ) : (
-                                      <div className="space-y-2.5">
-                                        {inclusionsList.map((item, idx) => (
-                                          <div key={idx} className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl space-y-2">
-                                            <div className="text-xs font-bold text-indigo-400 font-mono">
-                                              Member {idx + 1}
-                                            </div>
-                                            <LocalEditableInput
-                                              value={item}
-                                              options={activeMasterRoles}
-                                              placeholder="Type or select Role / Team Member..."
-                                              onChange={(newVal) => {
-                                                const currentList = [...(editableInclusions[selectedPkgId] || [])];
-                                                currentList[idx] = newVal;
-                                                const updated = {
-                                                  ...editableInclusions,
-                                                  [selectedPkgId]: currentList
-                                                };
-                                                setEditableInclusions(updated);
-                                                saveStep3DataRealtime(updated, editableDeliverables);
-                                              }}
-                                              className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-slate-100 font-medium"
-                                            />
-                                            <div className="flex items-center justify-end gap-2 pt-0.5">
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  const currentList = [...(editableInclusions[selectedPkgId] || [])];
-                                                  currentList.splice(idx + 1, 0, '');
-                                                  const updated = {
-                                                    ...editableInclusions,
-                                                    [selectedPkgId]: currentList
-                                                  };
-                                                  setEditableInclusions(updated);
-                                                  saveStep3DataRealtime(updated, editableDeliverables);
-                                                }}
-                                                className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 border border-indigo-500/20"
-                                              >
-                                                + Add Member
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  const currentList = [...(editableInclusions[selectedPkgId] || [])];
-                                                  currentList.splice(idx, 1);
-                                                  const updated = {
-                                                    ...editableInclusions,
-                                                    [selectedPkgId]: currentList
-                                                  };
-                                                  setEditableInclusions(updated);
-                                                  saveStep3DataRealtime(updated, editableDeliverables);
-                                                }}
-                                                className="text-[11px] text-rose-400 hover:text-rose-300 font-bold font-mono bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 border border-rose-500/20"
-                                              >
-                                                Delete
-                                              </button>
-                                            </div>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-
-                              <div>
-                                <div className="mb-2">
-                                  <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Deliverables Description / Base Package Deliverables</label>
-                                </div>
-                                {deliverablesList.length === 0 ? (
-                                  <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
-                                    <p className="text-xs text-zinc-500 italic">No deliverables added yet.</p>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const currentList = [...(editableDeliverables[selectedPkgId] || [])];
-                                        currentList.push('');
-                                        const updated = {
-                                          ...editableDeliverables,
-                                          [selectedPkgId]: currentList
-                                        };
-                                        setEditableDeliverables(updated);
-                                        saveStep3DataRealtime(editableInclusions, updated);
-                                      }}
-                                      className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
-                                    >
-                                      + Add Deliverable
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div className="space-y-2.5">
-                                    {deliverablesList.map((item, idx) => (
-                                      <div key={idx} className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl space-y-2">
-                                        <div className="text-xs font-bold text-emerald-400 font-mono">
-                                          Deliverable {idx + 1}
-                                        </div>
-                                        <LocalEditableInput
-                                          value={item}
-                                          options={activeMasterDeliverables}
-                                          placeholder="Type or select Deliverable..."
-                                          onChange={(newVal) => {
-                                            const currentList = [...(editableDeliverables[selectedPkgId] || [])];
-                                            currentList[idx] = newVal;
-                                            const updated = {
-                                              ...editableDeliverables,
-                                              [selectedPkgId]: currentList
-                                            };
-                                            setEditableDeliverables(updated);
-                                            saveStep3DataRealtime(editableInclusions, updated);
-                                          }}
-                                          className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-slate-100 font-medium"
-                                        />
-                                        <div className="flex items-center justify-end gap-2 pt-0.5">
+                                      {inclusionsList.length === 0 ? (
+                                        <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
+                                          <p className="text-xs text-zinc-500 italic">No team members added yet.</p>
                                           <button
                                             type="button"
                                             onClick={() => {
-                                              const currentList = [...(editableDeliverables[selectedPkgId] || [])];
-                                              currentList.splice(idx + 1, 0, '');
+                                              const currentList = [...inclusionsList];
+                                              currentList.push('');
+                                              const updated = {
+                                                ...editableInclusions,
+                                                [selectedPkgId]: currentList
+                                              };
+                                              setEditableInclusions(updated);
+                                              saveStep3DataRealtime(updated, editableDeliverables);
+                                            }}
+                                            className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
+                                          >
+                                            + Add Member
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <div className="space-y-2.5">
+                                          {inclusionsList.map((item, idx) => (
+                                            <div key={idx} className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl space-y-2">
+                                              <div className="text-xs font-bold text-indigo-400 font-mono">
+                                                Member {idx + 1}
+                                              </div>
+                                              <LocalEditableInput
+                                                value={item}
+                                                options={activeMasterRoles}
+                                                placeholder="Type or select Role / Team Member..."
+                                                onChange={(newVal) => {
+                                                  const currentList = [...inclusionsList];
+                                                  currentList[idx] = newVal;
+                                                  const updated = {
+                                                    ...editableInclusions,
+                                                    [selectedPkgId]: currentList
+                                                  };
+                                                  setEditableInclusions(updated);
+                                                  saveStep3DataRealtime(updated, editableDeliverables);
+                                                }}
+                                                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-slate-100 font-medium"
+                                              />
+                                              <div className="flex items-center justify-end gap-2 pt-0.5">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const currentList = [...inclusionsList];
+                                                    currentList.splice(idx + 1, 0, '');
+                                                    const updated = {
+                                                      ...editableInclusions,
+                                                      [selectedPkgId]: currentList
+                                                    };
+                                                    setEditableInclusions(updated);
+                                                    saveStep3DataRealtime(updated, editableDeliverables);
+                                                  }}
+                                                  className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 border border-indigo-500/20"
+                                                >
+                                                  + Add Member
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const currentList = [...inclusionsList];
+                                                    currentList.splice(idx, 1);
+                                                    const updated = {
+                                                      ...editableInclusions,
+                                                      [selectedPkgId]: currentList
+                                                    };
+                                                    setEditableInclusions(updated);
+                                                    saveStep3DataRealtime(updated, editableDeliverables);
+                                                  }}
+                                                  className="text-[11px] text-rose-400 hover:text-rose-300 font-bold font-mono bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 border border-rose-500/20"
+                                                >
+                                                  Delete
+                                                </button>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Single Deliverables Description */}
+                                    <div>
+                                      <div className="mb-2">
+                                        <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Deliverables Description / Base Package Deliverables</label>
+                                      </div>
+                                      {deliverablesList.length === 0 ? (
+                                        <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
+                                          <p className="text-xs text-zinc-500 italic">No deliverables added yet.</p>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const currentList = [...deliverablesList];
+                                              currentList.push('');
                                               const updated = {
                                                 ...editableDeliverables,
                                                 [selectedPkgId]: currentList
@@ -11320,29 +11388,73 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                               setEditableDeliverables(updated);
                                               saveStep3DataRealtime(editableInclusions, updated);
                                             }}
-                                            className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 border border-emerald-500/20"
+                                            className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
                                           >
                                             + Add Deliverable
                                           </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              const currentList = [...(editableDeliverables[selectedPkgId] || [])];
-                                              currentList.splice(idx, 1);
-                                              const updated = {
-                                                ...editableDeliverables,
-                                                [selectedPkgId]: currentList
-                                              };
-                                              setEditableDeliverables(updated);
-                                              saveStep3DataRealtime(editableInclusions, updated);
-                                            }}
-                                            className="text-[11px] text-rose-400 hover:text-rose-300 font-bold font-mono bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 border border-rose-500/20"
-                                          >
-                                            Delete
-                                          </button>
                                         </div>
-                                      </div>
-                                    ))}
+                                      ) : (
+                                        <div className="space-y-2.5">
+                                          {deliverablesList.map((item, idx) => (
+                                            <div key={idx} className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl space-y-2">
+                                              <div className="text-xs font-bold text-emerald-400 font-mono">
+                                                Deliverable {idx + 1}
+                                              </div>
+                                              <LocalEditableInput
+                                                value={item}
+                                                options={activeMasterDeliverables}
+                                                placeholder="Type or select Deliverable..."
+                                                onChange={(newVal) => {
+                                                  const currentList = [...deliverablesList];
+                                                  currentList[idx] = newVal;
+                                                  const updated = {
+                                                    ...editableDeliverables,
+                                                    [selectedPkgId]: currentList
+                                                  };
+                                                  setEditableDeliverables(updated);
+                                                  saveStep3DataRealtime(editableInclusions, updated);
+                                                }}
+                                                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-slate-100 font-medium"
+                                              />
+                                              <div className="flex items-center justify-end gap-2 pt-0.5">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const currentList = [...deliverablesList];
+                                                    currentList.splice(idx + 1, 0, '');
+                                                    const updated = {
+                                                      ...editableDeliverables,
+                                                      [selectedPkgId]: currentList
+                                                    };
+                                                    setEditableDeliverables(updated);
+                                                    saveStep3DataRealtime(editableInclusions, updated);
+                                                  }}
+                                                  className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 border border-emerald-500/20"
+                                                >
+                                                  + Add Deliverable
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const currentList = [...deliverablesList];
+                                                    currentList.splice(idx, 1);
+                                                    const updated = {
+                                                      ...editableDeliverables,
+                                                      [selectedPkgId]: currentList
+                                                    };
+                                                    setEditableDeliverables(updated);
+                                                    saveStep3DataRealtime(editableInclusions, updated);
+                                                  }}
+                                                  className="text-[11px] text-rose-400 hover:text-rose-300 font-bold font-mono bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 border border-rose-500/20"
+                                                >
+                                                  Delete
+                                                </button>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 )}
                               </div>
