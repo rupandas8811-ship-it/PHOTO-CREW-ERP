@@ -102,9 +102,11 @@ export const CustomPackageMaster: React.FC = () => {
         setRoles(defaultRoles);
         localStorage.setItem('erp_custom_roles_data', JSON.stringify(defaultRoles));
         // Seed default roles in Supabase background
-        supabaseClient.from('custom_roles').insert(
-          defaultRoles.map(r => ({ role_name: r.role_name, description: r.description, status: r.status }))
-        ).then(() => {}).catch(() => {});
+        try {
+          supabaseClient.from('custom_roles').insert(
+            defaultRoles.map(r => ({ role_name: r.role_name, description: r.description, status: r.status }))
+          );
+        } catch (_) {}
       }
     } catch (e: any) {
       console.error('Error in fetchRoles:', e);
@@ -138,9 +140,11 @@ export const CustomPackageMaster: React.FC = () => {
         setDeliverables(defaultDeliverables);
         localStorage.setItem('erp_custom_deliverables_data', JSON.stringify(defaultDeliverables));
         // Seed default deliverables in Supabase background
-        supabaseClient.from('custom_deliverables').insert(
-          defaultDeliverables.map(d => ({ deliverable_name: d.deliverable_name, description: d.description, status: d.status }))
-        ).then(() => {}).catch(() => {});
+        try {
+          supabaseClient.from('custom_deliverables').insert(
+            defaultDeliverables.map(d => ({ deliverable_name: d.deliverable_name, description: d.description, status: d.status }))
+          );
+        } catch (_) {}
       }
     } catch (e: any) {
       console.error('Error in fetchDeliverables:', e);

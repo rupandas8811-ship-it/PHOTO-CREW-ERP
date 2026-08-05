@@ -43,6 +43,7 @@ const LocalEditableInput: React.FC<LocalEditableInputProps> = ({ value, disabled
   const [localVal, setLocalVal] = React.useState(value);
   const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const latestValueRef = React.useRef(value);
+  const autoListId = React.useId();
 
   React.useEffect(() => {
     latestValueRef.current = value;
@@ -85,19 +86,28 @@ const LocalEditableInput: React.FC<LocalEditableInputProps> = ({ value, disabled
     };
   }, []);
 
+  const datalistId = list || (options && options.length > 0 ? `datalist-${autoListId}` : undefined);
+
   return (
     <div className="flex-1 flex items-center gap-2">
       <input
         type="text"
         value={localVal}
         disabled={disabled}
-        list={list}
+        list={datalistId}
         placeholder={placeholder}
         onChange={handleChange}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
         className={className}
       />
+      {options && options.length > 0 && !list && (
+        <datalist id={datalistId}>
+          {options.map((opt, idx) => (
+            <option key={idx} value={opt} />
+          ))}
+        </datalist>
+      )}
     </div>
   );
 };
@@ -4511,6 +4521,43 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const handlePackageChange = (packageId: string) => {
     setIsPackageSelectedAndSaved(true);
     setIsPackageDetailsSaved(true);
+
+    if (packageId === 'Custom Package' || packageId === 'custom_package') {
+      const customPkgVal = 'Custom Package';
+      setWizardLeadData((prev) => ({
+        ...prev,
+        selected_package_id: customPkgVal,
+        Select_Package_Option: customPkgVal,
+        package_name: 'Custom Package',
+        package_cost: 0,
+        package_price: 0,
+        deliverables: '',
+        notes: '',
+        budget: 0,
+        final_quoted_amount: 0,
+        additional_charges: 0,
+        discount: 0,
+      }));
+
+      const newInclusions = { ...editableInclusions };
+      newInclusions[customPkgVal] = [];
+      if (crmEvents && crmEvents.length > 0) {
+        crmEvents.forEach((ev) => {
+          newInclusions[`${customPkgVal}_${ev.id}`] = [];
+          newInclusions[`${customPkgVal}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [];
+        });
+      }
+
+      const newDeliverables = { ...editableDeliverables };
+      newDeliverables[customPkgVal] = [];
+
+      setEditableInclusions(newInclusions);
+      setEditableDeliverables(newDeliverables);
+
+      saveStep3DataRealtime(newInclusions, newDeliverables, customPkgVal);
+      return;
+    }
+
     const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
     const pkg = availablePkgs.find((p) => String(p.package_id) === String(packageId));
     if (pkg) {
@@ -4518,6 +4565,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         ...prev,
         selected_package_id: packageId,
         Select_Package_Option: packageId,
+        package_name: pkg.package_name,
         package_cost: Number(pkg.price),
         deliverables: pkg.deliverables || '',
         notes: pkg.seasonal_offer ? `Seasonal Offer: ${pkg.seasonal_offer}` : prev.notes,
@@ -4554,8 +4602,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     } else {
       setWizardLeadData((prev) => ({
         ...prev,
-        selected_package_id: '',
-        Select_Package_Option: '',
+        selected_package_id: packageId || '',
+        Select_Package_Option: packageId || '',
       }));
     }
   };
@@ -9309,8 +9357,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         const val = e.target.value;
                         if (val) {
                           setSelectedPkgIds([val]);
+                          handlePackageChange(val);
                         } else {
                           setSelectedPkgIds([]);
+                          handlePackageChange("");
                         }
                       }}
                       className={`w-full bg-[#0F172A] border rounded-lg py-2.5 px-3.5 text-xs cursor-pointer focus:outline-none transition-all ${
@@ -9320,11 +9370,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       }`}
                     >
                       <option value="" className="text-slate-400">── Choose configuration package ──</option>
-                      {PACKAGES_LIST.flatMap(cat => cat.items).map((pkg) => (
+                      {PACKAGES_LIST.flatMap(cat => cat.items).filter(p => String(p.id) !== 'Custom Package' && String(p.name) !== 'Custom Package').map((pkg) => (
                         <option key={pkg.id} value={pkg.id} className="text-white bg-[#0F172A]">
                           {pkg.name} (₹{pkg.cost.toLocaleString('en-IN')})
                         </option>
                       ))}
+                      <option value="Custom Package" className="text-white bg-[#0F172A]">Custom Package</option>
                     </select>
 
                     {selectedPkgIds.length === 0 && (
@@ -10968,7 +11019,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                              {(() => {
                                const currentPkgId = wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option || (selectedLead as any)?.selected_package_id || (leadPackages?.find(lp => lp.lead_id === selectedLead?.lead_id)?.package_id) || (quotations?.find(q => q.lead_id === selectedLead?.lead_id)?.package_id) || '';
                                const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
-                               const activePkgs = availablePkgs.filter(p => !p.status || p.status.toLowerCase() === 'active');
+                               const activePkgs = availablePkgs.filter(p => (!p.status || p.status.toLowerCase() === 'active') && String(p.package_id) !== 'Custom Package' && String(p.package_id) !== 'custom_package' && String(p.package_name) !== 'Custom Package');
                                if (currentPkgId && !activePkgs.some(p => String(p.package_id) === String(currentPkgId))) {
                                  const matched = availablePkgs.find(p => String(p.package_id) === String(currentPkgId));
                                  if (matched) {
@@ -10982,11 +11033,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                    } as any);
                                  }
                                }
-                               return activePkgs.map((pkg) => (
-                                 <option key={pkg.package_id} value={pkg.package_id}>
-                                   {pkg.package_name} (₹{Number(pkg.price).toLocaleString('en-IN')})
-                                 </option>
-                               ));
+                               return (
+                                 <>
+                                   {activePkgs.map((pkg) => (
+                                     <option key={pkg.package_id} value={pkg.package_id}>
+                                       {pkg.package_name} (₹{Number(pkg.price).toLocaleString('en-IN')})
+                                     </option>
+                                   ))}
+                                   <option value="Custom Package">Custom Package</option>
+                                 </>
+                               );
                              })()}
                            </select>
                            {!(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option) && (
