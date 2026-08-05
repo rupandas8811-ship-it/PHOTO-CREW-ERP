@@ -623,5 +623,24 @@ export interface UnlockOverride {
   module: 'Sales' | 'Operations' | 'Production';
 }
 
+export interface CustomRole {
+  id: string;
+  role_name: string;
+  description?: string | null;
+  status: 'Active' | 'Inactive';
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CustomDeliverable {
+  id: string;
+  deliverable_name: string;
+  description?: string | null;
+  status: 'Active' | 'Inactive';
+  created_at?: string;
+  updated_at?: string;
+}
+
+
 
 

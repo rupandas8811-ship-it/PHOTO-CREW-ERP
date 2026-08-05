@@ -3,7 +3,7 @@ import { useRole } from './RoleContext';
 import { 
   Calendar, Clock, CheckCircle2, Eye, FileVideo, Play, UserCheck, 
   ShieldCheck, ChevronDown, Upload, FileText, CheckSquare, Lock, Activity, 
-  Link as LinkIcon, AlertCircle, X, Sparkles, Check
+  Link as LinkIcon, AlertCircle, X, Sparkles, Check, MessageSquare, Copy, ExternalLink, RefreshCw
 } from 'lucide-react';
 import { supabaseClient } from '../supabaseClient';
 import { EditorAssignment } from '../types';
@@ -49,6 +49,7 @@ export const ProductionStaffModule: React.FC = () => {
   const { 
     currentUser, 
     staff, 
+    productionStaff,
     leads, 
     orders, 
     operations, 
@@ -62,12 +63,18 @@ export const ProductionStaffModule: React.FC = () => {
     refreshData 
   } = useRole();
 
-  // Resolve staff member
-  const staffMember = staff.find(s => 
-    (s.mobile && s.mobile === currentUser?.mobile) || 
-    (s.email && s.email.toLowerCase() === currentUser?.email?.toLowerCase())
+  // Resolve production staff member
+  const prodStaffMember = (productionStaff || []).find(s => 
+    (s.staff_id && currentUser?.id && s.staff_id === currentUser.id) ||
+    (s.mobile && currentUser?.mobile && s.mobile === currentUser.mobile) || 
+    (s.email && currentUser?.email && s.email.toLowerCase() === currentUser.email.toLowerCase())
   );
-  const staffName = staffMember?.name || currentUser?.name || 'Staff';
+  const opStaffMember = (staff || []).find(s => 
+    (s.mobile && currentUser?.mobile && s.mobile === currentUser.mobile) || 
+    (s.email && currentUser?.email && s.email.toLowerCase() === currentUser.email.toLowerCase())
+  );
+  const resolvedStaffId = prodStaffMember?.staff_id || opStaffMember?.staff_id || currentUser?.id;
+  const staffName = prodStaffMember?.name || opStaffMember?.name || currentUser?.name || 'Staff';
   
   // Local state
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
@@ -78,22 +85,37 @@ export const ProductionStaffModule: React.FC = () => {
   // Selected project for ProjectDetailModal
   const [selectedProjectForDetail, setSelectedProjectForDetail] = useState<{ order: any; lead: any } | null>(null);
 
-  // Modal States for 4 Workflow Steps
-  const [editingStartedModal, setEditingStartedModal] = useState<any | null>(null); // booking
-  const [editingStartedForm, setEditingStartedForm] = useState({ date: '', time: '' });
+  // Modal States for Production Workflow
+  // 1. Editing Started Modal
+  const [editingStartedModal, setEditingStartedModal] = useState<any | null>(null);
+  const [editingStartedForm, setEditingStartedForm] = useState({ 
+    expected_delivery_date: '',
+    estimated_completion_date: '', 
+    estimated_completion_time: '' 
+  });
 
-  const [customerReviewModal, setCustomerReviewModal] = useState<any | null>(null); // booking
+  // 2. Customer Review Modal
+  const [customerReviewModal, setCustomerReviewModal] = useState<any | null>(null);
   const [customerReviewForm, setCustomerReviewForm] = useState({ edited_drive_link: '' });
 
-  const [editingCompletedModal, setEditingCompletedModal] = useState<any | null>(null); // booking
-  const [editingCompletedForm, setEditingCompletedForm] = useState({ confirmation_proof: '' });
+  // WhatsApp Popup Modal (2nd Popup immediately after Customer Review save)
+  const [whatsappModal, setWhatsappModal] = useState<{
+    customerName: string;
+    eventName: string;
+    driveLink: string;
+    phone: string;
+    message: string;
+  } | null>(null);
+  const [copiedSuccess, setCopiedSuccess] = useState(false);
 
-  const [clientAcceptanceModal, setClientAcceptanceModal] = useState<any | null>(null); // booking
+  // 3. Client Acceptance Modal
+  const [clientAcceptanceModal, setClientAcceptanceModal] = useState<any | null>(null);
   const [clientAcceptanceForm, setClientAcceptanceForm] = useState({
     checklist_1: false,
     checklist_2: false,
     checklist_3: false,
-    communication_proof: ''
+    communication_proof: '',
+    internal_validation: true
   });
 
   const showToast = (msg: string) => {
@@ -103,50 +125,69 @@ export const ProductionStaffModule: React.FC = () => {
 
   // Build assigned bookings list ONLY for logged in assigned editor
   useEffect(() => {
-    if (!staffName) return;
+    if (!resolvedStaffId && !staffName && !currentUser?.id) return;
 
     const bookings: any[] = [];
     // Strict filter: ONLY tasks assigned to THIS staff member
-    const myAssignments = editorAssignments.filter(ea => 
-      ea.staff_name.toLowerCase() === staffName.toLowerCase() ||
-      (staffMember?.staff_id && ea.staff_id === staffMember.staff_id)
-    );
+    const myAssignments = editorAssignments.filter(ea => {
+      const matchId = (resolvedStaffId && ea.staff_id && ea.staff_id === resolvedStaffId) ||
+                      (currentUser?.id && ea.staff_id && ea.staff_id === currentUser.id);
+      const matchName = (staffName && ea.staff_name && ea.staff_name.trim().toLowerCase() === staffName.trim().toLowerCase()) ||
+                        (currentUser?.name && ea.staff_name && ea.staff_name.trim().toLowerCase() === currentUser.name.trim().toLowerCase());
+      return matchId || matchName;
+    });
 
     myAssignments.forEach(assignment => {
-        const order = orders.find(o => o.order_id === assignment.production_id) || leads.find(l => l.lead_id === assignment.production_id);
-        const lead = leads.find(l => l.lead_id === order?.lead_id) || leads.find(l => l.lead_id === assignment.production_id);
-        const prod = production.find(p => p.production_id === assignment.production_id || p.tracking_id === order?.order_id || p.tracking_id === lead?.lead_id);
+        // Resolve production, order, and lead records flexibly
+        const prod = production.find(p => 
+          p.production_id === assignment.production_id || 
+          p.tracking_id === assignment.production_id || 
+          p.order_id === assignment.production_id || 
+          p.lead_id === assignment.production_id ||
+          p.production_id === `PRD-${assignment.production_id}`
+        );
         
-        if (order || lead) {
-            // Determine unified status
-            let currentStatus = assignment.status;
-            if (prod?.editing_status) {
-              currentStatus = prod.editing_status as any;
-            } else if (order?.current_stage) {
-              currentStatus = order.current_stage as any;
-            }
+        const orderIdToFind = assignment.order_id || prod?.order_id || prod?.tracking_id || assignment.production_id;
+        const leadIdToFind = prod?.lead_id || prod?.tracking_id || assignment.production_id;
 
-            bookings.push({
-                assignmentId: assignment.assignment_id,
-                orderId: order?.order_id || lead?.lead_id || assignment.production_id,
-                leadId: lead?.lead_id || order?.lead_id,
-                customerName: lead?.customer_name || order?.customer_name || 'Client',
-                customerMobile: lead?.mobile || order?.customer_phone || '',
-                eventDate: lead?.events?.[0]?.event_date || order?.event_date || '',
-                eventName: lead?.events?.[0]?.event_name || order?.event_type || '',
-                deliverable: assignment.speciality,
-                targetFinishDate: assignment.target_finish_date,
-                status: currentStatus,
-                assignmentObj: assignment,
-                orderObj: order,
-                leadObj: lead,
-                prodObj: prod
-            });
+        let order = orders.find(o => o.order_id === orderIdToFind || o.order_id === assignment.production_id);
+        if (!order) {
+          order = orders.find(o => o.lead_id === leadIdToFind || o.lead_id === assignment.production_id);
         }
+
+        let lead = leads.find(l => l.lead_id === leadIdToFind || l.lead_id === order?.lead_id || l.lead_id === assignment.production_id);
+        if (!lead && order) {
+          lead = leads.find(l => l.lead_id === order.lead_id);
+        }
+        
+        // Determine unified status
+        let currentStatus = assignment.status;
+        if (prod?.editing_status) {
+          currentStatus = prod.editing_status as any;
+        } else if (order?.current_stage) {
+          currentStatus = order.current_stage as any;
+        }
+
+        bookings.push({
+            assignmentId: assignment.assignment_id,
+            orderId: order?.order_id || prod?.order_id || prod?.tracking_id || assignment.production_id,
+            leadId: lead?.lead_id || order?.lead_id || prod?.lead_id,
+            customerName: lead?.customer_name || order?.customer_name || prod?.customer_name || 'Client',
+            customerMobile: lead?.mobile || order?.customer_phone || prod?.customer_mobile || '',
+            eventDate: lead?.events?.[0]?.event_date || lead?.event_date || order?.event_date || prod?.event_date || '',
+            eventName: lead?.events?.[0]?.event_name || lead?.event_type || order?.event_type || 'Project',
+            deliverable: assignment.speciality,
+            targetFinishDate: prod?.target_delivery_date || prod?.expected_delivery_date || assignment.target_finish_date || '',
+            status: currentStatus,
+            assignmentObj: assignment,
+            orderObj: order,
+            leadObj: lead,
+            prodObj: prod
+        });
     });
 
     setActiveBookings(bookings);
-  }, [staffName, editorAssignments, orders, leads, production, staffMember]);
+  }, [staffName, resolvedStaffId, currentUser, editorAssignments, orders, leads, production]);
 
   const getStatusBadge = (status: string) => {
     switch(status) {
@@ -158,25 +199,33 @@ export const ProductionStaffModule: React.FC = () => {
         return { label: 'Editing Started', color: 'text-sky-400 bg-sky-500/10 border-sky-500/30' };
       case 'Customer Review': 
         return { label: 'Customer Review', color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' };
-      case 'Editing Completed':
-      case 'Editing Complete':
-        return { label: 'Editing Completed', color: 'text-purple-400 bg-purple-500/10 border-purple-500/30' };
       case 'Client Acceptance':
       case 'Business Owner Review':
       case 'Project Completed':
       case 'Completed': 
+      case 'Order Closed':
         return { label: 'Client Acceptance (Transferred)', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' };
       default: 
         return { label: status, color: 'text-zinc-400 bg-zinc-500/10 border-zinc-500/30' };
     }
   };
 
+  // Helper to format WhatsApp phone number
+  const formatWhatsAppPhone = (phone: string) => {
+    let cleaned = (phone || '').replace(/\D/g, '');
+    if (!cleaned) return '';
+    if (cleaned.length === 8) {
+      cleaned = '65' + cleaned;
+    }
+    return cleaned;
+  };
+
   // 1. Submit Editing Started Modal
   const handleEditingStartedSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingStartedModal) return;
-    if (!editingStartedForm.date || !editingStartedForm.time) {
-      alert("Please provide both Estimated Completion Date and Time.");
+    if (!editingStartedForm.estimated_completion_date || !editingStartedForm.estimated_completion_time) {
+      alert("Please provide both Estimated Completion Date and Estimated Completion Time.");
       return;
     }
 
@@ -188,22 +237,22 @@ export const ProductionStaffModule: React.FC = () => {
       // Update Editor Assignment
       await updateEditorAssignmentStatus(b.assignmentId, 'Editing Started' as any);
 
-      // Save estimated completion info & start time
+      // Save estimated completion info & expected delivery date
       await pushUpdate('editor_assignments', 'assignment_id', b.assignmentId, {
-        target_finish_date: editingStartedForm.date,
-        estimated_completion_time: editingStartedForm.time,
+        target_finish_date: editingStartedForm.estimated_completion_date,
+        estimated_completion_time: editingStartedForm.estimated_completion_time,
         started_at: timestamp,
         started_by: staffName,
         status: 'Editing Started'
       });
 
-      // Update Production
+      // Update Production record
       if (b.prodObj?.production_id) {
         await updateProduction(b.prodObj.production_id, {
           editing_status: 'Editing Started',
           production_status: 'Editing Started',
-          expected_delivery_date: editingStartedForm.date,
-          remarks: `Editing Started by ${staffName} on ${new Date().toLocaleDateString()} at ${editingStartedForm.time}`
+          expected_delivery_date: editingStartedForm.expected_delivery_date || editingStartedForm.estimated_completion_date,
+          remarks: `Editing Started by ${staffName} on ${new Date().toLocaleDateString()} at ${editingStartedForm.estimated_completion_time}`
         });
       }
 
@@ -219,7 +268,7 @@ export const ProductionStaffModule: React.FC = () => {
       }
 
       setEditingStartedModal(null);
-      setEditingStartedForm({ date: '', time: '' });
+      setEditingStartedForm({ expected_delivery_date: '', estimated_completion_date: '', estimated_completion_time: '' });
       await refreshData();
       showToast('🚀 Status updated to Editing Started!');
     } catch (err: any) {
@@ -243,13 +292,14 @@ export const ProductionStaffModule: React.FC = () => {
     try {
       const timestamp = new Date().toISOString();
       const b = customerReviewModal;
+      const editedLink = customerReviewForm.edited_drive_link.trim();
 
       await updateEditorAssignmentStatus(b.assignmentId, 'Customer Review' as any);
 
       // Save Edited Drive Link
       await pushUpdate('editor_assignments', 'assignment_id', b.assignmentId, {
-        raw_footage_link: customerReviewForm.edited_drive_link,
-        edited_drive_link: customerReviewForm.edited_drive_link,
+        raw_footage_link: editedLink,
+        edited_drive_link: editedLink,
         edited_link_uploaded_at: timestamp,
         status: 'Customer Review'
       });
@@ -258,7 +308,8 @@ export const ProductionStaffModule: React.FC = () => {
         await updateProduction(b.prodObj.production_id, {
           editing_status: 'Customer Review',
           production_status: 'Customer Review',
-          remarks: `Edited Drive Link uploaded by ${staffName} on ${new Date().toLocaleDateString()}: ${customerReviewForm.edited_drive_link}`
+          edited_drive_link: editedLink,
+          remarks: `Edited Drive Link uploaded by ${staffName} on ${new Date().toLocaleDateString()}: ${editedLink}`
         });
       }
 
@@ -272,10 +323,35 @@ export const ProductionStaffModule: React.FC = () => {
         });
       }
 
+      // Prepare WhatsApp popup payload
+      const cName = b.customerName || 'Customer';
+      const eName = b.eventName || 'Event';
+      const cPhone = b.customerMobile || '';
+      const messageText = `Hello ${cName},
+
+Your edited photos/videos are ready for review.
+
+Please review them using the following link:
+
+${editedLink}
+
+Kindly let us know if any changes are required.
+
+Thank you.`;
+
       setCustomerReviewModal(null);
       setCustomerReviewForm({ edited_drive_link: '' });
       await refreshData();
       showToast('📁 Edited Drive Link saved & moved to Customer Review!');
+
+      // Automatically open 2nd popup: WhatsApp review message
+      setWhatsappModal({
+        customerName: cName,
+        eventName: eName,
+        driveLink: editedLink,
+        phone: cPhone,
+        message: messageText
+      });
     } catch (err: any) {
       console.error('Error submitting Customer Review:', err);
       alert('Failed to submit: ' + (err.message || 'Please try again.'));
@@ -284,70 +360,23 @@ export const ProductionStaffModule: React.FC = () => {
     }
   };
 
-  // 3. Submit Editing Completed Modal
-  const handleEditingCompletedSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingCompletedModal) return;
-    if (!editingCompletedForm.confirmation_proof) {
-      alert("Please upload or provide Customer Confirmation Image / Proof.");
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const timestamp = new Date().toISOString();
-      const b = editingCompletedModal;
-
-      await updateEditorAssignmentStatus(b.assignmentId, 'Editing Completed' as any);
-
-      await pushUpdate('editor_assignments', 'assignment_id', b.assignmentId, {
-        customer_confirmation_proof: editingCompletedForm.confirmation_proof,
-        completed_at: timestamp,
-        status: 'Editing Completed'
-      });
-
-      if (b.prodObj?.production_id) {
-        await updateProduction(b.prodObj.production_id, {
-          editing_status: 'Editing Completed' as any,
-          production_status: 'Editing Completed' as any,
-          remarks: `Editing Completed with Customer Proof by ${staffName} on ${new Date().toLocaleDateString()}`
-        });
-      }
-
-      if (b.orderId) {
-        await updateOrderStage(b.orderId, 'Editing Completed' as any);
-      }
-      if (b.leadId) {
-        await updateLead(b.leadId, {
-          status: 'Editing Completed' as any,
-          current_status: 'Editing Completed' as any
-        });
-      }
-
-      setEditingCompletedModal(null);
-      setEditingCompletedForm({ confirmation_proof: '' });
-      await refreshData();
-      showToast('🎉 Customer confirmation proof saved & status set to Editing Completed!');
-    } catch (err: any) {
-      console.error('Error submitting Editing Completed:', err);
-      alert('Failed to submit: ' + (err.message || 'Please try again.'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // 4. Submit Client Acceptance Modal
+  // 3. Submit Client Acceptance Modal
   const handleClientAcceptanceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!clientAcceptanceModal) return;
 
     if (!clientAcceptanceForm.checklist_1 || !clientAcceptanceForm.checklist_2 || !clientAcceptanceForm.checklist_3) {
-      alert("Validation Failed: Please complete all items in the Final Delivery Checklist.");
+      alert("Validation Failed: Please complete all required items in the Final Delivery Checklist.");
       return;
     }
 
     if (!clientAcceptanceForm.communication_proof) {
       alert("Validation Failed: Please upload or provide Customer Communication Proof.");
+      return;
+    }
+
+    if (!clientAcceptanceForm.internal_validation) {
+      alert("Validation Failed: Please check Internal Validation.");
       return;
     }
 
@@ -389,10 +418,11 @@ export const ProductionStaffModule: React.FC = () => {
         checklist_1: false,
         checklist_2: false,
         checklist_3: false,
-        communication_proof: ''
+        communication_proof: '',
+        internal_validation: true
       });
       await refreshData();
-      showToast('🏆 Client Acceptance Verified! Project transferred to Business Owner Dashboard.');
+      showToast('🏆 Client Acceptance Verified! Project automatically transferred to Business Owner Dashboard.');
     } catch (err: any) {
       console.error('Error submitting Client Acceptance:', err);
       alert('Failed to submit: ' + (err.message || 'Please try again.'));
@@ -458,7 +488,7 @@ export const ProductionStaffModule: React.FC = () => {
             <div className="grid gap-4">
               {activeBookings.map((b) => {
                 const badge = getStatusBadge(b.status);
-                const isLocked = ['Client Acceptance', 'Business Owner Review', 'Project Completed', 'Completed'].includes(b.status) || b.orderObj?.current_stage === 'Business Owner Review';
+                const isLocked = ['Client Acceptance', 'Business Owner Review', 'Project Completed', 'Completed', 'Order Closed'].includes(b.status) || b.orderObj?.current_stage === 'Business Owner Review';
 
                 return (
                   <div 
@@ -492,13 +522,13 @@ export const ProductionStaffModule: React.FC = () => {
                             </div>
                             <div className="flex items-center gap-1.5 text-zinc-400">
                               <Clock className="w-3.5 h-3.5 text-zinc-500" />
-                              <span>Target: <strong className="text-zinc-200">{b.targetFinishDate || 'N/A'}</strong></span>
+                              <span>Expected Delivery: <strong className="text-zinc-200">{b.targetFinishDate || 'N/A'}</strong></span>
                             </div>
                           </div>
                         </div>
 
                         {/* ACTIONS DROPDOWN */}
-                        <div className="relative shrink-0 sm:w-48 self-end sm:self-center">
+                        <div className="relative shrink-0 sm:w-52 self-end sm:self-center">
                           <button
                             type="button"
                             onClick={() => setActiveDropdownId(activeDropdownId === b.assignmentId ? null : b.assignmentId)}
@@ -529,20 +559,21 @@ export const ProductionStaffModule: React.FC = () => {
                               {/* Locked State Notification */}
                               {isLocked ? (
                                 <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-[11px] font-bold flex items-center gap-2">
-                                  <Lock className="w-3.5 h-3.5" /> Work Completed & Transferred (Read-Only)
+                                  <Lock className="w-3.5 h-3.5" /> Client Acceptance Complete (Locked)
                                 </div>
                               ) : (
                                 <>
                                   {/* Workflow Step 1: Editing Started */}
-                                  {(b.status === 'Assigned Editor' || b.status === 'Editor Assigned' || b.status === 'Assigned') && (
+                                  {(b.status === 'Assigned Editor' || b.status === 'Editor Assigned' || b.status === 'Assigned' || b.status === 'Raw Footage Received') && (
                                     <button
                                       type="button"
                                       onClick={() => {
                                         setActiveDropdownId(null);
                                         setEditingStartedModal(b);
                                         setEditingStartedForm({
-                                          date: b.targetFinishDate || new Date().toISOString().split('T')[0],
-                                          time: '18:00'
+                                          expected_delivery_date: b.targetFinishDate || new Date().toISOString().split('T')[0],
+                                          estimated_completion_date: b.targetFinishDate || new Date().toISOString().split('T')[0],
+                                          estimated_completion_time: '18:00'
                                         });
                                       }}
                                       className="w-full text-left px-4 py-2.5 text-xs text-sky-400 hover:bg-sky-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
@@ -566,39 +597,39 @@ export const ProductionStaffModule: React.FC = () => {
                                     </button>
                                   )}
 
-                                  {/* Workflow Step 3: Editing Completed */}
+                                  {/* Workflow Step 3: Re-send Customer Review & Client Acceptance */}
                                   {b.status === 'Customer Review' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setActiveDropdownId(null);
-                                        setEditingCompletedModal(b);
-                                        setEditingCompletedForm({ confirmation_proof: '' });
-                                      }}
-                                      className="w-full text-left px-4 py-2.5 text-xs text-purple-400 hover:bg-purple-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                    >
-                                      <CheckCircle2 className="w-4 h-4" /> Editing Completed
-                                    </button>
-                                  )}
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveDropdownId(null);
+                                          setCustomerReviewModal(b);
+                                          setCustomerReviewForm({ edited_drive_link: b.prodObj?.edited_drive_link || '' });
+                                        }}
+                                        className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                      >
+                                        <RefreshCw className="w-4 h-4" /> Re-send Customer Review
+                                      </button>
 
-                                  {/* Workflow Step 4: Client Acceptance */}
-                                  {(b.status === 'Editing Completed' || b.status === 'Editing Complete') && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setActiveDropdownId(null);
-                                        setClientAcceptanceModal(b);
-                                        setClientAcceptanceForm({
-                                          checklist_1: false,
-                                          checklist_2: false,
-                                          checklist_3: false,
-                                          communication_proof: ''
-                                        });
-                                      }}
-                                      className="w-full text-left px-4 py-2.5 text-xs text-emerald-400 hover:bg-emerald-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                    >
-                                      <ShieldCheck className="w-4 h-4" /> Client Acceptance
-                                    </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveDropdownId(null);
+                                          setClientAcceptanceModal(b);
+                                          setClientAcceptanceForm({
+                                            checklist_1: false,
+                                            checklist_2: false,
+                                            checklist_3: false,
+                                            communication_proof: '',
+                                            internal_validation: true
+                                          });
+                                        }}
+                                        className="w-full text-left px-4 py-2.5 text-xs text-emerald-400 hover:bg-emerald-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                      >
+                                        <ShieldCheck className="w-4 h-4" /> Client Acceptance
+                                      </button>
+                                    </>
                                   )}
                                 </>
                               )}
@@ -638,10 +669,22 @@ export const ProductionStaffModule: React.FC = () => {
             </div>
 
             <p className="text-xs text-zinc-400">
-              Please enter the estimated completion date and time to notify management and start tracking progress.
+              Please review the expected delivery date and enter your estimated completion date & time.
             </p>
 
             <form onSubmit={handleEditingStartedSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
+                  Expected Delivery Date (Pre-filled)
+                </label>
+                <input
+                  type="date"
+                  value={editingStartedForm.expected_delivery_date}
+                  onChange={(e) => setEditingStartedForm({ ...editingStartedForm, expected_delivery_date: e.target.value })}
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
+                />
+              </div>
+
               <div>
                 <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
                   Estimated Completion Date <span className="text-rose-400">*</span>
@@ -649,8 +692,8 @@ export const ProductionStaffModule: React.FC = () => {
                 <input
                   type="date"
                   required
-                  value={editingStartedForm.date}
-                  onChange={(e) => setEditingStartedForm({ ...editingStartedForm, date: e.target.value })}
+                  value={editingStartedForm.estimated_completion_date}
+                  onChange={(e) => setEditingStartedForm({ ...editingStartedForm, estimated_completion_date: e.target.value })}
                   className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
                 />
               </div>
@@ -662,8 +705,8 @@ export const ProductionStaffModule: React.FC = () => {
                 <input
                   type="time"
                   required
-                  value={editingStartedForm.time}
-                  onChange={(e) => setEditingStartedForm({ ...editingStartedForm, time: e.target.value })}
+                  value={editingStartedForm.estimated_completion_time}
+                  onChange={(e) => setEditingStartedForm({ ...editingStartedForm, estimated_completion_time: e.target.value })}
                   className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
                 />
               </div>
@@ -740,7 +783,7 @@ export const ProductionStaffModule: React.FC = () => {
                   disabled={isSubmitting}
                   className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer shadow-lg shadow-amber-600/20"
                 >
-                  {isSubmitting ? 'Submitting...' : 'Submit for Customer Review'}
+                  {isSubmitting ? 'Submitting...' : 'Submit & Generate WhatsApp Message'}
                 </button>
               </div>
             </form>
@@ -749,18 +792,18 @@ export const ProductionStaffModule: React.FC = () => {
       )}
 
       {/* ========================================================= */}
-      {/* 3. EDITING COMPLETED MODAL POPUP */}
+      {/* 2B. WHATSAPP REVIEW MESSAGE POPUP (AUTOMATIC SECOND POPUP) */}
       {/* ========================================================= */}
-      {editingCompletedModal && (
+      {whatsappModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95">
+          <div className="bg-zinc-900 border border-emerald-500/40 rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-purple-400" />
-                <h3 className="text-base font-bold text-white">Editing Completed</h3>
+                <MessageSquare className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-base font-bold text-white">WhatsApp Review Message</h3>
               </div>
               <button 
-                onClick={() => setEditingCompletedModal(null)}
+                onClick={() => setWhatsappModal(null)}
                 className="text-zinc-400 hover:text-white p-1 cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -768,67 +811,70 @@ export const ProductionStaffModule: React.FC = () => {
             </div>
 
             <p className="text-xs text-zinc-400">
-              Upload or attach the Customer Confirmation Image / Proof confirming review completion.
+              Pre-filled WhatsApp review message generated for <strong className="text-zinc-200">{whatsappModal.customerName}</strong> ({whatsappModal.phone || 'No Phone Registered'}).
             </p>
 
-            <form onSubmit={handleEditingCompletedSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
-                  Customer Confirmation Image / Proof <span className="text-rose-400">*</span>
-                </label>
-                
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={async (e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      const compressed = await compressImage(e.target.files[0]);
-                      setEditingCompletedForm({ confirmation_proof: compressed });
-                    }
-                  }}
-                  className="w-full text-xs text-zinc-300 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-purple-600 file:text-white hover:file:bg-purple-500 cursor-pointer mb-2"
-                />
+            <div className="space-y-2">
+              <label className="block text-[11px] font-mono font-bold text-emerald-400 uppercase">
+                Generated Message
+              </label>
+              <textarea
+                readOnly
+                rows={8}
+                value={whatsappModal.message}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-200 font-mono leading-relaxed focus:outline-none resize-none select-all"
+              />
+            </div>
 
-                <div className="text-[10px] text-zinc-500 text-center uppercase font-mono my-1">- OR ENTER PROOF IMAGE URL -</div>
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(whatsappModal.message);
+                  setCopiedSuccess(true);
+                  setTimeout(() => setCopiedSuccess(false), 3000);
+                }}
+                className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer"
+              >
+                <Copy className="w-4 h-4 text-zinc-400" />
+                <span>{copiedSuccess ? 'Copied!' : 'Copy Message'}</span>
+              </button>
 
-                <input
-                  type="text"
-                  placeholder="https://..."
-                  value={editingCompletedForm.confirmation_proof}
-                  onChange={(e) => setEditingCompletedForm({ confirmation_proof: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
-                />
-
-                {editingCompletedForm.confirmation_proof && (
-                  <div className="mt-2 text-[11px] text-emerald-400 font-mono font-bold flex items-center gap-1">
-                    <Check className="w-3.5 h-3.5" /> Proof Attached Successfully
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
+              {whatsappModal.phone ? (
+                <a
+                  href={`https://wa.me/${formatWhatsAppPhone(whatsappModal.phone)}?text=${encodeURIComponent(whatsappModal.message)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-600/20"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>Open WhatsApp</span>
+                </a>
+              ) : (
                 <button
                   type="button"
-                  onClick={() => setEditingCompletedModal(null)}
-                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl cursor-pointer"
+                  disabled
+                  className="px-4 py-2 bg-zinc-800 text-zinc-500 text-xs font-bold rounded-xl flex items-center gap-1.5 opacity-60 cursor-not-allowed"
                 >
-                  Cancel
+                  <ExternalLink className="w-4 h-4" />
+                  <span>No Phone Available</span>
                 </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting || !editingCompletedForm.confirmation_proof}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer shadow-lg shadow-purple-600/20"
-                >
-                  {isSubmitting ? 'Submitting...' : 'Submit Editing Completed'}
-                </button>
-              </div>
-            </form>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setWhatsappModal(null)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* ========================================================= */}
-      {/* 4. CLIENT ACCEPTANCE MODAL POPUP */}
+      {/* 3. CLIENT ACCEPTANCE MODAL POPUP */}
       {/* ========================================================= */}
       {clientAcceptanceModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -924,8 +970,22 @@ export const ProductionStaffModule: React.FC = () => {
                 )}
               </div>
 
+              {/* INTERNAL VALIDATION */}
+              <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="internal_validation_cb"
+                  checked={clientAcceptanceForm.internal_validation}
+                  onChange={(e) => setClientAcceptanceForm({ ...clientAcceptanceForm, internal_validation: e.target.checked })}
+                  className="rounded border-zinc-700 text-emerald-600 focus:ring-emerald-500"
+                />
+                <label htmlFor="internal_validation_cb" className="text-xs text-zinc-300 font-bold cursor-pointer">
+                  Internal Validation Verified <span className="text-rose-400">*</span>
+                </label>
+              </div>
+
               <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-3 text-[11px] text-purple-300 flex items-center gap-2">
-                <span>🚀</span> Submission will automatically complete Production & transfer project to Business Owner Dashboard.
+                <span>🚀</span> Submission will automatically update status to Client Acceptance & transfer project to Business Owner Dashboard.
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
@@ -943,7 +1003,8 @@ export const ProductionStaffModule: React.FC = () => {
                     !clientAcceptanceForm.checklist_1 || 
                     !clientAcceptanceForm.checklist_2 || 
                     !clientAcceptanceForm.checklist_3 || 
-                    !clientAcceptanceForm.communication_proof
+                    !clientAcceptanceForm.communication_proof ||
+                    !clientAcceptanceForm.internal_validation
                   }
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer shadow-lg shadow-emerald-600/20"
                 >

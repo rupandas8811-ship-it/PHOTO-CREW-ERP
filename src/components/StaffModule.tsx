@@ -273,30 +273,33 @@ export const StaffModule: React.FC = () => {
       );
       
       sortedHistory.forEach(leh => {
-        if (
-          leh.returned_by &&
-          leh.returned_by.toLowerCase() === staffName.toLowerCase()
-        ) {
+        let parsed: any = {};
+        if (leh.remarks) {
+          try {
+            parsed = typeof leh.remarks === 'string' ? JSON.parse(leh.remarks) : leh.remarks;
+          } catch (e) {}
+        }
+
+        const recordStaff = (leh.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
+        const currentStaffNorm = staffName.trim().toLowerCase();
+        const recordStaffId = parsed.staff_id || '';
+        const currentStaffId = staffMember?.id || currentUser?.id || '';
+
+        const isForCurrentStaff = (recordStaff && currentStaffNorm && recordStaff === currentStaffNorm) ||
+                                  (recordStaffId && currentStaffId && recordStaffId === currentStaffId);
+
+        if (isForCurrentStaff) {
           let eventId = 'gen';
           let photoUrl = (leh as any).photo_url || '';
           let assetId = (leh as any).asset_id || '';
           let parsedStatus = '';
           
-          if (leh.remarks) {
-            try {
-              const parsed = JSON.parse(leh.remarks);
-              photoUrl = parsed.photo_url || photoUrl;
-              assetId = parsed.asset_id || assetId;
-              if (parsed.event_id) {
-                eventId = parsed.event_id;
-              }
-              if (parsed.current_status) {
-                parsedStatus = parsed.current_status;
-              }
-            } catch (e) {}
-          }
+          if (parsed.photo_url) photoUrl = parsed.photo_url;
+          if (parsed.asset_id) assetId = parsed.asset_id;
+          if (parsed.event_id) eventId = parsed.event_id;
+          if (parsed.current_status) parsedStatus = parsed.current_status;
           
-          const key = `${leh.order_id}_${eventId}_${staffName.toLowerCase()}`;
+          const key = `${leh.order_id}_${eventId}_${staffName.trim().toLowerCase()}`;
 
           // Status restoration: If parsedStatus exists, override the status for this specific event key
           if (parsedStatus && parsedStatus !== 'Assigned Crew') {
@@ -346,15 +349,23 @@ export const StaffModule: React.FC = () => {
        return merged;
     });
     setStaffProofs(prev => {
-       const merged = { ...prev };
+       const freshForStaff: Record<string, EventProofData> = {};
+       // Strictly filter previous local state so proofs from other staff members never bleed into this session
+       const suffix = `_${staffName.trim().toLowerCase()}`;
+       for (const [k, v] of Object.entries(prev)) {
+          if (k.toLowerCase().endsWith(suffix)) {
+             freshForStaff[k] = v;
+          }
+       }
+
        for (const key of Object.keys(newProofs)) {
-          merged[key] = {
-             ...(merged[key] || {}),
+          freshForStaff[key] = {
+             ...(freshForStaff[key] || {}),
              ...newProofs[key]
           };
        }
-       localStorage.setItem('staff_equipment_proofs_v2', JSON.stringify(merged));
-       return merged;
+       localStorage.setItem('staff_equipment_proofs_v2', JSON.stringify(freshForStaff));
+       return freshForStaff;
     });
 
   }, [leadEquipmentHistory, staffAssignments, staffName]);
@@ -483,7 +494,16 @@ export const StaffModule: React.FC = () => {
             }
 
             const uniqueKey = `${orderId}_${ev.id || 'ev'}_${staffName.toLowerCase()}`;
-            const currentStaffStatus = staffStatuses[uniqueKey] || op?.event_status || 'Assigned Crew';
+            // Only use global or order-level status if it hasn't progressed to an active state.
+            // If it has progressed globally but this staff member has no specific event history, they should start at Assigned Crew.
+            const fallbackStatus = op?.event_status || 'Assigned Crew';
+            const isGlobalAdvanced = ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(fallbackStatus.toLowerCase());
+            let currentStaffStatus = staffStatuses[uniqueKey];
+            if (!currentStaffStatus) {
+                const saStatus = (sa as any)?.task_status;
+                const isSaAdvanced = saStatus && ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(saStatus.toLowerCase());
+                currentStaffStatus = (!isSaAdvanced && saStatus) ? saStatus : (isGlobalAdvanced ? 'Assigned Crew' : fallbackStatus);
+            }
 
             // Only remove from staff active bookings AFTER Footage Handover has been submitted
             if (!finishedStatuses.includes((currentStaffStatus || '').trim().toLowerCase())) {
@@ -510,6 +530,7 @@ export const StaffModule: React.FC = () => {
                 equipmentItems: assignedEqItems,
                 taskStatus: currentStaffStatus,
                 rawFootageVerificationStatus: getVerificationStatus(orderId, ev.id || 'ev'),
+                rawFootageLink: (sa as any)?.raw_footage_link || '',
                 coordinator: op?.operations_coordinator || 'Unassigned'
               });
             }
@@ -562,7 +583,14 @@ export const StaffModule: React.FC = () => {
           }
 
           const uniqueKey = `${orderId}_gen_${staffName.toLowerCase()}`;
-          const currentStaffStatus = staffStatuses[uniqueKey] || op?.event_status || 'Assigned Crew';
+          const fallbackStatus = op?.event_status || 'Assigned Crew';
+          const isGlobalAdvanced = ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(fallbackStatus.toLowerCase());
+          let currentStaffStatus = staffStatuses[uniqueKey];
+          if (!currentStaffStatus) {
+              const saStatus = (sa as any)?.task_status;
+              const isSaAdvanced = saStatus && ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(saStatus.toLowerCase());
+              currentStaffStatus = (!isSaAdvanced && saStatus) ? saStatus : (isGlobalAdvanced ? 'Assigned Crew' : fallbackStatus);
+          }
 
           // Only remove from staff active bookings AFTER Footage Handover has been submitted
           if (!finishedStatuses.includes((currentStaffStatus || '').trim().toLowerCase())) {
@@ -589,6 +617,7 @@ export const StaffModule: React.FC = () => {
               equipmentItems: assignedEqItems,
               taskStatus: currentStaffStatus,
               rawFootageVerificationStatus: getVerificationStatus(orderId, 'gen'),
+              rawFootageLink: (sa as any)?.raw_footage_link || '',
               coordinator: op?.operations_coordinator || 'Unassigned'
             });
           }
@@ -686,36 +715,79 @@ export const StaffModule: React.FC = () => {
   const openPhotoModal = (booking: any, stage: 'Equipment Received' | 'Event Start' | 'Equipment Handover' | 'Event Complete') => {
     const existingPhotos: Record<string, string> = {};
 
-    if (stage === 'Event Start') {
-      const relevantHistory = (leadEquipmentHistory || []).filter(h => 
-        (booking.orderId && h.order_id === booking.orderId) ||
-        (booking.leadId && h.lead_id === booking.leadId)
-      );
+    const relevantHistory = (leadEquipmentHistory || []).filter(h => {
+      // 1. Order ID / Lead ID match
+      const matchOrder = (booking.orderId && h.order_id === booking.orderId) ||
+                         (booking.leadId && h.lead_id === booking.leadId);
+      if (!matchOrder) return false;
 
-      for (const h of relevantHistory) {
-        let photoUrl = '';
-        try {
-          if (h.remarks && h.remarks.startsWith('{')) {
-            const parsed = JSON.parse(h.remarks);
-            photoUrl = parsed.photo_url || '';
-          }
-        } catch (e) {
-          photoUrl = '';
-        }
-
-        if (h.equipment_name === 'Asset Collection Photo Proof' || h.equipment_name === 'Asset Collection') {
-          if (photoUrl) existingPhotos['Asset Collection Photo Proof'] = photoUrl;
-        }
-        if (h.equipment_name === 'Event Start Photo Proof' || h.equipment_name === 'Event Start') {
-          if (photoUrl) existingPhotos['Event Start Photo Proof'] = photoUrl;
-        }
+      // 2. Parse remarks JSON
+      let parsed: any = {};
+      if (h.remarks && typeof h.remarks === 'string') {
+        try { parsed = JSON.parse(h.remarks); } catch (e) {}
+      } else if (h.remarks && typeof h.remarks === 'object') {
+        parsed = h.remarks;
       }
 
-      // Check local staffProofs fallback
-      const localProofObj = staffProofs[booking.key];
-      if (localProofObj?.eventStartProofs) {
-        for (const p of localProofObj.eventStartProofs) {
-          if (p.equipmentName && p.photoUrl) {
+      // 3. Match Assigned Staff ID / Staff Name (MUST belong to logged-in staff)
+      const recordStaff = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
+      const currentStaffNorm = (staffName || '').trim().toLowerCase();
+      const recordStaffId = parsed.staff_id || '';
+      const currentStaffId = staffMember?.id || currentUser?.id || '';
+
+      const staffMatches = (recordStaff && currentStaffNorm && recordStaff === currentStaffNorm) ||
+                           (recordStaffId && currentStaffId && recordStaffId === currentStaffId);
+
+      if (!staffMatches) return false;
+
+      // 4. Match Event ID if present and not 'gen'
+      const bookingEventId = booking.eventId;
+      const historyEventId = parsed.event_id;
+      if (bookingEventId && historyEventId && bookingEventId !== 'gen' && historyEventId !== 'gen' && bookingEventId !== historyEventId) {
+        return false;
+      }
+
+      return true;
+    });
+
+    for (const h of relevantHistory) {
+      let photoUrl = '';
+      try {
+        if (h.remarks && typeof h.remarks === 'string' && h.remarks.startsWith('{')) {
+          const parsed = JSON.parse(h.remarks);
+          photoUrl = parsed.photo_url || '';
+        } else if ((h as any).photo_url) {
+          photoUrl = (h as any).photo_url;
+        }
+      } catch (e) {
+        photoUrl = '';
+      }
+
+      if (h.equipment_name === 'Asset Collection Photo Proof' || h.equipment_name === 'Asset Collection') {
+        if (photoUrl) existingPhotos['Asset Collection Photo Proof'] = photoUrl;
+      }
+      if (h.equipment_name === 'Event Start Photo Proof' || h.equipment_name === 'Event Start') {
+        if (photoUrl) existingPhotos['Event Start Photo Proof'] = photoUrl;
+      }
+      if (h.equipment_name === 'Event Completion Photo Proof' || h.equipment_name === 'Event Completion') {
+        if (photoUrl) existingPhotos['Event Completion Photo Proof'] = photoUrl;
+      }
+      if (h.equipment_name === 'Equipment Handover Photo Proof' || h.equipment_name === 'Equipment Handover' || h.equipment_name === 'Asset Return Photo Proof') {
+        if (photoUrl) existingPhotos['Equipment Handover Photo Proof'] = photoUrl;
+      }
+    }
+
+    // Check local staffProofs fallback (strictly for this staff member's key)
+    const staffKey = `${booking.orderId}_${booking.eventId || 'ev'}_${staffName.trim().toLowerCase()}`;
+    const localProofObj = staffProofs[booking.key] || staffProofs[staffKey];
+    if (localProofObj) {
+      const proofList = stage === 'Event Start' ? localProofObj.eventStartProofs :
+                        stage === 'Equipment Received' ? localProofObj.equipmentReceivedProofs :
+                        stage === 'Equipment Handover' ? localProofObj.equipmentHandoverProofs :
+                        stage === 'Event Complete' ? localProofObj.completeProofs : localProofObj.eventStartProofs;
+      if (proofList) {
+        for (const p of proofList) {
+          if (p.equipmentName && p.photoUrl && !existingPhotos[p.equipmentName]) {
             existingPhotos[p.equipmentName] = p.photoUrl;
           }
         }

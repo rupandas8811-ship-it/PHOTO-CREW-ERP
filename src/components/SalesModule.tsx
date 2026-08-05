@@ -25,6 +25,7 @@ export const SHOOT_TYPES = [
 ];
 import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers } from '../utils';
 import { SalesCalendar } from './SalesCalendar';
+import { CustomPackageMaster } from './CustomPackageMaster';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { jsPDF } from 'jspdf';
 
@@ -33,9 +34,12 @@ interface LocalEditableInputProps {
   disabled?: boolean;
   onChange: (val: string) => void;
   className?: string;
+  list?: string;
+  placeholder?: string;
+  options?: string[];
 }
 
-const LocalEditableInput: React.FC<LocalEditableInputProps> = ({ value, disabled, onChange, className }) => {
+const LocalEditableInput: React.FC<LocalEditableInputProps> = ({ value, disabled, onChange, className, list, placeholder, options }) => {
   const [localVal, setLocalVal] = React.useState(value);
   const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const latestValueRef = React.useRef(value);
@@ -45,7 +49,7 @@ const LocalEditableInput: React.FC<LocalEditableInputProps> = ({ value, disabled
     setLocalVal(value);
   }, [value]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const newVal = e.target.value;
     setLocalVal(newVal);
     
@@ -55,7 +59,7 @@ const LocalEditableInput: React.FC<LocalEditableInputProps> = ({ value, disabled
       if (newVal !== latestValueRef.current) {
         onChange(newVal);
       }
-    }, 1000);
+    }, 600);
   };
 
   const handleBlur = () => {
@@ -82,15 +86,19 @@ const LocalEditableInput: React.FC<LocalEditableInputProps> = ({ value, disabled
   }, []);
 
   return (
-    <input
-      type="text"
-      value={localVal}
-      disabled={disabled}
-      onChange={handleChange}
-      onBlur={handleBlur}
-      onKeyDown={handleKeyDown}
-      className={className}
-    />
+    <div className="flex-1 flex items-center gap-2">
+      <input
+        type="text"
+        value={localVal}
+        disabled={disabled}
+        list={list}
+        placeholder={placeholder}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        className={className}
+      />
+    </div>
   );
 };
 
@@ -1436,6 +1444,60 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const [logoBase64, setLogoBase64] = useState<string>('');
   const [logoAspectRatio, setLogoAspectRatio] = useState<number>(1);
+
+  // Dynamic active master roles and deliverables loaded from Supabase master tables
+  const [activeMasterRoles, setActiveMasterRoles] = useState<string[]>([]);
+  const [activeMasterDeliverables, setActiveMasterDeliverables] = useState<string[]>([]);
+
+  const loadActiveMasterItems = React.useCallback(async () => {
+    try {
+      let rList: string[] = [];
+      let dList: string[] = [];
+
+      if (supabaseClient) {
+        const { data: rData } = await supabaseClient
+          .from('custom_roles')
+          .select('role_name')
+          .eq('status', 'Active');
+        if (rData && rData.length > 0) {
+          rList = rData.map((r: any) => r.role_name);
+        }
+
+        const { data: dData } = await supabaseClient
+          .from('custom_deliverables')
+          .select('deliverable_name')
+          .eq('status', 'Active');
+        if (dData && dData.length > 0) {
+          dList = dData.map((d: any) => d.deliverable_name);
+        }
+      }
+
+      if (rList.length === 0) {
+        const saved = localStorage.getItem('erp_custom_roles_data');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          rList = parsed.filter((r: any) => r.status === 'Active').map((r: any) => r.role_name);
+        }
+      }
+
+      if (dList.length === 0) {
+        const saved = localStorage.getItem('erp_custom_deliverables_data');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          dList = parsed.filter((d: any) => d.status === 'Active').map((d: any) => d.deliverable_name);
+        }
+      }
+
+      if (rList.length > 0) setActiveMasterRoles(rList);
+      if (dList.length > 0) setActiveMasterDeliverables(dList);
+    } catch (err) {
+      console.warn("Error fetching active custom master items in SalesModule:", err);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    loadActiveMasterItems();
+  }, [loadActiveMasterItems]);
 
   React.useEffect(() => {
     const preloadLogo = async () => {
@@ -3489,6 +3551,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       console.log(`✔ Creating/Updating quotation ${quotNum}...`);
       const qId = existingQuotation ? existingQuotation.quotation_id : ('QT-' + Math.random().toString(36).substring(2, 9).toUpperCase());
       
+      const activePkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
+      const activeDelList = editableDeliverables[activePkgId] || [];
+      const activeDeliverablesText = activeDelList.filter(Boolean).length > 0
+        ? activeDelList.filter(Boolean).join('\n')
+        : (wizardLeadData.deliverables || leadObj.deliverables_description || '');
+
       const standardQuotation = {
         quotation_id: qId,
         quotation_number: quotNum,
@@ -3513,7 +3581,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         whatsapp_sent_status: false,
         viewed_status: false,
         terms_conditions: quotationTerms,
-        deliverables_description: leadObj.deliverables_description,
+        deliverables_description: activeDeliverablesText,
         notes_special_customizations: leadObj.notes_special_customizations,
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
           Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
@@ -3547,7 +3615,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               total_amount: Number(wizardLeadData.package_cost),
               discount: 0,
               final_amount: Number(wizardLeadData.package_cost),
-              deliverables_description: wizardLeadData.deliverables,
+              deliverables_description: activeDeliverablesText,
               notes_special_customizations: wizardLeadData.notes,
               additional_services_cost: 0,
               team_members: '',
@@ -3567,7 +3635,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               total_amount: isPrimary ? Number(wizardLeadData.package_cost) : lp.total_amount,
               discount: lp.discount || 0,
               final_amount: isPrimary ? Number(wizardLeadData.package_cost) : lp.final_amount,
-              deliverables_description: isPrimary ? wizardLeadData.deliverables : lp.deliverables_description,
+              deliverables_description: isPrimary ? activeDeliverablesText : lp.deliverables_description,
               notes_special_customizations: isPrimary ? wizardLeadData.notes : lp.notes_special_customizations,
               additional_services_cost: lp.additional_services_cost || 0,
               team_members: incStr || lp.team_members || '',
@@ -3587,13 +3655,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           budget: finalAmt,
           final_quoted_amount: finalAmt,
           status: 'Quotation Sent' as CurrentStage,
-          remarks: updatedRemarks
+          remarks: updatedRemarks,
+          deliverables: activeDeliverablesText,
+          deliverables_description: activeDeliverablesText
         }));
         await updateLead(leadObj.lead_id, {
           budget: finalAmt,
           status: 'Quotation Sent' as CurrentStage,
           package_price: basePkgSum,
-          deliverables_description: leadObj.deliverables_description,
+          deliverables_description: activeDeliverablesText,
           notes_special_customizations: leadObj.notes_special_customizations,
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
           Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
@@ -4231,31 +4301,35 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setSalesStaffMobile(quoteSalesMobile);
     }
 
-    const matchedPkgId = latestQuote?.package_id || primaryLP?.package_id || lead.Select_Package_Option || '';
+    const matchedPkgId = fullLead.Select_Package_Option || latestQuote?.package_id || primaryLP?.package_id || '';
     const matchedPkg = (packages || []).find(p => p.package_id === matchedPkgId);
 
-    // Load deliverables from leads.deliverables_description directly to prevent stale/cached data
-    if (matchedPkgId && lead.deliverables_description) {
+    // 1. Load Deliverables: Prioritize lead.deliverables_description, then latestQuote, then primaryLP, then matchedPkg
+    let loadedDelText = fullLead.deliverables_description || latestQuote?.deliverables_description || primaryLP?.deliverables_description || matchedPkg?.deliverables || '';
+
+    if (matchedPkgId) {
       const newDeliverables: Record<string, string[]> = {};
-      try {
-        const parsedDel = JSON.parse(lead.deliverables_description);
-        if (Array.isArray(parsedDel)) {
-          if (typeof parsedDel[0] === 'string') {
-            newDeliverables[matchedPkgId] = parsedDel;
-          } else if (parsedDel[0] && Array.isArray(parsedDel[0].deliverables)) {
-            newDeliverables[matchedPkgId] = parsedDel[0].deliverables;
+      if (loadedDelText) {
+        try {
+          const parsedDel = JSON.parse(loadedDelText);
+          if (Array.isArray(parsedDel)) {
+            if (typeof parsedDel[0] === 'string') {
+              newDeliverables[matchedPkgId] = parsedDel;
+            } else if (parsedDel[0] && Array.isArray(parsedDel[0].deliverables)) {
+              newDeliverables[matchedPkgId] = parsedDel[0].deliverables;
+            } else {
+              newDeliverables[matchedPkgId] = [];
+            }
           } else {
             newDeliverables[matchedPkgId] = [];
           }
-        } else {
-          newDeliverables[matchedPkgId] = [];
+        } catch (e) {
+          // Fallback if not JSON (e.g. newline-separated text)
+          const delList = loadedDelText.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
+          newDeliverables[matchedPkgId] = delList;
         }
-      } catch (e) {
-        // Fallback if not JSON (e.g. newline-separated text)
-        const delList = lead.deliverables_description
-          ? lead.deliverables_description.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
-          : [];
-        newDeliverables[matchedPkgId] = delList;
+      } else {
+        newDeliverables[matchedPkgId] = [];
       }
       setEditableDeliverables(newDeliverables);
     } else {
@@ -4268,23 +4342,28 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
     }
 
-    // Load team members from leads.Team_Members directly to prevent stale/cached data
-    if (matchedPkgId && lead.Team_Members) {
+    // 2. Load Team Members: Prioritize lead.Team_Members, then latestQuote.editableInclusions, then primaryLP, then matchedPkg
+    if (matchedPkgId && fullLead.Team_Members) {
       try {
-        const parsedTeam = JSON.parse(lead.Team_Members);
+        const parsedTeam = JSON.parse(fullLead.Team_Members);
         if (Array.isArray(parsedTeam)) {
           const newInclusions: Record<string, string[]> = {};
+          let allMembers: string[] = [];
           parsedTeam.forEach((item: any) => {
             const eventName = item.event_name;
             const members = Array.isArray(item.team_members) ? item.team_members : [];
+            if (members.length > 0) {
+              allMembers = [...allMembers, ...members];
+            }
             if (eventName === 'General') {
               newInclusions[matchedPkgId] = members;
-            } else if (lead.events && lead.events.length > 0) {
-              const matchingEvent = lead.events.find(e => 
+            } else if (fullLead.events && fullLead.events.length > 0) {
+              const matchingEvent = fullLead.events.find(e => 
                 (e.event_name || e.event_type || 'Unnamed Event') === eventName
               );
               if (matchingEvent) {
                 newInclusions[`${matchedPkgId}_${matchingEvent.id}`] = members;
+                newInclusions[`${matchedPkgId}_${matchingEvent.event_name || matchingEvent.event_type || 'Unnamed Event'}`] = members;
               } else {
                 newInclusions[`${matchedPkgId}_${eventName}`] = members;
               }
@@ -4292,22 +4371,32 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               newInclusions[`${matchedPkgId}_${eventName}`] = members;
             }
           });
+          if (!newInclusions[matchedPkgId]) {
+            newInclusions[matchedPkgId] = allMembers.length > 0 ? Array.from(new Set(allMembers)) : [];
+          }
           setEditableInclusions(newInclusions);
         } else {
           setEditableInclusions({});
         }
       } catch (e) {
         console.error('Error parsing Team_Members from leads in handleSelectLead:', e);
-        setEditableInclusions({});
+        if (latestQuote?.editableInclusions) {
+          setEditableInclusions(latestQuote.editableInclusions);
+        } else if (primaryLP?.editable_inclusions) {
+          setEditableInclusions(primaryLP.editable_inclusions);
+        } else {
+          setEditableInclusions({});
+        }
       }
+    } else if (latestQuote?.editableInclusions) {
+      setEditableInclusions(latestQuote.editableInclusions);
+    } else if (primaryLP?.editable_inclusions) {
+      setEditableInclusions(primaryLP.editable_inclusions);
+    } else if (matchedPkg?.team_members) {
+      const defaultInc = parseTeamMembers(matchedPkg.team_members);
+      setEditableInclusions({ [matchedPkgId]: defaultInc.length > 0 ? defaultInc : ['1 Professional Photographer'] });
     } else {
-      if (latestQuote?.editableInclusions) {
-        setEditableInclusions(latestQuote.editableInclusions);
-      } else if (primaryLP?.editable_inclusions) {
-        setEditableInclusions(primaryLP.editable_inclusions);
-      } else {
-        setEditableInclusions({});
-      }
+      setEditableInclusions({});
     }
 
     const firstEvent = fullLead.events && fullLead.events.length > 0 ? fullLead.events[0] : null;
@@ -4321,6 +4410,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const evStaffPax = firstEvent?.staff_pax ?? fullLead.staff_pax ?? '';
     setInternalNotes(fullLead.follow_up_notes || '');
     setFollowUpDate(fullLead.next_follow_up_date || '');
+    
+    const cleanPkgPrice = fullLead.package_price ?? latestQuote?.package_price ?? (primaryLP ? Number(primaryLP.package_cost) : (matchedPkg ? Number(matchedPkg.price) : 0));
+    
     setWizardLeadData({
       customer_name: fullLead.customer_name || '',
       mobile: fullLead.mobile ? String(fullLead.mobile) : '',
@@ -4332,7 +4424,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       pincode: latestQuote?.pincode || fullLead.pincode || '',
       client_residence_address: latestQuote?.client_residence_address || fullLead.client_residence_address || '',
       desired_event_shoot_type: latestQuote?.desired_event_shoot_type || fullLead.desired_event_shoot_type || '',
-      Select_Package_Option: fullLead.Select_Package_Option || latestQuote?.Select_Package_Option || primaryLP?.package_id || '',
+      Select_Package_Option: fullLead.Select_Package_Option || latestQuote?.package_id || primaryLP?.package_id || '',
       // Step 2
       event_type: fullLead.event_type || '',
       custom_event_name: fullLead.custom_event_name || '',
@@ -4350,16 +4442,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       Specify_Custom_Lead_Source_Name: fullLead.Specify_Custom_Lead_Source_Name || '',
       shoot_type: evShootType,
       // Step 3
-      selected_package_id: latestQuote?.package_id || primaryLP?.package_id || fullLead.Select_Package_Option || '',
-      package_cost: fullLead.package_price || latestQuote?.package_price || (primaryLP ? Number(primaryLP.package_cost) : (matchedPkg ? Number(matchedPkg.price) : 0)),
-      package_price: fullLead.package_price || latestQuote?.package_price || (primaryLP ? Number(primaryLP.package_cost) : (matchedPkg ? Number(matchedPkg.price) : 0)),
-      deliverables: latestQuote?.deliverables_description || primaryLP?.deliverables_description || matchedPkg?.deliverables || '',
-      deliverables_description: latestQuote?.deliverables_description || primaryLP?.deliverables_description || matchedPkg?.deliverables || '',
-      notes_special_customizations: latestQuote?.notes_special_customizations || primaryLP?.notes_special_customizations || '',
+      selected_package_id: fullLead.Select_Package_Option || latestQuote?.package_id || primaryLP?.package_id || '',
+      package_cost: cleanPkgPrice,
+      package_price: cleanPkgPrice,
+      deliverables: loadedDelText,
+      deliverables_description: loadedDelText,
+      notes_special_customizations: fullLead.notes_special_customizations || latestQuote?.notes_special_customizations || primaryLP?.notes_special_customizations || '',
       notes: fullLead.remarks || '',
       // Step 4
-      budget: latestQuote?.quotation_amount || fullLead.budget || 0,
-      final_quoted_amount: latestQuote?.final_amount || (primaryLP ? Number(primaryLP.final_amount) : 0),
+      budget: cleanPkgPrice || fullLead.budget || latestQuote?.quotation_amount || 0,
+      final_quoted_amount: fullLead.Final_Quotation_Amount ?? latestQuote?.final_amount ?? (primaryLP ? Number(primaryLP.final_amount) : 0),
       remarks: fullLead.remarks || '',
       next_follow_up_date: '',
       // Step 5
@@ -4524,10 +4616,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         return;
       }
 
-      const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
+      const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead.Select_Package_Option;
 
       // 2. Perform the full save of lead_packages to Supabase using our robust real-time save logic
       await saveStep3DataRealtime(editableInclusions, editableDeliverables);
+
+      // Compute active deliverables text directly from editableDeliverables
+      const currentDelList = editableDeliverables[pkgId] || [];
+      const activeDeliverablesText = currentDelList.filter(Boolean).length > 0
+        ? currentDelList.filter(Boolean).join('\n')
+        : (wizardLeadData.deliverables || selectedLead.deliverables_description || '');
 
       // 3. Update the lead record in Supabase with latest Step 3 package / pricing / staff info
       const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
@@ -4546,7 +4644,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       await updateLead(selectedLead.lead_id, {
         budget: cleanPkgCost,
         package_price: cleanPkgCost,
-        deliverables_description: wizardLeadData.deliverables,
+        deliverables_description: activeDeliverablesText,
         notes_special_customizations: wizardLeadData.notes,
         remarks: updatedRemarks,
         Select_Package_Option: pkgId,
@@ -4558,6 +4656,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         events: updatedEvents
       });
 
+      setWizardLeadData(prev => ({
+        ...prev,
+        deliverables: activeDeliverablesText,
+        deliverables_description: activeDeliverablesText,
+        package_cost: cleanPkgCost ?? prev.package_cost,
+        package_price: cleanPkgCost ?? prev.package_price,
+        selected_package_id: pkgId,
+        Select_Package_Option: pkgId
+      }));
+
       // Update the local selectedLead state so that the UI reflects it
       setSelectedLead(prev => {
         if (!prev) return null;
@@ -4565,7 +4673,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           ...prev,
           budget: cleanPkgCost || 0,
           package_price: cleanPkgCost || 0,
-          deliverables_description: wizardLeadData.deliverables,
+          deliverables_description: activeDeliverablesText,
           notes_special_customizations: wizardLeadData.notes,
           remarks: updatedRemarks,
           Select_Package_Option: pkgId,
@@ -4625,7 +4733,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           Specify_Custom_Lead_Source_Name: wizardLeadData.lead_source === 'Other' && wizardLeadData.Specify_Custom_Lead_Source_Name?.trim() !== '' ? wizardLeadData.Specify_Custom_Lead_Source_Name.trim() : null,
           total_pax: wizardLeadData.total_pax,
           reference_source: wizardLeadData.reference_source,
-          Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || '',
+          Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead.Select_Package_Option || '',
           remarks: updatedRemarks,
           status: selectedLead.status || 'New Lead'
         });
@@ -4760,10 +4868,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           setIsSaving(false);
           return;
         }
-        const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
+        const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead.Select_Package_Option;
         if (pkgId) {
           await saveStep3DataRealtime(editableInclusions, editableDeliverables);
         }
+
+        const currentDelList = editableDeliverables[pkgId] || [];
+        const activeDeliverablesText = currentDelList.filter(Boolean).length > 0
+          ? currentDelList.filter(Boolean).join('\n')
+          : (wizardLeadData.deliverables || selectedLead.deliverables_description || '');
+
         const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
         
         const updatedEvents = crmEvents.map(ev => ({
@@ -4781,10 +4895,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         await updateLead(selectedLead.lead_id, {
           budget: cleanPkgCost,
           package_price: cleanPkgCost,
-          deliverables_description: wizardLeadData.deliverables,
+          deliverables_description: activeDeliverablesText,
           notes_special_customizations: wizardLeadData.notes,
           remarks: updatedRemarks,
-          Select_Package_Option: wizardLeadData.selected_package_id,
+          Select_Package_Option: pkgId,
           client_residence_address: wizardLeadData.client_residence_address,
           city: wizardLeadData.city,
           state: wizardLeadData.state,
@@ -4796,6 +4910,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           Final_Quotation_Amount: cleanFinalAmt,
           events: updatedEvents
         });
+
+        setWizardLeadData(prev => ({
+          ...prev,
+          deliverables: activeDeliverablesText,
+          deliverables_description: activeDeliverablesText,
+          package_cost: cleanPkgCost ?? prev.package_cost,
+          package_price: cleanPkgCost ?? prev.package_price,
+          selected_package_id: pkgId,
+          Select_Package_Option: pkgId
+        }));
 
         const newCompleted = Math.max(crmHighestStep, 3);
         setCrmHighestStep(newCompleted);
@@ -5082,7 +5206,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         guest_pax: firstEvent.guest_pax !== '' && firstEvent.guest_pax != null ? Number(firstEvent.guest_pax) : null,
         staff_pax: firstEvent.staff_pax !== '' && firstEvent.staff_pax != null ? Number(firstEvent.staff_pax) : null,
         reference_source: isCreateFlow ? createForm.reference_source : wizardLeadData.reference_source || '',
-        Select_Package_Option: isCreateFlow ? (createForm.Select_Package_Option || selectedPkgIds[0] || '') : (wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || ''),
+        Select_Package_Option: isCreateFlow ? (createForm.Select_Package_Option || selectedPkgIds[0] || '') : (wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option || ''),
         events: finalEventsList
       });
 
@@ -8419,6 +8543,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               })()}
             </div>
           </div>
+        ) : activeTab === 'custom_package_master' ? (
+          <CustomPackageMaster />
         ) : activeTab === 'packages' ? (
           /* NEW SCREEN: Package Management Catalog */
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 text-left relative overflow-hidden font-sans">
@@ -8533,7 +8659,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     </div>
 
                     <div>
-                      <label className="block text-slate-400 font-semibold mb-1">Team Members Included</label>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="px-2 py-0.5 text-xs font-mono font-bold bg-slate-950 text-emerald-400 border border-slate-800 rounded-md shadow-inner select-none">
+                          [ {pkgTeamMembers.length} ]
+                        </span>
+                        <label className="block text-slate-400 font-semibold">Team Members Included</label>
+                      </div>
                       <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
                         {pkgTeamMembers.map((member, index) => (
                           <div key={index} className="flex items-center gap-1.5 animate-slide-down">
@@ -8574,7 +8705,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                     {/* Deliverables (Spanning both cols) */}
                     <div className="md:col-span-2">
-                      <label className="block text-slate-400 font-semibold mb-1">Deliverables</label>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="px-2 py-0.5 text-xs font-mono font-bold bg-slate-950 text-emerald-400 border border-slate-800 rounded-md shadow-inner select-none">
+                          [ {pkgDeliverablesList.length} ]
+                        </span>
+                        <label className="block text-slate-400 font-semibold">Deliverables</label>
+                      </div>
                       <div className="flex gap-2">
                         <input
                           type="text"
@@ -10610,23 +10746,29 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         >
             {/* Header: Sticky */}
             <div className="py-2.5 px-4 sm:px-5 border-b border-slate-850 flex items-center justify-between bg-slate-950/40 sticky top-0 z-10 backdrop-blur-sm shrink-0">
-              <div className="flex items-center gap-2 text-left flex-wrap">
-                <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5 font-mono uppercase tracking-wider">
-                  <span>💍</span> Digital Lead CRM Workspace — Client Board
-                </h3>
-                <span className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded font-mono font-bold">Code: {selectedLead.lead_id}</span>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
-                  getLeadCurrentStage(selectedLead) === 'Sales' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
-                  getLeadCurrentStage(selectedLead) === 'Operations' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' :
-                  getLeadCurrentStage(selectedLead) === 'Production' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
-                  'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                }`}>
-                  Stage: {getLeadCurrentStage(selectedLead)}
-                </span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight bg-zinc-800 text-zinc-300 border border-zinc-700">
-                  Status: {getLeadCurrentStatus(selectedLead)}
-                </span>
-              </div>
+              {crmWizardStep !== 3 ? (
+                <div className="flex items-center gap-2 text-left flex-wrap">
+                  <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5 font-mono uppercase tracking-wider">
+                    <span>💍</span> Digital Lead CRM Workspace — Client Board
+                  </h3>
+                  <span className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded font-mono font-bold">Code: {selectedLead.lead_id}</span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
+                    getLeadCurrentStage(selectedLead) === 'Sales' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
+                    getLeadCurrentStage(selectedLead) === 'Operations' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' :
+                    getLeadCurrentStage(selectedLead) === 'Production' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
+                    'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                  }`}>
+                    Stage: {getLeadCurrentStage(selectedLead)}
+                  </span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight bg-zinc-800 text-zinc-300 border border-zinc-700">
+                    Status: {getLeadCurrentStatus(selectedLead)}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-200 font-mono uppercase tracking-wider">Step 3: Package Configuration</span>
+                </div>
+              )}
               <button 
                 onClick={() => setSelectedLead(null)}
                 className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs rounded-xl border border-slate-700 font-bold uppercase tracking-wider transition-all cursor-pointer inline-flex items-center gap-1 shadow"
@@ -10791,7 +10933,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                            <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">3</span>
                            <span>Quotation Workspace</span>
                          </h3>
-                         <p className="text-[10px] text-zinc-400 mt-0.5">Select from standard configured packages, customize team members and deliverables, adjust pricing, and generate the quotation.</p>
                        </div>
                        <div className="space-y-3.5 text-left">
                          <div>
@@ -10935,36 +11076,43 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                           </div>
                                         </div>
                                         <div>
-                                          <div className="flex items-center justify-between mb-2">
+                                          <div className="mb-2">
                                             <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">
-                                              Team Members Included (Editable)
+                                              Team Members Included
                                             </label>
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList))];
-                                                currentList.push('');
-                                                const updated = {
-                                                  ...editableInclusions,
-                                                  [eventKey]: currentList,
-                                                  [nameKey]: currentList
-                                                };
-                                                setEditableInclusions(updated);
-                                                saveStep3DataRealtime(updated, editableDeliverables);
-                                              }}
-                                              className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded transition-all cursor-pointer"
-                                            >
-                                              + Add Member
-                                            </button>
                                           </div>
                                           {eventInclusions.length === 0 ? (
-                                            <p className="text-[10px] text-zinc-500 italic">No team members added yet.</p>
+                                            <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
+                                              <p className="text-xs text-zinc-500 italic">No team members added yet.</p>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList))];
+                                                  currentList.push('');
+                                                  const updated = {
+                                                    ...editableInclusions,
+                                                    [eventKey]: currentList,
+                                                    [nameKey]: currentList
+                                                  };
+                                                  setEditableInclusions(updated);
+                                                  saveStep3DataRealtime(updated, editableDeliverables);
+                                                }}
+                                                className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
+                                              >
+                                                + Add Member
+                                              </button>
+                                            </div>
                                           ) : (
-                                            <div className="space-y-2">
+                                            <div className="space-y-2.5">
                                               {eventInclusions.map((item, idx) => (
-                                                <div key={idx} className="flex items-center gap-2">
+                                                <div key={idx} className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl space-y-2">
+                                                  <div className="text-xs font-bold text-indigo-400 font-mono">
+                                                    Member {idx + 1}
+                                                  </div>
                                                   <LocalEditableInput
                                                     value={item}
+                                                    options={activeMasterRoles}
+                                                    placeholder="Type or select Role / Team Member..."
                                                     onChange={(newVal) => {
                                                       const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList))];
                                                       currentList[idx] = newVal;
@@ -10976,25 +11124,44 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                                       setEditableInclusions(updated);
                                                       saveStep3DataRealtime(updated, editableDeliverables);
                                                     }}
-                                                    className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
+                                                    className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-slate-100 font-medium"
                                                   />
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                      const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList))];
-                                                      currentList.splice(idx, 1);
-                                                      const updated = {
-                                                        ...editableInclusions,
-                                                        [eventKey]: currentList,
-                                                        [nameKey]: currentList
-                                                      };
-                                                      setEditableInclusions(updated);
-                                                      saveStep3DataRealtime(updated, editableDeliverables);
-                                                    }}
-                                                    className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer"
-                                                  >
-                                                    Remove
-                                                  </button>
+                                                  <div className="flex items-center justify-end gap-2 pt-0.5">
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList))];
+                                                        currentList.splice(idx + 1, 0, '');
+                                                        const updated = {
+                                                          ...editableInclusions,
+                                                          [eventKey]: currentList,
+                                                          [nameKey]: currentList
+                                                        };
+                                                        setEditableInclusions(updated);
+                                                        saveStep3DataRealtime(updated, editableDeliverables);
+                                                      }}
+                                                      className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 border border-indigo-500/20"
+                                                    >
+                                                      + Add Member
+                                                    </button>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        const currentList = [...(editableInclusions[eventKey] !== undefined ? editableInclusions[eventKey] : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList))];
+                                                        currentList.splice(idx, 1);
+                                                        const updated = {
+                                                          ...editableInclusions,
+                                                          [eventKey]: currentList,
+                                                          [nameKey]: currentList
+                                                        };
+                                                        setEditableInclusions(updated);
+                                                        saveStep3DataRealtime(updated, editableDeliverables);
+                                                      }}
+                                                      className="text-[11px] text-rose-400 hover:text-rose-300 font-bold font-mono bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 border border-rose-500/20"
+                                                    >
+                                                      Delete
+                                                    </button>
+                                                  </div>
                                                 </div>
                                               ))}
                                             </div>
@@ -11005,33 +11172,40 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   })
                                 ) : (
                                   <div>
-                                    <div className="flex items-center justify-between mb-1.5">
-                                      <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Team Members Included (Editable)</label>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const currentList = [...(editableInclusions[selectedPkgId] || [])];
-                                          currentList.push('');
-                                          const updated = {
-                                            ...editableInclusions,
-                                            [selectedPkgId]: currentList
-                                          };
-                                          setEditableInclusions(updated);
-                                          saveStep3DataRealtime(updated, editableDeliverables);
-                                        }}
-                                        className="text-xs text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded"
-                                      >
-                                        + Add Member
-                                      </button>
+                                    <div className="mb-2">
+                                      <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Team Members Included</label>
                                     </div>
                                     {inclusionsList.length === 0 ? (
-                                      <p className="text-[10px] text-zinc-500 italic">No team members added yet.</p>
+                                      <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
+                                        <p className="text-xs text-zinc-500 italic">No team members added yet.</p>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const currentList = [...(editableInclusions[selectedPkgId] || [])];
+                                            currentList.push('');
+                                            const updated = {
+                                              ...editableInclusions,
+                                              [selectedPkgId]: currentList
+                                            };
+                                            setEditableInclusions(updated);
+                                            saveStep3DataRealtime(updated, editableDeliverables);
+                                          }}
+                                          className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
+                                        >
+                                          + Add Member
+                                        </button>
+                                      </div>
                                     ) : (
-                                      <div className="space-y-2">
+                                      <div className="space-y-2.5">
                                         {inclusionsList.map((item, idx) => (
-                                          <div key={idx} className="flex items-center gap-2">
+                                          <div key={idx} className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl space-y-2">
+                                            <div className="text-xs font-bold text-indigo-400 font-mono">
+                                              Member {idx + 1}
+                                            </div>
                                             <LocalEditableInput
                                               value={item}
+                                              options={activeMasterRoles}
+                                              placeholder="Type or select Role / Team Member..."
                                               onChange={(newVal) => {
                                                 const currentList = [...(editableInclusions[selectedPkgId] || [])];
                                                 currentList[idx] = newVal;
@@ -11042,24 +11216,42 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                                 setEditableInclusions(updated);
                                                 saveStep3DataRealtime(updated, editableDeliverables);
                                               }}
-                                              className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
+                                              className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-slate-100 font-medium"
                                             />
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                const currentList = [...(editableInclusions[selectedPkgId] || [])];
-                                                currentList.splice(idx, 1);
-                                                const updated = {
-                                                  ...editableInclusions,
-                                                  [selectedPkgId]: currentList
-                                                };
-                                                setEditableInclusions(updated);
-                                                saveStep3DataRealtime(updated, editableDeliverables);
-                                              }}
-                                              className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono"
-                                            >
-                                              Remove
-                                            </button>
+                                            <div className="flex items-center justify-end gap-2 pt-0.5">
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  const currentList = [...(editableInclusions[selectedPkgId] || [])];
+                                                  currentList.splice(idx + 1, 0, '');
+                                                  const updated = {
+                                                    ...editableInclusions,
+                                                    [selectedPkgId]: currentList
+                                                  };
+                                                  setEditableInclusions(updated);
+                                                  saveStep3DataRealtime(updated, editableDeliverables);
+                                                }}
+                                                className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 border border-indigo-500/20"
+                                              >
+                                                + Add Member
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  const currentList = [...(editableInclusions[selectedPkgId] || [])];
+                                                  currentList.splice(idx, 1);
+                                                  const updated = {
+                                                    ...editableInclusions,
+                                                    [selectedPkgId]: currentList
+                                                  };
+                                                  setEditableInclusions(updated);
+                                                  saveStep3DataRealtime(updated, editableDeliverables);
+                                                }}
+                                                className="text-[11px] text-rose-400 hover:text-rose-300 font-bold font-mono bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 border border-rose-500/20"
+                                              >
+                                                Delete
+                                              </button>
+                                            </div>
                                           </div>
                                         ))}
                                       </div>
@@ -11069,33 +11261,40 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               </div>
 
                               <div>
-                                <div className="flex items-center justify-between mb-1.5">
-                                  <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Deliverables Description / Base Package Deliverables (Editable)</label>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const currentList = [...(editableDeliverables[selectedPkgId] || [])];
-                                      currentList.unshift('');
-                                      const updated = {
-                                        ...editableDeliverables,
-                                        [selectedPkgId]: currentList
-                                      };
-                                      setEditableDeliverables(updated);
-                                      saveStep3DataRealtime(editableInclusions, updated);
-                                    }}
-                                    className="text-xs text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 px-2 py-0.5 rounded"
-                                  >
-                                    + Add Deliverable
-                                  </button>
+                                <div className="mb-2">
+                                  <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Deliverables Description / Base Package Deliverables</label>
                                 </div>
                                 {deliverablesList.length === 0 ? (
-                                  <p className="text-[10px] text-zinc-500 italic">No deliverables added yet.</p>
+                                  <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
+                                    <p className="text-xs text-zinc-500 italic">No deliverables added yet.</p>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const currentList = [...(editableDeliverables[selectedPkgId] || [])];
+                                        currentList.push('');
+                                        const updated = {
+                                          ...editableDeliverables,
+                                          [selectedPkgId]: currentList
+                                        };
+                                        setEditableDeliverables(updated);
+                                        saveStep3DataRealtime(editableInclusions, updated);
+                                      }}
+                                      className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
+                                    >
+                                      + Add Deliverable
+                                    </button>
+                                  </div>
                                 ) : (
-                                  <div className="space-y-2">
+                                  <div className="space-y-2.5">
                                     {deliverablesList.map((item, idx) => (
-                                      <div key={idx} className="flex items-center gap-2">
+                                      <div key={idx} className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl space-y-2">
+                                        <div className="text-xs font-bold text-emerald-400 font-mono">
+                                          Deliverable {idx + 1}
+                                        </div>
                                         <LocalEditableInput
                                           value={item}
+                                          options={activeMasterDeliverables}
+                                          placeholder="Type or select Deliverable..."
                                           onChange={(newVal) => {
                                             const currentList = [...(editableDeliverables[selectedPkgId] || [])];
                                             currentList[idx] = newVal;
@@ -11106,24 +11305,42 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                             setEditableDeliverables(updated);
                                             saveStep3DataRealtime(editableInclusions, updated);
                                           }}
-                                          className="flex-1 bg-slate-950 border border-slate-850 focus:border-indigo-500 focus:outline-none rounded-xl py-1.5 px-3 text-xs text-slate-100"
+                                          className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-slate-100 font-medium"
                                         />
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const currentList = [...(editableDeliverables[selectedPkgId] || [])];
-                                            currentList.splice(idx, 1);
-                                            const updated = {
-                                              ...editableDeliverables,
-                                              [selectedPkgId]: currentList
-                                            };
-                                            setEditableDeliverables(updated);
-                                            saveStep3DataRealtime(editableInclusions, updated);
-                                          }}
-                                          className="text-red-400 hover:text-red-350 p-1 px-2 hover:bg-red-500/10 rounded-lg text-xs font-bold font-mono"
-                                        >
-                                          Remove
-                                        </button>
+                                        <div className="flex items-center justify-end gap-2 pt-0.5">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const currentList = [...(editableDeliverables[selectedPkgId] || [])];
+                                              currentList.splice(idx + 1, 0, '');
+                                              const updated = {
+                                                ...editableDeliverables,
+                                                [selectedPkgId]: currentList
+                                              };
+                                              setEditableDeliverables(updated);
+                                              saveStep3DataRealtime(editableInclusions, updated);
+                                            }}
+                                            className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 border border-emerald-500/20"
+                                          >
+                                            + Add Deliverable
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const currentList = [...(editableDeliverables[selectedPkgId] || [])];
+                                              currentList.splice(idx, 1);
+                                              const updated = {
+                                                ...editableDeliverables,
+                                                [selectedPkgId]: currentList
+                                              };
+                                              setEditableDeliverables(updated);
+                                              saveStep3DataRealtime(editableInclusions, updated);
+                                            }}
+                                            className="text-[11px] text-rose-400 hover:text-rose-300 font-bold font-mono bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 border border-rose-500/20"
+                                          >
+                                            Delete
+                                          </button>
+                                        </div>
                                       </div>
                                     ))}
                                   </div>
@@ -11154,7 +11371,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">4</span>
                             <span>Status Update</span>
                           </h3>
-                          <p className="text-[10px] text-zinc-400 mt-0.5">Determine final CRM pipeline stages or transition the contract to Operations.</p>
                         </div>
                         <div className="space-y-4 text-left">
                           {(['Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Raw Footage Received', 'Editing Started', 'Client Review', 'Editing Complete', 'Completed'].includes(wizardLeadData.status || selectedLead?.status || '') || selectedLead?.booking_status === 'Confirmed' || !!orders?.find(o => o.lead_id === selectedLead?.lead_id)) ? (

@@ -168,7 +168,7 @@ const MainAppContent: React.FC = () => {
   }, [sidebarOpen]);
 
   // Sub-tab selection state for sales suite
-  const [activeSalesSubTab, setActiveSalesSubTab] = useState<'list' | 'profiles' | 'packages' | 'calendar' | 'create'>('list');
+  const [activeSalesSubTab, setActiveSalesSubTab] = useState<'list' | 'profiles' | 'packages' | 'calendar' | 'create' | 'custom_package_master'>('list');
 
   // Sub-tab selection state for production suite
   const [activeSubTab, setActiveSubTab] = useState<'pipeline' | 'production_leads' | 'production_calendar' | 'project_queue' | 'assignments' | 'tracker' | 'delivery' | 'resources' | 'analytics' | 'staff_performance' | 'overall_performance' | 'deliveries_desk' | 'staff_management' | 'notifications' | 'crew_roster' | 'staff_roster' | 'production_staff_directory' | 'production_role_specialities'>('production_leads');
@@ -604,6 +604,7 @@ const MainAppContent: React.FC = () => {
               { id: 'sales_list', label: 'Leads Directory', icon: Sparkles, color: 'text-emerald-400' },
               { id: 'sales_calendar', label: 'Sales Calendar', icon: Calendar, color: 'text-blue-400' },
               { id: 'sales_packages', label: 'Package Catalog', icon: Layers, color: 'text-teal-400' },
+              { id: 'custom_package_master', label: 'Custom Package Master', icon: Layers, color: 'text-amber-400' },
               { id: 'pending_payments', label: 'Pending Payment Report', icon: DollarSign, color: 'text-amber-500' },
               { id: 'notifications', label: 'Notifications', icon: Bell, color: 'text-rose-400' }
             ].filter(tab => !['sales_analytics', 'sales_calendar', 'notifications'].includes(tab.id)).map(tab => {
@@ -612,6 +613,7 @@ const MainAppContent: React.FC = () => {
               if (tab.id === 'sales_list') isSelected = activeTab === 'sales' && activeSalesSubTab === 'list';
               else if (tab.id === 'sales_calendar') isSelected = activeTab === 'sales' && activeSalesSubTab === 'calendar';
               else if (tab.id === 'sales_packages') isSelected = activeTab === 'sales' && activeSalesSubTab === 'packages';
+              else if (tab.id === 'custom_package_master') isSelected = activeTab === 'sales' && activeSalesSubTab === 'custom_package_master';
               else isSelected = activeTab === tab.id;
 
               return (
@@ -628,6 +630,9 @@ const MainAppContent: React.FC = () => {
                     } else if (tab.id === 'sales_packages') {
                       handleTabSelect('sales');
                       setActiveSalesSubTab('packages');
+                    } else if (tab.id === 'custom_package_master') {
+                      handleTabSelect('sales');
+                      setActiveSalesSubTab('custom_package_master');
                     } else {
                       handleTabSelect(tab.id);
                     }

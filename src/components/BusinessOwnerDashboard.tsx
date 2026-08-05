@@ -49,6 +49,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     payments, 
     production, 
     currentUserName, 
+    currentRole,
     updateOrderStage, 
     updateProduction, 
     logActivity,
@@ -136,10 +137,23 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     return orders.filter(order => {
       if (order.current_stage === 'Order Closed' || order.current_stage === 'Closed' || order.order_status === 'Closed') return false;
 
-      const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id);
+      const prod = production.find(p => 
+        p.tracking_id === order.lead_id || 
+        p.order_id === order.lead_id || 
+        p.tracking_id === order.order_id ||
+        p.order_id === order.order_id ||
+        p.production_id === order.order_id ||
+        p.lead_id === order.lead_id ||
+        p.production_id === `PRD-${order.lead_id}`
+      );
       
       const orderStageMatch = validApprovalStages.includes(order.current_stage);
-      const prodStageMatch = prod && validApprovalStages.includes(prod.editing_status);
+      const prodStageMatch = prod && (
+        validApprovalStages.includes(prod.editing_status) || 
+        validApprovalStages.includes(prod.production_status) || 
+        prod.customer_review_status === 'Accepted' || 
+        prod.customer_review_status === 'Approved'
+      );
 
       return orderStageMatch || prodStageMatch;
     });
@@ -272,7 +286,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
             }`}
           >
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>3. Waiting Approval</span>
+            <span>3. Orders Awaiting Final Approval</span>
             {waitingApprovalOrders.length > 0 && (
               <span className="ml-1 px-1.5 py-0.2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-[10px] font-mono">
                 {waitingApprovalOrders.length}
@@ -537,7 +551,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
         </div>
       )}
 
-      {/* SECTION 3: ORDERS WAITING FOR APPROVAL */}
+      {/* SECTION 3: ORDERS AWAITING FINAL APPROVAL */}
       {currentSection === 'approval' && (
         <div className="space-y-6 animate-in fade-in duration-200">
           
@@ -545,7 +559,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
             <div>
               <h2 className="text-sm font-black uppercase tracking-wider text-emerald-400 font-mono flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4" />
-                <span>SECTION 3: ORDERS WAITING FOR APPROVAL</span>
+                <span>SECTION 3: ORDERS AWAITING FINAL APPROVAL</span>
               </h2>
               <p className="text-xs text-zinc-400 mt-0.5">
                 Projects with Client Acceptance status waiting for final Business Owner approval and closure.
@@ -627,10 +641,10 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                           <td className="py-3.5 px-4 text-right">
                             <button
                               onClick={() => setReviewModalOrder(order)}
-                              className="px-3 py-1.5 rounded-xl bg-amber-500 text-black font-black hover:bg-amber-400 transition-all cursor-pointer text-xs flex items-center gap-1.5 ml-auto shadow-md"
+                              className="px-3.5 py-1.5 rounded-xl bg-amber-500 text-black font-black hover:bg-amber-400 transition-all cursor-pointer text-xs flex items-center gap-1.5 ml-auto shadow-md"
                             >
                               <ShieldCheck className="w-3.5 h-3.5" />
-                              <span>Review & Close</span>
+                              <span>Review</span>
                             </button>
                           </td>
                         </tr>
@@ -662,6 +676,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
           leads={leads}
           production={production}
           payments={payments}
+          currentRole={currentRole}
           onClose={() => setReviewModalOrder(null)}
           onApprove={() => handleApproveAndCloseOrder(reviewModalOrder)}
         />
@@ -1236,6 +1251,7 @@ interface ReviewAndCloseModalProps {
   leads: Lead[];
   production: Production[];
   payments: Payment[];
+  currentRole?: string;
   onClose: () => void;
   onApprove: () => void;
 }
@@ -1245,6 +1261,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
   leads,
   production,
   payments,
+  currentRole = 'Business Owner',
   onClose,
   onApprove
 }) => {
@@ -1252,29 +1269,40 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
   const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id);
   const pay = payments.find(p => p.order_id === order.order_id || p.lead_id === order.lead_id);
 
-  const reviewValidation = useMemo(() => {
-    return performBusinessOwnerReview(order, lead, prod, pay);
-  }, [order, lead, prod, pay]);
+  const totalQuotation = order.quotation_amount || 0;
+  const paymentReceived = pay ? ((pay.advance_received || 0) + (pay.final_payment_received || 0)) : (order.advance_received || 0);
+  const outstandingBalance = pay ? pay.balance_due : (order.balance_amount || Math.max(0, totalQuotation - paymentReceived));
 
-  const balanceDue = pay ? pay.balance_due : (order.balance_amount || 0);
+  const customerMobile = order.customer_phone || order.mobile || lead?.phone || lead?.mobile || pay?.customer_phone || 'N/A';
+  const eventName = order.custom_event_name || order.event_type || lead?.event_type || 'Photography & Videography';
+  const assignedEditor = prod?.editor_assigned || 'Unassigned';
+  const clientAcceptanceStatus = prod?.editing_status || prod?.customer_review_status || order.current_stage || 'Client Acceptance';
+
+  const customerAcceptanceProof = prod?.customer_acceptance_proof || prod?.remarks || "Verified via Client Portal";
+  const deliveryConfirmation = prod?.delivery_confirmation || prod?.raw_footage_location || "Project Delivered & Confirmed";
+  const communicationProof = prod?.communication_proof || prod?.internal_comments || "Client Acceptance Confirmation Logged";
+
+  const isBusinessOwner = currentRole === 'Business Owner';
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl max-w-2xl w-full p-6 space-y-6 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl max-w-3xl w-full p-6 space-y-6 shadow-2xl relative animate-in fade-in zoom-in duration-200">
         
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-4 border-b border-zinc-850">
           <div>
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-mono font-bold uppercase">
-                Final Review & Close
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px] font-mono font-bold uppercase tracking-wider">
+                Business Owner Review
               </span>
-              <span className="text-xs font-mono text-zinc-500">{order.order_id}</span>
+              <span className="text-xs font-mono text-zinc-500">Order ID: {order.order_id}</span>
             </div>
-            <h2 className="text-lg font-black text-white mt-1">
-              Project Review & Order Closure
+            <h2 className="text-xl font-black text-white mt-1">
+              Final Approval & Order Review
             </h2>
-            <p className="text-xs text-zinc-400">Customer: <strong className="text-zinc-200">{order.customer_name}</strong></p>
+            <p className="text-xs text-zinc-400">
+              Review completed workflow and client acceptance before closing this order.
+            </p>
           </div>
 
           <button
@@ -1285,82 +1313,131 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
           </button>
         </div>
 
-        {/* 4 Required Review Checkpoints */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* 5 Summary Sections */}
+        <div className="space-y-4">
           
-          {/* Checkpoint 1: View Customer Acceptance */}
-          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-mono uppercase font-bold text-zinc-400">1. Customer Acceptance</span>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-mono font-bold flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> Verified
-              </span>
+          {/* Section 1: Customer Details */}
+          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
+            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5 mb-3">
+              <User className="w-3.5 h-3.5" />
+              <span>Customer Details</span>
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Customer Name</span>
+                <span className="text-zinc-100 font-bold">{order.customer_name}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Mobile Number</span>
+                <span className="text-zinc-200 font-mono">{customerMobile}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Order ID</span>
+                <span className="text-amber-400 font-mono font-bold">{order.order_id}</span>
+              </div>
             </div>
-            <p className="text-xs text-zinc-300 font-bold mt-1">
-              {prod?.editing_status || 'Client Acceptance'}
-            </p>
-            <p className="text-[11px] text-zinc-500">
-              Customer has reviewed final edits and accepted the project output.
-            </p>
           </div>
 
-          {/* Checkpoint 2: View Payment Details */}
-          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-mono uppercase font-bold text-zinc-400">2. Payment Details</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
-                pay?.payment_status === 'Fully Paid' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-              }`}>
-                {pay?.payment_status || 'Paid'}
-              </span>
+          {/* Section 2: Event Details */}
+          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
+            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-3">
+              <CalendarIcon className="w-3.5 h-3.5" />
+              <span>Event Details</span>
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Event Name</span>
+                <span className="text-zinc-100 font-bold">{eventName}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Event Date</span>
+                <span className="text-zinc-200 font-mono">{order.event_date}</span>
+              </div>
             </div>
-            <p className="text-xs text-zinc-300 font-mono">
-              Received: <strong className="text-emerald-400">{formatINR(pay ? (pay.advance_received + pay.final_payment_received) : (order.advance_received || 0))}</strong>
-            </p>
-            <p className="text-[11px] text-zinc-500">
-              Payment mode: {pay?.advance_payment_mode || 'Bank Transfer / UPI'}
-            </p>
           </div>
 
-          {/* Checkpoint 3: View Outstanding Balance */}
-          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-mono uppercase font-bold text-zinc-400">3. Outstanding Balance</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
-                balanceDue <= 0 ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
-              }`}>
-                {balanceDue <= 0 ? 'Clear (₹0)' : 'Pending'}
-              </span>
+          {/* Section 3: Production Summary */}
+          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
+            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1.5 mb-3">
+              <PackageCheck className="w-3.5 h-3.5" />
+              <span>Production Summary</span>
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Assigned Editor</span>
+                <span className="text-zinc-100 font-bold">{assignedEditor}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Client Acceptance Status</span>
+                <span className="inline-block mt-0.5 px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono text-[10px] font-bold">
+                  {clientAcceptanceStatus}
+                </span>
+              </div>
             </div>
-            <p className="text-xs font-mono font-bold text-white">
-              Remaining: <span className={balanceDue <= 0 ? 'text-emerald-400' : 'text-rose-400'}>{formatINR(balanceDue)}</span>
-            </p>
-            <p className="text-[11px] text-zinc-500">
-              Total Package: {formatINR(order.quotation_amount || 0)}
-            </p>
           </div>
 
-          {/* Checkpoint 4: View Overall Workflow */}
-          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-mono uppercase font-bold text-zinc-400">4. Overall Workflow</span>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-mono font-bold">
-                Completed
-              </span>
+          {/* Section 4: Financial Summary */}
+          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
+            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5 mb-3">
+              <DollarSign className="w-3.5 h-3.5" />
+              <span>Financial Summary</span>
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Total Quotation Amount</span>
+                <span className="text-zinc-100 font-mono font-bold">{formatINR(totalQuotation)}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Total Payment Received</span>
+                <span className="text-emerald-400 font-mono font-bold">{formatINR(paymentReceived)}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Outstanding Balance</span>
+                <span className={`font-mono font-bold ${outstandingBalance <= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {formatINR(outstandingBalance)}
+                </span>
+              </div>
             </div>
-            <div className="text-[11px] text-zinc-300 space-y-0.5 pt-1 font-mono">
-              <div>✓ Booking & Sales Confirmed</div>
-              <div>✓ Event Photography Executed</div>
-              <div>✓ Post-Production Completed</div>
+          </div>
+
+          {/* Section 5: Customer Acceptance */}
+          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
+            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-teal-400 flex items-center gap-1.5 mb-3">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Customer Acceptance</span>
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Customer Acceptance Proof</span>
+                <span className="text-zinc-200 text-xs block truncate mt-0.5" title={customerAcceptanceProof}>
+                  {customerAcceptanceProof}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Delivery Confirmation</span>
+                <span className="text-zinc-200 text-xs block truncate mt-0.5" title={deliveryConfirmation}>
+                  {deliveryConfirmation}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Communication Proof</span>
+                <span className="text-zinc-200 text-xs block truncate mt-0.5" title={communicationProof}>
+                  {communicationProof}
+                </span>
+              </div>
             </div>
           </div>
 
         </div>
 
-        {/* Action Button Section */}
+        {/* Modal Action Bar */}
         <div className="pt-4 border-t border-zinc-850 flex items-center justify-between gap-4">
           <p className="text-xs text-zinc-500">
-            Clicking <strong className="text-amber-400">Approve & Close Order</strong> will set the project status to <strong className="text-emerald-400">Order Closed</strong>.
+            {isBusinessOwner ? (
+              <>Confirms final verification. The order status will automatically update to <strong className="text-emerald-400">Order Closed</strong>.</>
+            ) : (
+              <span className="text-amber-400 font-bold">Only the Business Owner role can close orders.</span>
+            )}
           </p>
 
           <div className="flex items-center gap-2">
@@ -1371,13 +1448,15 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
               Cancel
             </button>
 
-            <button
-              onClick={onApprove}
-              className="px-5 py-2.5 rounded-xl bg-amber-500 text-black font-black text-xs hover:bg-amber-400 transition-all cursor-pointer shadow-lg flex items-center gap-2"
-            >
-              <ShieldCheck className="w-4 h-4" />
-              <span>Approve & Close Order</span>
-            </button>
+            {isBusinessOwner && (
+              <button
+                onClick={onApprove}
+                className="px-5 py-2.5 rounded-xl bg-amber-500 text-black font-black text-xs hover:bg-amber-400 transition-all cursor-pointer shadow-lg flex items-center gap-2"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span>Approve & Close Order</span>
+              </button>
+            )}
           </div>
         </div>
 

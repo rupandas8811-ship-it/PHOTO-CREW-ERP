@@ -669,36 +669,57 @@ ${coordinatorName}`;
     ];
 
     const mapped = (leadsData || []).filter(l => {
-      const order = orders.find(o => o.lead_id === l.lead_id);
-      const stage = l.status || order?.current_stage;
-      if (!postProdStages.includes(stage)) return false;
+      const order = orders.find(o => o.lead_id === l.lead_id || o.order_id === l.lead_id);
+      const rf = order ? rawFootage.find(f => f.order_id === order.order_id) : null;
+      const prod = production?.find(p => 
+        p.tracking_id === l.lead_id || 
+        p.lead_id === l.lead_id || 
+        p.production_id === `PRD-${l.lead_id}` ||
+        (order && (p.order_id === order.order_id || p.tracking_id === order.order_id || p.production_id === order.order_id || p.lead_id === order.lead_id)) ||
+        (rf && (p.tracking_id === rf.tracking_id || p.order_id === rf.order_id))
+      );
+
+      const stage = prod?.editing_status || prod?.production_status || l.status || order?.current_stage;
+      if (stage && !postProdStages.includes(stage) && !postProdStages.includes(l.status) && !postProdStages.includes(order?.current_stage || '')) return false;
 
       // Filter for Production Staff / Editors: only see assigned projects
       if (currentRole === 'Production Staff') {
-        const myName = currentUserName || '';
-        const prodId = order?.order_id || l.lead_id;
-        const assignedInAssignments = editorAssignments ? editorAssignments.some(ea => ea.production_id === prodId && ea.staff_name?.toLowerCase() === myName.toLowerCase()) : false;
-        const prodItem = production ? production.find(p => p.production_id === prodId || p.tracking_id === prodId) : null;
-        const assignedInProd = prodItem ? (prodItem.editor_assigned?.toLowerCase() === myName.toLowerCase() || prodItem.assigned_staff?.toLowerCase().includes(myName.toLowerCase())) : false;
+        const myName = (currentUserName || '').trim().toLowerCase();
+        const myId = currentUser?.id;
+        const prodId = prod?.production_id || order?.order_id || l.lead_id;
+        const assignedInAssignments = editorAssignments ? editorAssignments.some(ea => 
+          (ea.production_id === prodId || ea.production_id === `PRD-${l.lead_id}` || ea.order_id === order?.order_id) && 
+          ((ea.staff_name && ea.staff_name.trim().toLowerCase() === myName) || (ea.staff_id && ea.staff_id === myId))
+        ) : false;
+        const assignedInProd = prod ? (
+          (prod.editor_assigned && prod.editor_assigned.toLowerCase().includes(myName)) || 
+          (prod.assigned_staff && prod.assigned_staff.toLowerCase().includes(myName))
+        ) : false;
         if (!assignedInAssignments && !assignedInProd) return false;
       }
 
       return true;
     }).map(l => {
-      const order = orders.find(o => o.lead_id === l.lead_id);
+      const order = orders.find(o => o.lead_id === l.lead_id || o.order_id === l.lead_id);
       const rf = order ? rawFootage.find(f => f.order_id === order.order_id) : null;
-      const prod = rf ? production.find(p => p.tracking_id === rf.tracking_id) : production.find(p => p.tracking_id === l.lead_id);
+      const prod = production?.find(p => 
+        p.tracking_id === l.lead_id || 
+        p.lead_id === l.lead_id || 
+        p.production_id === `PRD-${l.lead_id}` ||
+        (order && (p.order_id === order.order_id || p.tracking_id === order.order_id || p.production_id === order.order_id || p.lead_id === order.lead_id)) ||
+        (rf && (p.tracking_id === rf.tracking_id || p.order_id === rf.order_id))
+      );
       
       const defaultTargetDate = l.event_date ? new Date(new Date(l.event_date).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : '';
       
       if (prod) {
         return {
           ...prod,
-          editor_assigned: (l as any).assigned_editor || prod.editor_assigned || 'Unassigned',
-          assigned_staff: (l as any).assigned_editors || prod.assigned_staff || '',
-          target_delivery_date: (l as any).delivery_target_date || prod.target_delivery_date || defaultTargetDate,
-          expected_delivery_date: (l as any).delivery_target_date || prod.expected_delivery_date || defaultTargetDate,
-          editing_status: (l as any).current_status || l.status || prod.editing_status
+          editor_assigned: prod.editor_assigned || (l as any).assigned_editor || 'Unassigned',
+          assigned_staff: prod.assigned_staff || (l as any).assigned_editors || '',
+          target_delivery_date: prod.target_delivery_date || (l as any).delivery_target_date || defaultTargetDate,
+          expected_delivery_date: prod.expected_delivery_date || prod.target_delivery_date || (l as any).delivery_target_date || defaultTargetDate,
+          editing_status: prod.editing_status || prod.production_status || (l as any).current_status || l.status
         };
       }
 
@@ -1841,6 +1862,9 @@ _Please acknowledge receipt of this task assignment._`;
       const newAssignments = [];
       const activeStaffList = productionStaff.filter(s => s.status === 'Active');
       const currentDeliverablesList = Object.keys(currentRowsMap);
+      const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
+      const orderId = order?.order_id || activeWorkflowProd?.tracking_id || activeWorkflowProd?.production_id;
+      const eventId = activeWorkflowProd?.event_id || lead?.events?.[0]?.id || 'EVT-01';
 
       for (const d of currentDeliverablesList) {
         const rows = currentRowsMap[d] || [];
@@ -1859,6 +1883,8 @@ _Please acknowledge receipt of this task assignment._`;
             newAssignments.push({
               assignment_id: id,
               production_id: activeWorkflowProd.production_id,
+              order_id: orderId,
+              event_id: eventId,
               staff_id: staffMem.staff_id,
               staff_name: staffMem.name,
               speciality: d, // Deliverable Name
@@ -1872,9 +1898,11 @@ _Please acknowledge receipt of this task assignment._`;
       }
 
       if (newAssignments.length > 0) {
+        // Map payload for Supabase insert cleanly
+        const dbPayload = newAssignments.map(({ order_id, event_id, ...rest }) => rest);
         const { error: insertError } = await supabaseClient
           .from('editor_assignments')
-          .insert(newAssignments);
+          .insert(dbPayload);
 
         if (insertError) throw insertError;
       }
@@ -7469,23 +7497,32 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       <div className="space-y-3">
                         <div className="p-3 text-green-400 bg-green-500/10 border border-green-500/10 rounded-xl flex items-center gap-2">
                           <span>✓</span>
-                          <span className="text-[11px] font-semibold">Ready to safe-close and archive!</span>
+                          <span className="text-[11px] font-semibold">Client Acceptance Completed!</span>
                         </div>
 
-                        <div className="pt-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedStage('Completed' as any);
-                              setDeliveryDate(new Date().toISOString().split('T')[0]);
-                              setClosingNotes('');
-                              setWorkflowActionType('close_project');
-                            }}
-                            className="w-full py-2 bg-gradient-to-r from-violet-600 to-indigo-650 text-white text-[10px] font-black uppercase tracking-wider rounded-lg hover:from-violet-500 hover:to-indigo-500 transition-all shadow-md"
-                          >
-                            🔐 Final Archive & Close Project
-                          </button>
-                        </div>
+                        {currentRole === 'Business Owner' ? (
+                          <div className="pt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedStage('Completed' as any);
+                                setDeliveryDate(new Date().toISOString().split('T')[0]);
+                                setClosingNotes('');
+                                setWorkflowActionType('close_project');
+                              }}
+                              className="w-full py-2 bg-gradient-to-r from-violet-600 to-indigo-650 text-white text-[10px] font-black uppercase tracking-wider rounded-lg hover:from-violet-500 hover:to-indigo-500 transition-all shadow-md"
+                            >
+                              🔐 Final Review & Close Project
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="p-3 text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs space-y-1">
+                            <div className="font-bold">Pending Business Owner Review</div>
+                            <div className="text-[11px] text-zinc-400">
+                              This project has reached Client Acceptance and is automatically queued in the <strong>Business Owner Dashboard</strong> under <strong>Orders Awaiting Final Approval</strong>. Only the Business Owner can perform final approval and close orders.
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

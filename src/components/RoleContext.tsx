@@ -194,14 +194,28 @@ const RoleContext = createContext<RoleContextType | undefined>(undefined);
 
 // Stable UUID translator mapping helpers because Supabase 'public.users' id is UUID
 const mapToDbUserId = (id: string): string => {
-  if (id.startsWith('U-')) {
-    const num = id.substring(2).padStart(12, '0');
-    return `00000000-0000-0000-0000-${num}`;
-  }
+  if (!id) return `00000000-0000-0000-0000-000000000000`;
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
     return id;
   }
-  return `00000000-0000-0000-0000-999999999999`;
+  if (id.startsWith('U-') && /^\d+$/.test(id.substring(2))) {
+    const num = id.substring(2).padStart(12, '0');
+    return `00000000-0000-0000-0000-${num}`;
+  }
+  // Deterministic hex hash conversion into 32 hex chars for UUID v4 style
+  let hash1 = 0, hash2 = 0;
+  for (let i = 0; i < id.length; i++) {
+    const ch = id.charCodeAt(i);
+    hash1 = ((hash1 << 5) - hash1) + ch;
+    hash1 |= 0;
+    hash2 = ((hash2 << 7) - hash2) + ch;
+    hash2 |= 0;
+  }
+  const hex1 = Math.abs(hash1).toString(16).padStart(8, '0');
+  const hex2 = Math.abs(hash2).toString(16).padStart(8, '0');
+  const hex3 = Math.abs(hash1 ^ hash2).toString(16).padStart(4, '0');
+  const hex4 = Math.abs(hash1 + hash2).toString(16).padStart(12, '0');
+  return `${hex1}-${hex2.substring(0,4)}-4${hex3.substring(1,4)}-a${hex2.substring(4,7)}-${hex4.substring(0,12)}`;
 };
 
 export const mapFromDbUserId = (uuid: string): string => {
@@ -1048,6 +1062,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let cloned = { ...record };
     delete cloned.customer_id;
 
+    if (table === 'raw_footage') {
+      delete cloned.storage_type;
+      delete cloned.upload_notes;
+    }
+
     if (table === 'users') {
       cloned.full_name = cloned.full_name || cloned.name;
       cloned.name = cloned.name || cloned.full_name;
@@ -1419,7 +1438,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           body: JSON.stringify({ table, record: sanitized })
         });
         const parsed = await safeParseResponse(response);
-        if (parsed.ok && parsed.isJson) {
+        if (parsed.isJson && parsed.data && typeof parsed.data === 'object') {
           const resJson = parsed.data;
           if (resJson && resJson.success) {
             console.log(`[pushInsert Proxy SUCCESS] for ${table}:`, resJson.data);
@@ -1585,7 +1604,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           body: JSON.stringify({ table, matchColumn, matchValue: finalMatchValue, updates: sanitized })
         });
         const parsed = await safeParseResponse(response);
-        if (parsed.ok && parsed.isJson) {
+        if (parsed.isJson && parsed.data && typeof parsed.data === 'object') {
           const resJson = parsed.data;
           if (resJson && resJson.success) {
             console.log(`[pushUpdate Proxy SUCCESS] for ${table}:`, resJson.data);
@@ -1846,12 +1865,15 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           body: JSON.stringify({ table, record: sanitized })
         });
         const parsed = await safeParseResponse(response);
-        if (parsed.ok && parsed.isJson) {
+        if (parsed.isJson && parsed.data && typeof parsed.data === 'object') {
           const resJson = parsed.data;
           if (resJson && resJson.success) {
             updateDiagnosticMetric('insert', 'ok');
             broadcastSyncPing();
             return { success: true };
+          } else {
+            console.warn(`[pushUpsert Proxy WARN] server returned success=false for ${table}`, resJson?.error);
+            return { success: false, error: resJson?.error || "Server validation failed" };
           }
         }
       } catch (proxyErr) {
@@ -2409,19 +2431,65 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
   // Handle auto-logout if user is deactivated
   useEffect(() => {
-    if (currentUser && users.length > 0) {
-      const dbUser = users.find(u => u.id === currentUser.id || u.email === currentUser.email);
-      if (!dbUser || !dbUser.active) {
-        logout();
-        alert('Your account is no longer active. You have been logged out.');
-      } else if (dbUser.role !== currentUser.role || dbUser.name !== currentUser.name) {
-        // Sync detail changes in business owner's panel
-        setCurrentUser(dbUser);
-        setCurrentRoleState(dbUser.role);
-        setCurrentUserNameState(dbUser.name);
+    if (currentUser && (users.length > 0 || staff.length > 0 || productionStaff.length > 0)) {
+      let isActive = true; // Default to true if not found yet
+      let roleToSync = currentUser.role;
+      let nameToSync = currentUser.name;
+      let found = false;
+
+      // Check specific staff tables first based on user role to avoid stale override from users table
+      if (currentUser.role === 'Production Staff') {
+        const prodUser = productionStaff.find(s => 
+          s.staff_id === currentUser.id || 
+          (s.email && currentUser.email && s.email.toLowerCase() === currentUser.email.toLowerCase()) || 
+          (s.mobile && currentUser.mobile && s.mobile === currentUser.mobile)
+        );
+        if (prodUser) {
+          isActive = prodUser.status !== 'Inactive' && prodUser.status !== 'inactive';
+          roleToSync = 'Production Staff';
+          nameToSync = prodUser.name;
+          found = true;
+        }
+      } else if (currentUser.role === 'Operation Staff') {
+        const staffUser = staff.find(s => 
+          s.staff_id === currentUser.id || 
+          (s.email && currentUser.email && s.email.toLowerCase() === currentUser.email.toLowerCase()) || 
+          (s.mobile && currentUser.mobile && s.mobile === currentUser.mobile)
+        );
+        if (staffUser) {
+          isActive = staffUser.status !== 'Inactive' && staffUser.status !== 'inactive';
+          roleToSync = 'Operation Staff';
+          nameToSync = staffUser.name;
+          found = true;
+        }
+      }
+
+      if (!found) {
+        const dbUser = users.find(u => 
+          u.id === currentUser.id || 
+          (u.email && currentUser.email && u.email.toLowerCase() === currentUser.email.toLowerCase()) || 
+          (u.mobile && currentUser.mobile && u.mobile === currentUser.mobile)
+        );
+        if (dbUser) {
+          isActive = dbUser.active !== false && dbUser.active !== 'false';
+          roleToSync = dbUser.role || currentUser.role;
+          nameToSync = dbUser.name || currentUser.name;
+          found = true;
+        }
+      }
+
+      if (found) {
+        if (!isActive) {
+          logout();
+          alert('Your account is no longer active. You have been logged out.');
+        } else if (roleToSync !== currentUser.role || nameToSync !== currentUser.name) {
+          setCurrentUser({ ...currentUser, role: roleToSync, name: nameToSync });
+          setCurrentRoleState(roleToSync);
+          setCurrentUserNameState(nameToSync);
+        }
       }
     }
-  }, [users, currentUser]);
+  }, [users, staff, productionStaff, currentUser]);
 
   // Sync username with role switcher for smooth demo
   const setCurrentRole = (role: UserRole) => {
@@ -4015,8 +4083,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       if (!r3?.success) throw new Error("Failed to update lead status");
     }
 
-    await pushInsert('raw_footage', newRawFootage);
-    await pushInsert('production', newProd);
+    const rRf = await pushInsert('raw_footage', newRawFootage);
+    if (!rRf?.success) throw new Error("Failed to insert raw footage: " + rRf?.error);
+    const rProd = await pushInsert('production', newProd);
+    if (!rProd?.success) throw new Error("Failed to insert production data: " + rProd?.error);
 
     //  // Disabled to prevent full reload
 
@@ -4502,43 +4572,47 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       upload_notes: uploadNotes || '',
     };
 
-    if (existingRf) {
-      const rRf = await pushUpdate('raw_footage', 'tracking_id', trackingId, finalRf);
-      if (!rRf?.success) {
-        throw new Error("Failed to update raw footage table: " + rRf?.error);
-      }
-    } else {
-      const rRf = await pushInsert('raw_footage', finalRf);
-      if (!rRf?.success) {
-        throw new Error("Failed to insert raw footage to database: " + rRf?.error);
-      }
+    const rRf = await pushUpsert('raw_footage', finalRf);
+    if (!rRf?.success) {
+      throw new Error("Failed to save raw footage record: " + (rRf?.error || "Unknown error"));
     }
+
+    setRawFootage(prev => {
+      const idx = prev.findIndex(f => f.order_id === orderId || f.tracking_id === trackingId);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = finalRf;
+        return copy;
+      }
+      return [finalRf, ...prev];
+    });
 
     // Ensure production entry exists or update it
     let existingProd = augmentedProduction.find(p => p.tracking_id === trackingId);
-    if (existingProd) {
-      const rProd = await pushUpdate('production', 'tracking_id', trackingId, {
-        raw_footage_location: resolvedLink,
-        remarks: `Raw footage received via ${storageType || 'Google Drive'}. ${uploadNotes || ''}`,
-      });
-      if (!rProd?.success) {
-        throw new Error("Failed to update production data: " + rProd?.error);
-      }
-    } else {
-      const pId = `PRD-${Math.floor(4012 + Math.random() * 850)}`;
-      const newProd: Production = {
-        production_id: pId,
-        tracking_id: trackingId,
-        editor_assigned: 'Unassigned',
-        raw_footage_location: resolvedLink,
-        editing_status: 'Raw Footage Received',
-        remarks: `Raw footage received via ${storageType || 'Google Drive'}. ${uploadNotes || ''}`,
-      };
-      const rProd = await pushInsert('production', newProd);
-      if (!rProd?.success) {
-        throw new Error("Failed to insert production data: " + rProd?.error);
-      }
+    let pId = existingProd?.production_id || `PRD-${Math.floor(4012 + Math.random() * 850)}`;
+    const newProd: Production = {
+      production_id: pId,
+      tracking_id: trackingId,
+      editor_assigned: existingProd?.editor_assigned || 'Unassigned',
+      raw_footage_location: resolvedLink,
+      editing_status: existingProd?.editing_status || 'Raw Footage Received',
+      remarks: `Raw footage received via ${storageType || 'Google Drive'}. ${uploadNotes || ''}`,
+    };
+
+    const rProd = await pushUpsert('production', newProd);
+    if (!rProd?.success) {
+      throw new Error("Failed to insert production data: " + (rProd?.error || "Unknown error"));
     }
+
+    setProduction(prev => {
+      const idx = prev.findIndex(p => p.tracking_id === trackingId || p.production_id === pId);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = { ...copy[idx], ...newProd };
+        return copy;
+      }
+      return [newProd, ...prev];
+    });
 
     addNotification({
       user_id: 'All',
@@ -4556,23 +4630,24 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const updateOrderStage = async (orderId: string, stage: CurrentStage) => {
-    const targetOrder = augmentedOrders.find((o) => o.order_id === orderId);
+    const targetOrder = augmentedOrders.find((o) => o.order_id === orderId || o.lead_id === orderId);
+    const resolvedOrderId = targetOrder ? targetOrder.order_id : orderId;
     const previousStage = targetOrder ? targetOrder.current_stage : 'Order Confirmed';
     const timestamp = new Date().toISOString();
 
     let targetStageToSave = stage;
     if (['Closed', 'Order Closed', 'Project Closed', 'Completed'].includes(stage as string)) {
       const tgtLead = leads.find(l => l.lead_id === targetOrder?.lead_id);
-      const tgtProd = production.find(p => p.tracking_id === orderId || p.production_id === orderId);
-      const tgtPayment = payments.find(p => p.order_id === orderId || p.lead_id === targetOrder?.lead_id);
+      const tgtProd = production.find(p => p.tracking_id === resolvedOrderId || p.production_id === resolvedOrderId || p.order_id === resolvedOrderId || p.lead_id === targetOrder?.lead_id);
+      const tgtPayment = payments.find(p => p.order_id === resolvedOrderId || p.lead_id === targetOrder?.lead_id);
 
       const validation = performBusinessOwnerReview(targetOrder, tgtLead, tgtProd, tgtPayment);
       if (!validation.isValid) {
         targetStageToSave = 'Business Owner Review';
         logActivity(
-          `Business Owner Review Pending for Order ${orderId}. Pending items: ${validation.pendingItems.join('; ')}`,
+          `Business Owner Review Pending for Order ${resolvedOrderId}. Pending items: ${validation.pendingItems.join('; ')}`,
           'Business Owner',
-          orderId,
+          resolvedOrderId,
           previousStage,
           'Business Owner Review'
         );
@@ -4581,14 +4656,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         logActivity(
           `Business Owner Review Completed & Validated. Reviewed By: ${currentUserName || 'Business Owner'}, Review Date & Time: ${timestamp}, Final Status: Order Closed.`,
           'Business Owner',
-          orderId,
+          resolvedOrderId,
           'Business Owner Review',
           'Order Closed'
         );
       }
     }
 
-    const rOrd = await pushUpdate('orders', 'order_id', orderId, { 
+    const rOrd = await pushUpdate('orders', 'order_id', resolvedOrderId, { 
       current_stage: targetStageToSave,
       updated_by: currentUserName,
       updated_at: timestamp
