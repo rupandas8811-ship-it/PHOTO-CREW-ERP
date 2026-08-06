@@ -3029,6 +3029,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       created_date: new Date().toISOString().split('T')[0],
       updated_at: new Date().toISOString(),
       sales_person: currentUserName,
+      sales_staff_id: currentUser?.id || '',
       status: (leadDetails as any).status || 'Create Quote',
       created_by: currentUserName,
       total_pax: leadDetails.total_pax !== undefined ? Number(leadDetails.total_pax) : 0,
@@ -6761,6 +6762,33 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     checkAndGenerateReminders().catch(e => console.warn("checkAndGenerateReminders error:", e));
   }, [isDataLoading, augmentedProduction, notifications, augmentedOrders, leads]);
 
+  const visibleLeads = useMemo(() => {
+    if (currentRole === 'Sales Team' && currentUser) {
+      return leads.filter(l => 
+        l.sales_person === currentUserName || 
+        l.created_by === currentUserName || 
+        l.sales_staff_id === currentUser.id
+      );
+    }
+    return leads;
+  }, [leads, currentRole, currentUser, currentUserName]);
+
+  const visibleOrders = useMemo(() => {
+    if (currentRole === 'Sales Team' && currentUser) {
+      const allowedLeadIds = new Set(visibleLeads.map(l => l.lead_id));
+      return augmentedOrders.filter(o => allowedLeadIds.has(o.lead_id));
+    }
+    return augmentedOrders;
+  }, [augmentedOrders, currentRole, visibleLeads, currentUser]);
+
+  const visiblePayments = useMemo(() => {
+    if (currentRole === 'Sales Team' && currentUser) {
+      const allowedOrderIds = new Set(visibleOrders.map(o => o.order_id));
+      return augmentedPayments.filter(p => allowedOrderIds.has(p.order_id));
+    }
+    return augmentedPayments;
+  }, [augmentedPayments, currentRole, visibleOrders, currentUser]);
+
   return (
     <RoleContext.Provider
       value={{
@@ -6773,12 +6801,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         login,
         logout,
         users,
-        leads,
-        orders: augmentedOrders,
+        leads: visibleLeads,
+        orders: visibleOrders,
         operations: augmentedOperations,
         rawFootage,
         production: augmentedProduction,
-        payments: augmentedPayments,
+        payments: visiblePayments,
         logs,
         staff,
         addStaff,

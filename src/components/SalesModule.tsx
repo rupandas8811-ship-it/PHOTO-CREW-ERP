@@ -1538,7 +1538,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     deleteOrder,
     statusHistory,
     getLeadCurrentStatus,
-    getLeadCurrentStage
+    getLeadCurrentStage,
+    addNotification
   } = useRole();
 
   const leads = currentRole === 'Sales Team' 
@@ -2071,6 +2072,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [lostReason, setLostReason] = useState('Price too high');
   const [lostNotes, setLostNotes] = useState('');
   const [otherLostReason, setOtherLostReason] = useState('');
+  
+  // Unlock Request State
+  const [showUnlockRequestModal, setShowUnlockRequestModal] = useState(false);
+  const [unlockRequestReason, setUnlockRequestReason] = useState('Customer requested additional discount');
+  const [unlockRequestCustomReason, setUnlockRequestCustomReason] = useState('');
+  const [selectedUnlockLead, setSelectedUnlockLead] = useState<Lead | null>(null);
+
   const [showCancelConfirmPopup, setShowCancelConfirmPopup] = useState(false);
   const [errorDetails, setErrorDetails] = useState<{
     title: string;
@@ -5723,6 +5731,54 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setSelectedLead(null);
     } catch (err: any) {
       console.error("Failed to set lead as lost:", err);
+      showToastMsg(err.message || String(err), "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  
+  const handleSubmitUnlockRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUnlockLead) return;
+    
+    if (unlockRequestReason === 'Other' && !unlockRequestCustomReason.trim()) {
+      showToastMsg("Please enter a custom reason.", "error");
+      return;
+    }
+    
+    setIsSaving(true);
+    
+    try {
+      const order = orders.find(o => o.lead_id === selectedUnlockLead.lead_id);
+      if (!order) {
+        throw new Error("Could not find confirmed order for this lead.");
+      }
+      
+      const payload = {
+        title: unlockRequestReason,
+        message: unlockRequestCustomReason,
+        notification_type: 'Quotation Unlock Request',
+        recipient_role: 'Business Owner',
+        project_id: order.order_id,
+        task_id: 'Pending',
+        priority: 'High',
+        action_url: JSON.stringify({
+          lead_id: selectedUnlockLead.lead_id,
+          customer_name: selectedUnlockLead.customer_name,
+          mobile: selectedUnlockLead.mobile,
+          sales_staff_id: currentUser?.id || '',
+          sales_staff_name: currentUserName,
+          sales_staff_mobile: currentUser?.mobile || ''
+        })
+      };
+      
+      await addNotification(payload);
+      
+      showToastMsg("Unlock request submitted to Business Owner successfully.", "success");
+      setShowUnlockRequestModal(false);
+      setSelectedUnlockLead(null);
+    } catch (err: any) {
+      console.error("Failed to submit unlock request:", err);
       showToastMsg(err.message || String(err), "error");
     } finally {
       setIsSaving(false);
@@ -10072,18 +10128,75 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                               if (isConfirmOrderStatus) {
                                 return (
-                                  <button
-                                    type="button"
-                                    id={`btn_followup_${lead.lead_id}`}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSelectLead(lead);
-                                    }}
-                                    className="w-32 h-8 text-xs font-bold bg-sky-950/40 hover:bg-sky-900/60 text-sky-400 hover:text-white rounded-xl border border-sky-900/50 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow shrink-0"
-                                  >
-                                    <Eye className="w-3.5 h-3.5 shrink-0 text-sky-400" />
-                                    <span>View CRM</span>
-                                  </button>
+                                  <div className="relative flex justify-end">
+                                    <button
+                                      type="button"
+                                      id={`btn_actions_confirm_${lead.lead_id}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (openDropdownLeadId === lead.lead_id) {
+                                          setOpenDropdownLeadId(null);
+                                        } else {
+                                          const rect = e.currentTarget.getBoundingClientRect();
+                                          const spaceBelow = window.innerHeight - rect.bottom;
+                                          const spaceAbove = rect.top;
+                                          const menuHeight = 90;
+                                          
+                                          let top: number | string = rect.bottom + 4;
+                                          let bottom: number | string = 'auto';
+                                          
+                                          if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
+                                            top = 'auto';
+                                            bottom = window.innerHeight - rect.top + 4;
+                                          }
+                                          
+                                          setDropdownCoords({ top, right: window.innerWidth - rect.right, bottom });
+                                          setOpenDropdownLeadId(lead.lead_id);
+                                        }
+                                      }}
+                                      className="w-32 h-8 text-xs font-bold bg-sky-950/40 hover:bg-sky-900/60 text-sky-400 hover:text-white rounded-xl border border-sky-900/50 transition-all cursor-pointer inline-flex items-center justify-between px-3 shadow shrink-0"
+                                    >
+                                      <span>⚡ Actions</span>
+                                      <span className="text-[10px] ml-1">▼</span>
+                                    </button>
+
+                                    {openDropdownLeadId === lead.lead_id && createPortal(
+                                      <div 
+                                        className="fixed w-48 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl z-[9999] p-1.5 space-y-1.5 animate-in fade-in zoom-in-95 duration-100 text-left actions-dropdown-menu"
+                                        style={{ top: dropdownCoords.top, right: dropdownCoords.right, bottom: dropdownCoords.bottom }}
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenDropdownLeadId(null);
+                                            handleSelectLead(lead);
+                                          }}
+                                          className="w-full h-8 px-3 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white rounded-lg border border-zinc-850/40 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                        >
+                                          <Eye className="w-3.5 h-3.5 shrink-0" />
+                                          <span>View CRM</span>
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenDropdownLeadId(null);
+                                            setSelectedUnlockLead(lead);
+                                            setUnlockRequestReason('Customer requested additional discount');
+                                            setUnlockRequestCustomReason('');
+                                            setShowUnlockRequestModal(true);
+                                          }}
+                                          className="w-full h-8 px-3 text-xs font-bold bg-amber-950 hover:bg-amber-900 text-amber-400 hover:text-white rounded-lg border border-amber-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                        >
+                                          <Ban className="w-3.5 h-3.5 shrink-0" />
+                                          <span>Unlock Quotation</span>
+                                        </button>
+                                      </div>,
+                                      document.body
+                                    )}
+                                  </div>
                                 );
                               }
 
@@ -10879,6 +10992,84 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unlock Request Modal */}
+      {showUnlockRequestModal && selectedUnlockLead && (
+        <div className="fixed inset-0 bg-black/85 z-[100] flex items-center justify-center p-4 backdrop-blur-md">
+          <div className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
+                <Ban className="w-4 h-4 text-amber-500" /> Request Quotation Unlock
+              </h4>
+              <button 
+                onClick={() => setShowUnlockRequestModal(false)}
+                className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg text-xs text-amber-200/80">
+              This request will be sent to the Business Owner for approval. The quotation remains locked until approved.
+            </div>
+
+            <form onSubmit={handleSubmitUnlockRequest} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-medium text-slate-400 mb-1">
+                  Reason * (Required)
+                </label>
+                <select
+                  required
+                  value={unlockRequestReason}
+                  onChange={(e) => setUnlockRequestReason(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                >
+                  <option value="Customer requested additional discount">Customer requested additional discount</option>
+                  <option value="Customer requested package modification">Customer requested package modification</option>
+                  <option value="Customer requested event changes">Customer requested event changes</option>
+                  <option value="Customer requested team member changes">Customer requested team member changes</option>
+                  <option value="Customer requested deliverable changes">Customer requested deliverable changes</option>
+                  <option value="Pricing correction required">Pricing correction required</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              {unlockRequestReason === 'Other' && (
+                <div>
+                  <label className="block font-medium text-slate-400 mb-1">
+                    Enter Reason * (Required)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Enter custom reason..."
+                    value={unlockRequestCustomReason}
+                    onChange={(e) => setUnlockRequestCustomReason(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 border-t border-slate-800 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowUnlockRequestModal(false)}
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs animate-none border-0"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold cursor-pointer text-xs disabled:opacity-50 border-0"
+                >
+                  {isSaving ? 'Submitting...' : 'Submit Request'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

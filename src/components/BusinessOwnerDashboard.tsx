@@ -48,6 +48,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     leads, 
     payments, 
     production, 
+    notifications,
     currentUserName, 
     currentRole,
     updateOrderStage, 
@@ -121,6 +122,11 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     });
   }, [orders, startDate, endDate, datePreset]);
 
+  const unlockRequests = useMemo(() => {
+    if (!notifications) return [];
+    return notifications.filter(n => n.notification_type === 'Quotation Unlock Request' && n.task_id === 'Pending');
+  }, [notifications]);
+
   // Orders waiting for approval dataset
   const waitingApprovalOrders = useMemo(() => {
     const validApprovalStages = [
@@ -182,6 +188,90 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
 
   // Calendar Event Selection Modal State
   const [calendarEventModal, setCalendarEventModal] = useState<any | null>(null);
+  
+  // Quotation Unlock Request Modal State
+  const [unlockRequestModal, setUnlockRequestModal] = useState<any | null>(null);
+  
+  const handleApproveUnlock = async (request: any) => {
+    try {
+      const extraData = JSON.parse(request.action_url || '{}');
+      const order = orders.find(o => o.order_id === request.project_id);
+      
+      if (!order) throw new Error("Order not found");
+      
+      if (updateOrderStage) {
+        // Unlock quotation by moving it back to Negotiation stage for the Sales person to edit.
+        await updateOrderStage(order.lead_id, 'Negotiation', 'Business Owner');
+        
+        // Update request status to Approved
+        const { supabaseClient } = require('../supabaseClient');
+        await supabaseClient.from('notifications')
+          .update({ task_id: 'Approved', read_status: true, is_read: true })
+          .eq('notification_id', request.notification_id);
+          
+        await logActivity(
+          'Business Owner',
+          'Approved Quotation Unlock',
+          'Business Owner',
+          `Approved unlock for Order ${order.order_id} - Reason: ${request.title}`
+        );
+        
+        // Notify Sales Staff
+        await supabaseClient.from('notifications').insert({
+          notification_id: `NTF-${Math.floor(Math.random() * 100000)}`,
+          title: "Quotation Unlocked",
+          message: `Your request to unlock quotation for order ${order.order_id} has been approved.`,
+          notification_type: 'Alert',
+          read_status: false,
+          is_read: false,
+          recipient_role: 'Sales Team',
+          recipient_user_id: extraData.sales_staff_id || null,
+          project_id: order.order_id
+        });
+        
+        setUnlockRequestModal(null);
+        alert("Quotation has been successfully unlocked.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Failed to approve unlock");
+    }
+  };
+  
+  const handleRejectUnlock = async (request: any) => {
+    try {
+      const { supabaseClient } = require('../supabaseClient');
+      await supabaseClient.from('notifications')
+        .update({ task_id: 'Rejected', read_status: true, is_read: true })
+        .eq('notification_id', request.notification_id);
+        
+      await logActivity(
+        'Business Owner',
+        'Rejected Quotation Unlock',
+        'Business Owner',
+        `Rejected unlock for Order ${request.project_id} - Reason: ${request.title}`
+      );
+      
+      const extraData = JSON.parse(request.action_url || '{}');
+      await supabaseClient.from('notifications').insert({
+        notification_id: `NTF-${Math.floor(Math.random() * 100000)}`,
+        title: "Unlock Request Rejected",
+        message: `Your request to unlock quotation for order ${request.project_id} was rejected.`,
+        notification_type: 'Alert',
+        read_status: false,
+        is_read: false,
+        recipient_role: 'Sales Team',
+        recipient_user_id: extraData.sales_staff_id || null,
+        project_id: request.project_id
+      });
+      
+      setUnlockRequestModal(null);
+      alert("Quotation unlock request rejected.");
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Failed to reject unlock");
+    }
+  };
 
   // Handle Approve & Close Order Action
   const handleApproveAndCloseOrder = async (order: Order) => {
@@ -554,6 +644,90 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       {/* SECTION 3: ORDERS AWAITING FINAL APPROVAL */}
       {currentSection === 'approval' && (
         <div className="space-y-6 animate-in fade-in duration-200">
+
+          {/* QUOTATION UNLOCK REQUESTS */}
+          <div className="bg-zinc-950/80 border border-zinc-850 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+            <div>
+              <h2 className="text-sm font-black uppercase tracking-wider text-amber-400 font-mono flex items-center gap-2">
+                <Ban className="w-4 h-4" />
+                <span>QUOTATION UNLOCK REQUESTS</span>
+              </h2>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Sales staff requests to unlock quotations for editing.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono text-zinc-400">Total Pending:</span>
+              <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-mono font-bold">
+                {unlockRequests.length} Requests
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden shadow-2xl mb-8">
+            {unlockRequests.length === 0 ? (
+              <div className="p-12 text-center space-y-3">
+                <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <h3 className="text-sm font-bold text-white">No Quotation Unlock Requests</h3>
+                <p className="text-xs text-zinc-400 max-w-md mx-auto">
+                  There are no pending requests from the sales team to unlock quotations.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse min-w-[1000px]">
+                  <thead>
+                    <tr className="bg-zinc-900/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
+                      <th className="py-3 px-4">Order ID</th>
+                      <th className="py-3 px-4">Customer Name</th>
+                      <th className="py-3 px-4">Sales Staff</th>
+                      <th className="py-3 px-4">Request Date</th>
+                      <th className="py-3 px-4">Reason</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-850">
+                    {unlockRequests.map(request => {
+                      let extraData: any = {};
+                      try { extraData = JSON.parse(request.action_url || '{}'); } catch(e) {}
+                      return (
+                        <tr key={request.notification_id} className="hover:bg-zinc-900/50 transition-colors">
+                          <td className="py-3 px-4 font-mono font-bold text-amber-400">{request.project_id}</td>
+                          <td className="py-3 px-4 text-zinc-300 font-bold">{extraData.customer_name || '-'}</td>
+                          <td className="py-3 px-4 text-zinc-400">
+                            <div>{extraData.sales_staff_name || '-'}</div>
+                            <div className="text-[10px] text-zinc-500 font-mono mt-0.5">{extraData.mobile || '-'}</div>
+                          </td>
+                          <td className="py-3 px-4 text-zinc-400">{request.created_at ? new Date(request.created_at).toLocaleDateString() : '-'}</td>
+                          <td className="py-3 px-4 text-zinc-300">
+                            <div>{request.title}</div>
+                            {request.message && <div className="text-[10px] text-zinc-500 mt-0.5">{request.message}</div>}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                              {request.task_id}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <button
+                              onClick={() => setUnlockRequestModal(request)}
+                              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded shadow text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              Review
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
           
           <div className="bg-zinc-950/80 border border-zinc-850 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
             <div>
@@ -680,6 +854,82 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
           onClose={() => setReviewModalOrder(null)}
           onApprove={() => handleApproveAndCloseOrder(reviewModalOrder)}
         />
+      )}
+
+      {/* UNLOCK REQUEST REVIEW MODAL */}
+      {unlockRequestModal && (
+        <div className="fixed inset-0 bg-black/85 z-[100] flex items-center justify-center p-4 backdrop-blur-md">
+          <div className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
+                <Ban className="w-4 h-4 text-amber-500" /> Review Quotation Unlock
+              </h4>
+              <button 
+                onClick={() => setUnlockRequestModal(null)}
+                className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 text-xs">
+                <div>
+                  <div className="text-slate-400 font-medium mb-1">Order ID</div>
+                  <div className="text-amber-400 font-mono font-bold">{unlockRequestModal.project_id}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400 font-medium mb-1">Customer Name</div>
+                  <div className="text-white font-bold">{JSON.parse(unlockRequestModal.action_url || '{}').customer_name || '-'}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400 font-medium mb-1">Sales Staff</div>
+                  <div className="text-white">{JSON.parse(unlockRequestModal.action_url || '{}').sales_staff_name || '-'}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400 font-medium mb-1">Request Date</div>
+                  <div className="text-slate-300">{unlockRequestModal.created_at ? new Date(unlockRequestModal.created_at).toLocaleDateString() : '-'}</div>
+                </div>
+              </div>
+              
+              <div className="bg-slate-900 border border-slate-750 p-3 rounded-lg text-xs">
+                <div className="text-slate-400 font-medium mb-1 border-b border-slate-800 pb-1">Reason</div>
+                <div className="text-amber-300 font-bold mt-1.5">{unlockRequestModal.title}</div>
+                {unlockRequestModal.message && (
+                  <div className="text-slate-300 mt-2 bg-slate-950 p-2 rounded border border-slate-800">
+                    <span className="text-slate-500 text-[10px] block mb-1">Custom Reason:</span>
+                    {unlockRequestModal.message}
+                  </div>
+                )}
+              </div>
+              
+              <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg text-[11px] text-amber-200/80">
+                Approving this request will move the project back to the <strong className="text-amber-400">Negotiation</strong> stage, allowing the sales staff to modify the quotation.
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-800 pt-4">
+              <button
+                onClick={() => setUnlockRequestModal(null)}
+                className="px-3 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs font-bold transition-colors border-0"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleRejectUnlock(unlockRequestModal)}
+                className="px-3 py-2 bg-rose-950 hover:bg-rose-900 text-rose-400 border border-rose-900/50 rounded-xl cursor-pointer text-xs font-bold transition-colors"
+              >
+                Reject
+              </button>
+              <button
+                onClick={() => handleApproveUnlock(unlockRequestModal)}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl cursor-pointer text-xs font-bold shadow-lg transition-colors border-0"
+              >
+                Approve Unlock
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* CALENDAR EVENT DETAIL MODAL */}
