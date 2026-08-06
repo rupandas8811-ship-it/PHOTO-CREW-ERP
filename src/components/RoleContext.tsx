@@ -133,9 +133,10 @@ interface RoleContextType {
   getLeadCurrentStage: (lead: Lead) => 'Sales' | 'Operations' | 'Production' | 'Completed';
   
   // User Management Admin features
-  addUser: (name: string, email: string, mobile: string, role: UserRole, active: boolean, password?: string) => Promise<void>;
+  addUser: (name: string, email: string, mobile: string, role: UserRole, active: boolean, password?: string, employee_id?: string) => Promise<void>;
   signUpUser: (name: string, username: string, email: string, mobile: string, role: UserRole, password: string) => Promise<any>;
-  editUser: (id: string, updates: { name: string, email: string, mobile: string, role: UserRole, active: boolean }) => Promise<void>;
+  editUser: (id: string, updates: { name: string, email: string, mobile: string, role?: UserRole, active: boolean, employee_id?: string }) => Promise<void>;
+  deleteUser: (id: string) => Promise<void>;
   toggleUserStatus: (id: string) => Promise<void>;
   resetUserPassword: (id: string, newPassword: string) => Promise<void>;
   staffAssignments: StaffAssignment[];
@@ -4940,18 +4941,48 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   // User Management Admin features
-  const addUser = async (name: string, email: string, mobile: string, role: UserRole, active: boolean, password?: string) => {
-    throw new Error('Adding users is disabled. The system operates on four fixed accounts only.');
+  const addUser = async (name: string, email: string, mobile: string, role: UserRole, active: boolean, password?: string, employee_id?: string) => {
+    const newId = crypto.randomUUID ? crypto.randomUUID() : `U-${Math.floor(1000 + Math.random() * 9000)}`;
+    const newUser = {
+      id: newId,
+      name,
+      mobile,
+      email,
+      role,
+      active,
+      created_at: new Date().toISOString(),
+      password,
+      username: email ? email.split('@')[0] : name.replace(/\s+/g, '').toLowerCase(),
+      employee_id
+    };
+    
+    setUsers((prev) => [...prev, newUser]);
+    // Save to Supabase using pushUpsert
+    await pushUpsert('users', { ...newUser, id: mapToDbUserId(newId) });
+    logActivity(`Added New User Account: ${name} (${role})`, 'UserManagement', newId);
   };
 
   const signUpUser = async (name: string, username: string, email: string, mobile: string, role: UserRole, password: string) => {
     throw new Error('User registration is disabled. Only pre-configured system accounts are permitted.');
   };
 
-  const editUser = async (id: string, updates: { name: string, email: string, mobile: string, role: UserRole, active: boolean }) => {
+  const editUser = async (id: string, updates: { name: string, email: string, mobile: string, role?: UserRole, active: boolean, employee_id?: string }) => {
     setUsers((prev) => prev.map((u) => u.id === id ? { ...u, ...updates } : u));
     await pushUpdate('users', 'id', mapToDbUserId(id), updates);
     logActivity(`Updated User Account Profile: ${updates.name}`, 'UserManagement', id);
+  };
+
+  const deleteUser = async (id: string) => {
+    let targetUser = users.find(u => u.id === id);
+    if (!targetUser) return;
+    setUsers((prev) => prev.filter(u => u.id !== id));
+    // Since pushDelete is available or we can use supabaseClient directly:
+    try {
+      await supabaseClient.from('users').delete().eq('id', mapToDbUserId(id));
+    } catch (e) {
+      console.error("Failed to delete from DB", e);
+    }
+    logActivity(`Deleted User Account: ${targetUser.name}`, 'UserManagement', id);
   };
 
   const toggleUserStatus = async (id: string) => {
@@ -6770,6 +6801,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         addUser,
         signUpUser,
         editUser,
+        deleteUser,
         toggleUserStatus,
         resetUserPassword,
         staffAssignments,

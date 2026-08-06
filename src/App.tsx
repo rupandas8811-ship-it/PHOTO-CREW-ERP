@@ -18,6 +18,7 @@ import { OrderSearch } from './components/OrderSearch';
 import { LoginScreen } from './components/LoginScreen';
 import { StudioLoader } from './components/StudioLoader';
 import { UserManagementModule } from './components/UserManagementModule';
+import { SalesStaffManagementModule } from './components/SalesStaffManagementModule';
 import { DatabaseHealthModule } from './components/DatabaseHealthModule';
 import { NotificationsModule } from './components/NotificationsModule';
 import { BusinessOwnerDashboard } from './components/BusinessOwnerDashboard';
@@ -106,6 +107,7 @@ const MainAppContent: React.FC = () => {
         'operations',
         'production',
         'staff_management',
+        'sales_staff_management',
         'users',
         'diagnostics',
         'notifications',
@@ -126,7 +128,8 @@ const MainAppContent: React.FC = () => {
 
     if (currentRole === 'Production Team') {
       // Production users can only access Production (leads, roster, performance, and analytics)
-      return ['production', 'staff_management', 'notifications'].includes(tab);
+      return ['production', 'staff_management',
+        'sales_staff_management', 'notifications'].includes(tab);
     }
 
     if (currentRole === 'Operation Staff' || currentRole === 'Production Staff') {
@@ -171,7 +174,8 @@ const MainAppContent: React.FC = () => {
   const [activeSalesSubTab, setActiveSalesSubTab] = useState<'list' | 'profiles' | 'packages' | 'calendar' | 'create' | 'custom_package_master'>('list');
 
   // Sub-tab selection state for production suite
-  const [activeSubTab, setActiveSubTab] = useState<'pipeline' | 'production_leads' | 'production_calendar' | 'project_queue' | 'assignments' | 'tracker' | 'delivery' | 'resources' | 'analytics' | 'staff_performance' | 'overall_performance' | 'deliveries_desk' | 'staff_management' | 'notifications' | 'crew_roster' | 'staff_roster' | 'production_staff_directory' | 'production_role_specialities'>('production_leads');
+  const [activeSubTab, setActiveSubTab] = useState<'pipeline' | 'production_leads' | 'production_calendar' | 'project_queue' | 'assignments' | 'tracker' | 'delivery' | 'resources' | 'analytics' | 'staff_performance' | 'overall_performance' | 'deliveries_desk' | 'staff_management'
+    | 'sales_staff_management' | 'notifications' | 'crew_roster' | 'staff_roster' | 'production_staff_directory' | 'production_role_specialities'>('production_leads');
 
   // Sub-tab selection state for operations suite
   const [activeOpSubTab, setActiveOpSubTab] = useState<
@@ -193,6 +197,7 @@ const MainAppContent: React.FC = () => {
     | 'operations'
     | 'production'
     | 'staff_management'
+    | 'sales_staff_management'
     | 'notifications'
     | 'payments'
     | 'search'
@@ -680,7 +685,8 @@ const MainAppContent: React.FC = () => {
               { id: 'owner_overview', label: '1. Business Overview', icon: LayoutDashboard, color: 'text-amber-400' },
               { id: 'owner_calendar', label: '2. Event Calendar', icon: Calendar, color: 'text-purple-400' },
               { id: 'owner_approval', label: '3. Waiting Approval', icon: ShieldCheck, color: 'text-emerald-400' },
-              { id: 'owner_summary', label: '4. Revenue Summary', icon: FileText, color: 'text-blue-400' }
+              { id: 'owner_summary', label: '4. Revenue Summary', icon: FileText, color: 'text-blue-400' },
+              { id: 'sales_staff_management', label: 'Sales Staff Management', icon: Users, color: 'text-indigo-400' }
             ].map((tab) => {
               const IconComponent = tab.icon;
               const isSelected = activeTab === tab.id;
@@ -890,6 +896,7 @@ const MainAppContent: React.FC = () => {
                     {activeTab === 'search' && currentRole === 'Business Owner' && <OrderSearch />}
                     {activeTab === 'staff_dashboard' && currentRole === 'Operation Staff' && <StaffModule />}
                     {activeTab === 'staff_dashboard' && currentRole === 'Production Staff' && <ProductionStaffModule />}
+                    {activeTab === 'sales_staff_management' && currentRole === 'Business Owner' && <SalesStaffManagementModule />}
                     {activeTab === 'users' && currentRole === 'Business Owner' && <UserManagementModule />}
                     {activeTab === 'diagnostics' && currentRole === 'Business Owner' && <DatabaseHealthModule />}
                   </>
