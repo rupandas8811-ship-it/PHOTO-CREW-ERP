@@ -1512,10 +1512,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const { 
     currentUser,
     currentRole, 
-    leads, 
+    leads: allLeads, 
     leadPackages, 
-    orders, 
-    payments, 
+    orders: allOrders, 
+    payments: allPayments, 
     production, 
     addLead, 
     updateLeadFollowUp, 
@@ -1524,7 +1524,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     addPackage,
     updatePackage,
     deletePackage,
-    quotations,
+    quotations: allQuotations,
     addQuotation,
     updateQuotation,
     updateLead,
@@ -1540,6 +1540,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     getLeadCurrentStatus,
     getLeadCurrentStage
   } = useRole();
+
+  const leads = currentRole === 'Sales Team' 
+    ? allLeads.filter(l => l.sales_staff_id === currentUser?.id || l.sales_person === currentUser?.name) 
+    : allLeads;
+  const orders = currentRole === 'Sales Team' 
+    ? allOrders.filter(o => leads.some(l => l.lead_id === o.lead_id)) 
+    : allOrders;
+  const payments = currentRole === 'Sales Team' 
+    ? allPayments.filter(p => leads.some(l => l.lead_id === p.lead_id)) 
+    : allPayments;
+  const quotations = currentRole === 'Sales Team' 
+    ? (allQuotations || []).filter((q: any) => leads.some(l => l.lead_id === q.lead_id)) 
+    : (allQuotations || []);
 
   const [logoBase64, setLogoBase64] = useState<string>('');
   const [logoAspectRatio, setLogoAspectRatio] = useState<number>(1);
@@ -2697,6 +2710,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
     }
 
+    if (!candidate && currentRole === 'Sales Team' && currentUser) {
+      candidate = currentUser.name;
+    }
+
+    if (!candidate && currentRole === 'Sales Team' && currentUser) {
+      candidate = currentUser.mobile || '';
+    }
+
+    if (!candidate && currentRole === 'Sales Team' && currentUser) {
+      candidate = currentUser.name;
+    }
+
     if (!candidate) return '';
 
     // If candidate contains comma-separated names, extract only the actual Sales Person
@@ -2718,6 +2743,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     if (!candidate && leadObj && leadObj.sales_staff_mobile && String(leadObj.sales_staff_mobile).trim()) {
       candidate = String(leadObj.sales_staff_mobile).trim();
+    }
+
+    if (!candidate && currentRole === 'Sales Team' && currentUser) {
+      candidate = currentUser.mobile || '';
     }
 
     if (!candidate) return '';
