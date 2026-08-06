@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useRole, mapUserFieldsFromDb, INITIAL_PACKAGES } from './RoleContext';
 import { supabaseClient } from '../supabaseClient';
 import { 
-  Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye
+  Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye, Loader2
 } from 'lucide-react';
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIVE_STAGE_GROUPS, LeadEvent } from '../types';
 import { StatusText } from './ui/StatusText';
@@ -1558,6 +1558,35 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const [logoBase64, setLogoBase64] = useState<string>('');
   const [logoAspectRatio, setLogoAspectRatio] = useState<number>(1);
+  const [unlockRequests, setUnlockRequests] = useState<any[]>([]);
+
+  // Fetch unlock requests
+  useEffect(() => {
+    if (!supabaseClient) return;
+
+    const fetchUnlockRequests = async () => {
+      const { data, error } = await supabaseClient
+        .from('unlock_requests')
+        .select('*');
+      
+      if (!error && data) {
+        setUnlockRequests(data);
+      }
+    };
+
+    fetchUnlockRequests();
+
+    const channel = supabaseClient
+      .channel('rt-unlock_requests-sales')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'unlock_requests' }, () => {
+        fetchUnlockRequests();
+      })
+      .subscribe();
+
+    return () => {
+      supabaseClient.removeChannel(channel);
+    };
+  }, []);
 
   // Dynamic active master roles and deliverables loaded from Supabase master tables
   const [activeMasterRoles, setActiveMasterRoles] = useState<string[]>([]);
@@ -5799,7 +5828,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         
       await addNotification(payload);
       
-      showToastMsg("Unlock request submitted to Business Owner successfully.", "success");
+      setUnlockRequests(prev => [...prev, unlockRequestPayload]);
+      showToastMsg("Unlock request submitted successfully.", "success");
       setShowUnlockRequestModal(false);
       setSelectedUnlockLead(null);
     } catch (err: any) {
@@ -10151,6 +10181,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               const isConfirmOrderStatus = ['Confirm Order', 'Order Confirmed'].includes(leadStatus) || currentStage !== 'Sales';
                               const isLeadLostStatus = ['Lead Lost', 'Lost Lead'].includes(leadStatus);
 
+                              const latestUnlockRequest = unlockRequests
+                                .filter((r: any) => r.lead_id === lead.lead_id)
+                                .sort((a: any, b: any) => new Date(b.created_at || "").getTime() - new Date(a.created_at || "").getTime())[0];
+                              const isPendingUnlock = latestUnlockRequest?.status === 'Pending';
+                              const isRejectedUnlock = latestUnlockRequest?.status === 'Rejected';
+                              const isApprovedUnlock = latestUnlockRequest?.status === 'Approved';
+
                               if (isConfirmOrderStatus) {
                                 return (
                                   <div className="relative flex justify-end">
@@ -10159,6 +10196,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       id={`btn_actions_confirm_${lead.lead_id}`}
                                       onClick={(e) => {
                                         e.stopPropagation();
+                                        if (isPendingUnlock) {
+                                          showToastMsg("Unlock request already submitted.", "error");
+                                          return;
+                                        }
                                         if (openDropdownLeadId === lead.lead_id) {
                                           setOpenDropdownLeadId(null);
                                         } else {
@@ -10179,9 +10220,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                           setOpenDropdownLeadId(lead.lead_id);
                                         }
                                       }}
-                                      className="w-32 h-8 text-xs font-bold bg-sky-950/40 hover:bg-sky-900/60 text-sky-400 hover:text-white rounded-xl border border-sky-900/50 transition-all cursor-pointer inline-flex items-center justify-between px-3 shadow shrink-0"
+                                      className={`w-36 h-8 text-[11px] font-bold rounded-xl border transition-all cursor-pointer inline-flex items-center justify-between px-2 shadow shrink-0 ${
+                                        isPendingUnlock 
+                                          ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border-amber-500/30' 
+                                          : isRejectedUnlock 
+                                            ? 'bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border-rose-500/30'
+                                            : 'bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-700'
+                                      }`}
                                     >
-                                      <span>⚡ Actions</span>
+                                      <span>{isPendingUnlock ? '🟡 Pending Approval' : isRejectedUnlock ? '🔴 Rejected' : '🔒 Request Unlock'}</span>
                                       <span className="text-[10px] ml-1">▼</span>
                                     </button>
 
@@ -10203,21 +10250,23 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                           <span>View CRM</span>
                                         </button>
 
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setOpenDropdownLeadId(null);
-                                            setSelectedUnlockLead(lead);
-                                            setUnlockRequestReason('Customer requested additional discount');
-                                            setUnlockRequestCustomReason('');
-                                            setShowUnlockRequestModal(true);
-                                          }}
-                                          className="w-full h-8 px-3 text-xs font-bold bg-amber-950 hover:bg-amber-900 text-amber-400 hover:text-white rounded-lg border border-amber-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
-                                        >
-                                          <Ban className="w-3.5 h-3.5 shrink-0" />
-                                          <span>Unlock Quotation</span>
-                                        </button>
+                                        {!isPendingUnlock && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setOpenDropdownLeadId(null);
+                                              setSelectedUnlockLead(lead);
+                                              setUnlockRequestReason('Customer requested additional discount');
+                                              setUnlockRequestCustomReason('');
+                                              setShowUnlockRequestModal(true);
+                                            }}
+                                            className="w-full h-8 px-3 text-xs font-bold bg-amber-950 hover:bg-amber-900 text-amber-400 hover:text-white rounded-lg border border-amber-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                          >
+                                            <Ban className="w-3.5 h-3.5 shrink-0" />
+                                            <span>{isRejectedUnlock ? '↻ Request Again' : 'Unlock Quotation'}</span>
+                                          </button>
+                                        )}
                                       </div>,
                                       document.body
                                     )}
@@ -10269,9 +10318,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                           setOpenDropdownLeadId(lead.lead_id);
                                         }
                                       }}
-                                      className="w-32 h-8 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white rounded-xl border border-zinc-850 transition-all cursor-pointer inline-flex items-center justify-between px-3 shadow shrink-0"
+                                      className={`w-32 h-8 text-xs font-bold rounded-xl border transition-all cursor-pointer inline-flex items-center justify-between px-3 shadow shrink-0 ${
+                                        isApprovedUnlock
+                                          ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border-emerald-500/40'
+                                          : 'bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white border-zinc-850'
+                                      }`}
                                     >
-                                      <span>⚡ Actions</span>
+                                      <span>{isApprovedUnlock ? '✔ Edit Record' : '⚡ Actions'}</span>
                                       <span className="text-[10px] ml-1">▼</span>
                                     </button>
 
@@ -11089,9 +11142,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold cursor-pointer text-xs disabled:opacity-50 border-0"
+                  className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold cursor-pointer text-xs disabled:opacity-50 border-0 flex items-center justify-center"
                 >
-                  {isSaving ? 'Submitting...' : 'Submit Request'}
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : 'Submit Request'}
                 </button>
               </div>
             </form>
