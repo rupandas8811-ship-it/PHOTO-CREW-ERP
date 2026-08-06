@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { supabaseClient } from '../supabaseClient';
 import { useRole } from './RoleContext';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
@@ -123,10 +124,35 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     });
   }, [orders, startDate, endDate, datePreset]);
 
-  const unlockRequests = useMemo(() => {
-    if (!notifications) return [];
-    return notifications.filter(n => n.notification_type === 'Quotation Unlock Request' && n.task_id === 'Pending');
-  }, [notifications]);
+  const [unlockRequests, setUnlockRequests] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!supabaseClient) return;
+
+    const fetchUnlockRequests = async () => {
+      const { data, error } = await supabaseClient
+        .from('unlock_requests')
+        .select('*')
+        .eq('request_status', 'Pending');
+        
+      if (!error && data) {
+        setUnlockRequests(data);
+      }
+    };
+
+    fetchUnlockRequests();
+
+    const channel = supabaseClient
+      .channel('rt-unlock_requests')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'unlock_requests' }, () => {
+        fetchUnlockRequests();
+      })
+      .subscribe();
+
+    return () => {
+      supabaseClient.removeChannel(channel);
+    };
+  }, []);
 
   // Orders waiting for approval dataset
   const waitingApprovalOrders = useMemo(() => {
@@ -195,8 +221,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
   
   const handleApproveUnlock = async (request: any) => {
     try {
-      const extraData = JSON.parse(request.action_url || '{}');
-      const order = orders.find(o => o.order_id === request.project_id);
+      const order = orders.find(o => o.order_id === request.order_id);
       
       if (!order) throw new Error("Order not found");
       
@@ -205,16 +230,22 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
         await updateOrderStage(order.lead_id, 'Negotiation', 'Business Owner');
         
         // Update request status to Approved
-        const { supabaseClient } = require('../supabaseClient');
-        await supabaseClient.from('notifications')
-          .update({ task_id: 'Approved', read_status: true, is_read: true })
-          .eq('notification_id', request.notification_id);
+        const { error: updErr } = await supabaseClient.from('unlock_requests')
+          .update({ 
+             request_status: 'Approved',
+             approved_by: currentUser?.name || 'Business Owner',
+             approved_at: new Date().toISOString(),
+             updated_at: new Date().toISOString()
+          })
+          .eq('request_id', request.request_id);
+          
+        if (updErr) throw new Error(updErr.message);
           
         await logActivity(
           'Business Owner',
           'Approved Quotation Unlock',
           'Business Owner',
-          `Approved unlock for Order ${order.order_id} - Reason: ${request.title}`
+          `Approved unlock for Order ${order.order_id} - Reason: ${request.request_reason}`
         );
         
         // Notify Sales Staff
@@ -226,7 +257,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
           read_status: false,
           is_read: false,
           recipient_role: 'Sales Team',
-          recipient_user_id: extraData.sales_staff_id || null,
+          recipient_user_id: request.requested_by_user_id || null,
           project_id: order.order_id
         });
         
@@ -241,29 +272,35 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
   
   const handleRejectUnlock = async (request: any) => {
     try {
-      const { supabaseClient } = require('../supabaseClient');
-      await supabaseClient.from('notifications')
-        .update({ task_id: 'Rejected', read_status: true, is_read: true })
-        .eq('notification_id', request.notification_id);
+      const { error: updErr } = await supabaseClient.from('unlock_requests')
+        .update({ 
+          request_status: 'Rejected',
+          rejected_by: currentUser?.name || 'Business Owner',
+          rejected_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('request_id', request.request_id);
+        
+      if (updErr) throw new Error(updErr.message);
         
       await logActivity(
         'Business Owner',
         'Rejected Quotation Unlock',
         'Business Owner',
-        `Rejected unlock for Order ${request.project_id} - Reason: ${request.title}`
+        `Rejected unlock for Order ${request.order_id} - Reason: ${request.request_reason}`
       );
       
-      const extraData = JSON.parse(request.action_url || '{}');
+      // Notify Sales Staff
       await supabaseClient.from('notifications').insert({
         notification_id: `NTF-${Math.floor(Math.random() * 100000)}`,
         title: "Unlock Request Rejected",
-        message: `Your request to unlock quotation for order ${request.project_id} was rejected.`,
+        message: `Your request to unlock quotation for order ${request.order_id} was rejected.`,
         notification_type: 'Alert',
         read_status: false,
         is_read: false,
         recipient_role: 'Sales Team',
-        recipient_user_id: extraData.sales_staff_id || null,
-        project_id: request.project_id
+        recipient_user_id: request.requested_by_user_id || null,
+        project_id: request.order_id
       });
       
       setUnlockRequestModal(null);
@@ -693,24 +730,23 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                   </thead>
                   <tbody className="divide-y divide-zinc-850">
                     {unlockRequests.map(request => {
-                      let extraData: any = {};
-                      try { extraData = JSON.parse(request.action_url || '{}'); } catch(e) {}
+                      const orderDetails = orders.find(o => o.order_id === request.order_id);
+                      const leadDetails = leads.find(l => l.lead_id === request.lead_id);
                       return (
-                        <tr key={request.notification_id} className="hover:bg-zinc-900/50 transition-colors">
-                          <td className="py-3 px-4 font-mono font-bold text-amber-400">{request.project_id}</td>
-                          <td className="py-3 px-4 text-zinc-300 font-bold">{extraData.customer_name || '-'}</td>
+                        <tr key={request.request_id} className="hover:bg-zinc-900/50 transition-colors">
+                          <td className="py-3 px-4 font-mono font-bold text-amber-400">{request.order_id}</td>
+                          <td className="py-3 px-4 text-zinc-300 font-bold">{leadDetails?.customer_name || '-'}</td>
                           <td className="py-3 px-4 text-zinc-400">
-                            <div>{extraData.sales_staff_name || '-'}</div>
-                            <div className="text-[10px] text-zinc-500 font-mono mt-0.5">{extraData.mobile || '-'}</div>
+                            <div>{request.requested_by_name || '-'}</div>
+                            <div className="text-[10px] text-zinc-500 font-mono mt-0.5">{request.requested_by_role || '-'}</div>
                           </td>
-                          <td className="py-3 px-4 text-zinc-400">{request.created_at ? new Date(request.created_at).toLocaleDateString() : '-'}</td>
+                          <td className="py-3 px-4 text-zinc-400">{request.requested_at ? new Date(request.requested_at).toLocaleDateString() : '-'}</td>
                           <td className="py-3 px-4 text-zinc-300">
-                            <div>{request.title}</div>
-                            {request.message && <div className="text-[10px] text-zinc-500 mt-0.5">{request.message}</div>}
+                            <div>{request.request_reason}</div>
                           </td>
                           <td className="py-3 px-4">
                             <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                              {request.task_id}
+                              {request.request_status}
                             </span>
                           </td>
                           <td className="py-3 px-4 text-right">

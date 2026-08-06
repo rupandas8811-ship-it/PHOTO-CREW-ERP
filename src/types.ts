@@ -535,6 +535,27 @@ export interface LeadStaffAssignmentHistory {
   assigned_at: string;
 }
 
+export interface UnlockRequest {
+  request_id: string;
+  order_id: string;
+  lead_id: string;
+  requested_by_user_id: string;
+  requested_by_name: string;
+  requested_by_role: string;
+  business_owner_user_id: string;
+  chapter_id: string;
+  request_reason: string;
+  request_status: 'Pending' | 'Approved' | 'Rejected';
+  requested_at: string;
+  updated_at?: string;
+  created_by?: string;
+  created_at?: string;
+  approved_by?: string;
+  approved_at?: string;
+  rejected_by?: string;
+  rejected_at?: string;
+}
+
 export interface Notification {
   notification_id: string;
   user_id?: string | null;

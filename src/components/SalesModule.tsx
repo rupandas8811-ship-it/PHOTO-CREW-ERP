@@ -1539,7 +1539,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     statusHistory,
     getLeadCurrentStatus,
     getLeadCurrentStage,
-    addNotification
+    addNotification,
+    users
   } = useRole();
 
   const leads = currentRole === 'Sales Team' 
@@ -5756,7 +5757,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       
       const payload = {
         title: unlockRequestReason,
-        message: unlockRequestCustomReason,
+        message: 'New unlock request received.',
         notification_type: 'Quotation Unlock Request',
         recipient_role: 'Business Owner',
         project_id: order.order_id,
@@ -5772,6 +5773,35 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         })
       };
       
+      const businessOwner = users?.find(u => u.role === 'Business Owner');
+      const businessOwnerId = businessOwner?.id || 'DEFAULT_BO';
+      
+      const unlockRequestPayload = {
+        request_id: crypto.randomUUID(),
+        order_id: order.order_id,
+        lead_id: selectedUnlockLead.lead_id,
+        requested_by_user_id: currentUser?.id || '',
+        requested_by_name: currentUser?.name || '',
+        requested_by_role: currentUser?.role || 'Sales Team',
+        business_owner_user_id: businessOwnerId,
+        chapter_id: 'DEFAULT-CHAPTER',
+        request_reason: unlockRequestReason === 'Other' ? unlockRequestCustomReason : unlockRequestReason,
+        request_status: 'Pending',
+        requested_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        created_by: currentUser?.name || '',
+        created_at: new Date().toISOString()
+      };
+      
+      if (supabaseClient) {
+        const { error: reqErr } = await supabaseClient.from('unlock_requests').insert(unlockRequestPayload);
+        if (reqErr) {
+          throw new Error(`Supabase error saving unlock request: ${reqErr.message}`);
+        }
+      } else {
+        throw new Error("Supabase client is not available.");
+      }
+        
       await addNotification(payload);
       
       showToastMsg("Unlock request submitted to Business Owner successfully.", "success");
