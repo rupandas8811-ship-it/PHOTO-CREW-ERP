@@ -4944,7 +4944,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   // User Management Admin features
   const addUser = async (name: string, email: string, mobile: string, role: UserRole, active: boolean, password?: string, employee_id?: string) => {
     const newId = crypto.randomUUID ? crypto.randomUUID() : `U-${Math.floor(1000 + Math.random() * 9000)}`;
-    const safeEmail = (email && email.trim() !== '') ? email.trim() : `${mobile}@photocrew.com`;
+    const safeEmail = (email && email.trim() !== '') ? email.trim() : `${mobile ? mobile.replace(/[^a-zA-Z0-9]/g, '') : 'user'}_${newId.substring(0,6)}@photocrew.com`;
     const safeUsername = safeEmail.split('@')[0];
     
     const newUser = {
@@ -4963,6 +4963,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     // Save to Supabase using pushUpsert
     const dbRes = await pushUpsert('users', { ...newUser, id: mapToDbUserId(newId) });
     if (!dbRes.success) {
+      if (dbRes.error && dbRes.error.includes('users_email_key')) {
+        throw new Error("This email address is already in use by another user.");
+      }
       throw new Error(dbRes.error || "Failed to save user to database");
     }
     
@@ -4975,11 +4978,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const editUser = async (id: string, updates: { name: string, email: string, mobile: string, role?: UserRole, active: boolean, employee_id?: string }) => {
-    const safeEmail = (updates.email && updates.email.trim() !== '') ? updates.email.trim() : `${updates.mobile}@photocrew.com`;
+    const safeEmail = (updates.email && updates.email.trim() !== '') ? updates.email.trim() : `${updates.mobile ? updates.mobile.replace(/[^a-zA-Z0-9]/g, '') : 'user'}_${id.substring(0,6)}@photocrew.com`;
     const safeUpdates = { ...updates, email: safeEmail };
     
     const dbRes = await pushUpdate('users', 'id', mapToDbUserId(id), safeUpdates);
     if (!dbRes.success) {
+      if (dbRes.error && dbRes.error.includes('users_email_key')) {
+        throw new Error("This email address is already in use by another user.");
+      }
       throw new Error(dbRes.error || "Failed to update user in database");
     }
     setUsers((prev) => prev.map((u) => u.id === id ? { ...u, ...safeUpdates } : u));
