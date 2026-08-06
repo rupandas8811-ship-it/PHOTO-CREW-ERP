@@ -166,39 +166,38 @@ const CompactQtyItemRow: React.FC<CompactQtyItemRowProps> = ({
   };
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-2 bg-slate-950/40 border border-slate-800/80 p-2 sm:p-2.5 rounded-lg transition-all hover:border-slate-700/80">
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-[10px] font-bold text-slate-400 uppercase font-mono hidden sm:inline">Qty</span>
-          <input
-            type="number"
-            min="1"
-            value={qty}
-            onChange={handleQtyChange}
-            className="w-14 sm:w-16 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:outline-none rounded-md py-1 px-1.5 text-xs font-mono font-bold text-center text-white shrink-0"
-            placeholder="Qty"
-            title="Quantity"
-          />
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <LocalEditableInput
-            value={text}
-            options={options}
-            placeholder={placeholder}
-            onChange={handleTextChange}
-            className="w-full bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:outline-none rounded-md py-1 px-2.5 text-xs text-slate-100 font-medium"
-          />
-        </div>
+    <div className="flex items-center gap-2 bg-slate-950/40 border border-slate-800/80 p-2 sm:p-2.5 rounded-lg transition-all hover:border-slate-700/80">
+      <div className="flex items-center gap-1.5 shrink-0">
+        <span className="text-[10px] font-bold text-slate-400 uppercase font-mono hidden sm:inline">Qty</span>
+        <input
+          type="number"
+          min="1"
+          value={qty}
+          onChange={handleQtyChange}
+          className="w-12 sm:w-16 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:outline-none rounded-md py-1 px-1.5 text-xs font-mono font-bold text-center text-white shrink-0"
+          placeholder="Qty"
+          title="Quantity"
+        />
       </div>
 
-      <div className="flex items-center justify-end shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-800/50 sm:border-none">
+      <div className="flex-1 min-w-0">
+        <LocalEditableInput
+          value={text}
+          options={options}
+          placeholder={placeholder}
+          onChange={handleTextChange}
+          className="w-full bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:outline-none rounded-md py-1 px-2.5 text-xs text-slate-100 font-medium"
+        />
+      </div>
+
+      <div className="shrink-0 flex items-center justify-center">
         <button
           type="button"
           onClick={onDelete}
-          className="text-[11px] text-rose-400 hover:text-rose-300 font-bold font-mono bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 border border-rose-500/20"
+          className="w-10 h-10 sm:w-auto sm:h-auto sm:px-2.5 sm:py-1 text-[16px] sm:text-[11px] text-rose-400 hover:text-rose-300 font-bold font-mono bg-rose-500/10 hover:bg-rose-500/20 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1 border border-rose-500/20"
         >
-          Delete
+          <span className="sm:hidden">🗑</span>
+          <span className="hidden sm:inline">Delete</span>
         </button>
       </div>
     </div>
