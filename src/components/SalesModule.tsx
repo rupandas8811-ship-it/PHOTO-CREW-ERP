@@ -5773,30 +5773,25 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         })
       };
       
-      const businessOwner = users?.find(u => u.role === 'Business Owner');
-      const businessOwnerId = businessOwner?.id || 'DEFAULT_BO';
-      
       const unlockRequestPayload = {
-        request_id: crypto.randomUUID(),
-        order_id: order.order_id,
         lead_id: selectedUnlockLead.lead_id,
-        requested_by_user_id: currentUser?.id || '',
-        requested_by_name: currentUser?.name || '',
-        requested_by_role: currentUser?.role || 'Sales Team',
-        business_owner_user_id: businessOwnerId,
-        chapter_id: 'DEFAULT-CHAPTER',
-        request_reason: unlockRequestReason === 'Other' ? unlockRequestCustomReason : unlockRequestReason,
-        request_status: 'Pending',
+        order_id: order.order_id,
+        customer_name: selectedUnlockLead.customer_name || 'Unknown',
+        sales_staff_id: currentUser?.id || '',
+        sales_staff_name: currentUser?.name || '',
+        sales_staff_mobile: currentUser?.mobile || '',
+        reason: unlockRequestReason,
+        custom_reason: unlockRequestReason === 'Other' ? unlockRequestCustomReason : null,
+        status: 'Pending',
         requested_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        created_by: currentUser?.name || '',
         created_at: new Date().toISOString()
       };
       
       if (supabaseClient) {
-        const { error: reqErr } = await supabaseClient.from('unlock_requests').insert(unlockRequestPayload);
+        const { error: reqErr } = await supabaseClient.from('unlock_requests').insert([unlockRequestPayload]);
         if (reqErr) {
-          throw new Error(`Supabase error saving unlock request: ${reqErr.message}`);
+          console.error("Supabase insert error:", reqErr);
+          throw new Error(`Supabase error: ${reqErr.message}`);
         }
       } else {
         throw new Error("Supabase client is not available.");

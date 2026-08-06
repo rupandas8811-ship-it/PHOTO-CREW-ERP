@@ -133,7 +133,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       const { data, error } = await supabaseClient
         .from('unlock_requests')
         .select('*')
-        .eq('request_status', 'Pending');
+        .eq('status', 'Pending');
         
       if (!error && data) {
         setUnlockRequests(data);
@@ -232,12 +232,9 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
         // Update request status to Approved
         const { error: updErr } = await supabaseClient.from('unlock_requests')
           .update({ 
-             request_status: 'Approved',
-             approved_by: currentUser?.name || 'Business Owner',
-             approved_at: new Date().toISOString(),
-             updated_at: new Date().toISOString()
+             status: 'Approved'
           })
-          .eq('request_id', request.request_id);
+          .eq('order_id', request.order_id);
           
         if (updErr) throw new Error(updErr.message);
           
@@ -245,7 +242,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
           'Business Owner',
           'Approved Quotation Unlock',
           'Business Owner',
-          `Approved unlock for Order ${order.order_id} - Reason: ${request.request_reason}`
+          `Approved unlock for Order ${order.order_id} - Reason: ${request.reason}`
         );
         
         // Notify Sales Staff
@@ -257,7 +254,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
           read_status: false,
           is_read: false,
           recipient_role: 'Sales Team',
-          recipient_user_id: request.requested_by_user_id || null,
+          recipient_user_id: request.sales_staff_id || null,
           project_id: order.order_id
         });
         
@@ -274,12 +271,9 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     try {
       const { error: updErr } = await supabaseClient.from('unlock_requests')
         .update({ 
-          request_status: 'Rejected',
-          rejected_by: currentUser?.name || 'Business Owner',
-          rejected_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          status: 'Rejected'
         })
-        .eq('request_id', request.request_id);
+        .eq('order_id', request.order_id);
         
       if (updErr) throw new Error(updErr.message);
         
@@ -287,7 +281,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
         'Business Owner',
         'Rejected Quotation Unlock',
         'Business Owner',
-        `Rejected unlock for Order ${request.order_id} - Reason: ${request.request_reason}`
+        `Rejected unlock for Order ${request.order_id} - Reason: ${request.reason}`
       );
       
       // Notify Sales Staff
@@ -299,7 +293,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
         read_status: false,
         is_read: false,
         recipient_role: 'Sales Team',
-        recipient_user_id: request.requested_by_user_id || null,
+        recipient_user_id: request.sales_staff_id || null,
         project_id: request.order_id
       });
       
@@ -733,20 +727,21 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                       const orderDetails = orders.find(o => o.order_id === request.order_id);
                       const leadDetails = leads.find(l => l.lead_id === request.lead_id);
                       return (
-                        <tr key={request.request_id} className="hover:bg-zinc-900/50 transition-colors">
+                        <tr key={request.order_id} className="hover:bg-zinc-900/50 transition-colors">
                           <td className="py-3 px-4 font-mono font-bold text-amber-400">{request.order_id}</td>
-                          <td className="py-3 px-4 text-zinc-300 font-bold">{leadDetails?.customer_name || '-'}</td>
+                          <td className="py-3 px-4 text-zinc-300 font-bold">{request.customer_name || '-'}</td>
                           <td className="py-3 px-4 text-zinc-400">
-                            <div>{request.requested_by_name || '-'}</div>
-                            <div className="text-[10px] text-zinc-500 font-mono mt-0.5">{request.requested_by_role || '-'}</div>
+                            <div>{request.sales_staff_name || '-'}</div>
+                            <div className="text-[10px] text-zinc-500 font-mono mt-0.5">Sales Team</div>
                           </td>
                           <td className="py-3 px-4 text-zinc-400">{request.requested_at ? new Date(request.requested_at).toLocaleDateString() : '-'}</td>
                           <td className="py-3 px-4 text-zinc-300">
-                            <div>{request.request_reason}</div>
+                            <div>{request.reason}</div>
+                            {request.custom_reason && <div className="text-[10px] text-zinc-500 mt-0.5">{request.custom_reason}</div>}
                           </td>
                           <td className="py-3 px-4">
                             <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                              {request.request_status}
+                              {request.status}
                             </span>
                           </td>
                           <td className="py-3 px-4 text-right">
