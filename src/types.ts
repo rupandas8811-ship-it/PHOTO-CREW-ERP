@@ -173,6 +173,7 @@ export interface User {
   created_at: string;
   password?: string;
   username?: string;
+  employee_id?: string;
 }
 
 export interface LeadEvent {
@@ -219,6 +220,9 @@ export interface Lead {
   event_location: string;
   budget: number;
   sales_person: string;
+  sales_staff_id?: string;
+  sales_staff_name?: string;
+  sales_staff_mobile?: string;
   status: CurrentStage;
   remarks?: string;
   photo_url?: string;
@@ -265,8 +269,6 @@ export interface Lead {
   lead_score?: number;
   booking_status?: string;
   google_maps_link?: string;
-  sales_staff_name?: string;
-  sales_staff_mobile?: string;
   guest_pax?: number;
   staff_pax?: number;
   booking_date?: string;
@@ -323,6 +325,9 @@ export interface Order {
   | 'Project Completed' | 'Delivered' | 'Paid' | 'Closed';
   current_stage: CurrentStage;
   sales_person: string;
+  sales_staff_id?: string;
+  sales_staff_name?: string;
+  sales_staff_mobile?: string;
   created_at: string;
   updated_by?: string;
   updated_at?: string;

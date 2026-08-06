@@ -5767,7 +5767,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           customer_name: selectedUnlockLead.customer_name,
           mobile: selectedUnlockLead.mobile,
           sales_staff_id: currentUser?.id || '',
-          sales_staff_name: currentUserName,
+          sales_staff_name: currentUser?.name || '',
           sales_staff_mobile: currentUser?.mobile || ''
         })
       };
