@@ -261,7 +261,7 @@ export const DatabaseHealthModule: React.FC = () => {
       </div>
 
       {/* Grid Layout: Indicators */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         
         {/* Connection status card */}
         <div className="bg-zinc-950 border border-zinc-850 p-4 rounded-2xl flex items-center justify-between relative shadow-lg">

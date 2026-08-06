@@ -253,7 +253,7 @@ export const StaffManagementModule: React.FC = () => {
         <div className="space-y-6">
           
           {/* Key Metrics row */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             
             {/* Total Staff member count */}
             <div className="bg-zinc-950 border border-zinc-900 p-5 rounded-2xl relative overflow-hidden group hover:border-violet-500/20 transition-all shadow-md">

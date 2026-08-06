@@ -3464,7 +3464,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     if (selectedLead) {
       triggerAutoScrollAndFocus('#lead_details_mobile_modal', 150);
     }
-  }, [crmWizardStep, selectedLead]);
+  }, [crmWizardStep, selectedLead?.lead_id]);
 
   React.useEffect(() => {
     if (isAddFormOpen || editingPackage) {
@@ -3482,7 +3482,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
          }));
       }
     }
-  }, [showConfirmModal, selectedLead]);
+  }, [showConfirmModal, selectedLead?.lead_id]);
 
   React.useEffect(() => {
     if (showFinalReportingModal) {
@@ -9660,7 +9660,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         <div className="space-y-4">
 
           {/* Sales Performance Dashboard Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 mt-2">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-2">
             {[
               { label: 'Create Quote', val: statCreatedQuotation, theme: 'blue' as CameraLensTheme, filterValue: 'Create Quote', chartPoints: [10, 15, 12, 18, 14, 20, 16], trendText: 'Initial Lead' },
               { label: 'Quote Sent', val: statQuotesSent, theme: 'purple' as CameraLensTheme, filterValue: 'Quote Sent', chartPoints: [12, 14, 18, 15, 21, 25, 22], trendText: 'Quotation Saved' },

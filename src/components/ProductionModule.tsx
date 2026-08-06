@@ -2094,7 +2094,8 @@ _Please acknowledge receipt of this task assignment._`;
 
       triggerAutoScrollAndFocus('#production_workflow_modal', 150);
     }
-  }, [workflowActionType, activeWorkflowProd, editorAssignments]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowActionType]);
 
   useEffect(() => {
     if (isStaffModalOpen && !editingStaffMember) {
@@ -3364,7 +3365,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         return (
           <div className="space-y-6">
             {/* 7 ANALYTICS CARDS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4 animate-in fade-in duration-300">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-7 gap-4 animate-in fade-in duration-300">
               <div className="bg-zinc-950 border border-zinc-900 p-4.5 rounded-2xl flex flex-col justify-between">
                 <span className="text-zinc-500 text-[9px] font-mono uppercase tracking-widest font-black leading-none mb-1 text-left block">Total Editors</span>
                 <span className="text-xl font-bold text-white font-mono mt-1 text-left block leading-none">{totalEditors}</span>
