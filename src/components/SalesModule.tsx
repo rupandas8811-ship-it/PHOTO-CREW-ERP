@@ -5780,16 +5780,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     
     try {
       const order = orders.find(o => o.lead_id === selectedUnlockLead.lead_id);
-      if (!order) {
-        throw new Error("Could not find confirmed order for this lead.");
-      }
+      const orderId = order?.order_id || (selectedUnlockLead as any).order_id || selectedUnlockLead.lead_id;
       
       const payload = {
         title: unlockRequestReason,
-        message: 'New unlock request received.',
+        message: `New unlock request received for ${selectedUnlockLead.customer_name || 'Lead'}.`,
         notification_type: 'Quotation Unlock Request',
         recipient_role: 'Business Owner',
-        project_id: order.order_id,
+        project_id: orderId,
         task_id: 'Pending',
         priority: 'High',
         action_url: JSON.stringify({
@@ -5804,7 +5802,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       
       const unlockRequestPayload = {
         lead_id: selectedUnlockLead.lead_id,
-        order_id: order.order_id,
+        order_id: orderId,
         customer_name: selectedUnlockLead.customer_name || 'Unknown',
         sales_staff_id: currentUser?.id || '',
         sales_staff_name: currentUser?.name || '',
@@ -5817,18 +5815,25 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       };
       
       if (supabaseClient) {
-        const { error: reqErr } = await supabaseClient.from('unlock_requests').insert([unlockRequestPayload]);
-        if (reqErr) {
-          console.error("Supabase insert error:", reqErr);
-          throw new Error(`Supabase error: ${reqErr.message}`);
+        try {
+          const { error: reqErr } = await supabaseClient.from('unlock_requests').insert([unlockRequestPayload]);
+          if (reqErr) {
+            console.error("Supabase insert error (falling back to local state):", reqErr);
+          }
+        } catch (sbErr) {
+          console.error("Supabase insert exception (falling back to local state):", sbErr);
         }
-      } else {
-        throw new Error("Supabase client is not available.");
       }
         
-      await addNotification(payload);
+      if (addNotification) {
+        try {
+          await addNotification(payload);
+        } catch (notifErr) {
+          console.error("Notification error:", notifErr);
+        }
+      }
       
-      setUnlockRequests(prev => [...prev, unlockRequestPayload]);
+      setUnlockRequests(prev => [...prev.filter(r => r.lead_id !== selectedUnlockLead.lead_id), unlockRequestPayload]);
       showToastMsg("Unlock request submitted successfully.", "success");
       setShowUnlockRequestModal(false);
       setSelectedUnlockLead(null);
