@@ -1283,10 +1283,9 @@ const generateQuotationPDF = (
   doc.setLineWidth(0.2);
   doc.rect(15, currentY, 180, cfg.pricingCardHeight, 'D');
 
-  const pricingRowH = cfg.pricingCardHeight / 4;
+  const pricingRowH = cfg.pricingCardHeight / 3;
   doc.line(15, currentY + pricingRowH, 195, currentY + pricingRowH);
   doc.line(15, currentY + (pricingRowH * 2), 195, currentY + (pricingRowH * 2));
-  doc.line(15, currentY + (pricingRowH * 3), 195, currentY + (pricingRowH * 3));
   doc.line(115, currentY, 115, currentY + cfg.pricingCardHeight);
 
   const baseSumVal = baseServices.reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
@@ -1297,23 +1296,21 @@ const generateQuotationPDF = (
   doc.setFontSize(7.5);
   doc.setTextColor(71, 85, 105);
   
-  doc.text('Package Base Cost', 19, currentY + pricingRowH - 2);
-  doc.text('Additional Services & Add-ons', 19, currentY + (pricingRowH * 2) - 2);
-  doc.text('Quotation Discount (Applied)', 19, currentY + (pricingRowH * 3) - 2);
+  doc.text('Package Base Price', 19, currentY + pricingRowH - 2);
+  doc.text('Quotation Discount (Applied)', 19, currentY + (pricingRowH * 2) - 2);
   
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(15, 23, 42);
-  doc.text('FINAL ESTIMATED COMMERCIAL AMOUNT', 19, currentY + (pricingRowH * 4) - 2);
+  doc.text('FINAL ESTIMATED COMMERCIAL AMOUNT', 19, currentY + (pricingRowH * 3) - 2);
 
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(51, 65, 85);
   doc.text(baseSumVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + pricingRowH - 2, { align: 'right' });
-  doc.text(addlSumVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 2) - 2, { align: 'right' });
-  doc.text('- ' + discountValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 3) - 2, { align: 'right' });
+  doc.text('- ' + discountValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 2) - 2, { align: 'right' });
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
-  doc.text(finalAmountSum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 4) - 2, { align: 'right' });
+  doc.text(finalAmountSum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 3) - 2, { align: 'right' });
 
   currentY += cfg.pricingCardHeight + cfg.secSpacing;
 
@@ -4047,9 +4044,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const body = `Dear ${safeCustomerName},\n\n` +
         `Thank you for reach out to us! We are pleased to provide the custom quotation details for your upcoming ${safeEventType} shoot.\n\n` +
         `Selected Package: ${pkgNames}\n` +
-        `Package Amount: Rs. ${basePkgSum.toLocaleString('en-IN')}\n` +
+        `Package Base Price: Rs. ${basePkgSum.toLocaleString('en-IN')}\n` +
         `Discount Applied: Rs. ${(quoteDiscount || 0).toLocaleString('en-IN')}\n` +
-        `Additional Services: Rs. ${(quoteAdditional || 0).toLocaleString('en-IN')}\n` +
         `Final Quotation Amount: Rs. ${finalAmt.toLocaleString('en-IN')}\n\n` +
         `We will follow up shortly to discuss any specific adjustments you might need.\n\n` +
         `Warm regards,\n` +
@@ -4156,8 +4152,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               />
             </div>
 
-            {/* Additional Services Cost */}
-            <div>
+            {/* Additional Services Cost - Hidden per user request */}
+            <div className="hidden">
               <label className="block text-xs font-semibold text-slate-400 mb-1.5">
                 Additional Services Cost (₹)
               </label>
@@ -4178,7 +4174,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 flex items-center justify-between shadow-inner mt-2">
             <div className="space-y-0.5">
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide font-mono">Final Quotation Amount</p>
-              <p className="text-[9px] text-slate-500 font-mono">Formula: Base Price (₹{basePkgSum}) + Addl (₹{quoteAdditional || 0}) - Disc (₹{quoteDiscount || 0})</p>
+              <p className="text-[9px] text-slate-500 font-mono">Formula: Base Price (₹{basePkgSum}) - Disc (₹{quoteDiscount || 0})</p>
             </div>
             <div className="text-right">
               <span className="text-lg font-extrabold text-amber-500 font-mono">
@@ -11193,10 +11189,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 </div>
                               </div>
 
-                              {/* Single Package Cost (₹) Field */}
+                              {/* Single Package Base Price (₹) Field */}
                               <div className="bg-slate-900/50 border border-slate-800/80 rounded-lg p-3 space-y-2 shadow-sm">
                                 <label className="block text-[11px] font-bold text-amber-400 uppercase tracking-wide font-mono flex items-center gap-1.5">
-                                  <span>💰</span> Package Cost (₹) *
+                                  <span>💰</span> Package Base Price (₹) *
                                 </label>
                                 <input
                                   type="number"
@@ -11212,7 +11208,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       final_quoted_amount: numVal
                                     }));
                                   }}
-                                  placeholder="Enter package cost..."
+                                  placeholder="Enter package base price..."
                                   className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-amber-300 font-mono font-bold"
                                   required
                                 />
