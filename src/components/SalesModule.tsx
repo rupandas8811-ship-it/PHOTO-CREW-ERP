@@ -2194,13 +2194,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     : false;
 
   const isApprovedUnlocked = selectedLead
-    ? unlockRequests.some(r => {
-        const matchesLead = r.lead_id === selectedLead.lead_id || r.order_id === selectedLead.lead_id || r.project_id === selectedLead.lead_id;
-        const matchesOrder = orders && orders.some(o => o.lead_id === selectedLead.lead_id && (o.order_id === r.order_id || o.order_id === r.lead_id));
-        const matchesLeadOrderId = (selectedLead as any).order_id && (r.order_id === (selectedLead as any).order_id || r.lead_id === (selectedLead as any).order_id);
-        const isApproved = r.status === 'Approved' || r.request_status === 'Approved';
-        return (matchesLead || matchesOrder || matchesLeadOrderId) && isApproved;
-      })
+    ? (selectedLead.quotation_locked === false ||
+       unlockRequests.some(r => {
+         const matchesLead = r.lead_id === selectedLead.lead_id || r.order_id === selectedLead.lead_id || r.project_id === selectedLead.lead_id;
+         const matchesOrder = orders && orders.some(o => o.lead_id === selectedLead.lead_id && (o.order_id === r.order_id || o.order_id === r.lead_id));
+         const matchesLeadOrderId = (selectedLead as any).order_id && (r.order_id === (selectedLead as any).order_id || r.lead_id === (selectedLead as any).order_id);
+         const isApproved = r.status === 'Approved' || r.request_status === 'Approved';
+         return (matchesLead || matchesOrder || matchesLeadOrderId) && isApproved;
+       })) && selectedLead.quotation_locked !== true
     : false;
 
   const isCrmLocked = isLeadConfirmed && !isApprovedUnlocked;
@@ -4920,51 +4921,89 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const completeApprovedUnlockRequest = async (leadId: string) => {
     if (!supabaseClient || !leadId) return;
+    console.log("[DEBUG completeApprovedUnlockRequest] Executing completeApprovedUnlockRequest for leadId:", leadId);
     try {
       const linkedOrder = (orders || []).find(o => o.lead_id === leadId);
       const orderId = linkedOrder?.order_id || (selectedLead as any)?.order_id;
-      
-      // 1. Query unlock_requests to find any approved request matching lead_id or order_id
-      const { data: allReqs } = await supabaseClient
+      const nowIso = new Date().toISOString();
+
+      // 1. Log quotation_locked value BEFORE save
+      const { data: leadBefore } = await supabaseClient
+        .from('leads')
+        .select('lead_id, quotation_locked')
+        .eq('lead_id', leadId)
+        .maybeSingle();
+
+      console.log("[DEBUG completeApprovedUnlockRequest] Lead quotation_locked BEFORE save:", leadBefore?.quotation_locked);
+
+      // 2. Update lead record in Supabase: set quotation_locked = true
+      const { data: leadAfter, error: leadUpdErr } = await supabaseClient
+        .from('leads')
+        .update({ quotation_locked: true, updated_at: nowIso })
+        .eq('lead_id', leadId)
+        .select();
+
+      if (leadUpdErr) {
+        console.error("[DEBUG completeApprovedUnlockRequest] Supabase error setting quotation_locked=true on lead:", leadUpdErr);
+      } else {
+        console.log("[DEBUG completeApprovedUnlockRequest] Lead quotation_locked AFTER save:", leadAfter?.[0]?.quotation_locked, "Data:", leadAfter);
+      }
+
+      // 3. Query unlock_requests to find matching records and mark them Completed
+      const { data: allReqs, error: fetchReqsErr } = await supabaseClient
         .from('unlock_requests')
         .select('*');
 
-      if (allReqs && allReqs.length > 0) {
-        const matchingIds = allReqs
-          .filter((r: any) => {
-            const matchesLead = r.lead_id === leadId || r.order_id === leadId || r.project_id === leadId;
-            const matchesOrder = orderId && (r.order_id === orderId || r.lead_id === orderId);
-            const isApproved = r.request_status === 'Approved' || r.status === 'Approved';
-            return (matchesLead || matchesOrder) && isApproved;
-          })
-          .map((r: any) => r.request_id || r.id)
-          .filter(Boolean);
+      if (fetchReqsErr) {
+        console.error("[DEBUG completeApprovedUnlockRequest] Fetch unlock_requests error:", fetchReqsErr);
+      }
 
-        if (matchingIds.length > 0) {
-          const { error: updErr } = await supabaseClient
+      if (allReqs && allReqs.length > 0) {
+        const matchingReqs = allReqs.filter((r: any) => {
+          const matchesLead = r.lead_id === leadId || r.order_id === leadId || r.project_id === leadId;
+          const matchesOrder = orderId && (r.order_id === orderId || r.lead_id === orderId);
+          return matchesLead || matchesOrder;
+        });
+
+        console.log("[DEBUG completeApprovedUnlockRequest] Found matching unlock_requests count:", matchingReqs.length);
+
+        for (const req of matchingReqs) {
+          let updQuery = supabaseClient
             .from('unlock_requests')
             .update({
               request_status: 'Completed',
               status: 'Completed',
-              edited_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
-            .in('request_id', matchingIds);
+              completed_at: nowIso,
+              edited_at: nowIso,
+              updated_at: nowIso
+            });
 
-          if (updErr) {
-            console.warn("Error marking unlock requests as completed by request_id:", updErr.message);
+          if (req.id) {
+            updQuery = updQuery.eq('id', req.id);
+          } else if (req.request_id) {
+            updQuery = updQuery.eq('request_id', req.request_id);
+          } else if (req.lead_id) {
+            updQuery = updQuery.eq('lead_id', req.lead_id);
+          }
+
+          const { error: reqUpdErr } = await updQuery;
+          if (reqUpdErr) {
+            console.error("[DEBUG completeApprovedUnlockRequest] Error updating unlock_request:", reqUpdErr);
+          } else {
+            console.log("[DEBUG completeApprovedUnlockRequest] unlock_requests.status set to Completed for ID:", req.id || req.request_id || req.lead_id);
           }
         }
       }
 
-      // 2. Direct fallback update by lead_id
+      // Fallback updates by lead_id & order_id
       await supabaseClient
         .from('unlock_requests')
         .update({
           request_status: 'Completed',
           status: 'Completed',
-          edited_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          completed_at: nowIso,
+          edited_at: nowIso,
+          updated_at: nowIso
         })
         .eq('lead_id', leadId);
 
@@ -4974,13 +5013,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           .update({
             request_status: 'Completed',
             status: 'Completed',
-            edited_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
+            completed_at: nowIso,
+            edited_at: nowIso,
+            updated_at: nowIso
           })
           .eq('order_id', orderId);
       }
 
-      // 3. Immediately update local unlockRequests state
+      // 4. Update local React state
       setUnlockRequests(prev => Array.isArray(prev) ? prev.map(r => {
         const matchesLead = r.lead_id === leadId || r.order_id === leadId || r.project_id === leadId;
         const matchesOrder = orderId && (r.order_id === orderId || r.lead_id === orderId);
@@ -4989,13 +5029,23 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             ...r,
             request_status: 'Completed',
             status: 'Completed',
-            edited_at: new Date().toISOString()
+            completed_at: nowIso,
+            edited_at: nowIso
           };
         }
         return r;
       }) : []);
+
+      setLeads(prevLeads => prevLeads.map(l => l.lead_id === leadId ? { ...l, quotation_locked: true } : l));
+      if (selectedLead && selectedLead.lead_id === leadId) {
+        setSelectedLead(prev => prev ? { ...prev, quotation_locked: true } : prev);
+      }
+
+      // Re-fetch unlock_requests from DB to be 100% in sync
+      await fetchUnlockRequests();
+
     } catch (err: any) {
-      console.warn("completeApprovedUnlockRequest error:", err?.message || err);
+      console.error("[DEBUG completeApprovedUnlockRequest] Exception during unlock completion:", err?.message || err);
     }
   };
 
@@ -10453,11 +10503,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               const isLeadLostStatus = ['Lead Lost', 'Lost Lead'].includes(leadStatus);
 
                               const latestUnlockRequest = unlockRequests
-                                .filter((r: any) => r.lead_id === lead.lead_id || (linkedOrder && r.order_id === linkedOrder.order_id))
+                                .filter((r: any) => r.lead_id === lead.lead_id || (linkedOrder && r.order_id === linkedOrder.order_id) || ((lead as any).order_id && r.order_id === (lead as any).order_id))
                                 .sort((a: any, b: any) => new Date(b.created_at || b.requested_at || "").getTime() - new Date(a.created_at || a.requested_at || "").getTime())[0];
                               const isPendingUnlock = latestUnlockRequest?.status === 'Pending' || latestUnlockRequest?.request_status === 'Pending';
                               const isRejectedUnlock = latestUnlockRequest?.status === 'Rejected' || latestUnlockRequest?.request_status === 'Rejected';
-                              const isApprovedUnlock = latestUnlockRequest?.status === 'Approved' || latestUnlockRequest?.request_status === 'Approved';
+                              const isApprovedUnlock = lead.quotation_locked === false || (
+                                lead.quotation_locked !== true && (latestUnlockRequest?.status === 'Approved' || latestUnlockRequest?.request_status === 'Approved')
+                              );
 
                                if (isPendingUnlock || isApprovedUnlock || isRejectedUnlock || isConfirmOrderStatus) {
                                 return (

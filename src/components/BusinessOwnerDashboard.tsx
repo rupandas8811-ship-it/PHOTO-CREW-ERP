@@ -286,6 +286,8 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
 
         if (request.request_id) {
           reqQuery = reqQuery.eq('request_id', request.request_id);
+        } else if ((request as any).id) {
+          reqQuery = reqQuery.eq('id', (request as any).id);
         } else if (effectiveOrderId && effectiveLeadId) {
           reqQuery = reqQuery.or(`order_id.eq.${effectiveOrderId},lead_id.eq.${effectiveLeadId}`);
         } else if (effectiveLeadId) {
@@ -299,6 +301,19 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
         if (updErr) {
           console.error("[DEBUG handleApproveUnlock] unlock_requests update error:", updErr);
           throw new Error(`Failed to update unlock request status: ${updErr.message}`);
+        }
+
+        // 2. Update lead in Supabase: set quotation_locked = false
+        if (effectiveLeadId) {
+          const { error: leadErr } = await supabaseClient
+            .from('leads')
+            .update({ quotation_locked: false, updated_at: new Date().toISOString() })
+            .eq('lead_id', effectiveLeadId);
+          if (leadErr) {
+            console.warn("[DEBUG handleApproveUnlock] leads table quotation_locked=false update warning:", leadErr.message);
+          } else {
+            console.log("[DEBUG handleApproveUnlock] Successfully updated lead quotation_locked = false for", effectiveLeadId);
+          }
         }
       }
 
