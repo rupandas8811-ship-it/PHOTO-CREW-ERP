@@ -8,7 +8,7 @@ import { NotificationsModule } from './NotificationsModule';
 import { OperationsAnalytics } from './operations/OperationsAnalytics';
 import { OperationsCalendar } from './OperationsCalendar';
 import { useRole } from './RoleContext';
-import { normalizeCategory, parseTeamMembers } from '../utils';
+import { normalizeCategory, parseTeamMembers, formatQtyList } from '../utils';
 import { 
   Briefcase, Sparkles, Calendar, BarChart3, Shield, Search, 
   Layers, Camera, Users, Clock, Bell
@@ -110,7 +110,7 @@ const PackageCatalogueView: React.FC = () => {
                   {pkg.team_members && (
                     <div className="flex justify-between text-zinc-400 gap-2">
                       <span className="text-zinc-500 font-mono text-[10px] shrink-0">CREW PROFILE:</span>
-                      <span className="text-right break-words max-w-[150px]">{parseTeamMembers(pkg.team_members).join(', ')}</span>
+                      <span className="text-right break-words max-w-[150px]">{formatQtyList(pkg.team_members)}</span>
                     </div>
                   )}
                 </div>
@@ -118,7 +118,7 @@ const PackageCatalogueView: React.FC = () => {
                 {pkg.deliverables && (
                   <div className="bg-[#040405] border border-zinc-905 p-2.5 rounded-lg text-[11px] text-zinc-405 space-y-1">
                     <span className="text-[10px] text-zinc-500 uppercase font-mono font-bold block pb-1">Included Deliverables:</span>
-                    <span className="leading-relaxed block">{pkg.deliverables}</span>
+                    <span className="leading-relaxed block">{formatQtyList(pkg.deliverables)}</span>
                   </div>
                 )}
 

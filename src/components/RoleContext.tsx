@@ -8,6 +8,81 @@ import { supabaseClient, updateDiagnosticMetric } from '../supabaseClient';
 import { serializeLeadEvents, deserializeLeadEvents } from '../utils';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 
+export const getStatusRank = (status: string | undefined | null): number => {
+  if (!status) return 0;
+  const s = status.trim();
+  if (['Lost Lead', 'Lead Lost'].includes(s)) return 99;
+  if ([
+    'Confirm Order', 'Order Confirmed', 'New Order Received', 'Operations Assigned', 
+    'Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Start', 
+    'Event Ended', 'Event End', 'Event Completed', 'Event Complete', 'Footage Handover', 
+    'Equipment Handover', 'Verified Footage', 'Footage Handover Verified', 'Raw Footage Received', 
+    'Event Cancelled', 'Assigned Editor', 'Editor Assigned', 'Editing Started', 
+    'Editing In Progress', 'Internal QC Review', 'Customer Review', 'Client Review Sent', 
+    'Internal Review', 'Client Review', 'Revision Required', 'Revision In Progress', 
+    'Revision', 'Client Acceptance', 'Final Approval', 'Approved', 'Ready for Delivery', 
+    'Delivered', 'Completed', 'Closed', 'Project Closed', 'Project Delivered'
+  ].includes(s)) {
+    return 4;
+  }
+  if (['Quote Follow-up', 'Follow Up', 'Follow-up', 'Negotiation'].includes(s)) {
+    return 3;
+  }
+  if (['Quote Sent', 'Quotation Sent'].includes(s)) {
+    return 2;
+  }
+  if (['Create Quote', 'Created Quotation', 'New Lead', 'Contacted'].includes(s)) {
+    return 1;
+  }
+  return 0;
+};
+
+export const isFollowUpDateTimeReached = (lead: Lead): boolean => {
+  const rawStatus = lead.current_status || lead.status || '';
+  if (['Confirm Order', 'Order Confirmed', 'Lost Lead', 'Lead Lost'].includes(rawStatus)) {
+    return false;
+  }
+
+  const followUpDate = lead.next_follow_up_date || (lead as any).follow_up_date || '';
+  if (!followUpDate) return false;
+
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const todayStr = `${year}-${month}-${day}`;
+
+  if (followUpDate < todayStr) return true;
+  if (followUpDate > todayStr) return false;
+
+  let followUpTime = (lead as any).next_follow_up_time || '';
+  if (!followUpTime && (lead.follow_up_notes || lead.remarks)) {
+    const match = (lead.follow_up_notes || lead.remarks || '').match(/\[Time:\s*([0-9]{1,2}:[0-9]{2}(?:\s*[AP]M)?)\]/i);
+    if (match) followUpTime = match[1];
+  }
+
+  if (!followUpTime) return true;
+
+  const currentHours = String(now.getHours()).padStart(2, '0');
+  const currentMins = String(now.getMinutes()).padStart(2, '0');
+  const currentTimeStr = `${currentHours}:${currentMins}`;
+
+  let targetTime24 = followUpTime.trim();
+  if (/AM|PM/i.test(targetTime24)) {
+    const timeMatch = targetTime24.match(/([0-9]{1,2}):([0-9]{2})\s*([AP]M)/i);
+    if (timeMatch) {
+      let h = parseInt(timeMatch[1], 10);
+      const m = timeMatch[2];
+      const ampm = timeMatch[3].toUpperCase();
+      if (ampm === 'PM' && h < 12) h += 12;
+      if (ampm === 'AM' && h === 12) h = 0;
+      targetTime24 = `${String(h).padStart(2, '0')}:${m}`;
+    }
+  }
+
+  return currentTimeStr >= targetTime24;
+};
+
 interface RoleContextType {
   currentUser: User | null;
   currentRole: UserRole;
@@ -3230,6 +3305,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     updatesPayload.follow_up_notes = callNotes || null;
     updatesPayload.next_follow_up_date = nextFollowUpDate || null;
     
+    // Extract time tag if present in callNotes
+    const timeMatch = (callNotes || '').match(/\[Time:\s*([0-9]{1,2}:[0-9]{2}(?:\s*[AP]M)?)\]/i);
+    if (timeMatch) {
+      updatesPayload.next_follow_up_time = timeMatch[1].trim();
+    }
+    
     if (normalizedStatus === 'Lost Lead') {
       updatesPayload["Lost_Reason"] = callNotes; // Lost Reason is usually passed via callNotes or negotiationNotes
       updatesPayload["Lost_Notes"] = negotiationNotes || callNotes;
@@ -6211,6 +6292,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   const getLeadCurrentStatus = (lead: Lead): string => {
     let rawStatus = lead.current_status || lead.status || 'Create Quote';
 
+    if (rawStatus === 'New Lead') {
+      return 'Create Quote';
+    }
+
     if (rawStatus === 'Created Quotation' || rawStatus === 'Create Quote') {
       return 'Create Quote';
     }
@@ -6223,12 +6308,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       return 'Confirm Order';
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    const followUpDate = lead.next_follow_up_date || (lead as any).follow_up_date || '';
-
-    // Automatically transition Quote Sent -> Quote Follow-up if follow-up date reached
-    if (rawStatus === 'Quote Sent' || rawStatus === 'Quotation Sent' || rawStatus === 'Quote Follow-up') {
-      if (followUpDate && followUpDate <= todayStr) {
+    // Automatically transition Quote Sent -> Quote Follow-up if follow-up date/time reached
+    if (rawStatus === 'Quote Sent' || rawStatus === 'Quotation Sent') {
+      if (isFollowUpDateTimeReached(lead)) {
         return 'Quote Follow-up';
       }
       return 'Quote Sent';

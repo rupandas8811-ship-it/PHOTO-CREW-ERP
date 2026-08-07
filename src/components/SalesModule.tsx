@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useRole, mapUserFieldsFromDb, INITIAL_PACKAGES } from './RoleContext';
+import { useRole, mapUserFieldsFromDb, INITIAL_PACKAGES, getStatusRank, isFollowUpDateTimeReached } from './RoleContext';
 import { supabaseClient } from '../supabaseClient';
 import { 
   Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye, Loader2
@@ -5008,7 +5008,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           reference_source: wizardLeadData.reference_source,
           Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead.Select_Package_Option || '',
           remarks: updatedRemarks,
-          status: selectedLead.status || 'New Lead'
+          status: getStatusRank(selectedLead.status || selectedLead.current_status) < 1 || selectedLead.status === 'New Lead' ? 'Create Quote' : (selectedLead.status || 'Create Quote'),
+          current_status: getStatusRank(selectedLead.status || selectedLead.current_status) < 1 || selectedLead.status === 'New Lead' ? 'Create Quote' : (selectedLead.current_status || selectedLead.status || 'Create Quote')
         });
 
         const newCompleted = Math.max(crmHighestStep, 1);
@@ -5365,28 +5366,33 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
   };
 
-  // Automatic background sync for Quote Sent -> Quote Follow-up when follow-up date is reached
+  // Automatic background sync for Quote Sent -> Quote Follow-up when follow-up date and time are reached
   React.useEffect(() => {
     if (!leads || leads.length === 0) return;
-    const todayStr = new Date().toISOString().split('T')[0];
-    leads.forEach(async (ld) => {
-      const rawSt = ld.current_status || ld.status;
-      const fDate = ld.next_follow_up_date || (ld as any).follow_up_date;
-      if ((rawSt === 'Quote Sent' || rawSt === 'Quotation Sent') && fDate && fDate <= todayStr) {
-        try {
-          await updateLeadFollowUp(
-            ld.lead_id,
-            'Quote Follow-up' as CurrentStage,
-            'Auto updated: Follow-up date reached',
-            fDate,
-            Number(ld.budget || 0),
-            ld.follow_up_notes || 'Follow-up date reached'
-          );
-        } catch (e) {
-          // Silent auto sync
+
+    const checkAndSyncFollowUp = () => {
+      leads.forEach(async (ld) => {
+        const rawSt = ld.current_status || ld.status;
+        if ((rawSt === 'Quote Sent' || rawSt === 'Quotation Sent') && isFollowUpDateTimeReached(ld)) {
+          try {
+            await updateLeadFollowUp(
+              ld.lead_id,
+              'Quote Follow-up' as CurrentStage,
+              'Auto updated: Scheduled follow-up date and time reached',
+              ld.next_follow_up_date || '',
+              Number(ld.budget || 0),
+              ld.follow_up_notes || 'Follow-up date and time reached'
+            );
+          } catch (e) {
+            // Silent auto sync
+          }
         }
-      }
-    });
+      });
+    };
+
+    checkAndSyncFollowUp();
+    const interval = setInterval(checkAndSyncFollowUp, 30000);
+    return () => clearInterval(interval);
   }, [leads]);
 
   const handleSaveStep2Direct = async () => {
@@ -5553,8 +5559,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       const currentPkgCost = Number(isCreateFlow ? (createForm.budget || finalTotal || 0) : (wizardLeadData.package_cost || selectedLead?.budget || 0));
 
-      const currentLeadStatus = isCreateFlow ? 'Quote Sent' : (selectedLead ? getLeadCurrentStatus(selectedLead) : 'Quote Sent');
-      const targetStage = isCreateFlow ? ('Quote Sent' as CurrentStage) : (currentLeadStatus as CurrentStage || 'Quote Sent');
+      const previousStatus = selectedLead ? (selectedLead.current_status || selectedLead.status || 'Create Quote') : 'Create Quote';
+      const prevRank = getStatusRank(previousStatus);
+
+      // Target stage:
+      // If previous status rank < 2 (i.e. Create Quote or New Lead), update status to Quote Sent.
+      // If previous status rank >= 2 (already Quote Sent, Quote Follow-up, Confirm Order, Lost Lead), preserve existing status!
+      const targetStage: CurrentStage = (isCreateFlow || prevRank < 2) 
+        ? ('Quote Sent' as CurrentStage) 
+        : (previousStatus as CurrentStage);
 
       await updateLeadFollowUp(
         currentLeadId,

@@ -10,7 +10,7 @@ import { StatusText } from '../ui/StatusText';
 import { ProjectDetailModal } from '../ProjectDetailModal';
 import { ViewDetailsModal } from './ViewDetailsModal';
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
-import { convertTimeToDbFormat, triggerAutoScrollAndFocus, convertTo12Hour } from '../../utils';
+import { convertTimeToDbFormat, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem } from '../../utils';
 import { supabaseClient } from '../../supabaseClient';
 import { getCalculatedOrderStage, getStageRank } from '../../utils/orderStageCalculator';
 
@@ -2462,7 +2462,7 @@ export const OperationsLeads: React.FC = () => {
                                             className="text-xs font-bold text-zinc-200 truncate pr-2 select-none"
                                             title={roleStr as string}
                                           >
-                                            ✔ {roleStr as string}
+                                            ✔ {formatQtyItem(roleStr as string)}
                                           </div>
                                         </div>
                                       </td>
@@ -4103,7 +4103,7 @@ export const OperationsLeads: React.FC = () => {
                                     </td>
                                     <td className="py-3 px-3.5 font-sans whitespace-nowrap">
                                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-bold text-xs">
-                                        {member.assigned_task || member.staff_role}
+                                        {formatQtyItem(member.assigned_task || member.staff_role)}
                                       </span>
                                     </td>
                                     <td className="py-3 px-3.5 text-center whitespace-nowrap">

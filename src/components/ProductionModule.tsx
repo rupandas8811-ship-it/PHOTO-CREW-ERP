@@ -14,7 +14,7 @@ import { Production, EditingStatus, Staff } from '../types';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { ProjectDetailModal } from './ProjectDetailModal';
-import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour } from '../utils';
+import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem } from '../utils';
 import { AppLogo } from './AppLogo';
 import { StatusText } from './ui/StatusText';
 import { EventDropdownCell } from './EventDropdownCell';
@@ -39,7 +39,7 @@ function getIndividualDeliverables(description: string): string[] {
     .map(line => {
       // Remove leading numbers like "1.", "1 )", "- ", "* "
       let cleaned = line.replace(/^\s*([0-9]+\.?\s*\)?|-|\*)\s*/, '').trim();
-      return cleaned;
+      return formatQtyItem(cleaned);
     })
     .filter(line => line.length > 0);
 }
@@ -77,15 +77,15 @@ function parseExactDeliverables(description: string): string[] {
     const parsed = JSON.parse(description);
     if (Array.isArray(parsed)) {
       if (typeof parsed[0] === 'string') {
-        return parsed.map((s: any) => String(s).trim()).filter(Boolean);
+        return parsed.map((s: any) => formatQtyItem(String(s).trim())).filter(Boolean);
       } else if (parsed[0] && Array.isArray(parsed[0].deliverables)) {
-        return parsed[0].deliverables.map((s: any) => String(s).trim()).filter(Boolean);
+        return parsed[0].deliverables.map((s: any) => formatQtyItem(String(s).trim())).filter(Boolean);
       }
     }
   } catch (e) {}
   return description
     .split(/[,\n]/)
-    .map(line => line.trim())
+    .map(line => formatQtyItem(line.trim()))
     .filter(Boolean);
 }
 

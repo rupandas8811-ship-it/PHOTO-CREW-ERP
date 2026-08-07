@@ -422,6 +422,61 @@ export function parseTeamMembers(teamMembersStr: string | undefined | null): str
   return trimmed.split(',').map(item => item.trim()).filter(Boolean);
 }
 
+export function parseQtyAndText(raw: string | undefined | null): { qty: number; text: string } {
+  if (!raw || typeof raw !== "string") return { qty: 1, text: "" };
+  const str = raw.trim();
+  if (!str) return { qty: 1, text: "" };
+  
+  const match = str.match(/^(\d+)\s*[\*xX×\-]?\s*(.*)$/);
+  if (match) {
+    const q = parseInt(match[1], 10);
+    const qty = isNaN(q) || q < 1 ? 1 : q;
+    let text = match[2] ? match[2].trim() : "";
+    text = text.replace(/^[xX×\*\-]\s*/, "").trim();
+    return { qty, text: text || str };
+  }
+  return { qty: 1, text: str };
+}
+
+export function formatQtyItem(raw: string | undefined | null): string {
+  if (!raw || typeof raw !== "string") return "";
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  const { qty, text } = parseQtyAndText(trimmed);
+  if (!text) return trimmed;
+  return `${qty} × ${text}`;
+}
+
+export function formatQtyArray(raw: string | string[] | undefined | null): string[] {
+  if (!raw) return [];
+  let items: string[] = [];
+  if (Array.isArray(raw)) {
+    items = raw.map(s => String(s).trim()).filter(Boolean);
+  } else if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          items = parsed.map(s => String(s).trim()).filter(Boolean);
+        }
+      } catch (e) {
+        items = trimmed.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+      }
+    } else if (trimmed.includes('\n')) {
+      items = trimmed.split('\n').map(s => s.trim()).filter(Boolean);
+    } else {
+      items = trimmed.split(',').map(s => s.trim()).filter(Boolean);
+    }
+  }
+  return items.map(formatQtyItem);
+}
+
+export function formatQtyList(raw: string | string[] | undefined | null, delimiter: string = ', '): string {
+  const formatted = formatQtyArray(raw);
+  return formatted.join(delimiter);
+}
+
 
 
 export const convertTo12Hour = (timeStr: string | undefined | null): string => {
