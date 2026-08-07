@@ -1929,7 +1929,9 @@ Production Team`;
       const eventType = selectedEvent?.event_type || selectedEvent?.event_shoot_type || orderData?.event_type || 'Shoot Type';
 
       // Raw footage drive link
-      const driveLink = prodData?.raw_footage_location || rfItem?.server_path || '—';
+      const matchedOp = orderData ? operations.find(o => o.order_id === orderData.order_id) : null;
+      const opsDriveLink = matchedOp ? (matchedOp.raw_footage_drive_link || matchedOp.Raw_Footage_Drive_Link || matchedOp.consolidated_drive_link || matchedOp.Consolidated_Drive_Link) : null;
+      const driveLink = opsDriveLink || prodData?.raw_footage_location || rfItem?.server_path || '—';
 
       // Target Delivery date
       const targetDate = prodData?.target_delivery_date || prodData?.expected_delivery_date || '—';
@@ -2931,41 +2933,28 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             </td>
                             <td className="p-3">
                               {(() => {
-                                const serverPath = rf?.server_path || '';
-                                const isDriveLinkAvailable = serverPath.trim() !== '' && (serverPath.startsWith('http://') || serverPath.startsWith('https://'));
+                                const { order } = resolveOrderAndLead(prod);
+                                const matchedOp = order ? operations.find(o => o.order_id === order.order_id) : null;
+                                const opsDriveLink = matchedOp ? (matchedOp.raw_footage_drive_link || matchedOp.Raw_Footage_Drive_Link || matchedOp.consolidated_drive_link || matchedOp.Consolidated_Drive_Link) : null;
+                                const finalDriveLink = (opsDriveLink || rf?.server_path || '').trim();
+                                const isDriveLinkAvailable = finalDriveLink !== '' && (finalDriveLink.startsWith('http://') || finalDriveLink.startsWith('https://'));
 
                                 if (isDriveLinkAvailable) {
                                   return (
                                     <a
-                                      href={serverPath}
+                                      href={finalDriveLink}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       referrerPolicy="no-referrer"
                                       className="text-purple-400 hover:text-purple-300 underline font-semibold flex items-center gap-1.5 cursor-pointer max-w-[200px] break-words"
-                                      title={serverPath}
+                                      title={finalDriveLink}
                                     >
                                       <span>🔗</span> Open Drive Link
                                     </a>
                                   );
                                 }
 
-                                const uploadNotes = rf?.upload_notes || '';
-                                const hasHardDisk = uploadNotes.includes('Hard Disk Received: YES');
-                                const hasMemoryCard = uploadNotes.includes('Memory Card Received: YES');
-
-                                if (hasHardDisk && hasMemoryCard) {
-                                  return <span className="text-zinc-300 font-medium">Hard Disk & Memory Card Received</span>;
-                                } else if (hasHardDisk) {
-                                  return <span className="text-zinc-300 font-medium">Hard Disk Received</span>;
-                                } else if (hasMemoryCard) {
-                                  return <span className="text-zinc-300 font-medium">Memory Card Received</span>;
-                                }
-
-                                if (rf?.raw_received) {
-                                  return <span className="text-zinc-300 font-medium">Physical Media Received</span>;
-                                }
-
-                                return <span className="text-zinc-650 italic">No link</span>;
+                                return <span className="text-zinc-500 italic text-[11px]">No Drive Link Uploaded</span>;
                               })()}
                             </td>
                             <td className="p-3">
@@ -3271,46 +3260,33 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             />
                           </td>
 
-                           {/* Raw Footage Link */}
-                           <td className="p-4 text-left font-sans">
-                             {(() => {
-                               const serverPath = rf?.server_path || '';
-                               const isDriveLinkAvailable = serverPath.trim() !== '' && (serverPath.startsWith('http://') || serverPath.startsWith('https://'));
+                            {/* Raw Footage Link */}
+                            <td className="p-4 text-left font-sans">
+                              {(() => {
+                                const { order } = resolveOrderAndLead(prod);
+                                const matchedOp = order ? operations.find(o => o.order_id === order.order_id) : null;
+                                const opsDriveLink = matchedOp ? (matchedOp.raw_footage_drive_link || matchedOp.Raw_Footage_Drive_Link || matchedOp.consolidated_drive_link || matchedOp.Consolidated_Drive_Link) : null;
+                                const finalDriveLink = (opsDriveLink || rf?.server_path || '').trim();
+                                const isDriveLinkAvailable = finalDriveLink !== '' && (finalDriveLink.startsWith('http://') || finalDriveLink.startsWith('https://'));
 
-                               if (isDriveLinkAvailable) {
-                                 return (
-                                   <a
-                                     href={serverPath}
-                                     target="_blank"
-                                     rel="noopener noreferrer"
-                                     referrerPolicy="no-referrer"
-                                     className="text-purple-400 hover:text-purple-300 underline font-semibold flex items-center gap-1.5 cursor-pointer max-w-[150px] break-words"
-                                     title={serverPath}
-                                   >
-                                     <span>🔗</span> Open Drive Link
-                                   </a>
-                                 );
-                               }
+                                if (isDriveLinkAvailable) {
+                                  return (
+                                    <a
+                                      href={finalDriveLink}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      referrerPolicy="no-referrer"
+                                      className="text-purple-400 hover:text-purple-300 underline font-semibold flex items-center gap-1.5 cursor-pointer max-w-[150px] break-words"
+                                      title={finalDriveLink}
+                                    >
+                                      <span>🔗</span> Open Drive Link
+                                    </a>
+                                  );
+                                }
 
-                               const uploadNotes = rf?.upload_notes || '';
-                               const hasHardDisk = uploadNotes.includes('Hard Disk Received: YES');
-                               const hasMemoryCard = uploadNotes.includes('Memory Card Received: YES');
-
-                               if (hasHardDisk && hasMemoryCard) {
-                                 return <span className="text-zinc-300 font-medium">Hard Disk & Memory Card Received</span>;
-                               } else if (hasHardDisk) {
-                                 return <span className="text-zinc-300 font-medium">Hard Disk Received</span>;
-                               } else if (hasMemoryCard) {
-                                 return <span className="text-zinc-300 font-medium">Memory Card Received</span>;
-                               }
-
-                               if (rf?.raw_received) {
-                                 return <span className="text-zinc-300 font-medium">Physical Media Received</span>;
-                               }
-
-                               return <span className="text-zinc-650 italic">No link</span>;
-                             })()}
-                           </td>
+                                return <span className="text-zinc-500 italic text-[11px]">No Drive Link Uploaded</span>;
+                              })()}
+                            </td>
 
                           {/* Editor Assigned */}
                           <td className="p-4 text-center font-sans">
@@ -3400,15 +3376,16 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     <div className="flex flex-col gap-1.5 w-full items-center">
                                       <div className="w-full max-w-[160px]">
                                         <select
-                                          value="Reassign Editor"
+                                          value=""
                                           onChange={(e) => {
-                                            if (e.target.value === 'Reassign Editor') {
+                                            if (e.target.value === 'reassign') {
                                               handleOpenAssignEditor(prod);
                                             }
                                           }}
                                           className="w-full text-zinc-100 bg-zinc-950 border border-zinc-800 hover:border-zinc-700 text-[10.5px] font-sans font-bold py-1.5 px-2.5 rounded focus:outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer text-center"
                                         >
-                                          <option value="Reassign Editor">▼ Reassign Editor</option>
+                                          <option value="" disabled>▼ Action</option>
+                                          <option value="reassign">Reassign Editor</option>
                                         </select>
                                       </div>
 
@@ -7493,6 +7470,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     try {
                       setIsSaving(true);
                       
+                      const assignedForThis = editorAssignments.filter(a => a.production_id === activeWorkflowProd.production_id);
+                      const isReassignment = assignedForThis.length > 0;
+
                       // 1. Delete all existing editor assignments for this production
                       const { error: deleteError } = await supabaseClient
                         .from('editor_assignments')
@@ -7506,7 +7486,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const orderId = order?.order_id || activeWorkflowProd?.tracking_id || activeWorkflowProd?.production_id;
                       const eventId = activeWorkflowProd?.event_id || lead?.events?.[0]?.id || 'EVT-01';
                       
-                      const assignedForThis = editorAssignments.filter(a => a.production_id === activeWorkflowProd.production_id);
                       const newAssignments = [];
                       for (const item of wfDeliverableAssignments) {
                         if (!item.editor || item.editor === 'Unassigned') continue;
@@ -7517,7 +7496,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           const finalStatus = hasChanged ? 'Assigned' : (originalAssignment?.status || 'Assigned');
                           
                           const id = item.assignment_id || `EDR-${Math.floor(100000 + Math.random() * 900000)}`;
+                          
+                          // Preserve all fields from original assignment if it hasn't changed
+                          const preservedFields = !hasChanged && originalAssignment ? { ...originalAssignment } : {};
+                          
                           newAssignments.push({
+                            ...preservedFields,
                             assignment_id: id,
                             production_id: activeWorkflowProd.production_id,
                             order_id: orderId,
@@ -7552,20 +7536,52 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       })));
                       const rolesJoined = assignedRoles.join(', ') || 'Editor';
                       
+                      // Determine new status based on new assignments (do NOT reset if already higher or keep existing workflow)
+                      let newEditingStatus = 'Assigned Editor';
+                      if (newAssignments.length > 0) {
+                        const allCompleted = newAssignments.every(a => 
+                          ['Completed', 'Editing Completed', 'Editing Complete'].includes(a.status as string)
+                        );
+                        if (allCompleted) {
+                          newEditingStatus = 'Editing Completed';
+                        } else {
+                          const hasUploadedDriveLink = newAssignments.some(a => 
+                            (((a as any).edited_drive_link && ((a as any).edited_drive_link as string).trim() !== '') || 
+                            ['Customer Review', 'Client Review'].includes(a.status as string))
+                          ) || ((activeWorkflowProd as any).edited_drive_link && ((activeWorkflowProd as any).edited_drive_link as string).trim() !== '');
+                          if (hasUploadedDriveLink) {
+                            newEditingStatus = 'Customer Review';
+                          } else {
+                            const anyStarted = newAssignments.some(a => 
+                              ['Editing Started', 'In Progress', 'Editing In Progress'].includes(a.status as string)
+                            );
+                            if (anyStarted) {
+                              newEditingStatus = 'Editing Started';
+                            }
+                          }
+                        }
+                      }
+                      
                       await updateProduction(activeWorkflowProd.production_id, {
                         editor_assigned: primaryEditor,
                         assigned_staff: assignedStaffJoined,
                         target_delivery_date: wfTargetDeliveryDate,
                         expected_delivery_date: wfTargetDeliveryDate,
                         project_notes: wfProjectNotes,
-                        editing_status: 'Assigned Editor',
-                        production_status: 'Assigned Editor',
+                        editing_status: newEditingStatus,
+                        production_status: newEditingStatus,
                         production_role: rolesJoined,
                         assigned_role: rolesJoined
                       });
                       
                       if (typeof refreshData === 'function') {
                         refreshData();
+                      }
+                      
+                      if (isReassignment) {
+                        alert("Editor reassigned successfully.");
+                      } else {
+                        alert("Editor assigned successfully.");
                       }
                       
                       setActiveWorkflowProd(null);
