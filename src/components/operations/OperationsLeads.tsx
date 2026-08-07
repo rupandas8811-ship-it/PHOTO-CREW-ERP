@@ -3252,52 +3252,84 @@ export const OperationsLeads: React.FC = () => {
         const rawFootageLink = currentOp?.raw_footage_drive_link || footageForm.footage_link || assetCollectionProof.rawLink || eventStartProof.rawLink || eventCompletionProof.rawLink || equipmentHandoverProof.rawLink;
 
         // Construct assigned crew list
-        const orderStaffAssignments = (staffAssignments || []).filter(sa => sa.order_id === receivingFootageOrderId && sa.assignment_status !== 'Cancelled');
+        const staffDetails = currentOrder ? getAssignedStaffDetailsForOrder(currentOrder) : [];
+        let assignedCrewList: Array<{ staff_name: string; staff_role: string; raw_footage_link?: string; event_name?: string }> = [];
 
-        let assignedCrewList: Array<{ staff_name: string; staff_role: string; raw_footage_link?: string }> = [];
+        if (staffDetails.length > 0) {
+          assignedCrewList = staffDetails.map(member => {
+            const normStaffName = (member.staff_name || '').trim().toLowerCase();
+            const normEvName = (member.event_name || '').trim().toLowerCase();
+            const memberEvId = member.event_id;
+            
+            let rawLink: string | null = null;
 
-        if (orderStaffAssignments.length > 0) {
-          assignedCrewList = orderStaffAssignments.map(sa => {
-            let link = sa.raw_footage_link || '';
-            if (!link) {
-              const hist = (leadEquipmentHistory || []).find(h => 
-                ((h.order_id && h.order_id === receivingFootageOrderId) || (currentOrder?.lead_id && h.lead_id === currentOrder.lead_id)) &&
-                h.returned_by?.toLowerCase() === sa.staff_name.toLowerCase() &&
-                h.remarks
-              );
-              if (hist?.remarks) {
+            // 1. Check rawFootage table
+            if (rawFootage && rawFootage.length > 0) {
+              const rfMatch = rawFootage.find(rf => {
+                if (rf.order_id !== receivingFootageOrderId) return false;
+                const upBy = (rf.uploaded_by || '').trim().toLowerCase();
+                if (upBy && upBy !== normStaffName) return false;
+                if (memberEvId && rf.event_id) {
+                  if (rf.event_id !== memberEvId) return false;
+                } else if (rf.event_name) {
+                  if (rf.event_name.trim().toLowerCase() !== normEvName) return false;
+                }
+                return true;
+              });
+              if (rfMatch) {
+                rawLink = rfMatch.server_path || rfMatch.drive_link || null;
+              }
+            }
+
+            // 2. Check staffAssignments table
+            if (!rawLink && staffAssignments && staffAssignments.length > 0) {
+              const saMatch = staffAssignments.find(sa => {
+                if (sa.order_id !== receivingFootageOrderId) return false;
+                if ((sa.staff_name || '').trim().toLowerCase() !== normStaffName) return false;
+                return true;
+              });
+              if (saMatch) {
+                const saLink = saMatch.raw_footage_link || (saMatch as any).drive_link || (saMatch as any).raw_footage_location;
+                if (saLink && saLink.trim() && saLink.trim() !== 'Pending') {
+                  rawLink = saLink.trim();
+                }
+              }
+            }
+
+            // 3. Check leadEquipmentHistory
+            if (!rawLink && leadEquipmentHistory && leadEquipmentHistory.length > 0) {
+              const hMatch = leadEquipmentHistory.find(h => {
+                if (h.order_id !== receivingFootageOrderId) return false;
+                let parsed: any = {};
+                if (h.remarks) {
+                  try { parsed = JSON.parse(h.remarks); } catch(e) {}
+                }
+                const retBy = (h.returned_by || parsed.staff_name || '').trim().toLowerCase();
+                if (retBy !== normStaffName) return false;
+                return !!(parsed.raw_footage_link || parsed.drive_link);
+              });
+              if (hMatch && hMatch.remarks) {
                 try {
-                  const parsed = typeof hist.remarks === 'string' ? JSON.parse(hist.remarks) : hist.remarks;
-                  link = parsed.raw_footage_link || link;
+                  const parsed = JSON.parse(hMatch.remarks);
+                  rawLink = parsed.raw_footage_link || parsed.drive_link || null;
                 } catch (e) {}
               }
             }
 
             return {
-              staff_name: sa.staff_name,
-              staff_role: sa.assigned_task || sa.staff_role || 'Operations Staff',
-              raw_footage_link: link
+              staff_name: member.staff_name,
+              staff_role: member.staff_role || 'Operations Staff',
+              event_name: member.event_name,
+              raw_footage_link: rawLink || ''
             };
           });
-        } else if (currentLead?.events && currentLead.events.length > 0) {
-          currentLead.events.forEach((ev: any) => {
-            const names = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((s: string) => s.trim()) : [];
-            names.forEach((name: string) => {
-              if (name && !assignedCrewList.some(c => c.staff_name.toLowerCase() === name.toLowerCase())) {
-                assignedCrewList.push({
-                  staff_name: name,
-                  staff_role: 'Operations Staff',
-                  raw_footage_link: ''
-                });
-              }
-            });
-          });
         }
-
+        
+        // Fallbacks if no staffDetails (should be rare)
         if (assignedCrewList.length === 0 && currentOp?.assigned_staff) {
           const names = currentOp.assigned_staff.split(',').map((s: string) => s.trim());
           names.forEach(name => {
-            if (name) {
+            if (name && !assignedCrewList.some(c => c.staff_name.toLowerCase() === name.toLowerCase())) {
               assignedCrewList.push({
                 staff_name: name,
                 staff_role: 'Operations Staff',
