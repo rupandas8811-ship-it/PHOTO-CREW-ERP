@@ -1542,12 +1542,13 @@ ${coordinatorName}`;
     return () => window.removeEventListener('calendar-action-click-deferred', handler);
   }, [production, rawFootage]);
   
-  const [workflowActionType, setWorkflowActionType] = useState<'assign_editor' | 'send_review' | 'request_revision' | 'deliver_project' | 'manage_payment_close' | 'manage_status' | 'close_project' | null>(null);
+  const [workflowActionType, setWorkflowActionType] = useState<'assign_editor' | 'reassign_staff' | 'delivery_checklist' | 'send_review' | 'request_revision' | 'deliver_project' | 'manage_payment_close' | 'manage_status' | 'close_project' | null>(null);
 
   // Form states for each step popup
   // Step 1: Assign Editor Form
   const [wfEditor, setWfEditor] = useState('Unassigned');
   const [wfTargetDeliveryDate, setWfTargetDeliveryDate] = useState('');
+  const [wfTargetDeliveryTime, setWfTargetDeliveryTime] = useState('');
   const [wfPriority, setWfPriority] = useState<'Low' | 'Medium' | 'High' | 'Critical'>('Medium');
   const [wfProjectNotes, setWfProjectNotes] = useState('');
   const [wfInternalComments, setWfInternalComments] = useState('');
@@ -1980,7 +1981,7 @@ _Please acknowledge receipt of this task assignment._`;
       } else if (workflowActionType === 'close_project') {
         setDeliveryDate('');
         setClosingNotes('');
-      } else if (workflowActionType === 'assign_editor') {
+      } else if (workflowActionType === 'reassign_staff') {
         const currentProdId = activeWorkflowProd?.production_id || null;
         if (currentProdId && currentProdId !== lastModalProdId) {
           setLastModalProdId(currentProdId);
@@ -3157,7 +3158,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           <td className="p-4 text-center">
                             <div className="flex flex-col gap-1.5 items-center justify-center">
                               {/* Step 1: Assign Editor */}
-                              {displayStatus === 'Raw Footage Received' && (
+                              {(displayStatus === 'Raw Footage Received' || displayStatus === 'Verified Footage' || displayStatus === 'Footage Handover Verified' || displayStatus === 'Pending') && (
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -3191,7 +3192,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               )}
 
                               {/* Dropdown status transition select */}
-                              {displayStatus !== 'Raw Footage Received' && displayStatus !== 'Completed' && (
+                              {displayStatus !== 'Raw Footage Received' && displayStatus !== 'Verified Footage' && displayStatus !== 'Footage Handover Verified' && displayStatus !== 'Pending' && displayStatus !== 'Completed' && (
                                 <div className="w-full max-w-[160px]">
                                   <label className="block text-[8px] uppercase tracking-wider text-zinc-500 font-bold mb-1 text-left">
                                     Update Status:
@@ -6860,7 +6861,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     Step Workflow Wizard • {orderId}
                   </span>
                   <h3 className="text-xs font-black text-white uppercase tracking-wider font-mono">
-                    {workflowActionType === 'assign_editor' && 'Step 1: Assign Editor'}
+                    {workflowActionType === 'assign_editor' && 'Assign Editor'}
+                    {workflowActionType === 'reassign_staff' && 'Reassign Staff'}
+                    {workflowActionType === 'delivery_checklist' && 'Delivery Checklist'}
                     {workflowActionType === 'send_review' && 'Step 4: Send For Review'}
                     {workflowActionType === 'request_revision' && 'Step 5: Request Revision'}
                     {workflowActionType === 'deliver_project' && 'Step 8: Deliver Project'}
@@ -6885,8 +6888,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   Step workflow update for <strong className="text-white">{customerName}</strong>.
                 </p>
 
-                {/* FORM: Assign Editor (Step 1) */}
-                {workflowActionType === 'assign_editor' && activeWorkflowProd && (
+                {/* FORM: Reassign Staff (Deliverable-Wise) */}
+                {workflowActionType === 'reassign_staff' && activeWorkflowProd && (
                   <div className="space-y-5 font-sans text-left">
                     
                     {/* 1. Deliverable / Lead Details (Read-only) */}
@@ -7261,6 +7264,218 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     </div>
                   </div>
                 )}
+
+                {/* FORM: Assign Editor (Lead) */}
+                {workflowActionType === 'assign_editor' && activeWorkflowProd && (
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!wfEditor || wfEditor === 'Unassigned') {
+                      setWfError('Please select an editor.');
+                      return;
+                    }
+                    if (!wfTargetDeliveryDate || !wfTargetDeliveryTime) {
+                      setWfError('Target Delivery Date and Time are required.');
+                      return;
+                    }
+                    
+                    try {
+                      setIsSaving(true);
+                      const dtStr = `${wfTargetDeliveryDate}T${wfTargetDeliveryTime}`;
+                      await updateProduction(activeWorkflowProd.production_id, {
+                        editor_assigned: wfEditor,
+                        target_delivery_date: wfTargetDeliveryDate,
+                        expected_delivery_date: dtStr,
+                        project_notes: wfProjectNotes,
+                        editing_status: 'Assigned Editor'
+                      });
+                      
+                      const assignedForThis = editorAssignments.filter(a => a.production_id === activeWorkflowProd.production_id && a.staff_name === wfEditor);
+                      if (assignedForThis.length === 0) {
+                         const st = productionStaff.find(s => s.name === wfEditor);
+                         if (st) {
+                           await pushUpdate('editor_assignments', 'assignment_id', `assign-${Date.now()}`, {
+                             production_id: activeWorkflowProd.production_id,
+                             staff_id: st.staff_id,
+                             staff_name: wfEditor,
+                             speciality: 'Lead Editor',
+                             target_finish_date: wfTargetDeliveryDate,
+                             assigned_at: new Date().toISOString()
+                           });
+                         }
+                      }
+                      setActiveWorkflowProd(null);
+                      setWorkflowActionType(null);
+                    } catch (err: any) {
+                      setWfError(err.message || 'Failed to assign editor');
+                    } finally {
+                      setIsSaving(false);
+                    }
+                  }} className="space-y-4 font-sans text-left">
+                    <p className="text-[11px] text-zinc-400 mb-2">
+                      Assign a Lead Editor for this project.
+                    </p>
+                    {wfError && (
+                      <div className="bg-rose-950/20 border border-rose-900/30 text-rose-400 text-xs p-3 rounded-xl font-mono">
+                        ⚠️ {wfError}
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-[9px] font-mono text-zinc-500 uppercase mb-1 font-bold">Select Editor (Production Staff only) *</label>
+                      <select
+                        value={wfEditor}
+                        onChange={(e) => setWfEditor(e.target.value)}
+                        required
+                        className="w-full bg-zinc-905 border border-zinc-900 text-xs rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-purple-500"
+                      >
+                        <option value="Unassigned">-- Select Editor --</option>
+                        {productionStaff.map(s => (
+                          <option key={s.staff_id} value={s.name}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase mb-1 font-bold">Target Delivery Date *</label>
+                        <input
+                          type="date"
+                          required
+                          value={wfTargetDeliveryDate}
+                          onChange={(e) => setWfTargetDeliveryDate(e.target.value)}
+                          className="w-full bg-zinc-905 border border-zinc-900 text-xs rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-purple-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-mono text-zinc-500 uppercase mb-1 font-bold">Target Delivery Time *</label>
+                        <input
+                          type="time"
+                          required
+                          value={wfTargetDeliveryTime}
+                          onChange={(e) => setWfTargetDeliveryTime(e.target.value)}
+                          className="w-full bg-zinc-905 border border-zinc-900 text-xs rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-purple-500"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-mono text-zinc-500 uppercase mb-1 font-bold">Notes (Optional)</label>
+                      <textarea
+                        rows={3}
+                        value={wfProjectNotes}
+                        onChange={(e) => setWfProjectNotes(e.target.value)}
+                        className="w-full bg-zinc-905 border border-zinc-900 text-xs rounded-xl px-3 py-2 text-white font-mono resize-none focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => { setActiveWorkflowProd(null); setWorkflowActionType(null); }}
+                        className="flex-1 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSaving}
+                        className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+                      >
+                        {isSaving ? 'Assigning...' : 'Assign Editor'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* FORM: Delivery Checklist */}
+                {workflowActionType === 'delivery_checklist' && activeWorkflowProd && (() => {
+                  const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
+                  const customerName = order?.customer_name || lead?.customer_name || '—';
+                  const eventName = order?.custom_event_name || lead?.custom_event_name || '—';
+                  const eventType = order?.event_type || lead?.event_type || '—';
+                  let deliverablesText = order?.deliverables_description || lead?.deliverables_description || '';
+                  if (!deliverablesText && lead) {
+                    const targetLeadQuotations = quotations?.filter((q: any) => q.lead_id === lead.lead_id) || [];
+                    targetLeadQuotations.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                    const targetLatestQuote = targetLeadQuotations[0];
+                    if (targetLatestQuote) {
+                      deliverablesText = targetLatestQuote.deliverables_description || '';
+                    }
+                  }
+                  const checklistItems = parseExactDeliverables(deliverablesText);
+
+                  return (
+                    <form onSubmit={async (e) => {
+                      e.preventDefault();
+                      try {
+                        setIsSaving(true);
+                        await updateProduction(activeWorkflowProd.production_id, {
+                          editing_status: 'Client Acceptance'
+                        });
+                        setActiveWorkflowProd(null);
+                        setWorkflowActionType(null);
+                      } catch (err: any) {
+                        alert("Failed to update status: " + (err.message || err));
+                      } finally {
+                        setIsSaving(false);
+                      }
+                    }} className="space-y-5 font-sans text-left">
+                      <div className="bg-zinc-900/40 border border-zinc-900 rounded-2xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-sans">
+                        <div className="space-y-1">
+                          <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Customer Name</span>
+                          <div className="text-zinc-200 font-semibold">{customerName}</div>
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Event Name</span>
+                          <div className="text-zinc-200 font-semibold">{eventName}</div>
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Event Type</span>
+                          <div className="text-zinc-200 font-semibold">{eventType}</div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <h4 className="text-[10px] text-[#a78bfa] uppercase font-black tracking-widest font-mono border-b border-zinc-900 pb-2">
+                          Deliverables Checklist
+                        </h4>
+                        {checklistItems.length === 0 ? (
+                          <div className="text-zinc-500 text-xs italic font-mono p-4 text-center bg-zinc-900/20 rounded-xl">
+                            No deliverables found. Check to proceed.
+                            <label className="flex items-center gap-3 mt-3 justify-center text-zinc-300">
+                              <input type="checkbox" required className="w-4 h-4 accent-purple-500 bg-zinc-900 border-zinc-700 rounded" />
+                              <span className="font-semibold text-xs">Proceed without deliverables</span>
+                            </label>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {checklistItems.map((item, idx) => (
+                              <label key={idx} className="flex items-center gap-3 p-3 bg-zinc-905 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900 transition-colors">
+                                <input type="checkbox" required className="w-4 h-4 accent-purple-500 bg-zinc-900 border-zinc-700 rounded cursor-pointer" />
+                                <span className="font-semibold text-xs text-zinc-300">
+                                  {item} <span className="text-zinc-500 font-normal ml-1">(Completed and Delivered)</span>
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => { setActiveWorkflowProd(null); setWorkflowActionType(null); }}
+                          className="flex-1 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isSaving}
+                          className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+                        >
+                          {isSaving ? 'Submitting...' : 'Submit Deliverables'}
+                        </button>
+                      </div>
+                    </form>
+                  );
+                })()}
 
                 {/* FORM: Send For Review (Step 4) */}
                 {workflowActionType === 'send_review' && (

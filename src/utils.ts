@@ -409,7 +409,14 @@ export function parseTeamMembers(teamMembersStr: string | undefined | null): str
     try {
       const parsed = JSON.parse(trimmed);
       if (Array.isArray(parsed)) {
-        return parsed.map(item => String(item).trim()).filter(Boolean);
+        return parsed.map(item => {
+          if (typeof item === 'object' && item !== null) {
+            const qty = item.qty ? Number(item.qty) : 1;
+            const name = item.name || '';
+            return qty > 1 ? `${qty} ${name}`.trim() : name;
+          }
+          return String(item).trim();
+        }).filter(Boolean);
       }
     } catch (e) {
       // Fallback

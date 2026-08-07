@@ -1876,8 +1876,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     duration: '',
     package_includes: ''
   });
-  const [pkgTeamMembers, setPkgTeamMembers] = useState<string[]>(['']);
-  const [pkgDeliverablesList, setPkgDeliverablesList] = useState<string[]>([]);
+  const [pkgTeamMembers, setPkgTeamMembers] = useState<{qty: number, name: string}[]>([{ qty: 1, name: '' }]);
+  const [pkgDeliverablesList, setPkgDeliverablesList] = useState<{qty: number, name: string}[]>([]);
   const [pkgDeliverableInput, setPkgDeliverableInput] = useState('');
   const [customCategory, setCustomCategory] = useState('');
   const [isComparingPkgs, setIsComparingPkgs] = useState(false);
@@ -3280,9 +3280,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         setEditableDeliverables(prev => {
           let updated = { ...prev };
           let changed = false;
-          const delList = pkg.deliverables
-            ? pkg.deliverables.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
-            : [];
+          const delList = parseTeamMembers(pkg.deliverables);
           const defaultDel = delList.length > 0 ? delList : ['High Resolution Edited Photos'];
 
           if (!prev[pkgId] || prev[pkgId].length === 0) {
@@ -4923,9 +4921,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const incList = parseTeamMembers(pkg.team_members);
       const defaultInc = incList.length > 0 ? incList : ['1 Professional Photographer'];
       
-      const delList = pkg.deliverables
-        ? pkg.deliverables.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
-        : [];
+      const delList = parseTeamMembers(pkg.deliverables);
       const defaultDel = delList.length > 0 ? delList : ['High Resolution Edited Photos'];
 
       const newInclusions = { ...editableInclusions };
@@ -9444,12 +9440,23 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         {pkgTeamMembers.map((member, index) => (
                           <div key={index} className="flex items-center gap-1.5 animate-slide-down">
                             <input
-                              type="text"
-                              placeholder="e.g. 2 Candid Photographers"
-                              value={member}
+                              type="number"
+                              min="1"
+                              value={member.qty}
                               onChange={(e) => {
                                 const newList = [...pkgTeamMembers];
-                                newList[index] = e.target.value;
+                                newList[index] = { ...member, qty: Math.max(1, parseInt(e.target.value) || 1) };
+                                setPkgTeamMembers(newList);
+                              }}
+                              className="w-14 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:outline-none rounded-md py-1 px-1.5 text-xs font-mono font-bold text-center text-white shrink-0"
+                            />
+                            <input
+                              type="text"
+                              placeholder="e.g. Candid Photographer"
+                              value={member.name}
+                              onChange={(e) => {
+                                const newList = [...pkgTeamMembers];
+                                newList[index] = { ...member, name: e.target.value };
                                 setPkgTeamMembers(newList);
                               }}
                               className="flex-1 bg-slate-950 border border-slate-855 rounded-lg py-1 px-2.5 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans text-xs"
@@ -9458,7 +9465,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               type="button"
                               onClick={() => {
                                 const newList = pkgTeamMembers.filter((_, idx) => idx !== index);
-                                setPkgTeamMembers(newList.length > 0 ? newList : ['']);
+                                setPkgTeamMembers(newList.length > 0 ? newList : [{ qty: 1, name: '' }]);
                               }}
                               className="p-1.5 text-slate-400 hover:text-rose-450 bg-slate-950 hover:bg-slate-900 border border-slate-855 hover:border-rose-900/30 rounded-lg transition-all cursor-pointer flex-shrink-0 animate-fade-in"
                               title="Remove item"
@@ -9470,7 +9477,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       </div>
                       <button
                         type="button"
-                        onClick={() => setPkgTeamMembers([...pkgTeamMembers, ''])}
+                        onClick={() => setPkgTeamMembers([...pkgTeamMembers, { qty: 1, name: '' }])}
                         className="text-[10px] text-emerald-400 hover:text-emerald-350 font-semibold flex items-center gap-1 cursor-pointer transition-all hover:underline mt-1"
                       >
                         <Plus className="w-3 h-3" />
@@ -9486,73 +9493,59 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         </span>
                         <label className="block text-slate-400 font-semibold">Deliverables</label>
                       </div>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder="e.g. 2 Candid Photographers"
-                          value={pkgDeliverableInput}
-                          onChange={(e) => setPkgDeliverableInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              if (pkgDeliverableInput.trim()) {
-                                const newDeliverables = [...pkgDeliverablesList, pkgDeliverableInput.trim()];
-                                setPkgDeliverablesList(newDeliverables);
-                                setPkgDeliverableInput('');
-                                setPkgForm({ ...pkgForm, deliverables: newDeliverables.join('\n') });
-                              }
-                            }
-                          }}
-                          className="flex-1 bg-slate-950 border border-slate-855 rounded-lg py-1.5 px-3 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans text-xs"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (pkgDeliverableInput.trim()) {
-                              const newDeliverables = [...pkgDeliverablesList, pkgDeliverableInput.trim()];
-                              setPkgDeliverablesList(newDeliverables);
-                              setPkgDeliverableInput('');
-                              setPkgForm({ ...pkgForm, deliverables: newDeliverables.join('\n') });
-                            }
-                          }}
-                          className="px-4 py-1.5 text-[10px] bg-slate-800 hover:bg-slate-755 text-slate-300 rounded-lg transition-all cursor-pointer font-medium border border-slate-700 uppercase tracking-wider whitespace-nowrap"
-                        >
-                          Add More
-                        </button>
+                      
+                      <div className="space-y-2 mt-1 max-h-[160px] overflow-y-auto pr-1">
+                        {pkgDeliverablesList.map((del, index) => (
+                          <div key={index} className="flex items-center gap-2 animate-fade-in">
+                            <span className="text-emerald-400 font-bold text-xs shrink-0">✓</span>
+                            <input
+                              type="number"
+                              min="1"
+                              value={del.qty}
+                              onChange={(e) => {
+                                const newList = [...pkgDeliverablesList];
+                                newList[index] = { ...del, qty: Math.max(1, parseInt(e.target.value) || 1) };
+                                setPkgDeliverablesList(newList);
+                                setPkgForm({ ...pkgForm, deliverables: JSON.stringify(newList) });
+                              }}
+                              className="w-14 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:outline-none rounded-md py-1 px-1.5 text-xs font-mono font-bold text-center text-white shrink-0"
+                            />
+                            <input
+                              type="text"
+                              placeholder="e.g. Photo Album"
+                              value={del.name}
+                              onChange={(e) => {
+                                const newList = [...pkgDeliverablesList];
+                                newList[index] = { ...del, name: e.target.value };
+                                setPkgDeliverablesList(newList);
+                                setPkgForm({ ...pkgForm, deliverables: JSON.stringify(newList) });
+                              }}
+                              className="flex-1 bg-slate-950/50 border border-slate-855 rounded-lg py-1 px-2.5 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans text-xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newList = pkgDeliverablesList.filter((_, idx) => idx !== index);
+                                setPkgDeliverablesList(newList);
+                                setPkgForm({ ...pkgForm, deliverables: JSON.stringify(newList) });
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-rose-450 bg-slate-950 hover:bg-slate-900 border border-slate-855 hover:border-rose-900/30 rounded-lg transition-all cursor-pointer shrink-0"
+                              title="Remove item"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
                       </div>
                       
-                      {pkgDeliverablesList.length > 0 && (
-                        <div className="mt-3 space-y-2">
-                          {pkgDeliverablesList.map((del, index) => (
-                            <div key={index} className="flex items-center gap-2 animate-fade-in">
-                              <span className="text-emerald-400 font-bold text-xs shrink-0">✓</span>
-                              <input
-                                type="text"
-                                value={del}
-                                onChange={(e) => {
-                                  const newList = [...pkgDeliverablesList];
-                                  newList[index] = e.target.value;
-                                  setPkgDeliverablesList(newList);
-                                  setPkgForm({ ...pkgForm, deliverables: newList.join('\n') });
-                                }}
-                                className="flex-1 bg-slate-950/50 border border-slate-855 rounded-lg py-1 px-2.5 text-slate-200 focus:outline-none focus:border-emerald-500 font-sans text-xs"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const newList = pkgDeliverablesList.filter((_, idx) => idx !== index);
-                                  setPkgDeliverablesList(newList);
-                                  setPkgForm({ ...pkgForm, deliverables: newList.join('\n') });
-                                }}
-                                className="p-1.5 text-slate-400 hover:text-rose-450 bg-slate-950 hover:bg-slate-900 border border-slate-855 hover:border-rose-900/30 rounded-lg transition-all cursor-pointer shrink-0"
-                                title="Remove item"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => setPkgDeliverablesList([...pkgDeliverablesList, { qty: 1, name: '' }])}
+                        className="text-[10px] text-emerald-400 hover:text-emerald-350 font-semibold flex items-center gap-1 cursor-pointer transition-all hover:underline mt-2"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Add More</span>
+                      </button>
                     </div>
                   </div>
 
@@ -9605,12 +9598,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           resolvedCategory = customCategory.trim();
                         }
                         
-                        const filteredMembers = pkgTeamMembers.map(item => item.trim()).filter(Boolean);
+                        const filteredMembers = pkgTeamMembers.filter(item => item.name.trim() !== '');
                         const teamMembersStr = filteredMembers.length > 0 ? JSON.stringify(filteredMembers) : '';
-
+                        
+                        const filteredDeliverables = pkgDeliverablesList.filter(item => item.name.trim() !== '');
+                        const deliverablesStr = filteredDeliverables.length > 0 ? JSON.stringify(filteredDeliverables) : '';
+                        
                         const payload = {
                           ...pkgForm,
                           team_members: teamMembersStr,
+                          deliverables: deliverablesStr,
                           category: resolvedCategory
                         };
                         
@@ -9636,9 +9633,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             duration: '',
                             package_includes: ''
                           });
-                          setPkgTeamMembers(['']);
+                          setPkgTeamMembers([{ qty: 1, name: '' }]);
                           setPkgDeliverablesList([]);
-                          setPkgDeliverableInput('');
                           setCustomCategory('');
                         } catch (err: any) {
                           alert(`Failed to save package: ${err.message || err}`);
@@ -9780,10 +9776,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       package_includes: pkg.package_includes || ''
                                     });
                                     const parsed = parseTeamMembers(pkg.team_members);
-                                    setPkgTeamMembers(parsed.length > 0 ? parsed : ['']);
-                                    const parsedDel = pkg.deliverables ? pkg.deliverables.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean) : [];
-                                    setPkgDeliverablesList(parsedDel);
-                                    setPkgDeliverableInput('');
+                                    setPkgTeamMembers(parsed.length > 0 ? parsed.map(s => { const r = parseQtyAndText(s); return { qty: r.qty, name: r.text }; }) : [{ qty: 1, name: '' }]);
+                                    const parsedDel = parseTeamMembers(pkg.deliverables);
+                                    setPkgDeliverablesList(parsedDel.length > 0 ? parsedDel.map(s => { const r = parseQtyAndText(s); return { qty: r.qty, name: r.text }; }) : []);
                                     setCustomCategory('');
                                     setIsAddFormOpen(true);
                                   }}
@@ -12946,7 +12941,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   const matches = pkg.deliverables?.match(/(\d+\s+edited\s+photos|\d+\+?\s+photos|unlimited\s+photos)/i);
                   if (matches) return matches[0];
                   if (text.includes('photographer') || text.includes('photos')) {
-                    const sentences = pkg.deliverables.split(',').map((s: string) => s.trim());
+                    const sentences = parseTeamMembers(pkg.deliverables);
                     const match = sentences.find((s: string) => s.toLowerCase().includes('photographer') || s.toLowerCase().includes('photo') || s.toLowerCase().includes('candid'));
                     if (match) return match;
                   }
@@ -12955,7 +12950,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                 if (key === 'videos') {
                   if (text.includes('video') || text.includes('videographer') || text.includes('cinematic') || text.includes('teaser')) {
-                    const sentences = pkg.deliverables.split(',').map((s: string) => s.trim());
+                    const sentences = parseTeamMembers(pkg.deliverables);
                     const match = sentences.find((s: string) => s.toLowerCase().includes('video') || s.toLowerCase().includes('videographer') || s.toLowerCase().includes('cinematic') || s.toLowerCase().includes('teaser'));
                     if (match) return match;
                     return '4K Cinematic Highlight Video';
@@ -12965,7 +12960,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                 if (key === 'reels') {
                   if (text.includes('reels') || text.includes('reel') || text.includes('short')) {
-                    const sentences = pkg.deliverables.split(',').map((s: string) => s.trim());
+                    const sentences = parseTeamMembers(pkg.deliverables);
                     const match = sentences.find((s: string) => s.toLowerCase().includes('reel') || s.toLowerCase().includes('short'));
                     if (match) return match;
                     return 'Reels Package Included';
@@ -12978,7 +12973,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                 if (key === 'album') {
                   if (text.includes('album') || text.includes('book') || text.includes('print')) {
-                    const sentences = pkg.deliverables.split(',').map((s: string) => s.trim());
+                    const sentences = parseTeamMembers(pkg.deliverables);
                     const match = sentences.find((s: string) => s.toLowerCase().includes('album') || s.toLowerCase().includes('book') || s.toLowerCase().includes('print'));
                     if (match) return match;
                     return 'Standard Hardcover Photo Album';
@@ -12988,7 +12983,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                 if (key === 'frames') {
                   if (text.includes('frame') || text.includes('canvas')) {
-                    const sentences = pkg.deliverables.split(',').map((s: string) => s.trim());
+                    const sentences = parseTeamMembers(pkg.deliverables);
                     const match = sentences.find((s: string) => s.toLowerCase().includes('frame') || s.toLowerCase().includes('canvas'));
                     if (match) return match;
                     return '1 Wall Frame / Canvas Print';
@@ -13339,10 +13334,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             package_includes: pkg.package_includes || ''
                           });
                           const parsed = parseTeamMembers(pkg.team_members);
-                          setPkgTeamMembers(parsed.length > 0 ? parsed : ['']);
-                          const parsedDel = pkg.deliverables ? pkg.deliverables.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean) : [];
-                          setPkgDeliverablesList(parsedDel);
-                          setPkgDeliverableInput('');
+                          setPkgTeamMembers(parsed.length > 0 ? parsed.map(s => { const r = parseQtyAndText(s); return { qty: r.qty, name: r.text }; }) : [{ qty: 1, name: '' }]);
+                          const parsedDel = parseTeamMembers(pkg.deliverables);
+                          setPkgDeliverablesList(parsedDel.length > 0 ? parsedDel.map(s => { const r = parseQtyAndText(s); return { qty: r.qty, name: r.text }; }) : []);
                           setIsAddFormOpen(false);
                           setViewingPkgDetails(null);
                         }}
