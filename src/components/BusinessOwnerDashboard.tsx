@@ -133,10 +133,17 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       const { data, error } = await supabaseClient
         .from('unlock_requests')
         .select('*')
-        .eq('status', 'Pending');
+        .eq('request_status', 'Pending');
         
       if (!error && data) {
-        setUnlockRequests(data);
+        const normalized = data.map((r: any) => ({
+          ...r,
+          status: r.request_status || r.status || 'Pending',
+          reason: r.request_reason || r.reason || '',
+          sales_staff_name: r.requested_by_name || r.sales_staff_name || '',
+          sales_staff_id: r.requested_by_user_id || r.sales_staff_id || ''
+        }));
+        setUnlockRequests(normalized);
       }
     };
 
@@ -232,9 +239,9 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
         // Update request status to Approved
         const { error: updErr } = await supabaseClient.from('unlock_requests')
           .update({ 
-             status: 'Approved'
+             request_status: 'Approved'
           })
-          .eq('order_id', request.order_id);
+          .or(`order_id.eq.${request.order_id},lead_id.eq.${request.lead_id}`);
           
         if (updErr) throw new Error(updErr.message);
           
@@ -271,9 +278,9 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     try {
       const { error: updErr } = await supabaseClient.from('unlock_requests')
         .update({ 
-          status: 'Rejected'
+          request_status: 'Rejected'
         })
-        .eq('order_id', request.order_id);
+        .or(`order_id.eq.${request.order_id},lead_id.eq.${request.lead_id}`);
         
       if (updErr) throw new Error(updErr.message);
         

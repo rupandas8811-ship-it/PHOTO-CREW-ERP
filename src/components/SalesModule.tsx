@@ -1570,7 +1570,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         .select('*');
       
       if (!error && data) {
-        setUnlockRequests(data);
+        const normalized = data.map((r: any) => ({
+          ...r,
+          status: r.request_status || r.status || 'Pending',
+          reason: r.request_reason || r.reason || '',
+          sales_staff_name: r.requested_by_name || r.sales_staff_name || '',
+          sales_staff_id: r.requested_by_user_id || r.sales_staff_id || ''
+        }));
+        setUnlockRequests(normalized);
       }
     };
 
@@ -5779,61 +5786,132 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setIsSaving(true);
     
     try {
+      if (!supabaseClient) {
+        throw new Error("Supabase database client is not initialized.");
+      }
+
       const order = orders.find(o => o.lead_id === selectedUnlockLead.lead_id);
-      const orderId = order?.order_id || (selectedUnlockLead as any).order_id || selectedUnlockLead.lead_id;
+      const orderId = order?.order_id || (selectedUnlockLead as any).order_id || selectedUnlockLead.lead_id || 'ORD-UNKNOWN';
       
-      const payload = {
-        title: unlockRequestReason,
-        message: `New unlock request received for ${selectedUnlockLead.customer_name || 'Lead'}.`,
-        notification_type: 'Quotation Unlock Request',
-        recipient_role: 'Business Owner',
-        project_id: orderId,
-        task_id: 'Pending',
-        priority: 'High',
-        action_url: JSON.stringify({
-          lead_id: selectedUnlockLead.lead_id,
-          customer_name: selectedUnlockLead.customer_name,
-          mobile: selectedUnlockLead.mobile,
-          sales_staff_id: currentUser?.id || '',
-          sales_staff_name: currentUser?.name || '',
-          sales_staff_mobile: currentUser?.mobile || ''
-        })
-      };
-      
+      // 1. Prevent Duplicate Requests: Check if a Pending request already exists
+      const { data: existingPending, error: checkErr } = await supabaseClient
+        .from('unlock_requests')
+        .select('*')
+        .or(`lead_id.eq.${selectedUnlockLead.lead_id},order_id.eq.${orderId}`)
+        .eq('request_status', 'Pending');
+
+      if (checkErr) {
+        console.error("Error checking existing pending unlock requests:", checkErr);
+      }
+
+      const localPending = unlockRequests.find((r: any) => 
+        (r.lead_id === selectedUnlockLead.lead_id || r.order_id === orderId) &&
+        (r.status === 'Pending' || r.request_status === 'Pending')
+      );
+
+      if ((existingPending && existingPending.length > 0) || localPending) {
+        showToastMsg("An Unlock Request is already pending Business Owner approval.", "error");
+        setIsSaving(false);
+        return;
+      }
+
+      const fullReason = unlockRequestReason === 'Other' ? unlockRequestCustomReason.trim() : unlockRequestReason;
+
       const unlockRequestPayload = {
         lead_id: selectedUnlockLead.lead_id,
         order_id: orderId,
-        customer_name: selectedUnlockLead.customer_name || 'Unknown',
-        sales_staff_id: currentUser?.id || '',
-        sales_staff_name: currentUser?.name || '',
-        sales_staff_mobile: currentUser?.mobile || '',
-        reason: unlockRequestReason,
-        custom_reason: unlockRequestReason === 'Other' ? unlockRequestCustomReason : null,
-        status: 'Pending',
+        requested_by_user_id: currentUser?.id || 'sales-user',
+        requested_by_name: currentUser?.name || 'Sales Staff',
+        requested_by_role: currentUser?.role || 'Sales',
+        business_owner_user_id: 'BO-MAIN',
+        chapter_id: selectedUnlockLead.chapter_id || 'DEFAULT',
+        request_reason: fullReason || 'Unlock quotation for editing',
+        request_status: 'Pending',
         requested_at: new Date().toISOString(),
         created_at: new Date().toISOString()
       };
       
-      if (supabaseClient) {
-        try {
-          const { error: reqErr } = await supabaseClient.from('unlock_requests').insert([unlockRequestPayload]);
-          if (reqErr) {
-            console.error("Supabase insert error (falling back to local state):", reqErr);
-          }
-        } catch (sbErr) {
-          console.error("Supabase insert exception (falling back to local state):", sbErr);
-        }
+      // 2. Save to Supabase: MUST succeed
+      const { data: insertedData, error: reqErr } = await supabaseClient
+        .from('unlock_requests')
+        .insert([unlockRequestPayload])
+        .select();
+
+      if (reqErr) {
+        console.error("Supabase unlock_requests insert failed:", reqErr);
+        throw new Error(`Database insert failed: ${reqErr.message}`);
       }
-        
+
+      if (!insertedData || insertedData.length === 0) {
+        throw new Error("Database insert did not return confirmation. Request not saved.");
+      }
+
+      // 3. Update Lead / Order Status in Supabase
+      try {
+        await supabaseClient
+          .from('leads')
+          .update({ 
+            current_status: 'Unlock Request Pending',
+            status: 'Unlock Request Pending',
+            updated_at: new Date().toISOString()
+          })
+          .eq('lead_id', selectedUnlockLead.lead_id);
+
+        if (orderId) {
+          await supabaseClient
+            .from('orders')
+            .update({ 
+              order_status: 'Unlock Request Pending',
+              updated_at: new Date().toISOString()
+            })
+            .eq('order_id', orderId);
+        }
+      } catch (statusErr) {
+        console.error("Non-fatal error updating lead/order status:", statusErr);
+      }
+
+      // 4. Send notification to Business Owner
       if (addNotification) {
         try {
+          const payload = {
+            title: unlockRequestReason,
+            message: `New unlock request received for ${selectedUnlockLead.customer_name || 'Lead'}.`,
+            notification_type: 'Quotation Unlock Request',
+            recipient_role: 'Business Owner',
+            project_id: orderId,
+            task_id: 'Pending',
+            priority: 'High',
+            action_url: JSON.stringify({
+              lead_id: selectedUnlockLead.lead_id,
+              customer_name: selectedUnlockLead.customer_name,
+              mobile: selectedUnlockLead.mobile,
+              sales_staff_id: currentUser?.id || '',
+              sales_staff_name: currentUser?.name || '',
+              sales_staff_mobile: currentUser?.mobile || ''
+            })
+          };
           await addNotification(payload);
         } catch (notifErr) {
           console.error("Notification error:", notifErr);
         }
       }
       
-      setUnlockRequests(prev => [...prev.filter(r => r.lead_id !== selectedUnlockLead.lead_id), unlockRequestPayload]);
+      const normalizedNewRecord = {
+        ...insertedData[0],
+        status: 'Pending',
+        request_status: 'Pending',
+        reason: fullReason,
+        request_reason: fullReason,
+        sales_staff_name: currentUser?.name || 'Sales Staff',
+        sales_staff_id: currentUser?.id || 'sales-user',
+        customer_name: selectedUnlockLead.customer_name || 'Unknown'
+      };
+
+      setUnlockRequests(prev => [
+        ...prev.filter(r => r.lead_id !== selectedUnlockLead.lead_id && r.order_id !== orderId),
+        normalizedNewRecord
+      ]);
+
       showToastMsg("Unlock request submitted successfully.", "success");
       setShowUnlockRequestModal(false);
       setSelectedUnlockLead(null);
@@ -10187,11 +10265,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               const isLeadLostStatus = ['Lead Lost', 'Lost Lead'].includes(leadStatus);
 
                               const latestUnlockRequest = unlockRequests
-                                .filter((r: any) => r.lead_id === lead.lead_id)
-                                .sort((a: any, b: any) => new Date(b.created_at || "").getTime() - new Date(a.created_at || "").getTime())[0];
-                              const isPendingUnlock = latestUnlockRequest?.status === 'Pending';
-                              const isRejectedUnlock = latestUnlockRequest?.status === 'Rejected';
-                              const isApprovedUnlock = latestUnlockRequest?.status === 'Approved';
+                                .filter((r: any) => r.lead_id === lead.lead_id || (linkedOrder && r.order_id === linkedOrder.order_id))
+                                .sort((a: any, b: any) => new Date(b.created_at || b.requested_at || "").getTime() - new Date(a.created_at || a.requested_at || "").getTime())[0];
+                              const isPendingUnlock = latestUnlockRequest?.status === 'Pending' || latestUnlockRequest?.request_status === 'Pending';
+                              const isRejectedUnlock = latestUnlockRequest?.status === 'Rejected' || latestUnlockRequest?.request_status === 'Rejected';
+                              const isApprovedUnlock = latestUnlockRequest?.status === 'Approved' || latestUnlockRequest?.request_status === 'Approved';
 
                               if (isConfirmOrderStatus) {
                                 return (
