@@ -2181,6 +2181,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     ? (['Confirm Order', 'Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed'].includes(selectedLead.status || '') ||
        (selectedLead as any).current_status === 'Order Confirmed' ||
        (selectedLead as any).booking_status === 'Confirmed' ||
+       getLeadCurrentStatus(selectedLead) === 'Order Confirmed' ||
+       ['Operations', 'Production', 'Post-Production', 'Completed'].includes(getLeadCurrentStage(selectedLead)) ||
        (orders && orders.some(o => o.lead_id === selectedLead.lead_id && o.status !== 'Cancelled')))
     : false;
 
@@ -2191,6 +2193,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const isCrmLocked = isLeadConfirmed && !isApprovedUnlocked;
   const isLeadLocked = isCrmLocked;
+
+  // Step-level locking rules after Order Confirmed / Operations stage:
+  // Step 1 (Customer Details) and Step 2 (Event Details) remain locked ALWAYS after Order Confirmed.
+  // Step 3 (Quotation Details) unlocks ONLY when Business Owner approves "Unlock Quotation".
+  const isStep1Locked = isLeadConfirmed;
+  const isStep2Locked = isLeadConfirmed;
+  const isStep3Locked = isLeadConfirmed && !isApprovedUnlocked;
 
   const [openDropdownLeadId, setOpenDropdownLeadId] = useState<string | null>(null);
   const [dropdownCoords, setDropdownCoords] = useState<{ top: number | string, right: number | string, bottom: number | string }>({ top: 0, right: 0, bottom: 'auto' });
@@ -2708,6 +2717,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     updatedDeliverables: Record<string, string[]>,
     activePkgId?: string
   ) => {
+    if (isStep3Locked) return;
     const pkgId = activePkgId || wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
     const leadId = selectedLead?.lead_id;
     if (!leadId || leadId === 'DRAFT-LEAD' || !pkgId || !supabaseClient) return;
@@ -3057,6 +3067,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   }, [quoteServices, selectedLead, createdLeadId, crmWizardStep, wizardStep]);
 
   const handleEditInclusion = (pkgKey: string, index: number, value: string) => {
+    if (isStep3Locked) return;
     setEditableInclusions(prev => {
       const list = prev[pkgKey] ? [...prev[pkgKey]] : [];
       list[index] = value;
@@ -3065,6 +3076,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   };
 
   const handleRemoveInclusion = (pkgKey: string, index: number) => {
+    if (isStep3Locked) return;
     setEditableInclusions(prev => {
       const list = prev[pkgKey] ? prev[pkgKey].filter((_, i) => i !== index) : [];
       return { ...prev, [pkgKey]: list };
@@ -3072,6 +3084,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   };
 
   const handleAddInclusion = (pkgKey: string, value: string) => {
+    if (isStep3Locked) return;
     if (!value.trim()) return;
     setEditableInclusions(prev => {
       const list = prev[pkgKey] ? [...prev[pkgKey]] : [];
@@ -3081,6 +3094,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   };
 
   const handleEditDeliverable = (pkgKey: string, index: number, value: string) => {
+    if (isStep3Locked) return;
     setEditableDeliverables(prev => {
       const list = prev[pkgKey] ? [...prev[pkgKey]] : [];
       list[index] = value;
@@ -3089,6 +3103,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   };
 
   const handleRemoveDeliverable = (pkgKey: string, index: number) => {
+    if (isStep3Locked) return;
     setEditableDeliverables(prev => {
       const list = prev[pkgKey] ? prev[pkgKey].filter((_, i) => i !== index) : [];
       return { ...prev, [pkgKey]: list };
@@ -3096,6 +3111,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   };
 
   const handleAddDeliverable = (pkgKey: string, value: string) => {
+    if (isStep3Locked) return;
     if (!value.trim()) return;
     setEditableDeliverables(prev => {
       const list = prev[pkgKey] ? [...prev[pkgKey]] : [];
@@ -4735,6 +4751,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   };
 
   const handlePackageChange = (packageId: string) => {
+    if (isStep3Locked) {
+      showToastMsg("Quotation details are locked. Owner unlock approval required to edit.", "error");
+      return;
+    }
     setIsPackageSelectedAndSaved(true);
     setIsPackageDetailsSaved(true);
 
@@ -4933,6 +4953,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleSavePackageOnly = async () => {
     if (!selectedLead || isSaving) return;
+    if (isStep3Locked) {
+      showToastMsg("Quotation details are locked. Owner unlock approval required to edit.", "error");
+      return;
+    }
     setIsSaving(true);
     try {
       // 1. Perform unified validation
@@ -5028,6 +5052,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setIsSaving(true);
     try {
       if (step === 1) {
+        if (isStep1Locked) {
+          showToastMsg("Customer details are locked after order confirmation.", "error");
+          setIsSaving(false);
+          return;
+        }
         if (!wizardLeadData.mobile) {
           showToastMsg("Phone Number is required.", "error");
           setIsSaving(false);
@@ -5079,6 +5108,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
         showToastMsg("CRM Updated Successfully.", "success");
       } else if (step === 2) {
+        if (isStep2Locked) {
+          showToastMsg("Event details are locked after order confirmation.", "error");
+          setIsSaving(false);
+          return;
+        }
         let finalEventsList = [...crmEvents];
 
         if (showEventForm || finalEventsList.length === 0) {
@@ -5191,6 +5225,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         await handleSaveStep2Direct();
         return;
       } else if (step === 3) {
+        if (isStep3Locked) {
+          showToastMsg("Quotation details are locked. Owner unlock approval required to edit.", "error");
+          setIsSaving(false);
+          return;
+        }
         if (!validateStep3Data('all')) {
           setIsSaving(false);
           return;
@@ -5450,6 +5489,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleSaveStep2Direct = async () => {
     const isCreateFlow = activeTab === 'create';
+    if (!isCreateFlow && isStep2Locked) {
+      showToastMsg("Event details are locked after order confirmation.", "error");
+      return;
+    }
     const currentLeadId = isCreateFlow ? createdLeadId : selectedLead?.lead_id;
     if (!currentLeadId) {
       showToastMsg("Lead not initialized yet.", "error");
