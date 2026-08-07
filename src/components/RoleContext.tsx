@@ -5417,7 +5417,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       description: JSON.stringify(extraData),
       price: newPkg.price,
       status: newPkg.status,
-      created_at: newPkg.created_at
+      created_at: newPkg.created_at,
+      category: newPkg.category
     };
 
     // 1. Perform Database Schema Validation before the operation
@@ -5489,7 +5490,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       description: JSON.stringify(extraData),
       price: merged.price,
       status: merged.status,
-      created_at: merged.created_at || new Date().toISOString()
+      created_at: merged.created_at || new Date().toISOString(),
+      category: merged.category
     };
 
     // 1. Perform Database Schema Validation before the operation
@@ -5506,7 +5508,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           name: dbPayload.name,
           description: dbPayload.description,
           price: dbPayload.price,
-          status: dbPayload.status
+          status: dbPayload.status,
+          category: dbPayload.category
         }).eq('package_id', packageId);
         
         if (error) throw error;

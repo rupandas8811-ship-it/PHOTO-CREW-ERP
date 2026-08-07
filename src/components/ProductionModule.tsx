@@ -535,7 +535,8 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     addSpeciality,
     isDepartmentAllowedToEdit,
     deleteRawFootage,
-    deleteProduction
+    deleteProduction,
+    pushUpdate
   } = useRole();
 
   // Role permissions gate
