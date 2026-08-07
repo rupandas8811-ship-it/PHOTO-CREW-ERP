@@ -489,7 +489,18 @@ const generateQuotationPDF = (
         members: (eventInclusions || []).filter(Boolean)
       });
 
-          });
+      const eventDeliverables = editableDeliverables?.[eventKey] !== undefined
+        ? editableDeliverables[eventKey]
+        : (editableDeliverables?.[nameKey] !== undefined ? editableDeliverables[nameKey] : null);
+
+      if (eventDeliverables && eventDeliverables.filter(Boolean).length > 0) {
+        orderedEventDeliverables.push({
+          eventName,
+          pkgName,
+          items: eventDeliverables.filter(Boolean).map((item: string) => formatQtyItem(item))
+        });
+      }
+    });
   } else {
     generalInclusions = inclusionsList;
   }
@@ -2776,17 +2787,30 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           }
         ];
     const deliverablesText = JSON.stringify(deliverablesJson);
-
     const teamMembersText = JSON.stringify(teamMembersJson);
+
+    const cleanPkgCost = wizardLeadData.package_cost !== "" && wizardLeadData.package_cost != null && !isNaN(Number(wizardLeadData.package_cost))
+      ? Number(wizardLeadData.package_cost)
+      : (wizardLeadData.package_price !== "" && wizardLeadData.package_price != null && !isNaN(Number(wizardLeadData.package_price))
+        ? Number(wizardLeadData.package_price)
+        : (wizardLeadData.budget ? Number(wizardLeadData.budget) : null));
+
+    const updatePayload: any = {
+      Team_Members: teamMembersText,
+      deliverables_description: deliverablesText,
+      Select_Package_Option: pkgId,
+    };
+
+    if (cleanPkgCost !== null) {
+      updatePayload.package_price = cleanPkgCost;
+      updatePayload.budget = cleanPkgCost;
+    }
 
     try {
       // Always UPDATE the existing lead record
       const { error: updateError } = await supabaseClient
         .from('leads')
-        .update({
-          Team_Members: teamMembersText,
-          deliverables_description: deliverablesText
-        })
+        .update(updatePayload)
         .eq('lead_id', leadId);
 
       if (updateError) {
@@ -3284,7 +3308,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         try {
           const { data, error } = await supabaseClient
             .from('leads')
-            .select('Team_Members, deliverables_description')
+            .select('Team_Members, deliverables_description, package_price, budget, Select_Package_Option, Quotation_Discount, Additional_Services_Cost, Final_Quotation_Amount, notes_special_customizations')
             .eq('lead_id', selectedLead.lead_id)
             .maybeSingle();
           
@@ -3292,6 +3316,25 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             lastLoadedLeadIdRef.current = selectedLead.lead_id;
             const newInclusions: Record<string, string[]> = {};
             const newDeliverables: Record<string, string[]> = {};
+
+            const cleanCost = data.package_price ?? data.budget;
+            if (cleanCost != null && !isNaN(Number(cleanCost))) {
+              setWizardLeadData(prev => ({
+                ...prev,
+                package_cost: Number(cleanCost),
+                package_price: Number(cleanCost),
+                budget: Number(cleanCost),
+                notes: data.notes_special_customizations ?? prev.notes,
+                Select_Package_Option: data.Select_Package_Option || prev.Select_Package_Option,
+                selected_package_id: data.Select_Package_Option || prev.selected_package_id,
+              }));
+            }
+            if (data.Quotation_Discount != null) {
+              setQuoteDiscount(Number(data.Quotation_Discount));
+            }
+            if (data.Additional_Services_Cost != null) {
+              setQuoteAdditional(Number(data.Additional_Services_Cost));
+            }
 
             if (data.Team_Members) {
               try {
@@ -3329,8 +3372,33 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 if (Array.isArray(parsedDel)) {
                   if (typeof parsedDel[0] === 'string') {
                     newDeliverables[pkgId] = parsedDel;
-                  } else if (parsedDel[0] && Array.isArray(parsedDel[0].deliverables)) {
-                    newDeliverables[pkgId] = parsedDel[0].deliverables;
+                  } else {
+                    let allDel: string[] = [];
+                    parsedDel.forEach((item: any) => {
+                      const eventName = item.event_name;
+                      const deliverables = Array.isArray(item.deliverables) ? item.deliverables : [];
+                      if (deliverables.length > 0) {
+                        allDel = [...allDel, ...deliverables];
+                      }
+                      if (eventName === 'General') {
+                        newDeliverables[pkgId] = deliverables;
+                      } else if (crmEvents && crmEvents.length > 0) {
+                        const matchingEvent = crmEvents.find(e => 
+                          (e.event_name || e.event_type || 'Unnamed Event') === eventName
+                        );
+                        if (matchingEvent) {
+                          newDeliverables[`${pkgId}_${matchingEvent.id}`] = deliverables;
+                          newDeliverables[`${pkgId}_${eventName}`] = deliverables;
+                        } else {
+                          newDeliverables[`${pkgId}_${eventName}`] = deliverables;
+                        }
+                      } else {
+                        newDeliverables[`${pkgId}_${eventName}`] = deliverables;
+                      }
+                    });
+                    if (!newDeliverables[pkgId]) {
+                      newDeliverables[pkgId] = allDel.length > 0 ? Array.from(new Set(allDel)) : [];
+                    }
                   }
                   setEditableDeliverables(newDeliverables);
                 }
@@ -4562,8 +4630,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setIsPackageDetailsSaved(false);
     }
 
-    setQuoteDiscount(lead.Quotation_Discount ?? latestQuote?.discount_amount ?? 0);
-    setQuoteAdditional(lead.Additional_Services_Cost ?? latestQuote?.additional_services_cost ?? 0);
+    setQuoteDiscount(fullLead.Quotation_Discount ?? latestQuote?.discount_amount ?? 0);
+    setQuoteAdditional(fullLead.Additional_Services_Cost ?? latestQuote?.additional_services_cost ?? 0);
     if (latestQuote) {
       setActiveQuoteNum(latestQuote.quotation_number || '');
       const quoteSalesName = getCleanSalesStaffName(latestQuote.sales_staff_name || lead.sales_staff_name, lead);
@@ -4586,10 +4654,33 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           if (Array.isArray(parsedDel)) {
             if (typeof parsedDel[0] === 'string') {
               newDeliverables[matchedPkgId] = parsedDel;
-            } else if (parsedDel[0] && Array.isArray(parsedDel[0].deliverables)) {
-              newDeliverables[matchedPkgId] = parsedDel[0].deliverables;
             } else {
-              newDeliverables[matchedPkgId] = [];
+              let allDel: string[] = [];
+              parsedDel.forEach((item: any) => {
+                const eventName = item.event_name;
+                const deliverables = Array.isArray(item.deliverables) ? item.deliverables : [];
+                if (deliverables.length > 0) {
+                  allDel = [...allDel, ...deliverables];
+                }
+                if (eventName === 'General') {
+                  newDeliverables[matchedPkgId] = deliverables;
+                } else if (fullLead.events && fullLead.events.length > 0) {
+                  const matchingEvent = fullLead.events.find(e => 
+                    (e.event_name || e.event_type || 'Unnamed Event') === eventName
+                  );
+                  if (matchingEvent) {
+                    newDeliverables[`${matchedPkgId}_${matchingEvent.id}`] = deliverables;
+                    newDeliverables[`${matchedPkgId}_${matchingEvent.event_name || matchingEvent.event_type || 'Unnamed Event'}`] = deliverables;
+                  } else {
+                    newDeliverables[`${matchedPkgId}_${eventName}`] = deliverables;
+                  }
+                } else {
+                  newDeliverables[`${matchedPkgId}_${eventName}`] = deliverables;
+                }
+              });
+              if (!newDeliverables[matchedPkgId]) {
+                newDeliverables[matchedPkgId] = allDel.length > 0 ? Array.from(new Set(allDel)) : [];
+              }
             }
           } else {
             newDeliverables[matchedPkgId] = [];
@@ -4772,32 +4863,40 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     if (packageId === 'Custom Package' || packageId === 'custom_package') {
       const customPkgVal = 'Custom Package';
+      const existingPrice = wizardLeadData.package_cost || wizardLeadData.package_price || selectedLead?.package_price || selectedLead?.budget || 0;
+
       setWizardLeadData((prev) => ({
         ...prev,
         selected_package_id: customPkgVal,
         Select_Package_Option: customPkgVal,
         package_name: 'Custom Package',
-        package_cost: 0,
-        package_price: 0,
-        deliverables: '',
-        notes: '',
-        budget: 0,
-        final_quoted_amount: 0,
-        additional_charges: 0,
-        discount: 0,
+        package_cost: prev.package_cost || existingPrice,
+        package_price: prev.package_price || existingPrice,
+        budget: prev.budget || existingPrice,
+        final_quoted_amount: prev.final_quoted_amount || existingPrice,
       }));
 
       const newInclusions = { ...editableInclusions };
-      newInclusions[customPkgVal] = [];
+      if (!newInclusions[customPkgVal]) newInclusions[customPkgVal] = [];
       if (crmEvents && crmEvents.length > 0) {
         crmEvents.forEach((ev) => {
-          newInclusions[`${customPkgVal}_${ev.id}`] = [];
-          newInclusions[`${customPkgVal}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [];
+          const k1 = `${customPkgVal}_${ev.id}`;
+          const k2 = `${customPkgVal}_${ev.event_name || ev.event_type || 'Unnamed Event'}`;
+          if (!newInclusions[k1]) newInclusions[k1] = [];
+          if (!newInclusions[k2]) newInclusions[k2] = [];
         });
       }
 
       const newDeliverables = { ...editableDeliverables };
-      newDeliverables[customPkgVal] = [];
+      if (!newDeliverables[customPkgVal]) newDeliverables[customPkgVal] = [];
+      if (crmEvents && crmEvents.length > 0) {
+        crmEvents.forEach((ev) => {
+          const k1 = `${customPkgVal}_${ev.id}`;
+          const k2 = `${customPkgVal}_${ev.event_name || ev.event_type || 'Unnamed Event'}`;
+          if (!newDeliverables[k1]) newDeliverables[k1] = [];
+          if (!newDeliverables[k2]) newDeliverables[k2] = [];
+        });
+      }
 
       setEditableInclusions(newInclusions);
       setEditableDeliverables(newDeliverables);
@@ -4920,107 +5019,86 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   };
 
   const completeApprovedUnlockRequest = async (leadId: string) => {
-    if (!supabaseClient || !leadId) return;
+    if (!leadId) return;
     console.log("[DEBUG completeApprovedUnlockRequest] Executing completeApprovedUnlockRequest for leadId:", leadId);
     try {
       const linkedOrder = (orders || []).find(o => o.lead_id === leadId);
       const orderId = linkedOrder?.order_id || (selectedLead as any)?.order_id;
       const nowIso = new Date().toISOString();
 
-      // 1. Log quotation_locked value BEFORE save
-      const { data: leadBefore } = await supabaseClient
-        .from('leads')
-        .select('lead_id, quotation_locked')
-        .eq('lead_id', leadId)
-        .maybeSingle();
-
-      console.log("[DEBUG completeApprovedUnlockRequest] Lead quotation_locked BEFORE save:", leadBefore?.quotation_locked);
-
-      // 2. Update lead record in Supabase: set quotation_locked = true
-      const { data: leadAfter, error: leadUpdErr } = await supabaseClient
-        .from('leads')
-        .update({ quotation_locked: true, updated_at: nowIso })
-        .eq('lead_id', leadId)
-        .select();
-
-      if (leadUpdErr) {
-        console.error("[DEBUG completeApprovedUnlockRequest] Supabase error setting quotation_locked=true on lead:", leadUpdErr);
-      } else {
-        console.log("[DEBUG completeApprovedUnlockRequest] Lead quotation_locked AFTER save:", leadAfter?.[0]?.quotation_locked, "Data:", leadAfter);
+      // 1. Update lead record in Supabase & context state: set quotation_locked = true
+      try {
+        await updateLead(leadId, { quotation_locked: true, updated_at: nowIso } as any);
+        console.log("[DEBUG completeApprovedUnlockRequest] Successfully updated lead quotation_locked = true via updateLead for", leadId);
+      } catch (lErr: any) {
+        console.warn("[DEBUG completeApprovedUnlockRequest] updateLead warning:", lErr?.message || lErr);
       }
 
-      // 3. Query unlock_requests to find matching records and mark them Completed
-      const { data: allReqs, error: fetchReqsErr } = await supabaseClient
-        .from('unlock_requests')
-        .select('*');
-
-      if (fetchReqsErr) {
-        console.error("[DEBUG completeApprovedUnlockRequest] Fetch unlock_requests error:", fetchReqsErr);
+      if (selectedLead && selectedLead.lead_id === leadId) {
+        setSelectedLead(prev => prev ? { ...prev, quotation_locked: true } : prev);
       }
 
-      if (allReqs && allReqs.length > 0) {
-        const matchingReqs = allReqs.filter((r: any) => {
-          const matchesLead = r.lead_id === leadId || r.order_id === leadId || r.project_id === leadId;
-          const matchesOrder = orderId && (r.order_id === orderId || r.lead_id === orderId);
-          return matchesLead || matchesOrder;
-        });
-
-        console.log("[DEBUG completeApprovedUnlockRequest] Found matching unlock_requests count:", matchingReqs.length);
-
-        for (const req of matchingReqs) {
-          let updQuery = supabaseClient
+      // 2. Update unlock_requests table status to Completed
+      if (supabaseClient) {
+        try {
+          const { data: allReqs } = await supabaseClient
             .from('unlock_requests')
-            .update({
-              request_status: 'Completed',
-              status: 'Completed',
-              completed_at: nowIso,
-              edited_at: nowIso,
-              updated_at: nowIso
+            .select('*');
+
+          if (allReqs && allReqs.length > 0) {
+            const matchingReqs = allReqs.filter((r: any) => {
+              const matchesLead = r.lead_id === leadId || r.order_id === leadId || r.project_id === leadId;
+              const matchesOrder = orderId && (r.order_id === orderId || r.lead_id === orderId);
+              return matchesLead || matchesOrder;
             });
 
-          if (req.id) {
-            updQuery = updQuery.eq('id', req.id);
-          } else if (req.request_id) {
-            updQuery = updQuery.eq('request_id', req.request_id);
-          } else if (req.lead_id) {
-            updQuery = updQuery.eq('lead_id', req.lead_id);
+            for (const req of matchingReqs) {
+              const reqKeyCol = req.id ? 'id' : (req.request_id ? 'request_id' : 'lead_id');
+              const reqKeyVal = req.id || req.request_id || req.lead_id;
+
+              await supabaseClient
+                .from('unlock_requests')
+                .update({
+                  request_status: 'Completed',
+                  status: 'Completed',
+                  completed_at: nowIso,
+                  edited_at: nowIso,
+                  updated_at: nowIso
+                })
+                .eq(reqKeyCol, reqKeyVal);
+            }
           }
 
-          const { error: reqUpdErr } = await updQuery;
-          if (reqUpdErr) {
-            console.error("[DEBUG completeApprovedUnlockRequest] Error updating unlock_request:", reqUpdErr);
-          } else {
-            console.log("[DEBUG completeApprovedUnlockRequest] unlock_requests.status set to Completed for ID:", req.id || req.request_id || req.lead_id);
+          // Proxy call fallback
+          await fetch('/api/db/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              table: 'unlock_requests',
+              matchColumn: 'lead_id',
+              matchValue: leadId,
+              updates: { request_status: 'Completed', status: 'Completed', completed_at: nowIso, updated_at: nowIso }
+            })
+          }).catch(() => {});
+
+          if (orderId && orderId !== leadId) {
+            await fetch('/api/db/update', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                table: 'unlock_requests',
+                matchColumn: 'order_id',
+                matchValue: orderId,
+                updates: { request_status: 'Completed', status: 'Completed', completed_at: nowIso, updated_at: nowIso }
+              })
+            }).catch(() => {});
           }
+        } catch (dbErr: any) {
+          console.warn("[DEBUG completeApprovedUnlockRequest] unlock_requests DB update warning:", dbErr?.message || dbErr);
         }
       }
 
-      // Fallback updates by lead_id & order_id
-      await supabaseClient
-        .from('unlock_requests')
-        .update({
-          request_status: 'Completed',
-          status: 'Completed',
-          completed_at: nowIso,
-          edited_at: nowIso,
-          updated_at: nowIso
-        })
-        .eq('lead_id', leadId);
-
-      if (orderId && orderId !== leadId) {
-        await supabaseClient
-          .from('unlock_requests')
-          .update({
-            request_status: 'Completed',
-            status: 'Completed',
-            completed_at: nowIso,
-            edited_at: nowIso,
-            updated_at: nowIso
-          })
-          .eq('order_id', orderId);
-      }
-
-      // 4. Update local React state
+      // 3. Update local React unlockRequests state
       setUnlockRequests(prev => Array.isArray(prev) ? prev.map(r => {
         const matchesLead = r.lead_id === leadId || r.order_id === leadId || r.project_id === leadId;
         const matchesOrder = orderId && (r.order_id === orderId || r.lead_id === orderId);
@@ -5036,13 +5114,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         return r;
       }) : []);
 
-      setLeads(prevLeads => prevLeads.map(l => l.lead_id === leadId ? { ...l, quotation_locked: true } : l));
-      if (selectedLead && selectedLead.lead_id === leadId) {
-        setSelectedLead(prev => prev ? { ...prev, quotation_locked: true } : prev);
+      // Re-fetch unlock_requests from DB to stay synchronized
+      if (supabaseClient) {
+        const { data } = await supabaseClient.from('unlock_requests').select('*');
+        if (data) {
+          setUnlockRequests(data.map((r: any) => ({
+            ...r,
+            request_status: r.request_status || r.status || 'Pending',
+            status: r.request_status || r.status || 'Pending',
+            reason: r.request_reason || r.reason || '',
+            sales_staff_name: r.requested_by_name || r.sales_staff_name || '',
+            sales_staff_id: r.requested_by_user_id || r.sales_staff_id || ''
+          })));
+        }
       }
-
-      // Re-fetch unlock_requests from DB to be 100% in sync
-      await fetchUnlockRequests();
 
     } catch (err: any) {
       console.error("[DEBUG completeApprovedUnlockRequest] Exception during unlock completion:", err?.message || err);
@@ -5063,16 +5148,53 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         return;
       }
 
-      const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead.Select_Package_Option;
+      const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead.Select_Package_Option || 'Custom Package';
 
       // 2. Perform the full save of lead_packages to Supabase using our robust real-time save logic
-      await saveStep3DataRealtime(editableInclusions, editableDeliverables);
+      await saveStep3DataRealtime(editableInclusions, editableDeliverables, pkgId);
 
-      // Compute active deliverables text directly from editableDeliverables
-      const currentDelList = editableDeliverables[pkgId] || [];
-      const activeDeliverablesText = currentDelList.filter(Boolean).length > 0
-        ? currentDelList.filter(Boolean).join('\n')
-        : (wizardLeadData.deliverables || selectedLead.deliverables_description || '');
+      // Construct JSON strings for deliverables and team members
+      const inclusionsList = editableInclusions[pkgId] || [];
+      const teamMembersJson = (crmEvents && crmEvents.length > 0)
+        ? crmEvents.map(event => {
+            const eventKey = `${pkgId}_${event.id}`;
+            const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
+            const list = editableInclusions[eventKey] !== undefined 
+              ? editableInclusions[eventKey] 
+              : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList);
+            return {
+              event_name: event.event_name || event.event_type || 'Unnamed Event',
+              team_members: list.filter(Boolean)
+            };
+          })
+        : [
+            {
+              event_name: "General",
+              team_members: inclusionsList.filter(Boolean)
+            }
+          ];
+      const teamMembersText = JSON.stringify(teamMembersJson);
+
+      const deliverablesList = editableDeliverables[pkgId] || [];
+      const deliverablesJson = (crmEvents && crmEvents.length > 0)
+        ? crmEvents.map(event => {
+            const eventKey = `${pkgId}_${event.id}`;
+            const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
+            const list = editableDeliverables[eventKey] !== undefined 
+              ? editableDeliverables[eventKey] 
+              : (editableDeliverables[nameKey] !== undefined ? editableDeliverables[nameKey] : deliverablesList);
+            return {
+              event_name: event.event_name || event.event_type || 'Unnamed Event',
+              deliverables: list.filter(Boolean)
+            };
+          })
+        : [
+            {
+              event_name: "General",
+              deliverables: deliverablesList.filter(Boolean)
+            }
+          ];
+      const deliverablesText = JSON.stringify(deliverablesJson);
 
       // 3. Update the lead record in Supabase with latest Step 3 package / pricing / staff info
       const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
@@ -5083,7 +5205,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         assigned_staff_mobiles: ev.assigned_staff_mobiles || ''
       }));
 
-      const cleanPkgCost = wizardLeadData.package_cost !== "" && wizardLeadData.package_cost != null && !isNaN(Number(wizardLeadData.package_cost)) ? Number(wizardLeadData.package_cost) : null;
+      const cleanPkgCost = wizardLeadData.package_cost !== "" && wizardLeadData.package_cost != null && !isNaN(Number(wizardLeadData.package_cost)) ? Number(wizardLeadData.package_cost) : (wizardLeadData.package_price !== "" && wizardLeadData.package_price != null && !isNaN(Number(wizardLeadData.package_price)) ? Number(wizardLeadData.package_price) : null);
       const cleanDiscount = quoteDiscount === "" || quoteDiscount == null || isNaN(Number(quoteDiscount)) ? null : Number(quoteDiscount);
       const cleanAdditional = quoteAdditional === "" || quoteAdditional == null || isNaN(Number(quoteAdditional)) ? null : Number(quoteAdditional);
       const cleanFinalAmt = Math.max(0, (cleanPkgCost || 0) + (cleanAdditional || 0) - (cleanDiscount || 0));
@@ -5091,7 +5213,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       await updateLead(selectedLead.lead_id, {
         budget: cleanPkgCost,
         package_price: cleanPkgCost,
-        deliverables_description: activeDeliverablesText,
+        deliverables_description: deliverablesText,
+        Team_Members: teamMembersText,
         notes_special_customizations: wizardLeadData.notes,
         remarks: updatedRemarks,
         Select_Package_Option: pkgId,
@@ -5105,8 +5228,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       setWizardLeadData(prev => ({
         ...prev,
-        deliverables: activeDeliverablesText,
-        deliverables_description: activeDeliverablesText,
+        deliverables: deliverablesText,
+        deliverables_description: deliverablesText,
         package_cost: cleanPkgCost ?? prev.package_cost,
         package_price: cleanPkgCost ?? prev.package_price,
         selected_package_id: pkgId,
@@ -5120,7 +5243,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           ...prev,
           budget: cleanPkgCost || 0,
           package_price: cleanPkgCost || 0,
-          deliverables_description: activeDeliverablesText,
+          deliverables_description: deliverablesText,
           notes_special_customizations: wizardLeadData.notes,
           remarks: updatedRemarks,
           Select_Package_Option: pkgId,
@@ -5332,15 +5455,52 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           setIsSaving(false);
           return;
         }
-        const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead.Select_Package_Option;
+        const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead.Select_Package_Option || 'Custom Package';
         if (pkgId) {
-          await saveStep3DataRealtime(editableInclusions, editableDeliverables);
+          await saveStep3DataRealtime(editableInclusions, editableDeliverables, pkgId);
         }
 
-        const currentDelList = editableDeliverables[pkgId] || [];
-        const activeDeliverablesText = currentDelList.filter(Boolean).length > 0
-          ? currentDelList.filter(Boolean).join('\n')
-          : (wizardLeadData.deliverables || selectedLead.deliverables_description || '');
+        const inclusionsList = editableInclusions[pkgId] || [];
+        const teamMembersJson = (crmEvents && crmEvents.length > 0)
+          ? crmEvents.map(event => {
+              const eventKey = `${pkgId}_${event.id}`;
+              const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
+              const list = editableInclusions[eventKey] !== undefined 
+                ? editableInclusions[eventKey] 
+                : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList);
+              return {
+                event_name: event.event_name || event.event_type || 'Unnamed Event',
+                team_members: list.filter(Boolean)
+              };
+            })
+          : [
+              {
+                event_name: "General",
+                team_members: inclusionsList.filter(Boolean)
+              }
+            ];
+        const teamMembersText = JSON.stringify(teamMembersJson);
+
+        const deliverablesList = editableDeliverables[pkgId] || [];
+        const deliverablesJson = (crmEvents && crmEvents.length > 0)
+          ? crmEvents.map(event => {
+              const eventKey = `${pkgId}_${event.id}`;
+              const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
+              const list = editableDeliverables[eventKey] !== undefined 
+                ? editableDeliverables[eventKey] 
+                : (editableDeliverables[nameKey] !== undefined ? editableDeliverables[nameKey] : deliverablesList);
+              return {
+                event_name: event.event_name || event.event_type || 'Unnamed Event',
+                deliverables: list.filter(Boolean)
+              };
+            })
+          : [
+              {
+                event_name: "General",
+                deliverables: deliverablesList.filter(Boolean)
+              }
+            ];
+        const deliverablesText = JSON.stringify(deliverablesJson);
 
         const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
         
@@ -5350,7 +5510,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           assigned_staff_mobiles: ev.assigned_staff_mobiles || ''
         }));
 
-        const cleanPkgCost = wizardLeadData.package_cost !== "" && wizardLeadData.package_cost != null && !isNaN(Number(wizardLeadData.package_cost)) ? Number(wizardLeadData.package_cost) : null;
+        const cleanPkgCost = wizardLeadData.package_cost !== "" && wizardLeadData.package_cost != null && !isNaN(Number(wizardLeadData.package_cost)) ? Number(wizardLeadData.package_cost) : (wizardLeadData.package_price !== "" && wizardLeadData.package_price != null && !isNaN(Number(wizardLeadData.package_price)) ? Number(wizardLeadData.package_price) : null);
         const cleanDiscount = quoteDiscount === "" || quoteDiscount == null || isNaN(Number(quoteDiscount)) ? null : Number(quoteDiscount);
         const cleanAdditional = quoteAdditional === "" || quoteAdditional == null || isNaN(Number(quoteAdditional)) ? null : Number(quoteAdditional);
         const cleanFinalAmt = Math.max(0, (cleanPkgCost || 0) + (cleanAdditional || 0) - (cleanDiscount || 0));
@@ -5359,7 +5519,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         await updateLead(selectedLead.lead_id, {
           budget: cleanPkgCost,
           package_price: cleanPkgCost,
-          deliverables_description: activeDeliverablesText,
+          deliverables_description: deliverablesText,
+          Team_Members: teamMembersText,
           notes_special_customizations: wizardLeadData.notes,
           remarks: updatedRemarks,
           Select_Package_Option: pkgId,
@@ -5377,8 +5538,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
         setWizardLeadData(prev => ({
           ...prev,
-          deliverables: activeDeliverablesText,
-          deliverables_description: activeDeliverablesText,
+          deliverables: deliverablesText,
+          deliverables_description: deliverablesText,
           package_cost: cleanPkgCost ?? prev.package_cost,
           package_price: cleanPkgCost ?? prev.package_price,
           selected_package_id: pkgId,

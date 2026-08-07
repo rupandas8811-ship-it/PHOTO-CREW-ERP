@@ -782,7 +782,7 @@ export const OperationsLeads: React.FC = () => {
     'Event Started', 'Event Start',
     'Event Ended', 'Event End', 'Event Completed', 'Event Complete',
     'Footage Handover', 'Equipment Handover',
-    'Verified Footage', 'Footage Handover Verified', 'Raw Footage Received',
+    'Verified Footage', 'Footage Handover Verified',
     'Event Cancelled'
   ];
   const operationsOrders = orders.filter(o => {
@@ -2004,6 +2004,29 @@ export const OperationsLeads: React.FC = () => {
                           const isFootageHandover = ['footage handover', 'equipment handover'].includes(stageNorm);
                           const isVerifiedFootage = ['verified footage', 'footage handover verified', 'raw footage received', 'production handover', 'delivered', 'completed'].includes(stageNorm);
 
+                          // Check if all assigned staff have uploaded raw footage links
+                          const orderStaffAssignments = (staffAssignments || []).filter(sa => sa.order_id === ord.order_id && sa.assignment_status !== 'Cancelled');
+                          let allStaffHaveFootage = false;
+                          if (orderStaffAssignments.length > 0) {
+                            allStaffHaveFootage = orderStaffAssignments.every(sa => {
+                              let link = sa.raw_footage_link || '';
+                              if (!link) {
+                                const hist = (leadEquipmentHistory || []).find(h => 
+                                  ((h.order_id && h.order_id === ord.order_id) || (ord.lead_id && h.lead_id === ord.lead_id)) &&
+                                  h.returned_by?.toLowerCase() === sa.staff_name.toLowerCase() &&
+                                  h.remarks
+                                );
+                                if (hist?.remarks) {
+                                  try {
+                                    const parsed = typeof hist.remarks === 'string' ? JSON.parse(hist.remarks) : hist.remarks;
+                                    link = parsed.raw_footage_link || link;
+                                  } catch (e) {}
+                                }
+                              }
+                              return !!(link && link.trim());
+                            });
+                          }
+
                           // Common Handlers
                           const handleAssignCrew = () => {
                             startAssigning(ord);
@@ -2106,26 +2129,17 @@ export const OperationsLeads: React.FC = () => {
                               label: 'View Details',
                               onClick: handleViewDetails
                             });
-                            actionItems.push({
-                              label: 'Verify Footage',
-                              onClick: handleFootageModal
-                            });
+                            if (allStaffHaveFootage) {
+                              actionItems.push({
+                                label: 'Verify Footage',
+                                onClick: handleFootageModal
+                              });
+                            }
                           }
                           // 6. When Current Status = Verified Footage
                           else if (isVerifiedFootage) {
                             actionItems.push({
                               label: 'View Details',
-                              onClick: handleViewDetails
-                            });
-                            actionItems.push({
-                              label: 'Transfer to Production (Automatic)',
-                              onClick: () => {
-                                alert("This project has been automatically transferred to Production upon footage verification.");
-                                setActiveMenuOrderId(null);
-                              }
-                            });
-                            actionItems.push({
-                              label: 'View History',
                               onClick: handleViewDetails
                             });
                           }
@@ -3259,9 +3273,6 @@ export const OperationsLeads: React.FC = () => {
                 } catch (e) {}
               }
             }
-            if (!link && currentOp?.raw_footage_drive_link) {
-              link = currentOp.raw_footage_drive_link;
-            }
 
             return {
               staff_name: sa.staff_name,
@@ -3277,7 +3288,7 @@ export const OperationsLeads: React.FC = () => {
                 assignedCrewList.push({
                   staff_name: name,
                   staff_role: 'Operations Staff',
-                  raw_footage_link: currentOp?.raw_footage_drive_link || ''
+                  raw_footage_link: ''
                 });
               }
             });
@@ -3291,13 +3302,15 @@ export const OperationsLeads: React.FC = () => {
               assignedCrewList.push({
                 staff_name: name,
                 staff_role: 'Operations Staff',
-                raw_footage_link: currentOp?.raw_footage_drive_link || ''
+                raw_footage_link: ''
               });
             }
           });
         }
 
-        const allCrewVerified = assignedCrewList.length > 0 ? assignedCrewList.every(c => verifiedCrewMap[`${receivingFootageOrderId}_${c.staff_name}`] === true) : true;
+        const allCrewVerified = assignedCrewList.length > 0 
+          ? assignedCrewList.every(c => !!(c.raw_footage_link && c.raw_footage_link.trim())) 
+          : true;
 
         return (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -3325,17 +3338,17 @@ export const OperationsLeads: React.FC = () => {
               </div>
 
               <div className="text-xs text-zinc-400 leading-relaxed bg-purple-500/10 border border-purple-500/20 rounded-xl p-3">
-                Verify each assigned crew member's Raw Footage link below. Once all crew footages are verified, enter the <strong>Final Consolidated Raw Footage Drive Link</strong> to complete verification and transfer the order to Production.
+                Review each assigned crew member's Raw Footage link below. Enter the <strong>Final Consolidated Raw Footage Drive Link</strong> to complete verification and transfer the order to Production.
               </div>
 
               {/* ASSIGNED TEAM MEMBERS VERIFICATION SECTION */}
               <div className="space-y-3 bg-zinc-950 p-4 rounded-xl border border-zinc-800">
                 <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                   <h4 className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <span>👥</span> Assigned Team Members & Raw Footage Verification
+                    <span>👥</span> Assigned Team Members & Raw Footage Links
                   </h4>
                   <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
-                    Verified: {assignedCrewList.filter(c => verifiedCrewMap[`${receivingFootageOrderId}_${c.staff_name}`]).length} / {assignedCrewList.length}
+                    Uploaded: {assignedCrewList.filter(c => c.raw_footage_link).length} / {assignedCrewList.length}
                   </span>
                 </div>
 
@@ -3349,19 +3362,18 @@ export const OperationsLeads: React.FC = () => {
                           <th className="py-2.5 px-3">Staff Name</th>
                           <th className="py-2.5 px-3">Assigned Role</th>
                           <th className="py-2.5 px-3">Raw Footage Link</th>
-                          <th className="py-2.5 px-3">Verification Status</th>
-                          <th className="py-2.5 px-3 text-right">Action</th>
+                          <th className="py-2.5 px-3 text-right">Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-800/60">
                         {assignedCrewList.map((c) => {
-                          const isVerified = !!verifiedCrewMap[`${receivingFootageOrderId}_${c.staff_name}`];
+                          const hasLink = !!(c.raw_footage_link && c.raw_footage_link.trim());
                           return (
                             <tr key={c.staff_name} className="hover:bg-zinc-900/50">
                               <td className="py-2.5 px-3 font-bold text-white">{c.staff_name}</td>
                               <td className="py-2.5 px-3 text-zinc-300 font-mono text-[11px]">{c.staff_role}</td>
                               <td className="py-2.5 px-3">
-                                {c.raw_footage_link ? (
+                                {hasLink ? (
                                   <a
                                     href={c.raw_footage_link}
                                     target="_blank"
@@ -3371,47 +3383,18 @@ export const OperationsLeads: React.FC = () => {
                                     Open Drive Link ↗
                                   </a>
                                 ) : (
-                                  <span className="text-zinc-500 italic text-[11px]">Not Provided</span>
-                                )}
-                              </td>
-                              <td className="py-2.5 px-3">
-                                {isVerified ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold">
-                                    ✅ Verified
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-bold">
-                                    ❌ Not Verified
-                                  </span>
+                                  <span className="text-amber-500/80 italic text-[11px]">Not Uploaded Yet</span>
                                 )}
                               </td>
                               <td className="py-2.5 px-3 text-right">
-                                {!isVerified ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setVerifiedCrewMap(prev => ({
-                                        ...prev,
-                                        [`${receivingFootageOrderId}_${c.staff_name}`]: true
-                                      }));
-                                    }}
-                                    className="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white font-bold text-[11px] rounded transition-colors shadow-sm cursor-pointer"
-                                  >
-                                    Verify
-                                  </button>
+                                {hasLink ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold">
+                                    ✅ Uploaded
+                                  </span>
                                 ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setVerifiedCrewMap(prev => ({
-                                        ...prev,
-                                        [`${receivingFootageOrderId}_${c.staff_name}`]: false
-                                      }));
-                                    }}
-                                    className="text-[10px] text-zinc-400 hover:text-zinc-200 underline cursor-pointer"
-                                  >
-                                    Undo
-                                  </button>
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-bold">
+                                    ❌ Missing
+                                  </span>
                                 )}
                               </td>
                             </tr>

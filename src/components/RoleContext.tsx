@@ -4132,16 +4132,25 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       status: 'Pending',
     };
 
-    const newProd: Production = {
+    const targetOrder = augmentedOrders.find((o) => o.order_id === orderId);
+
+    const newProd: any = {
       production_id: pId,
       tracking_id: trackingId,
       editor_assigned: 'Unassigned',
       raw_footage_location: newRawFootage.server_path,
       editing_status: 'Raw Footage Received',
       remarks: 'Raw footage uploaded. Awaiting editor assignment.',
+      order_id: orderId,
+      lead_id: targetOrder?.lead_id || '',
+      customer_name: targetOrder?.customer_name || '',
+      event_id: targetOrder?.event_type || '',
+      assigned_team: targetOrder?.assigned_team || 'Unassigned',
+      final_consolidated_drive_link: newRawFootage.server_path,
+      current_status: 'Raw Footage Received',
+      created_at: new Date().toISOString()
     };
 
-    const targetOrder = augmentedOrders.find((o) => o.order_id === orderId);
     const previousStage = targetOrder ? targetOrder.current_stage : 'Event Scheduled';
     const timestamp = new Date().toISOString();
 
@@ -4672,15 +4681,23 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     });
 
     // Ensure production entry exists or update it
-    let existingProd = augmentedProduction.find(p => p.tracking_id === trackingId);
+    let existingProd = augmentedProduction.find(p => p.tracking_id === trackingId || p.tracking_id === orderId);
     let pId = existingProd?.production_id || `PRD-${Math.floor(4012 + Math.random() * 850)}`;
-    const newProd: Production = {
+    const newProd: any = {
       production_id: pId,
       tracking_id: trackingId,
       editor_assigned: existingProd?.editor_assigned || 'Unassigned',
       raw_footage_location: resolvedLink,
-      editing_status: existingProd?.editing_status || 'Raw Footage Received',
+      editing_status: existingProd?.editing_status || 'Verified Footage',
       remarks: `Raw footage received via ${storageType || 'Google Drive'}. ${uploadNotes || ''}`,
+      order_id: orderId,
+      lead_id: targetOrder?.lead_id || '',
+      customer_name: targetOrder?.customer_name || '',
+      event_id: targetOrder?.event_type || '',
+      assigned_team: targetOrder?.assigned_team || 'Unassigned',
+      final_consolidated_drive_link: resolvedLink,
+      current_status: 'Verified Footage',
+      created_at: timestamp
     };
 
     const rProd = await pushUpsert('production', newProd);

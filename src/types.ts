@@ -273,6 +273,7 @@ export interface Lead {
   staff_pax?: number;
   booking_date?: string;
   booking_time?: string;
+  quotation_locked?: boolean;
   final_package_amount?: number;
   advance_collected?: number;
   payment_mode?: string;

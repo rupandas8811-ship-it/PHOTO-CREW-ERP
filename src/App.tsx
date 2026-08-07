@@ -686,6 +686,7 @@ const MainAppContent: React.FC = () => {
               { id: 'owner_calendar', label: '2. Event Calendar', icon: Calendar, color: 'text-purple-400' },
               { id: 'owner_approval', label: '3. Waiting Approval', icon: ShieldCheck, color: 'text-emerald-400' },
               { id: 'owner_summary', label: '4. Revenue Summary', icon: FileText, color: 'text-blue-400' },
+              { id: 'owner_staff_performance', label: '📊 5. Staff Performance', icon: BarChart3, color: 'text-pink-400' },
               { id: 'sales_staff_management', label: 'Sales Staff Management', icon: Users, color: 'text-indigo-400' }
             ].map((tab) => {
               const IconComponent = tab.icon;

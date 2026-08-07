@@ -30,8 +30,10 @@ import {
   Sparkles,
   FileSpreadsheet,
   Printer,
-  Ban
+  Ban,
+  BarChart3
 } from 'lucide-react';
+import { OwnerStaffPerformanceReport } from './OwnerModule';
 import { formatINR, formatTime12Hour } from '../utils';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { Order, Lead, Production, Payment } from '../types';
@@ -61,7 +63,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
   } = useRole();
 
   // Internal section tab state if not controlled externally
-  const [internalSection, setInternalSection] = useState<'overview' | 'calendar' | 'approval' | 'summary'>('overview');
+  const [internalSection, setInternalSection] = useState<'overview' | 'calendar' | 'approval' | 'summary' | 'staff_performance'>('overview');
   
   // Normalize current section ID
   const currentSection = useMemo(() => {
@@ -69,13 +71,14 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     if (initialSection === 'owner_calendar' || initialSection === 'calendar') return 'calendar';
     if (initialSection === 'owner_approval' || initialSection === 'approval') return 'approval';
     if (initialSection === 'owner_summary' || initialSection === 'summary') return 'summary';
+    if (initialSection === 'owner_staff_performance' || initialSection === 'staff_performance') return 'staff_performance';
     return internalSection;
   }, [initialSection, internalSection]);
 
-  const handleSectionSwitch = (sec: 'overview' | 'calendar' | 'approval' | 'summary') => {
+  const handleSectionSwitch = (sec: 'overview' | 'calendar' | 'approval' | 'summary' | 'staff_performance') => {
     setInternalSection(sec);
     if (onSectionChange) {
-      const mapKey = sec === 'overview' ? 'owner_overview' : sec === 'calendar' ? 'owner_calendar' : sec === 'approval' ? 'owner_approval' : 'owner_summary';
+      const mapKey = sec === 'overview' ? 'owner_overview' : sec === 'calendar' ? 'owner_calendar' : sec === 'approval' ? 'owner_approval' : sec === 'summary' ? 'owner_summary' : 'owner_staff_performance';
       onSectionChange(mapKey);
     }
   };
@@ -497,8 +500,8 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
           )}
         </div>
 
-        {/* 4 Main Dashboard Section Tabs */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-5 pt-4 border-t border-zinc-850">
+        {/* 5 Main Dashboard Section Tabs */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-5 pt-4 border-t border-zinc-850">
           <button
             onClick={() => handleSectionSwitch('overview')}
             className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
@@ -508,7 +511,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
             }`}
           >
             <LayoutDashboard className="w-4 h-4 text-amber-400" />
-            <span>1. Business Overview</span>
+            <span className="truncate">1. Business Overview</span>
           </button>
 
           <button
@@ -520,7 +523,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
             }`}
           >
             <CalendarIcon className="w-4 h-4 text-purple-400" />
-            <span>2. Event Calendar</span>
+            <span className="truncate">2. Event Calendar</span>
           </button>
 
           <button
@@ -532,7 +535,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
             }`}
           >
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>3. Orders Awaiting Final Approval</span>
+            <span className="truncate">3. Waiting Approval</span>
             {waitingApprovalOrders.length > 0 && (
               <span className="ml-1 px-1.5 py-0.2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-[10px] font-mono">
                 {waitingApprovalOrders.length}
@@ -549,7 +552,19 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
             }`}
           >
             <FileText className="w-4 h-4 text-blue-400" />
-            <span>4. Revenue Summary</span>
+            <span className="truncate">4. Revenue Summary</span>
+          </button>
+          
+          <button
+            onClick={() => handleSectionSwitch('staff_performance')}
+            className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+              currentSection === 'staff_performance'
+                ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 shadow-md shadow-amber-500/5'
+                : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4 text-pink-400" />
+            <span className="truncate">5. Staff Performance</span>
           </button>
         </div>
       </div>
@@ -1037,6 +1052,11 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
           leads={leads}
           production={production}
         />
+      )}
+
+      {/* SECTION 5: STAFF PERFORMANCE */}
+      {currentSection === 'staff_performance' && (
+        <OwnerStaffPerformanceReport />
       )}
 
       {/* REVIEW & CLOSE MODAL */}

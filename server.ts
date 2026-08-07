@@ -9,7 +9,11 @@ dotenv.config();
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://aqifyxsimhqayfjwzzwj.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_Qdmf44q1ASJboY1_AZoOVQ_YfYrWvcB';
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || Buffer.from('c2Jfc2VjcmV0X095RGl5S2JaQmE3MGNocndYR2puTFFfM0pQWXhFanQ=', 'base64').toString('utf-8');
+const hardcodedServiceKey = Buffer.from('c2Jfc2VjcmV0X095RGl5S2JaQmE3MGNocndYR2puTFFfM0pQWXhFanQ=', 'base64').toString('utf-8');
+const envServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_SERVICE_ROLE_KEY = (envServiceKey && envServiceKey !== 'YOUR_SUPABASE_SERVICE_ROLE_KEY' && envServiceKey.trim() !== '')
+  ? envServiceKey
+  : hardcodedServiceKey;
 
 console.log('[Server Init] SUPABASE_URL:', SUPABASE_URL);
 console.log('[Server Init] SUPABASE_ANON_KEY configured:', !!SUPABASE_ANON_KEY);
@@ -283,31 +287,52 @@ async function startServer() {
     return clone;
   }
 
+  async function executeWithSelfHealing(table: string, operation: 'insert' | 'update' | 'upsert', payload: any, matchCol?: string, matchVal?: any) {
+    const db = getServerSupabase();
+    let currentPayload = sanitizeRecordForDbServer(payload, table);
+    let retriesLeft = 15;
+    let lastError: any = null;
+
+    while (retriesLeft > 0) {
+      retriesLeft--;
+      let res: any;
+      if (operation === 'insert') {
+        res = await db.from(table).insert(currentPayload).select();
+      } else if (operation === 'upsert') {
+        res = await db.from(table).upsert(currentPayload).select();
+      } else if (operation === 'update') {
+        res = await db.from(table).update(currentPayload).eq(matchCol!, matchVal).select();
+      }
+
+      if (!res?.error) {
+        return { success: true, data: res?.data };
+      }
+
+      lastError = res.error;
+      const healed = healPayload(table, currentPayload, res.error.message || String(res.error));
+      if (healed) {
+        console.log(`[Server Self-Healing Loop] Stripped non-matching field, retrying ${operation} on ${table}: ${res.error.message}`);
+        currentPayload = healed;
+      } else {
+        break;
+      }
+    }
+
+    if (!['activity_logs', 'notifications', 'analytics_snapshots', 'login_logs'].includes(table)) {
+      console.error(`[Server DB ${operation} Error] ${table}:`, lastError);
+    }
+    return { success: false, error: lastError?.message || String(lastError) };
+  }
+
   app.post('/api/db/insert', async (req, res) => {
     const { table, record } = req.body;
     try {
-      const db = getServerSupabase();
-      const sanitizedRecord = sanitizeRecordForDbServer(record, table);
-      console.log(`[Server DB Insert] Inserting into ${table}`, sanitizedRecord);
-      let { data, error } = await db.from(table).insert(sanitizedRecord).select();
-      if (error) {
-        // Try healing the payload if it's a schema cache mismatch error
-        const healed = healPayload(table, sanitizedRecord, error.message);
-        if (healed) {
-          console.log(`[Server Self-Healing retry] Retrying insert with healed record:`, healed);
-          const retryRes = await db.from(table).insert(healed).select();
-          if (!retryRes.error) {
-            return res.json({ success: true, data: retryRes.data });
-          }
-          error = retryRes.error; // Keep latest error
-        }
-
-        if (!['activity_logs', 'notifications', 'analytics_snapshots', 'login_logs'].includes(table)) {
-          console.error(`[Server DB Insert Error] ${table}`, error);
-        }
-        return res.status(400).json({ success: false, error: error.message });
+      console.log(`[Server DB Insert] Inserting into ${table}`, record);
+      const result = await executeWithSelfHealing(table, 'insert', record);
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
       }
-      res.json({ success: true, data });
+      res.json({ success: true, data: result.data });
     } catch (err: any) {
       if (!['activity_logs', 'notifications', 'analytics_snapshots', 'login_logs'].includes(table)) {
         console.error(`[Server DB Insert Exception] ${table}`, err);
@@ -319,28 +344,12 @@ async function startServer() {
   app.post('/api/db/update', async (req, res) => {
     const { table, matchColumn, matchValue, updates } = req.body;
     try {
-      const db = getServerSupabase();
-      const sanitizedUpdates = sanitizeRecordForDbServer(updates, table);
-      console.log(`[Server DB Update] Updating ${table} where ${matchColumn}=${matchValue}`, sanitizedUpdates);
-      let { data, error } = await db.from(table).update(sanitizedUpdates).eq(matchColumn, matchValue).select();
-      if (error) {
-        // Try healing the payload if it's a schema cache mismatch error
-        const healed = healPayload(table, sanitizedUpdates, error.message);
-        if (healed) {
-          console.log(`[Server Self-Healing retry] Retrying update with healed updates:`, healed);
-          const retryRes = await db.from(table).update(healed).eq(matchColumn, matchValue).select();
-          if (!retryRes.error) {
-            return res.json({ success: true, data: retryRes.data });
-          }
-          error = retryRes.error; // Keep latest error
-        }
-
-        if (!['activity_logs', 'notifications', 'analytics_snapshots', 'login_logs'].includes(table)) {
-          console.error(`[Server DB Update Error] ${table}`, error);
-        }
-        return res.status(400).json({ success: false, error: error.message });
+      console.log(`[Server DB Update] Updating ${table} where ${matchColumn}=${matchValue}`, updates);
+      const result = await executeWithSelfHealing(table, 'update', updates, matchColumn, matchValue);
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
       }
-      res.json({ success: true, data });
+      res.json({ success: true, data: result.data });
     } catch (err: any) {
       if (!['activity_logs', 'notifications', 'analytics_snapshots', 'login_logs'].includes(table)) {
         console.error(`[Server DB Update Exception] ${table}`, err);
@@ -352,28 +361,12 @@ async function startServer() {
   app.post('/api/db/upsert', async (req, res) => {
     const { table, record } = req.body;
     try {
-      const db = getServerSupabase();
-      const sanitizedRecord = sanitizeRecordForDbServer(record, table);
-      console.log(`[Server DB Upsert] Upserting into ${table}`, sanitizedRecord);
-      let { data, error } = await db.from(table).upsert(sanitizedRecord).select();
-      if (error) {
-        // Try healing the payload if it's a schema cache mismatch error
-        const healed = healPayload(table, sanitizedRecord, error.message);
-        if (healed) {
-          console.log(`[Server Self-Healing retry] Retrying upsert with healed record:`, healed);
-          const retryRes = await db.from(table).upsert(healed).select();
-          if (!retryRes.error) {
-            return res.json({ success: true, data: retryRes.data });
-          }
-          error = retryRes.error; // Keep latest error
-        }
-
-        if (!['activity_logs', 'notifications', 'analytics_snapshots', 'login_logs'].includes(table)) {
-          console.error(`[Server DB Upsert Error] ${table}`, error);
-        }
-        return res.status(400).json({ success: false, error: error.message });
+      console.log(`[Server DB Upsert] Upserting into ${table}`, record);
+      const result = await executeWithSelfHealing(table, 'upsert', record);
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
       }
-      res.json({ success: true, data });
+      res.json({ success: true, data: result.data });
     } catch (err: any) {
       if (!['activity_logs', 'notifications', 'analytics_snapshots', 'login_logs'].includes(table)) {
         console.error(`[Server DB Upsert Exception] ${table}`, err);
