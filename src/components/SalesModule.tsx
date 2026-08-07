@@ -11430,7 +11430,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 <button
                   type="button"
                   onClick={handleSaveStep3FollowUp}
-                  disabled={isSaving || !step3FollowUpDate}
+                  disabled={isSaving || isCrmLocked || !step3FollowUpDate}
                   className="flex-1 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-lg text-xs border-0"
                 >
                   {isSaving ? 'Submitting...' : 'Submit'}
@@ -11794,7 +11794,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             <div id="crm-wizard-scroll-container" className="flex-1 overflow-y-auto p-2.5 sm:p-3">
               <div className="max-w-5xl mx-auto">
                 <form onSubmit={(e) => e.preventDefault()} className="space-y-3">
-                  {crmWizardStep === 1 && (
+                  <fieldset disabled={isCrmLocked} className="space-y-3 border-0 p-0 m-0 min-w-0">
+                    {crmWizardStep === 1 && (
                     <div className="space-y-4 animate-fade-in text-left">
                       <div className="border-b border-slate-800 pb-1.5">
                         <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
@@ -12654,6 +12655,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       </div>
                      </div>
                    )}
+                  </fieldset>
                 </form>
               </div>
             </div>
@@ -12682,7 +12684,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   <button
                     type="button"
                     onClick={() => setShowCancelConfirmPopup(true)}
-                    className="px-3.5 py-1 text-xs font-mono font-bold uppercase bg-rose-600 hover:bg-rose-500 text-white rounded transition-all cursor-pointer border border-transparent shadow-lg shadow-rose-600/15"
+                    disabled={isCrmLocked}
+                    className={`px-3.5 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-lg ${
+                      isCrmLocked ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 shadow-none' : 'bg-rose-600 hover:bg-rose-500 text-white cursor-pointer shadow-rose-600/15'
+                    } border border-transparent`}
                   >
                     Lost Lead
                   </button>
@@ -12693,8 +12698,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               <button
                 type="button"
                 onClick={() => handleSaveStep(crmWizardStep)}
-                  disabled={isSaving || (crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === ''))}
+                  disabled={isSaving || isCrmLocked || (crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === ''))}
                   className={`px-4 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 border-0 ${
+                    isCrmLocked
+                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 shadow-none' :
                     crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')
                       ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
                       : 'bg-indigo-650 hover:bg-indigo-600 text-white cursor-pointer'

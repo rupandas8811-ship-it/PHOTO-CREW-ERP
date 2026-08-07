@@ -345,6 +345,23 @@ async function startServer() {
     const { table, matchColumn, matchValue, updates } = req.body;
     try {
       console.log(`[Server DB Update] Updating ${table} where ${matchColumn}=${matchValue}`, updates);
+
+      // Enforce CRM Lock Backend
+      if (table === 'leads' && matchColumn === 'lead_id') {
+        const db = getServerSupabase();
+        const { data: existingLead } = await db.from('leads').select('quotation_locked').eq('lead_id', matchValue).maybeSingle();
+        
+        if (existingLead && existingLead.quotation_locked === true) {
+          const keys = Object.keys(updates);
+          // Only allow update if it explicitly modifies quotation_locked or if it's updating lead_owner/assignee (not CRM data)
+          const isLockAction = keys.includes('quotation_locked');
+          if (!isLockAction) {
+            console.warn(`[Server DB Update] Blocked update to locked lead ${matchValue}`);
+            return res.status(403).json({ success: false, error: 'Lead CRM is locked. Cannot be updated.' });
+          }
+        }
+      }
+
       const result = await executeWithSelfHealing(table, 'update', updates, matchColumn, matchValue);
       if (!result.success) {
         return res.status(400).json({ success: false, error: result.error });
