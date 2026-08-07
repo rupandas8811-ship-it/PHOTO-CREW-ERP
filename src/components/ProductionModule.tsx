@@ -508,6 +508,7 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     refreshData,
     production, 
     updateProduction, 
+    updateOrderStage,
     markDelivered, 
     acceptRawFootage, 
     orders, 
@@ -1148,6 +1149,146 @@ ${coordinatorName}`;
     return [];
   };
 
+  const getAssignedEditorsTableData = (prod: Production): { staff_name: string; deliverable: string; qty: number; status: string }[] => {
+    const { order, lead } = resolveOrderAndLead(prod);
+    let deliverablesText = order?.deliverables_description || lead?.deliverables_description || '';
+    if (!deliverablesText && lead) {
+      const targetLeadQuotations = quotations?.filter((q: any) => q.lead_id === lead.lead_id) || [];
+      targetLeadQuotations.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      const targetLatestQuote = targetLeadQuotations[0];
+      if (targetLatestQuote) {
+        deliverablesText = targetLatestQuote.deliverables_description || '';
+      }
+    }
+    const parsedDeliverables = parseExactDeliverables(deliverablesText);
+    const assignedForThis = (editorAssignments || []).filter(a => a.production_id === prod.production_id);
+    
+    const results: { staff_name: string; deliverable: string; qty: number; status: string }[] = [];
+    const usedAssignments = new Set<string>();
+    
+    // Map parsed deliverables
+    const parsedMap = new Map<string, number>();
+    for (const d of parsedDeliverables) {
+      const { qty, text } = parseQtyAndText(d);
+      if (text) {
+        parsedMap.set(text, (parsedMap.get(text) || 0) + qty);
+      }
+    }
+    
+    // For each unique deliverable, match with assignments
+    parsedMap.forEach((qty, text) => {
+      const matchingAssignments = assignedForThis.filter(a => a.speciality === text && !usedAssignments.has(a.assignment_id));
+      if (matchingAssignments.length > 0) {
+        matchingAssignments.forEach(a => {
+          results.push({
+            staff_name: a.staff_name || 'Unassigned',
+            deliverable: text,
+            qty: qty,
+            status: a.status || 'Assigned Editor'
+          });
+          usedAssignments.add(a.assignment_id);
+        });
+      } else {
+        results.push({
+          staff_name: 'Unassigned',
+          deliverable: text,
+          qty: qty,
+          status: 'Pending Assignment'
+        });
+      }
+    });
+    
+    // Add remaining unmatched assignments
+    assignedForThis.forEach(a => {
+      if (!usedAssignments.has(a.assignment_id)) {
+        results.push({
+          staff_name: a.staff_name || 'Unassigned',
+          deliverable: a.speciality || 'Deliverable',
+          qty: 1,
+          status: a.status || 'Assigned Editor'
+        });
+      }
+    });
+    
+    return results;
+  };
+
+  const getAutomatedProductionStatus = (prod: Production): string => {
+    const baseStatus = (prod.editing_status || 'Raw Footage Received') as string;
+    if (baseStatus === 'Raw Footage Received' || baseStatus === 'Verified Footage' || baseStatus === 'Footage Handover Verified' || baseStatus === 'Pending') {
+      return baseStatus;
+    }
+    if (baseStatus === 'Completed' || baseStatus === 'Closed' || baseStatus === 'Client Acceptance' || baseStatus === 'Project Closed' || baseStatus === 'Order Closed') {
+      return baseStatus;
+    }
+
+    const tableData = getAssignedEditorsTableData(prod);
+    const assignedRows = tableData.filter(row => row.staff_name !== 'Unassigned');
+    
+    if (assignedRows.length === 0) {
+      return baseStatus;
+    }
+
+    const stdStatuses = assignedRows.map(row => {
+      const s = row.status || 'Assigned Editor';
+      if (s === 'Assigned' || s === 'Assigned Editor') return 'Assigned Editor';
+      if (s === 'Editing Started') return 'Editing Started';
+      if (s === 'Customer Review') return 'Customer Review';
+      if (s === 'Completed' || s === 'Editing Completed') return 'Editing Completed';
+      return s;
+    });
+
+    const uniqueStatuses = Array.from(new Set(stdStatuses));
+    if (uniqueStatuses.length === 1) {
+      return uniqueStatuses[0];
+    }
+
+    return 'In Progress';
+  };
+
+  const generateCustomerReviewMessage = (prod: Production): { message: string; phone: string } => {
+    const { order, lead } = resolveOrderAndLead(prod);
+    const customerName = order?.customer_name || lead?.customer_name || 'Customer';
+    const eventType = order?.event_type || lead?.event_type || 'Event';
+    const eventDate = order?.event_date || lead?.event_date || 'the event';
+    const phone = order?.mobile || lead?.mobile || '';
+
+    const tableData = getAssignedEditorsTableData(prod);
+    const deliverablesList = tableData.map(row => {
+      const assignment = (editorAssignments || []).find(
+        a => a.production_id === prod.production_id && a.speciality === row.deliverable
+      );
+      const link = assignment?.raw_footage_link || assignment?.edited_drive_link || '';
+      return `• ${row.deliverable}: ${link || '(Link Pending)'}`;
+    }).join('\n');
+
+    const msg = `Hello ${customerName},
+Your edited files for ${eventType} on ${eventDate} are ready for review!
+
+Please review the deliverables below:
+
+${deliverablesList}
+
+Best regards,
+Production Team`;
+
+    return { message: msg, phone };
+  };
+
+  const handleOpenResendReviewPopup = (prod: Production) => {
+    const { message, phone } = generateCustomerReviewMessage(prod);
+    setCustomerReviewResendProd(prod);
+    setCustomerReviewMessage(message);
+    setCustomerReviewPhone(phone);
+  };
+
+  const handleOpenClientAcceptance = (prod: Production) => {
+    setClientAcceptanceProd(prod);
+    setCaCommunicationProof('');
+    setCaChecklistCompleted(false);
+    setCaInternalValidation(false);
+  };
+
   const getAssignedEditorsText = (prod: Production): string => {
     const assigned_editors = (() => {
       const fromAssignments = editorAssignments.filter(a => a.production_id === prod.production_id);
@@ -1584,7 +1725,7 @@ ${coordinatorName}`;
     
     const assignedForThis = editorAssignments.filter(a => a.production_id === prod.production_id);
     
-    const tempMap = new Map<string, { qty: number; text: string; editor: string }>();
+    const tempMap = new Map<string, { qty: number; text: string; editor: string; assignment_id?: string; status?: string }>();
     const usedAssignments = new Set<string>();
     
     for (const d of parsedDeliverables) {
@@ -1600,7 +1741,13 @@ ${coordinatorName}`;
           if (existingAssignment) {
             usedAssignments.add(existingAssignment.assignment_id);
           }
-          tempMap.set(text, { qty, text, editor });
+          tempMap.set(text, { 
+            qty, 
+            text, 
+            editor,
+            assignment_id: existingAssignment?.assignment_id,
+            status: existingAssignment?.status
+          });
         }
       }
     }
@@ -1690,6 +1837,21 @@ ${coordinatorName}`;
   const [openDropdownDeliverable, setOpenDropdownDeliverable] = useState<string | null>(null);
   const [assignedEditorsModalProd, setAssignedEditorsModalProd] = useState<Production | null>(null);
   const [rosterStaffName, setRosterStaffName] = useState<string | null>(null);
+
+  // Client Acceptance states
+  const [clientAcceptanceProd, setClientAcceptanceProd] = useState<Production | null>(null);
+  const [caCommunicationProof, setCaCommunicationProof] = useState<string>('');
+  const [caInternalValidation, setCaInternalValidation] = useState<boolean>(false);
+  const [caChecklistCompleted, setCaChecklistCompleted] = useState<boolean>(false);
+  const [caUploadingProof, setCaUploadingProof] = useState<boolean>(false);
+  const [caChecklist, setCaChecklist] = useState<Record<string, boolean>>({});
+  const [caValidation, setCaValidation] = useState<Record<string, boolean>>({});
+  const [caProofs, setCaProofs] = useState<Record<string, string>>({});
+
+  // Re-send Review / Customer Review Popup states
+  const [customerReviewResendProd, setCustomerReviewResendProd] = useState<Production | null>(null);
+  const [customerReviewMessage, setCustomerReviewMessage] = useState<string>('');
+  const [customerReviewPhone, setCustomerReviewPhone] = useState<string>('');
 
   // New States for Editor WhatsApp Share Feature
   const [editorWhatsappModalOpen, setEditorWhatsappModalOpen] = useState(false);
@@ -2936,7 +3098,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const priority = getProductionPriority(prod);
                       const status = prod.editing_status || 'Pending';
                       const lead = leadsData?.find(l => l.lead_id === order.lead_id);
-                      const displayStatus = lead ? getLeadCurrentStatus(lead) : getProductionStatus(prod);
+                      const displayStatus = getAutomatedProductionStatus(prod);
                       const daysRem = calculateDaysRemaining(prod.target_delivery_date || prod.expected_delivery_date);
 
                       // Payments calculations
@@ -3254,6 +3416,28 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 <span className="text-[10px] text-emerald-400 font-extrabold flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-950/20 border border-emerald-850">
                                   ✓ Completed
                                 </span>
+                              )}
+
+                              {/* Send Review Link Button */}
+                              {(displayStatus === 'Customer Review' || displayStatus === 'Editing Completed') && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenResendReviewPopup(prod)}
+                                  className="w-full max-w-[160px] px-3 py-1.5 bg-indigo-600/90 border border-indigo-500 text-white hover:bg-indigo-500 hover:border-indigo-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1"
+                                >
+                                  <span>📤</span> Send Review Link
+                                </button>
+                              )}
+
+                              {/* Process Acceptance Button */}
+                              {(displayStatus === 'Customer Review' || displayStatus === 'Editing Completed' || displayStatus === 'Client Acceptance') && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenClientAcceptance(prod)}
+                                  className="w-full max-w-[160px] px-3 py-1.5 bg-emerald-600/90 border border-emerald-500 text-white hover:bg-emerald-500 hover:border-emerald-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1"
+                                >
+                                  <span>✓</span> Process Acceptance
+                                </button>
                               )}
 
                               {(() => {
@@ -7309,12 +7493,17 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const orderId = order?.order_id || activeWorkflowProd?.tracking_id || activeWorkflowProd?.production_id;
                       const eventId = activeWorkflowProd?.event_id || lead?.events?.[0]?.id || 'EVT-01';
                       
+                      const assignedForThis = editorAssignments.filter(a => a.production_id === activeWorkflowProd.production_id);
                       const newAssignments = [];
                       for (const item of wfDeliverableAssignments) {
                         if (!item.editor || item.editor === 'Unassigned') continue;
                         const st = productionStaff.find(s => s.name === item.editor);
                         if (st) {
-                          const id = `EDR-${Math.floor(100000 + Math.random() * 900000)}`;
+                          const originalAssignment = assignedForThis.find(a => a.speciality === item.text);
+                          const hasChanged = originalAssignment ? originalAssignment.staff_name !== item.editor : true;
+                          const finalStatus = hasChanged ? 'Assigned' : (originalAssignment?.status || 'Assigned');
+                          
+                          const id = item.assignment_id || `EDR-${Math.floor(100000 + Math.random() * 900000)}`;
                           newAssignments.push({
                             assignment_id: id,
                             production_id: activeWorkflowProd.production_id,
@@ -7323,10 +7512,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             staff_id: st.staff_id,
                             staff_name: item.editor,
                             speciality: item.text,
-                            assigned_date: new Date().toISOString().split('T')[0],
+                            assigned_date: originalAssignment?.assigned_date || new Date().toISOString().split('T')[0],
                             target_finish_date: wfTargetDeliveryDate,
-                            status: 'Assigned',
-                            created_at: new Date().toISOString()
+                            status: finalStatus,
+                            created_at: originalAssignment?.created_at || new Date().toISOString()
                           });
                         }
                       }
@@ -9471,6 +9660,394 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     </table>
                   )}
                 </div>
+              </motion.div>
+            </div>
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* RE-SEND REVIEW MODAL */}
+      <AnimatePresence>
+        {customerReviewResendProd && (() => {
+          const { order, lead } = resolveOrderAndLead(customerReviewResendProd);
+          const customerName = order?.customer_name || lead?.customer_name || 'Customer';
+          const trackingId = customerReviewResendProd.tracking_id || 'N/A';
+          return (
+            <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]"
+              >
+                {/* Header */}
+                <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d11]">
+                  <div>
+                    <h3 className="text-sm font-black text-white flex items-center gap-2 uppercase tracking-wider font-mono">
+                      <span>📤</span> Send Customer Review Links
+                    </h3>
+                    <p className="text-[10px] text-zinc-500 mt-1 font-mono">
+                      PROJECT ID: <span className="text-violet-400 font-bold">{customerReviewResendProd.production_id}</span> • TRACKING ID: <span className="text-amber-400 font-bold">{trackingId}</span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCustomerReviewResendProd(null)}
+                    className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer font-bold text-xs"
+                  >
+                    ✕ Close
+                  </button>
+                </div>
+
+                {/* Body Form */}
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    try {
+                      setIsSaving(true);
+                      await updateProduction(customerReviewResendProd.production_id, {
+                        editing_status: 'Customer Review'
+                      });
+                      if (order?.order_id) {
+                        await updateOrderStage(order.order_id, 'Customer Review');
+                      }
+                      
+                      // Trigger WhatsApp Web with encoded text
+                      const formattedPhone = customerReviewPhone.replace(/\D/g, '');
+                      const encodedMsg = encodeURIComponent(customerReviewMessage);
+                      const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedMsg}`;
+                      window.open(whatsappUrl, '_blank');
+                      
+                      setCustomerReviewResendProd(null);
+                    } catch (err: any) {
+                      alert("Error updating status: " + (err.message || err));
+                    } finally {
+                      setIsSaving(false);
+                    }
+                  }}
+                  className="p-6 space-y-4 overflow-y-auto flex-1 text-left"
+                >
+                  <div className="space-y-1">
+                    <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
+                      Customer Name
+                    </label>
+                    <div className="text-sm font-semibold text-zinc-200 bg-zinc-900/40 px-3 py-2 rounded-xl border border-zinc-900">
+                      {customerName}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
+                        WhatsApp Number / Mobile
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={customerReviewPhone}
+                        onChange={(e) => setCustomerReviewPhone(e.target.value)}
+                        className="w-full bg-zinc-900 text-zinc-100 border border-zinc-800 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
+                        Set Stage Automatically to
+                      </label>
+                      <div className="text-xs font-semibold text-emerald-400 bg-emerald-950/10 border border-emerald-900/30 px-3 py-2 rounded-xl">
+                        💬 Customer Review
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
+                      Draft Message Content
+                    </label>
+                    <p className="text-[10px] text-zinc-500 font-mono mb-1">
+                      Customize review link messages including all assigned deliverables below:
+                    </p>
+                    <textarea
+                      required
+                      rows={10}
+                      value={customerReviewMessage}
+                      onChange={(e) => setCustomerReviewMessage(e.target.value)}
+                      className="w-full bg-zinc-900 text-zinc-100 border border-zinc-800 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-mono whitespace-pre-wrap leading-relaxed"
+                    />
+                  </div>
+
+                  {/* Buttons */}
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setCustomerReviewResendProd(null)}
+                      className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSaving}
+                      className="flex-1 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      <span>💬</span> {isSaving ? 'Saving...' : 'Send via WhatsApp'}
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* CLIENT ACCEPTANCE POPUP */}
+      <AnimatePresence>
+        {clientAcceptanceProd && (() => {
+          const { order, lead } = resolveOrderAndLead(clientAcceptanceProd);
+          const customerName = order?.customer_name || lead?.customer_name || 'Customer';
+          const trackingId = clientAcceptanceProd.tracking_id || 'N/A';
+          const tableData = getAssignedEditorsTableData(clientAcceptanceProd);
+
+          // Convert a file to Base64
+          const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            setCaUploadingProof(true);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              setCaCommunicationProof(reader.result as string);
+              setCaUploadingProof(false);
+            };
+            reader.onerror = () => {
+              alert("Failed to read file");
+              setCaUploadingProof(false);
+            };
+            reader.readAsDataURL(file);
+          };
+
+          return (
+            <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl relative flex flex-col max-h-[92vh]"
+              >
+                {/* Header */}
+                <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d11]">
+                  <div>
+                    <h3 className="text-sm font-black text-white flex items-center gap-2 uppercase tracking-wider font-mono">
+                      <span>✓</span> Client Acceptance Verification Deck
+                    </h3>
+                    <p className="text-[10px] text-zinc-500 mt-1 font-mono">
+                      PROJECT ID: <span className="text-violet-400 font-bold">{clientAcceptanceProd.production_id}</span> • TRACKING ID: <span className="text-amber-400 font-bold">{trackingId}</span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setClientAcceptanceProd(null)}
+                    className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer font-bold text-xs"
+                  >
+                    ✕ Close
+                  </button>
+                </div>
+
+                {/* Body Form */}
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!caInternalValidation) {
+                      alert("Please confirm the internal peer review & quality validation.");
+                      return;
+                    }
+                    if (!caChecklistCompleted) {
+                      alert("Please confirm that all deliverables match client specifications.");
+                      return;
+                    }
+                    try {
+                      setIsSaving(true);
+                      
+                      const updates: Partial<Production> = {
+                        editing_status: 'Client Acceptance',
+                        client_communication_proof: caCommunicationProof
+                      };
+                      
+                      await updateProduction(clientAcceptanceProd.production_id, updates);
+                      
+                      if (order?.order_id) {
+                        await updateOrderStage(order.order_id, 'Client Acceptance');
+                      }
+                      
+                      setClientAcceptanceProd(null);
+                    } catch (err: any) {
+                      alert("Error finalizing Client Acceptance: " + (err.message || err));
+                    } finally {
+                      setIsSaving(false);
+                    }
+                  }}
+                  className="p-6 space-y-5 overflow-y-auto flex-1 text-left"
+                >
+                  {/* Customer Block */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-zinc-900/30 border border-zinc-900 p-4 rounded-2xl">
+                    <div className="space-y-1">
+                      <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Customer Name</span>
+                      <div className="text-xs font-semibold text-zinc-200">{customerName}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Production Status</span>
+                      <span className="inline-block px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/15">
+                        {clientAcceptanceProd.editing_status || 'In Progress'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Rigorous Deliverables Checklist */}
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] text-amber-400 uppercase font-black tracking-widest font-mono border-b border-zinc-900 pb-1.5 flex items-center gap-1.5">
+                      <span>📋</span> Deliverables Verification Checklist
+                    </h4>
+                    <p className="text-[10px] text-zinc-500 font-mono">
+                      All deliverables below must be verified as fully approved by the client before submission.
+                    </p>
+
+                    <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
+                      {tableData.map((row, idx) => {
+                        const key = `${row.deliverable}_${row.staff_name}_${idx}`;
+                        return (
+                          <label
+                            key={key}
+                            className="flex items-center justify-between p-3 bg-zinc-900/40 border border-zinc-900 hover:border-zinc-850 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all"
+                          >
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="checkbox"
+                                required
+                                checked={!!caChecklist[key]}
+                                onChange={(e) => setCaChecklist(prev => ({ ...prev, [key]: e.target.checked }))}
+                                className="w-4 h-4 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
+                              />
+                              <div className="text-xs">
+                                <span className="font-semibold text-zinc-200">{row.deliverable}</span>
+                                <span className="text-[10px] text-zinc-500 block font-mono">
+                                  ASSIGNED TO: <span className="text-zinc-400 font-bold">{row.staff_name}</span> • STATUS: <span className="text-amber-400 font-bold">{row.status}</span>
+                                </span>
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-mono text-zinc-500 font-bold">QTY: {row.qty}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Quality Control Peer Review & Internal Validation */}
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] text-indigo-400 uppercase font-black tracking-widest font-mono border-b border-zinc-900 pb-1.5">
+                      🔬 Quality Assurance & Peer Verification
+                    </h4>
+                    
+                    <div className="space-y-2">
+                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
+                        <input
+                          type="checkbox"
+                          required
+                          checked={caInternalValidation}
+                          onChange={(e) => setCaInternalValidation(e.target.checked)}
+                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
+                        />
+                        <span className="text-xs text-zinc-300 leading-normal">
+                          <strong>Peer QC Check:</strong> I confirm that a secondary peer editor or production lead has validated video aspect ratios, frame-rates, resolution matching, audio balance, and transitions.
+                        </span>
+                      </label>
+
+                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
+                        <input
+                          type="checkbox"
+                          required
+                          checked={caChecklistCompleted}
+                          onChange={(e) => setCaChecklistCompleted(e.target.checked)}
+                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
+                        />
+                        <span className="text-xs text-zinc-300 leading-normal">
+                          <strong>Customer Acceptance Verified:</strong> I verify that the client has explicitly approved all deliverables on WhatsApp, email, or other channels.
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Customer Communication Proof Upload */}
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] text-[#f472b6] uppercase font-black tracking-widest font-mono border-b border-zinc-900 pb-1.5">
+                      💬 Client Communication & Consent Proof
+                    </h4>
+                    
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <label className="block text-[10px] text-zinc-500 font-mono">
+                          Upload Screenshot (WhatsApp Chat, Email approval, or receipt)
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <label className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 hover:border-zinc-700 bg-zinc-900/20 hover:bg-zinc-900/40 rounded-xl py-4 px-4 cursor-pointer transition-all">
+                            <span className="text-xs text-zinc-400 font-semibold mb-1">
+                              {caUploadingProof ? 'Processing image...' : 'Click to upload proof screenshot'}
+                            </span>
+                            <span className="text-[10px] text-zinc-600 font-mono">PNG, JPG formats supported</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleFileChange}
+                              disabled={caUploadingProof}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      </div>
+
+                      {caCommunicationProof ? (
+                        <div className="p-3 bg-zinc-900 border border-zinc-850 rounded-xl space-y-2">
+                          <div className="text-[10px] text-zinc-500 font-mono uppercase flex justify-between items-center">
+                            <span>Proof Preview:</span>
+                            <button
+                              type="button"
+                              onClick={() => setCaCommunicationProof('')}
+                              className="text-rose-400 hover:text-rose-300 font-bold underline"
+                            >
+                              Remove Proof
+                            </button>
+                          </div>
+                          <img
+                            src={caCommunicationProof}
+                            alt="Communication Proof"
+                            referrerPolicy="no-referrer"
+                            className="max-h-[140px] rounded-lg object-contain mx-auto border border-zinc-800 bg-black/40"
+                          />
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-zinc-500 font-mono italic text-center p-3 border border-zinc-900 bg-zinc-900/10 rounded-xl">
+                          No screenshot uploaded yet. A backup receipt image or screenshot of chat is recommended.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Buttons */}
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setClientAcceptanceProd(null)}
+                      className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSaving || caUploadingProof}
+                      className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      <span>✓</span> {isSaving ? 'Submitting...' : 'Approve Client Acceptance'}
+                    </button>
+                  </div>
+                </form>
               </motion.div>
             </div>
           );

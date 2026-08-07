@@ -5791,23 +5791,33 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           const prodId = assignment.production_id;
           const allTasks = currentAssignments.filter(t => t.production_id === prodId);
           
-          const completedTasks = allTasks.filter(t => t.status === 'Completed' || t.status === 'Editing Complete').length;
+          const completedTasks = allTasks.filter(t => t.status === 'Completed' || t.status === 'Editing Complete' || t.status === 'Editing Completed').length;
           const totalTasks = allTasks.length;
           const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
           
-          const hasTasks = totalTasks > 0;
-          const allReachedStarted = hasTasks && allTasks.every(t => ['In Progress', 'Editing Started', 'Review Pending', 'Client Review', 'Completed', 'Editing Complete'].includes(t.status));
-          const allReachedReview = hasTasks && allTasks.every(t => ['Review Pending', 'Client Review', 'Completed', 'Editing Complete'].includes(t.status));
-          const allReachedComplete = hasTasks && allTasks.every(t => ['Completed', 'Editing Complete'].includes(t.status));
-          
+          const prodObj = (production || []).find(p => p.production_id === prodId);
+          const baseStatus = prodObj?.editing_status || 'Raw Footage Received';
+
           let nextEditingStatus: EditingStatus | undefined = undefined;
           
-          if (allReachedComplete) {
-            nextEditingStatus = 'Editing Complete';
-          } else if (allReachedReview) {
-            nextEditingStatus = 'Client Review';
-          } else if (allReachedStarted) {
-            nextEditingStatus = 'Editing Started';
+          // Do not override terminal statuses
+          if (!['Completed', 'Closed', 'Client Acceptance', 'Project Closed', 'Order Closed', 'Final Approval'].includes(baseStatus)) {
+            const hasTasks = totalTasks > 0;
+            const allReachedComplete = hasTasks && allTasks.every(t => 
+              t.status === 'Completed' || t.status === 'Editing Complete' || t.status === 'Editing Completed'
+            );
+            const anyCustomerReview = allTasks.some(t => t.status === 'Customer Review');
+            const anyStarted = allTasks.some(t => t.status === 'Editing Started' || t.status === 'In Progress');
+
+            if (allReachedComplete) {
+              nextEditingStatus = 'Editing Completed' as any;
+            } else if (anyCustomerReview) {
+              nextEditingStatus = 'Customer Review';
+            } else if (anyStarted) {
+              nextEditingStatus = 'Editing Started';
+            } else {
+              nextEditingStatus = 'Assigned Editor';
+            }
           }
           
           const updates: Partial<Omit<Production, 'production_id' | 'tracking_id'>> = {

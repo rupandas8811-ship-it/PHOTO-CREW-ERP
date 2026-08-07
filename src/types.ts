@@ -428,6 +428,8 @@ export interface Production {
   production_status?: 'New Project' | 'Footage Received' | 'Editor Assigned' | 'Editing Started' | 'In Progress' | 'Customer Review' | 'Revision Required' | 'Approved' | 'Delivered' | 'Closed' | 'Project Completed' | 'Project Cancelled';
   approval_status?: string;
   editing_progress?: string;
+  delivery_link?: string;
+  client_communication_proof?: string;
 }
 
 export interface Payment {
