@@ -279,6 +279,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       if (supabaseClient) {
         let reqQuery = supabaseClient.from('unlock_requests').update({ 
            request_status: 'Approved',
+           status: 'Approved',
            approved_at: new Date().toISOString(),
            approved_by: currentUserName || 'Business Owner'
         });

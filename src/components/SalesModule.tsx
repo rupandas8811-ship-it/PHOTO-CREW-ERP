@@ -1605,13 +1605,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         .select('*');
       
       if (!error && data) {
-        const normalized = data.map((r: any) => ({
-          ...r,
-          status: r.request_status || r.status || 'Pending',
-          reason: r.request_reason || r.reason || '',
-          sales_staff_name: r.requested_by_name || r.sales_staff_name || '',
-          sales_staff_id: r.requested_by_user_id || r.sales_staff_id || ''
-        }));
+        const normalized = data.map((r: any) => {
+          const isApproved = r.request_status === 'Approved' || r.status === 'Approved';
+          const isCompleted = r.request_status === 'Completed' || r.status === 'Completed';
+          const isRejected = r.request_status === 'Rejected' || r.status === 'Rejected';
+          const effectiveStatus = isApproved ? 'Approved' : isCompleted ? 'Completed' : isRejected ? 'Rejected' : (r.request_status || r.status || 'Pending');
+          return {
+            ...r,
+            request_status: effectiveStatus,
+            status: effectiveStatus,
+            reason: r.request_reason || r.reason || '',
+            sales_staff_name: r.requested_by_name || r.sales_staff_name || '',
+            sales_staff_id: r.requested_by_user_id || r.sales_staff_id || ''
+          };
+        });
         setUnlockRequests(normalized);
       }
     };
@@ -2187,19 +2194,23 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     : false;
 
   const isApprovedUnlocked = selectedLead
-    ? (unlockRequests.some(r => (r.lead_id === selectedLead.lead_id || r.order_id === selectedLead.lead_id || r.project_id === selectedLead.lead_id) && (r.status === 'Approved' || r.request_status === 'Approved')) ||
-       unlockedRecords.some(r => r.recordId === selectedLead.lead_id && r.module === 'Sales'))
+    ? unlockRequests.some(r => {
+        const matchesLead = r.lead_id === selectedLead.lead_id || r.order_id === selectedLead.lead_id || r.project_id === selectedLead.lead_id;
+        const matchesOrder = orders && orders.some(o => o.lead_id === selectedLead.lead_id && (o.order_id === r.order_id || o.order_id === r.lead_id));
+        const matchesLeadOrderId = (selectedLead as any).order_id && (r.order_id === (selectedLead as any).order_id || r.lead_id === (selectedLead as any).order_id);
+        const isApproved = r.status === 'Approved' || r.request_status === 'Approved';
+        return (matchesLead || matchesOrder || matchesLeadOrderId) && isApproved;
+      })
     : false;
 
   const isCrmLocked = isLeadConfirmed && !isApprovedUnlocked;
   const isLeadLocked = isCrmLocked;
 
-  // Step-level locking rules after Order Confirmed / Operations stage:
-  // Step 1 (Customer Details) and Step 2 (Event Details) remain locked ALWAYS after Order Confirmed.
-  // Step 3 (Quotation Details) unlocks ONLY when Business Owner approves "Unlock Quotation".
-  const isStep1Locked = isLeadConfirmed;
-  const isStep2Locked = isLeadConfirmed;
-  const isStep3Locked = isLeadConfirmed && !isApprovedUnlocked;
+  // When Business Owner approves Unlock Request, ALL steps (Step 1, Step 2, Step 3) become editable.
+  // When locked, ALL steps remain locked in Read Only mode.
+  const isStep1Locked = isCrmLocked;
+  const isStep2Locked = isCrmLocked;
+  const isStep3Locked = isCrmLocked;
 
   const [openDropdownLeadId, setOpenDropdownLeadId] = useState<string | null>(null);
   const [dropdownCoords, setDropdownCoords] = useState<{ top: number | string, right: number | string, bottom: number | string }>({ top: 0, right: 0, bottom: 'auto' });
@@ -4911,32 +4922,69 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     if (!supabaseClient || !leadId) return;
     try {
       const linkedOrder = (orders || []).find(o => o.lead_id === leadId);
-      const orderId = linkedOrder?.order_id;
+      const orderId = linkedOrder?.order_id || (selectedLead as any)?.order_id;
       
-      let query = supabaseClient
+      // 1. Query unlock_requests to find any approved request matching lead_id or order_id
+      const { data: allReqs } = await supabaseClient
+        .from('unlock_requests')
+        .select('*');
+
+      if (allReqs && allReqs.length > 0) {
+        const matchingIds = allReqs
+          .filter((r: any) => {
+            const matchesLead = r.lead_id === leadId || r.order_id === leadId || r.project_id === leadId;
+            const matchesOrder = orderId && (r.order_id === orderId || r.lead_id === orderId);
+            const isApproved = r.request_status === 'Approved' || r.status === 'Approved';
+            return (matchesLead || matchesOrder) && isApproved;
+          })
+          .map((r: any) => r.request_id || r.id)
+          .filter(Boolean);
+
+        if (matchingIds.length > 0) {
+          const { error: updErr } = await supabaseClient
+            .from('unlock_requests')
+            .update({
+              request_status: 'Completed',
+              status: 'Completed',
+              edited_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .in('request_id', matchingIds);
+
+          if (updErr) {
+            console.warn("Error marking unlock requests as completed by request_id:", updErr.message);
+          }
+        }
+      }
+
+      // 2. Direct fallback update by lead_id
+      await supabaseClient
         .from('unlock_requests')
         .update({
           request_status: 'Completed',
           status: 'Completed',
           edited_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
-        });
+        })
+        .eq('lead_id', leadId);
 
       if (orderId && orderId !== leadId) {
-        query = query.or(`lead_id.eq.${leadId},order_id.eq.${orderId}`);
-      } else {
-        query = query.eq('lead_id', leadId);
+        await supabaseClient
+          .from('unlock_requests')
+          .update({
+            request_status: 'Completed',
+            status: 'Completed',
+            edited_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('order_id', orderId);
       }
 
-      query = query.or('request_status.eq.Approved,status.eq.Approved');
-
-      const { error } = await query;
-      if (error) {
-        console.warn("Error marking unlock request as completed:", error.message);
-      }
-
+      // 3. Immediately update local unlockRequests state
       setUnlockRequests(prev => Array.isArray(prev) ? prev.map(r => {
-        if ((r.lead_id === leadId || (orderId && r.order_id === orderId)) && (r.request_status === 'Approved' || r.status === 'Approved')) {
+        const matchesLead = r.lead_id === leadId || r.order_id === leadId || r.project_id === leadId;
+        const matchesOrder = orderId && (r.order_id === orderId || r.lead_id === orderId);
+        if (matchesLead || matchesOrder) {
           return {
             ...r,
             request_status: 'Completed',
@@ -4946,8 +4994,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         }
         return r;
       }) : []);
-    } catch (err) {
-      console.warn("completeApprovedUnlockRequest exception:", err);
+    } catch (err: any) {
+      console.warn("completeApprovedUnlockRequest error:", err?.message || err);
     }
   };
 
