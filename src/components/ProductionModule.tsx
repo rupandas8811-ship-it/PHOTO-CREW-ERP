@@ -560,16 +560,16 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     if (!prodItem) return { order: undefined, lead: undefined };
     
     // 1. Try to find via raw footage matching tracking_id or order_id
-    const rf = rawFootage.find(f => f.tracking_id === prodItem.tracking_id || f.order_id === prodItem.tracking_id);
+    const rf = rawFootage.find(f => f.tracking_id === prodItem.tracking_id || f.order_id === prodItem.tracking_id || f.order_id === prodItem.order_id);
     
     // 2. Find order by order_id or lead_id matching tracking_id
-    let order = orders.find(o => o.order_id === prodItem.tracking_id || o.lead_id === prodItem.tracking_id);
+    let order = orders.find(o => o.order_id === prodItem.tracking_id || o.lead_id === prodItem.tracking_id || o.order_id === prodItem.order_id || o.lead_id === prodItem.lead_id);
     if (!order && rf) {
       order = orders.find(o => o.order_id === rf.order_id);
     }
     
     // 3. Find lead by lead_id matching tracking_id or order's lead_id
-    const lead = leadsData?.find(l => l.lead_id === prodItem.tracking_id || l.lead_id === order?.lead_id);
+    const lead = leadsData?.find(l => l.lead_id === prodItem.tracking_id || l.lead_id === order?.lead_id || l.lead_id === prodItem.lead_id);
     
     return { order, lead };
   };
@@ -644,6 +644,7 @@ ${coordinatorName}`;
   // Dynamically compile active production projects/leads from leadsData / Supabase leads table
   const leads = useMemo(() => {
     const postProdStages = [
+      'Verified Footage',
       'Footage Handover Verified',
       'Raw Footage Received', 
       'Assigned Editor',
@@ -1096,7 +1097,7 @@ ${coordinatorName}`;
 
   const getProductionStatus = (prod: Production): string => {
     const status = (prod.editing_status || 'Raw Footage Received') as string;
-    if (status === 'Pending' || status === 'Raw Footage Received') return 'Raw Footage Received';
+    if (status === 'Pending' || status === 'Raw Footage Received' || status === 'Verified Footage' || status === 'Footage Handover Verified') return 'Raw Footage Received';
     if (status === 'Editor Assigned') return 'Editor Assigned';
     if (status === 'Editing Started') return 'Editing Started';
     if (status === 'Editing' || status === 'Editing In Progress') return 'Editing In Progress';
@@ -2259,7 +2260,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
   // Calculate stats for pipeline counters
   const statTotalVideo = leads.length;
-  const statPendingVideo = leads.filter(p => ['Pending', 'New Raw Footage Arrived', 'Raw Footage Received', 'Editor Assigned'].includes(p.editing_status)).length;
+  const statPendingVideo = leads.filter(p => ['Pending', 'New Raw Footage Arrived', 'Raw Footage Received', 'Editor Assigned', 'Verified Footage', 'Footage Handover Verified'].includes(p.editing_status)).length;
   const statEditingVideo = leads.filter(p => ['Editing Started', 'Editing In Progress', 'Editing'].includes(p.editing_status)).length;
   const statReviewVideo = leads.filter(p => ['Internal QC Review', 'Client Review Sent', 'Customer Review', 'Ready For Review', 'Revision Required', 'Revision In Progress'].includes(p.editing_status)).length;
   const statApprovedVideo = leads.filter(p => ['Approved', 'Final Approval'].includes(p.editing_status)).length;
@@ -2821,6 +2822,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 <tbody className="divide-y divide-zinc-900 font-sans">
                   {(() => {
                     const postProdStages = [
+                      'Verified Footage',
+                      'Footage Handover Verified',
                       'Raw Footage Received', 
                       'Editor Assigned', 
                       'Editing Started', 
@@ -5584,7 +5587,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             ].map(col => {
               const colProds = production.filter(p => {
                 // Map logical status fallback helper
-                if (col.id === 'Pending') return p.editing_status === 'Pending' || p.editing_status === 'Raw Footage Received' || p.editing_status === 'Editor Assigned';
+                if (col.id === 'Pending') return p.editing_status === 'Pending' || p.editing_status === 'Raw Footage Received' || p.editing_status === 'Editor Assigned' || p.editing_status === 'Verified Footage' || p.editing_status === 'Footage Handover Verified';
                 if (col.id === 'Editing') return p.editing_status === 'Editing' || p.editing_status === 'Editing Started' || p.editing_status === 'Editing In Progress';
                 if (col.id === 'Customer Review') return p.editing_status === 'Customer Review' || p.editing_status === 'Internal QC Review' || p.editing_status === 'Client Review Sent';
                 if (col.id === 'Revision Required') return p.editing_status === 'Revision Required' || p.editing_status === 'Revision In Progress';

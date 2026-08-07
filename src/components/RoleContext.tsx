@@ -1048,13 +1048,20 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const augmentedProduction = useMemo(() => {
     const list = [...production];
     augmentedOrders.forEach(o => {
-      const prodExists = list.some(p => p.tracking_id === o.order_id || p.tracking_id === o.lead_id);
+      const prodExists = list.some(p => 
+        p.tracking_id === o.order_id || 
+        p.tracking_id === o.lead_id ||
+        (p as any).order_id === o.order_id ||
+        (p as any).lead_id === o.lead_id
+      );
       if (!prodExists) {
         const parentLeadForO = leads.find(l => l.lead_id === o.lead_id);
         const defaultTargetDate = parentLeadForO?.delivery_target_date || (o.event_date ? new Date(new Date(o.event_date).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : '');
         list.push({
           production_id: `PRD-${o.lead_id}`,
           tracking_id: o.order_id,
+          order_id: o.order_id,
+          lead_id: o.lead_id,
           editor_assigned: parentLeadForO?.assigned_editor || 'Unassigned',
           raw_footage_location: '',
           editing_status: (parentLeadForO?.current_status || parentLeadForO?.status || o.current_stage) as any,
@@ -1066,8 +1073,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
     return list.map(p => {
-      const ord = augmentedOrders.find(o => o.order_id === p.tracking_id || o.lead_id === p.tracking_id);
-      const parentLead = leads.find(l => l.lead_id === p.tracking_id || (ord && l.lead_id === ord.lead_id));
+      const ord = augmentedOrders.find(o => o.order_id === p.tracking_id || o.lead_id === p.tracking_id || o.order_id === (p as any).order_id || o.lead_id === (p as any).lead_id);
+      const parentLead = leads.find(l => l.lead_id === p.tracking_id || (ord && l.lead_id === ord.lead_id) || l.lead_id === (p as any).lead_id);
       
       const leadStatus = parentLead?.current_status || parentLead?.status;
       const leadEditor = parentLead?.assigned_editor;
