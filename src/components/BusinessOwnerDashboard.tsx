@@ -228,84 +228,167 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
   
   const handleApproveUnlock = async (request: any) => {
     try {
-      const order = orders.find(o => o.order_id === request.order_id);
-      
-      if (!order) throw new Error("Order not found");
-      
-      if (updateOrderStage) {
-        // Unlock quotation by moving it back to Negotiation stage for the Sales person to edit.
-        await updateOrderStage(order.lead_id, 'Negotiation', 'Business Owner');
-        
-        // Update request status to Approved
-        const { error: updErr } = await supabaseClient.from('unlock_requests')
-          .update({ 
-             request_status: 'Approved'
-          })
-          .or(`order_id.eq.${request.order_id},lead_id.eq.${request.lead_id}`);
-          
-        if (updErr) throw new Error(updErr.message);
-          
-        await logActivity(
-          'Business Owner',
-          'Approved Quotation Unlock',
-          'Business Owner',
-          `Approved unlock for Order ${order.order_id} - Reason: ${request.reason}`
-        );
-        
-        // Notify Sales Staff
+      const targetLeadId = request.lead_id || request.order_id;
+      const targetOrderId = request.order_id || request.lead_id;
+
+      // Find order or lead in props
+      let order = orders.find(o => o.order_id === targetOrderId || o.lead_id === targetLeadId || o.order_id === targetLeadId);
+      let lead = leads.find(l => l.lead_id === targetLeadId || l.lead_id === targetOrderId);
+
+      // If not in memory props, fetch directly from Supabase
+      if (!order && !lead && supabaseClient) {
+        const { data: dbLeads } = await supabaseClient
+          .from('leads')
+          .select('*')
+          .or(`lead_id.eq.${targetLeadId},lead_id.eq.${targetOrderId}`);
+        if (dbLeads && dbLeads.length > 0) {
+          lead = dbLeads[0];
+        }
+
+        const { data: dbOrders } = await supabaseClient
+          .from('orders')
+          .select('*')
+          .or(`order_id.eq.${targetOrderId},order_id.eq.${targetLeadId},lead_id.eq.${targetLeadId}`);
+        if (dbOrders && dbOrders.length > 0) {
+          order = dbOrders[0];
+        }
+      }
+
+      const effectiveLeadId = lead?.lead_id || order?.lead_id || targetLeadId;
+      const effectiveOrderId = order?.order_id || targetOrderId;
+
+      if (!effectiveLeadId && !effectiveOrderId) {
+        throw new Error("Target Lead or Order record could not be found.");
+      }
+
+      // 1. Update Lead/Order status in Supabase
+      if (supabaseClient) {
+        if (effectiveLeadId) {
+          await supabaseClient
+            .from('leads')
+            .update({ 
+              current_status: 'Negotiation',
+              status: 'Negotiation',
+              updated_at: new Date().toISOString()
+            })
+            .eq('lead_id', effectiveLeadId);
+        }
+
+        if (effectiveOrderId && effectiveOrderId !== effectiveLeadId) {
+          await supabaseClient
+            .from('orders')
+            .update({ 
+              order_status: 'Negotiation',
+              current_stage: 'Negotiation',
+              updated_at: new Date().toISOString()
+            })
+            .eq('order_id', effectiveOrderId);
+        }
+      }
+
+      // 2. Call updateOrderStage if available (safely wrapped)
+      if (updateOrderStage && effectiveLeadId) {
+        try {
+          await updateOrderStage(effectiveLeadId, 'Negotiation');
+        } catch (stageErr) {
+          console.warn("updateOrderStage non-fatal warning:", stageErr);
+        }
+      }
+
+      // 3. Update unlock_requests status to Approved
+      const { error: updErr } = await supabaseClient.from('unlock_requests')
+        .update({ 
+           request_status: 'Approved',
+           approved_at: new Date().toISOString(),
+           approved_by: currentUserName || 'Business Owner'
+        })
+        .or(`request_id.eq.${request.request_id},order_id.eq.${effectiveOrderId},lead_id.eq.${effectiveLeadId}`);
+
+      if (updErr) throw new Error(updErr.message);
+
+      // 4. Log activity
+      await logActivity(
+        'Business Owner',
+        'Approved Quotation Unlock',
+        'Business Owner',
+        `Approved unlock for Lead ${effectiveLeadId} / Order ${effectiveOrderId} - Reason: ${request.reason || request.request_reason || ''}`
+      );
+
+      // 5. Notify Sales Staff
+      if (supabaseClient) {
         await supabaseClient.from('notifications').insert({
           notification_id: `NTF-${Math.floor(Math.random() * 100000)}`,
           title: "Quotation Unlocked",
-          message: `Your request to unlock quotation for order ${order.order_id} has been approved.`,
+          message: `Your request to unlock quotation for ${request.customer_name || 'lead'} (${effectiveLeadId}) has been approved.`,
           notification_type: 'Alert',
           read_status: false,
           is_read: false,
           recipient_role: 'Sales Team',
-          recipient_user_id: request.sales_staff_id || null,
-          project_id: order.order_id
+          recipient_user_id: request.sales_staff_id || request.requested_by_user_id || null,
+          project_id: effectiveOrderId || effectiveLeadId
         });
-        
-        setUnlockRequestModal(null);
-        alert("Quotation has been successfully unlocked.");
       }
+
+      setUnlockRequests(prev => prev.filter(r => r.request_id !== request.request_id && r.order_id !== effectiveOrderId && r.lead_id !== effectiveLeadId));
+      setUnlockRequestModal(null);
+      alert("Quotation has been successfully unlocked.");
     } catch (err: any) {
-      console.error(err);
+      console.error("Approve unlock error:", err);
       alert(err.message || "Failed to approve unlock");
     }
   };
-  
+
   const handleRejectUnlock = async (request: any) => {
     try {
+      const targetLeadId = request.lead_id || request.order_id;
+      const targetOrderId = request.order_id || request.lead_id;
+
       const { error: updErr } = await supabaseClient.from('unlock_requests')
         .update({ 
-          request_status: 'Rejected'
+          request_status: 'Rejected',
+          rejected_at: new Date().toISOString(),
+          rejected_by: currentUserName || 'Business Owner'
         })
-        .or(`order_id.eq.${request.order_id},lead_id.eq.${request.lead_id}`);
+        .or(`request_id.eq.${request.request_id},order_id.eq.${targetOrderId},lead_id.eq.${targetLeadId}`);
         
       if (updErr) throw new Error(updErr.message);
+
+      if (supabaseClient && targetLeadId) {
+        await supabaseClient
+          .from('leads')
+          .update({ 
+            current_status: 'Negotiation',
+            status: 'Negotiation',
+            updated_at: new Date().toISOString()
+          })
+          .eq('lead_id', targetLeadId);
+      }
         
       await logActivity(
         'Business Owner',
         'Rejected Quotation Unlock',
         'Business Owner',
-        `Rejected unlock for Order ${request.order_id} - Reason: ${request.reason}`
+        `Rejected unlock for Lead ${targetLeadId} / Order ${targetOrderId} - Reason: ${request.reason || request.request_reason || ''}`
       );
       
       // Notify Sales Staff
-      await supabaseClient.from('notifications').insert({
-        notification_id: `NTF-${Math.floor(Math.random() * 100000)}`,
-        title: "Unlock Request Rejected",
-        message: `Your request to unlock quotation for order ${request.order_id} was rejected.`,
-        notification_type: 'Alert',
-        read_status: false,
-        is_read: false,
-        recipient_role: 'Sales Team',
-        recipient_user_id: request.sales_staff_id || null,
-        project_id: request.order_id
-      });
-      
+      if (supabaseClient) {
+        await supabaseClient.from('notifications').insert({
+          notification_id: `NTF-${Math.floor(Math.random() * 100000)}`,
+          title: "Quotation Unlock Rejected",
+          message: `Your request to unlock quotation for ${request.customer_name || 'lead'} (${targetLeadId}) was rejected.`,
+          notification_type: 'Alert',
+          read_status: false,
+          is_read: false,
+          recipient_role: 'Sales Team',
+          recipient_user_id: request.sales_staff_id || request.requested_by_user_id || null,
+          project_id: targetOrderId || targetLeadId
+        });
+      }
+
+      setUnlockRequests(prev => prev.filter(r => r.request_id !== request.request_id && r.order_id !== targetOrderId && r.lead_id !== targetLeadId));
       setUnlockRequestModal(null);
-      alert("Quotation unlock request rejected.");
+      alert("Quotation unlock request has been rejected.");
     } catch (err: any) {
       console.error(err);
       alert(err.message || "Failed to reject unlock");
