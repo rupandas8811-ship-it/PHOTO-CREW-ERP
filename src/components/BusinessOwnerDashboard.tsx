@@ -228,43 +228,57 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
   
   const handleApproveUnlock = async (request: any) => {
     try {
+      console.log("[DEBUG handleApproveUnlock] Step 1: Read unlock request:", request);
+      if (!request) {
+        throw new Error("No unlock request selected.");
+      }
+
       const targetLeadId = request.lead_id || request.order_id;
       const targetOrderId = request.order_id || request.lead_id;
 
       // Find order or lead in props
-      let order = orders.find(o => o.order_id === targetOrderId || o.lead_id === targetLeadId || o.order_id === targetLeadId);
-      let lead = leads.find(l => l.lead_id === targetLeadId || l.lead_id === targetOrderId);
+      let order = (orders || []).find(o => o.order_id === targetOrderId || o.lead_id === targetLeadId || o.order_id === targetLeadId);
+      let lead = (leads || []).find(l => l.lead_id === targetLeadId || l.lead_id === targetOrderId);
 
       // If not in memory props, fetch directly from Supabase
       if (!order && !lead && supabaseClient) {
-        const { data: dbLeads } = await supabaseClient
-          .from('leads')
-          .select('*')
-          .or(`lead_id.eq.${targetLeadId},lead_id.eq.${targetOrderId}`);
-        if (dbLeads && dbLeads.length > 0) {
-          lead = dbLeads[0];
+        if (targetLeadId) {
+          const { data: dbLeads, error: leadFetchErr } = await supabaseClient
+            .from('leads')
+            .select('*')
+            .or(`lead_id.eq.${targetLeadId}`);
+          if (leadFetchErr) console.warn("[DEBUG handleApproveUnlock] Lead fetch warning:", leadFetchErr.message);
+          if (dbLeads && dbLeads.length > 0) {
+            lead = dbLeads[0];
+          }
         }
 
-        const { data: dbOrders } = await supabaseClient
-          .from('orders')
-          .select('*')
-          .or(`order_id.eq.${targetOrderId},order_id.eq.${targetLeadId},lead_id.eq.${targetLeadId}`);
-        if (dbOrders && dbOrders.length > 0) {
-          order = dbOrders[0];
+        if (targetOrderId) {
+          const { data: dbOrders, error: orderFetchErr } = await supabaseClient
+            .from('orders')
+            .select('*')
+            .or(`order_id.eq.${targetOrderId}`);
+          if (orderFetchErr) console.warn("[DEBUG handleApproveUnlock] Order fetch warning:", orderFetchErr.message);
+          if (dbOrders && dbOrders.length > 0) {
+            order = dbOrders[0];
+          }
         }
       }
 
       const effectiveLeadId = lead?.lead_id || order?.lead_id || targetLeadId;
       const effectiveOrderId = order?.order_id || targetOrderId;
 
+      console.log("[DEBUG handleApproveUnlock] Step 2: Find lead/order:", { effectiveLeadId, effectiveOrderId, lead, order });
+
       if (!effectiveLeadId && !effectiveOrderId) {
         throw new Error("Target Lead or Order record could not be found.");
       }
 
       // 1. Update Lead/Order status in Supabase
+      console.log("[DEBUG handleApproveUnlock] Step 3: Update lead & order to Negotiation");
       if (supabaseClient) {
         if (effectiveLeadId) {
-          await supabaseClient
+          const { error: leadUpdErr } = await supabaseClient
             .from('leads')
             .update({ 
               current_status: 'Negotiation',
@@ -272,10 +286,15 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
               updated_at: new Date().toISOString()
             })
             .eq('lead_id', effectiveLeadId);
+
+          if (leadUpdErr) {
+            console.error("[DEBUG handleApproveUnlock] Lead status update error:", leadUpdErr);
+            throw new Error(`Failed to update lead status: ${leadUpdErr.message}`);
+          }
         }
 
         if (effectiveOrderId && effectiveOrderId !== effectiveLeadId) {
-          await supabaseClient
+          const { error: orderUpdErr } = await supabaseClient
             .from('orders')
             .update({ 
               order_status: 'Negotiation',
@@ -283,40 +302,68 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
               updated_at: new Date().toISOString()
             })
             .eq('order_id', effectiveOrderId);
+
+          if (orderUpdErr) {
+            console.warn("[DEBUG handleApproveUnlock] Order status update warning:", orderUpdErr.message);
+          }
         }
       }
 
-      // 2. Call updateOrderStage if available (safely wrapped)
-      if (updateOrderStage && effectiveLeadId) {
+      // 2. Call updateOrderStage if available
+      if (typeof updateOrderStage === 'function' && effectiveLeadId) {
         try {
           await updateOrderStage(effectiveLeadId, 'Negotiation');
-        } catch (stageErr) {
-          console.warn("updateOrderStage non-fatal warning:", stageErr);
+        } catch (stageErr: any) {
+          console.warn("[DEBUG handleApproveUnlock] updateOrderStage warning:", stageErr?.message || stageErr);
         }
       }
 
       // 3. Update unlock_requests status to Approved
-      const { error: updErr } = await supabaseClient.from('unlock_requests')
-        .update({ 
+      console.log("[DEBUG handleApproveUnlock] Step 4: Update unlock_requests status to Approved");
+      if (supabaseClient) {
+        let reqQuery = supabaseClient.from('unlock_requests').update({ 
            request_status: 'Approved',
+           status: 'Approved',
            approved_at: new Date().toISOString(),
            approved_by: currentUserName || 'Business Owner'
-        })
-        .or(`request_id.eq.${request.request_id},order_id.eq.${effectiveOrderId},lead_id.eq.${effectiveLeadId}`);
+        });
 
-      if (updErr) throw new Error(updErr.message);
+        if (request.request_id) {
+          reqQuery = reqQuery.eq('request_id', request.request_id);
+        } else if (effectiveOrderId && effectiveLeadId) {
+          reqQuery = reqQuery.or(`order_id.eq.${effectiveOrderId},lead_id.eq.${effectiveLeadId}`);
+        } else if (effectiveLeadId) {
+          reqQuery = reqQuery.eq('lead_id', effectiveLeadId);
+        } else if (effectiveOrderId) {
+          reqQuery = reqQuery.eq('order_id', effectiveOrderId);
+        }
+
+        const { error: updErr } = await reqQuery;
+
+        if (updErr) {
+          console.error("[DEBUG handleApproveUnlock] unlock_requests update error:", updErr);
+          throw new Error(`Failed to update unlock request status: ${updErr.message}`);
+        }
+      }
 
       // 4. Log activity
-      await logActivity(
-        'Business Owner',
-        'Approved Quotation Unlock',
-        'Business Owner',
-        `Approved unlock for Lead ${effectiveLeadId} / Order ${effectiveOrderId} - Reason: ${request.reason || request.request_reason || ''}`
-      );
+      if (typeof logActivity === 'function') {
+        try {
+          logActivity(
+            'Approved Quotation Unlock',
+            'Business Owner',
+            effectiveOrderId || effectiveLeadId || 'N/A',
+            `Approved unlock for Lead ${effectiveLeadId} / Order ${effectiveOrderId}`
+          );
+        } catch (logErr: any) {
+          console.warn("[DEBUG handleApproveUnlock] logActivity warning:", logErr?.message || logErr);
+        }
+      }
 
-      // 5. Notify Sales Staff
+      // 5. Send notification to Sales Staff
+      console.log("[DEBUG handleApproveUnlock] Step 5: Send notification to Sales Staff");
       if (supabaseClient) {
-        await supabaseClient.from('notifications').insert({
+        const { error: ntfErr } = await supabaseClient.from('notifications').insert({
           notification_id: `NTF-${Math.floor(Math.random() * 100000)}`,
           title: "Quotation Unlocked",
           message: `Your request to unlock quotation for ${request.customer_name || 'lead'} (${effectiveLeadId}) has been approved.`,
@@ -327,49 +374,77 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
           recipient_user_id: request.sales_staff_id || request.requested_by_user_id || null,
           project_id: effectiveOrderId || effectiveLeadId
         });
+
+        if (ntfErr) {
+          console.warn("[DEBUG handleApproveUnlock] notification insert warning:", ntfErr.message);
+        }
       }
 
-      setUnlockRequests(prev => prev.filter(r => r.request_id !== request.request_id && r.order_id !== effectiveOrderId && r.lead_id !== effectiveLeadId));
+      // 6. Refresh UI
+      console.log("[DEBUG handleApproveUnlock] Step 6: Refresh UI");
+      setUnlockRequests(prev => Array.isArray(prev) ? prev.filter(r => r.request_id !== request.request_id && r.order_id !== effectiveOrderId && r.lead_id !== effectiveLeadId) : []);
       setUnlockRequestModal(null);
       alert("Quotation has been successfully unlocked.");
     } catch (err: any) {
-      console.error("Approve unlock error:", err);
-      alert(err.message || "Failed to approve unlock");
+      console.error("[DEBUG handleApproveUnlock ERROR]:", err);
+      if (err && err.stack) {
+        console.error("Stack trace:", err.stack);
+      }
+      alert(err.message || String(err) || "Failed to approve unlock");
     }
   };
 
   const handleRejectUnlock = async (request: any) => {
     try {
+      if (!request) return;
       const targetLeadId = request.lead_id || request.order_id;
       const targetOrderId = request.order_id || request.lead_id;
 
-      const { error: updErr } = await supabaseClient.from('unlock_requests')
-        .update({ 
+      if (supabaseClient) {
+        let reqQuery = supabaseClient.from('unlock_requests').update({ 
           request_status: 'Rejected',
+          status: 'Rejected',
           rejected_at: new Date().toISOString(),
           rejected_by: currentUserName || 'Business Owner'
-        })
-        .or(`request_id.eq.${request.request_id},order_id.eq.${targetOrderId},lead_id.eq.${targetLeadId}`);
-        
-      if (updErr) throw new Error(updErr.message);
+        });
 
-      if (supabaseClient && targetLeadId) {
-        await supabaseClient
-          .from('leads')
-          .update({ 
-            current_status: 'Negotiation',
-            status: 'Negotiation',
-            updated_at: new Date().toISOString()
-          })
-          .eq('lead_id', targetLeadId);
+        if (request.request_id) {
+          reqQuery = reqQuery.eq('request_id', request.request_id);
+        } else if (targetOrderId && targetLeadId) {
+          reqQuery = reqQuery.or(`order_id.eq.${targetOrderId},lead_id.eq.${targetLeadId}`);
+        } else if (targetLeadId) {
+          reqQuery = reqQuery.eq('lead_id', targetLeadId);
+        } else if (targetOrderId) {
+          reqQuery = reqQuery.eq('order_id', targetOrderId);
+        }
+
+        const { error: updErr } = await reqQuery;
+        if (updErr) throw new Error(`Supabase error rejecting unlock request: ${updErr.message}`);
+
+        if (targetLeadId) {
+          await supabaseClient
+            .from('leads')
+            .update({ 
+              current_status: 'Negotiation',
+              status: 'Negotiation',
+              updated_at: new Date().toISOString()
+            })
+            .eq('lead_id', targetLeadId);
+        }
       }
         
-      await logActivity(
-        'Business Owner',
-        'Rejected Quotation Unlock',
-        'Business Owner',
-        `Rejected unlock for Lead ${targetLeadId} / Order ${targetOrderId} - Reason: ${request.reason || request.request_reason || ''}`
-      );
+      if (typeof logActivity === 'function') {
+        try {
+          logActivity(
+            'Rejected Quotation Unlock',
+            'Business Owner',
+            targetOrderId || targetLeadId || 'N/A',
+            `Rejected unlock for Lead ${targetLeadId} / Order ${targetOrderId}`
+          );
+        } catch (logErr: any) {
+          console.warn("logActivity warning:", logErr?.message || logErr);
+        }
+      }
       
       // Notify Sales Staff
       if (supabaseClient) {
