@@ -22,11 +22,15 @@ export const getStatusColorClass = (status: string) => {
   if (s === 'verified footage' || s === 'footage handover verified') return 'text-emerald-400 font-semibold';
   if (s === 'raw footage received') return 'text-amber-500';
   if (s === 'production') return 'text-sky-500';
-  if (s === 'editing in progress' || s === 'editing started') return 'text-indigo-600';
-  if (s === 'client review' || s === 'client review sent') return 'text-pink-500';
+  if (s === 'assigned editor' || s === 'editor assigned') return 'text-sky-400 font-semibold';
+  if (s === 'editing started') return 'text-yellow-400 font-semibold';
+  if (s === 'editing in progress') return 'text-blue-400 font-semibold';
+  if (s === 'customer review' || s === 'client review' || s === 'client review sent') return 'text-pink-400 font-semibold';
+  if (s === 'editing completed') return 'text-teal-400 font-bold';
+  if (s === 'client acceptance') return 'text-violet-400 font-bold';
   if (s === 'ready for delivery') return 'text-teal-500';
   if (s === 'delivered') return 'text-green-500';
-  if (s === 'completed' || s === 'closed') return 'text-green-700';
+  if (s === 'completed' || s === 'closed' || s === 'order closed') return 'text-green-400 font-bold';
   if (s === 'lost lead') return 'text-rose-500 font-bold';
   return 'text-zinc-400';
 };

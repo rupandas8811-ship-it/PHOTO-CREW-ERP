@@ -1214,36 +1214,52 @@ ${coordinatorName}`;
   };
 
   const getAutomatedProductionStatus = (prod: Production): string => {
-    const baseStatus = (prod.editing_status || 'Raw Footage Received') as string;
-    if (baseStatus === 'Raw Footage Received' || baseStatus === 'Verified Footage' || baseStatus === 'Footage Handover Verified' || baseStatus === 'Pending') {
-      return baseStatus;
-    }
-    if (baseStatus === 'Completed' || baseStatus === 'Closed' || baseStatus === 'Client Acceptance' || baseStatus === 'Project Closed' || baseStatus === 'Order Closed') {
-      return baseStatus;
-    }
-
-    const tableData = getAssignedEditorsTableData(prod);
-    const assignedRows = tableData.filter(row => row.staff_name !== 'Unassigned');
+    const baseStatus = (prod.editing_status || 'Pending') as string;
     
-    if (assignedRows.length === 0) {
-      return baseStatus;
+    // 1. Order Closed (After Business Owner final approval)
+    if (baseStatus === 'Order Closed' || baseStatus === 'Closed' || baseStatus === 'Completed' || baseStatus === 'Project Closed') {
+      return 'Order Closed';
+    }
+    
+    // 2. Client Acceptance (After Client Acceptance popup submitted)
+    if (baseStatus === 'Client Acceptance') {
+      return 'Client Acceptance';
     }
 
-    const stdStatuses = assignedRows.map(row => {
-      const s = row.status || 'Assigned Editor';
-      if (s === 'Assigned' || s === 'Assigned Editor') return 'Assigned Editor';
-      if (s === 'Editing Started') return 'Editing Started';
-      if (s === 'Customer Review') return 'Customer Review';
-      if (s === 'Completed' || s === 'Editing Completed') return 'Editing Completed';
-      return s;
-    });
+    const assignments = (editorAssignments || []).filter(a => a.production_id === prod.production_id);
+    
+    if (assignments.length > 0) {
+      // 3. Editing Completed (Only when ALL assigned editors have completed their assigned deliverables)
+      const allCompleted = assignments.every(a => 
+        ['Completed', 'Editing Completed', 'Editing Complete'].includes(a.status as string)
+      );
+      if (allCompleted) {
+        return 'Editing Completed';
+      }
 
-    const uniqueStatuses = Array.from(new Set(stdStatuses));
-    if (uniqueStatuses.length === 1) {
-      return uniqueStatuses[0];
+      // 4. Customer Review (When at least one assigned editor uploads the Edited Drive Link or is in Customer/Client Review status)
+      const hasUploadedDriveLink = assignments.some(a => 
+        (((a as any).edited_drive_link && ((a as any).edited_drive_link as string).trim() !== '') || 
+        ['Customer Review', 'Client Review'].includes(a.status as string))
+      ) || ((prod as any).edited_drive_link && ((prod as any).edited_drive_link as string).trim() !== '');
+      if (hasUploadedDriveLink) {
+        return 'Customer Review';
+      }
+
+      // 5. Editing Started (When any assigned editor starts editing)
+      const anyStarted = assignments.some(a => 
+        ['Editing Started', 'In Progress', 'Editing In Progress'].includes(a.status as string)
+      );
+      if (anyStarted) {
+        return 'Editing Started';
+      }
+
+      // 6. Assigned Editor (Immediately after Assign Editor, or when all deliverables have been assigned)
+      return 'Assigned Editor';
     }
 
-    return 'In Progress';
+    // Pre-assignment statuses (e.g. Verified Footage, Footage Handover Verified, Raw Footage Received, Pending)
+    return baseStatus;
   };
 
   const generateCustomerReviewMessage = (prod: Production): { message: string; phone: string } => {
@@ -3050,8 +3066,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const { order } = resolveOrderAndLead(prod);
                       if (!order) return false;
                       
-                      // Only show in active Production table once editor assignment has been completed
-                      // if (prod.editing_status === 'Raw Footage Received') return false;
+                      // Filter out projects that have reached Client Acceptance or Order Closed
+                      const displayStatus = getAutomatedProductionStatus(prod);
+                      if (displayStatus === 'Client Acceptance' || displayStatus === 'Order Closed' || displayStatus === 'Completed' || displayStatus === 'Closed') {
+                        return false;
+                      }
                       
                       const searchLower = leadSearch.toLowerCase();
                       const clientMatch = order.customer_name?.toLowerCase().includes(searchLower) || order.order_id.toLowerCase().includes(searchLower);
@@ -3360,85 +3379,79 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           {/* Actions column */}
                           <td className="p-4 text-center">
                             <div className="flex flex-col gap-1.5 items-center justify-center">
-                              {/* Step 1: Assign Editor */}
-                              {(displayStatus === 'Raw Footage Received' || displayStatus === 'Verified Footage' || displayStatus === 'Footage Handover Verified' || displayStatus === 'Pending') && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenAssignEditor(prod)}
-                                  className="w-full max-w-[160px] px-3 py-1.5 bg-purple-600 border border-purple-500 text-white hover:bg-purple-500 hover:border-purple-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  disabled={isProjectLocked(prod.editing_status)}
-                                >
-                                  <span>👤</span> Assign Editor
-                                </button>
-                              )}
+                              {(() => {
+                                // 1. Pre-assignment: Show "Assign Editor" button
+                                if (displayStatus === 'Raw Footage Received' || displayStatus === 'Verified Footage' || displayStatus === 'Footage Handover Verified' || displayStatus === 'Pending') {
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenAssignEditor(prod)}
+                                      className="w-full max-w-[160px] px-3 py-1.5 bg-purple-600 border border-purple-500 text-white hover:bg-purple-500 hover:border-purple-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                      disabled={isProjectLocked(prod.editing_status)}
+                                    >
+                                      <span>👤</span> Assign Editor
+                                    </button>
+                                  );
+                                }
 
-                              {/* Dropdown status transition select */}
-                              {displayStatus !== 'Raw Footage Received' && displayStatus !== 'Verified Footage' && displayStatus !== 'Footage Handover Verified' && displayStatus !== 'Pending' && displayStatus !== 'Completed' && (
-                                <div className="w-full max-w-[160px]">
-                                  <label className="block text-[8px] uppercase tracking-wider text-zinc-500 font-bold mb-1 text-left">
-                                    Update Status:
-                                  </label>
-                                  <select
-                                    value={displayStatus}
-                                    onChange={async (e) => {
-                                      const val = e.target.value;
-                                      if (val === displayStatus) return;
-                                      try {
-                                        setIsSaving(true);
-                                        const updates: any = {
-                                          editing_status: val,
-                                        };
-                                        if (val === 'Project Delivered' || val === 'Completed') {
-                                          updates.delivery_date = new Date().toISOString().split('T')[0];
-                                        }
-                                        await updateProduction(prod.production_id, updates);
-                                      } catch (err: any) {
-                                        alert("Failed to update status: " + (err.message || err));
-                                      } finally {
-                                        setIsSaving(false);
-                                      }
-                                    }}
-                                    disabled={isSaving || isProjectLocked(prod.editing_status)}
-                                    className="w-full text-zinc-100 bg-zinc-950 border border-zinc-800 hover:border-zinc-750 text-[10.5px] font-sans font-medium py-1 px-1.5 rounded focus:outline-none focus:ring-1 focus:ring-violet-500 cursor-pointer"
-                                  >
-                                    
-                                    <option value="Assigned Editor">Assigned Editor</option>
-<option value="Editing Started">Editing Started</option>
-<option value="Customer Review">Customer Review</option>
-<option value="Editing Completed">Editing Completed</option>
-<option value="Client Acceptance">Client Acceptance</option>
-                                  </select>
-                                </div>
-                              )}
+                                // 2. Post-assignment but before completed: Show "Reassign Editor" dropdown
+                                if (displayStatus === 'Assigned Editor' || displayStatus === 'Editing Started' || displayStatus === 'Customer Review') {
+                                  return (
+                                    <div className="flex flex-col gap-1.5 w-full items-center">
+                                      <div className="w-full max-w-[160px]">
+                                        <select
+                                          value="Reassign Editor"
+                                          onChange={(e) => {
+                                            if (e.target.value === 'Reassign Editor') {
+                                              handleOpenAssignEditor(prod);
+                                            }
+                                          }}
+                                          className="w-full text-zinc-100 bg-zinc-950 border border-zinc-800 hover:border-zinc-700 text-[10.5px] font-sans font-bold py-1.5 px-2.5 rounded focus:outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer text-center"
+                                        >
+                                          <option value="Reassign Editor">▼ Reassign Editor</option>
+                                        </select>
+                                      </div>
 
-                              {/* Step 11: Completed */}
-                              {(displayStatus === 'Completed') && (
-                                <span className="text-[10px] text-emerald-400 font-extrabold flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-950/20 border border-emerald-850">
-                                  ✓ Completed
-                                </span>
-                              )}
+                                      {/* Auxiliary Send Review Link Button for Customer Review */}
+                                      {displayStatus === 'Customer Review' && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenResendReviewPopup(prod)}
+                                          className="w-full max-w-[160px] px-3 py-1.5 bg-indigo-600/90 border border-indigo-500 text-white hover:bg-indigo-500 hover:border-indigo-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1"
+                                        >
+                                          <span>📤</span> Send Review Link
+                                        </button>
+                                      )}
+                                    </div>
+                                  );
+                                }
 
-                              {/* Send Review Link Button */}
-                              {(displayStatus === 'Customer Review' || displayStatus === 'Editing Completed') && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenResendReviewPopup(prod)}
-                                  className="w-full max-w-[160px] px-3 py-1.5 bg-indigo-600/90 border border-indigo-500 text-white hover:bg-indigo-500 hover:border-indigo-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1"
-                                >
-                                  <span>📤</span> Send Review Link
-                                </button>
-                              )}
+                                // 3. Editing Completed: Show "Client Acceptance" button
+                                if (displayStatus === 'Editing Completed') {
+                                  return (
+                                    <div className="flex flex-col gap-1.5 w-full items-center">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenClientAcceptance(prod)}
+                                        className="w-full max-w-[160px] px-3 py-1.5 bg-emerald-600 border border-emerald-500 text-white hover:bg-emerald-500 hover:border-emerald-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1"
+                                      >
+                                        <span>✓</span> Client Acceptance
+                                      </button>
 
-                              {/* Process Acceptance Button */}
-                              {(displayStatus === 'Customer Review' || displayStatus === 'Editing Completed' || displayStatus === 'Client Acceptance') && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenClientAcceptance(prod)}
-                                  className="w-full max-w-[160px] px-3 py-1.5 bg-emerald-600/90 border border-emerald-500 text-white hover:bg-emerald-500 hover:border-emerald-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1"
-                                >
-                                  <span>✓</span> Process Acceptance
-                                </button>
-                              )}
+                                      {/* Auxiliary Send Review Link Button */}
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenResendReviewPopup(prod)}
+                                        className="w-full max-w-[160px] px-3 py-1.5 bg-indigo-600/90 border border-indigo-500 text-white hover:bg-indigo-500 hover:border-indigo-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1"
+                                      >
+                                        <span>📤</span> Send Review Link
+                                      </button>
+                                    </div>
+                                  );
+                                }
+
+                                return null;
+                              })()}
 
                               {(() => {
                                 const isEditorAssigned = prod.editor_assigned && prod.editor_assigned !== 'Unassigned' && prod.editor_assigned.trim() !== '';
