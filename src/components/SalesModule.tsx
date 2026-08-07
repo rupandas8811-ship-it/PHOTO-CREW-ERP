@@ -4376,7 +4376,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     return () => window.removeEventListener('calendar-action-click-deferred', handler);
   }, [leads]);
   
-  const handleSelectLead = async (lead: Lead) => {
+  const handleSelectLead = async (lead: Lead, targetStep?: number) => {
     let fullLead = lead;
     if (supabaseClient && lead.lead_id && lead.lead_id !== 'DRAFT-LEAD') {
       try {
@@ -4467,9 +4467,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       else startStep = 1;
     }
 
-    const completedStep = Math.max(startStep === 3 ? (hasQuotationOrPackage ? 3 : 2) : startStep - 1, explicitStep || 1);
+    const finalStep = targetStep || startStep;
+    const completedStep = Math.max(finalStep === 3 ? 3 : (startStep === 3 ? (hasQuotationOrPackage ? 3 : 2) : startStep - 1), explicitStep || 1);
     setCrmHighestStep(completedStep);
-    setCrmWizardStep(startStep);
+    setCrmWizardStep(finalStep);
     
     const hasPackageAnywhere = !!(lead.Select_Package_Option || primaryLP?.package_id || latestQuote?.package_id);
     if (completedStep >= 3 || hasPackageAnywhere) {
@@ -4833,6 +4834,50 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     return true;
   };
 
+  const completeApprovedUnlockRequest = async (leadId: string) => {
+    if (!supabaseClient || !leadId) return;
+    try {
+      const linkedOrder = (orders || []).find(o => o.lead_id === leadId);
+      const orderId = linkedOrder?.order_id;
+      
+      let query = supabaseClient
+        .from('unlock_requests')
+        .update({
+          request_status: 'Completed',
+          status: 'Completed',
+          edited_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+
+      if (orderId && orderId !== leadId) {
+        query = query.or(`lead_id.eq.${leadId},order_id.eq.${orderId}`);
+      } else {
+        query = query.eq('lead_id', leadId);
+      }
+
+      query = query.or('request_status.eq.Approved,status.eq.Approved');
+
+      const { error } = await query;
+      if (error) {
+        console.warn("Error marking unlock request as completed:", error.message);
+      }
+
+      setUnlockRequests(prev => Array.isArray(prev) ? prev.map(r => {
+        if ((r.lead_id === leadId || (orderId && r.order_id === orderId)) && (r.request_status === 'Approved' || r.status === 'Approved')) {
+          return {
+            ...r,
+            request_status: 'Completed',
+            status: 'Completed',
+            edited_at: new Date().toISOString()
+          };
+        }
+        return r;
+      }) : []);
+    } catch (err) {
+      console.warn("completeApprovedUnlockRequest exception:", err);
+    }
+  };
+
   const handleSavePackageOnly = async () => {
     if (!selectedLead || isSaving) return;
     setIsSaving(true);
@@ -4912,6 +4957,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         };
       });
 
+      await completeApprovedUnlockRequest(selectedLead.lead_id);
       setIsPackageDetailsSaved(true);
     } catch (err: any) {
       console.error("Save package only failed:", err);
@@ -5258,12 +5304,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
              return;
           }
           
+          await completeApprovedUnlockRequest(selectedLead.lead_id);
           showToastMsg("Order Confirmed and sent to Operations.", "success");
           setSelectedLead(null);
           setIsSaving(false);
           return;
         }
 
+        await completeApprovedUnlockRequest(selectedLead.lead_id);
         showToastMsg(`✅ Quotation & CRM changes saved.`, "success");
         setStep3FollowUpDate(selectedLead?.next_follow_up_date || '');
         setStep3FollowUpTime((selectedLead as any)?.next_follow_up_time || '');
@@ -5505,14 +5553,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       const currentPkgCost = Number(isCreateFlow ? (createForm.budget || finalTotal || 0) : (wizardLeadData.package_cost || selectedLead?.budget || 0));
 
+      const currentLeadStatus = isCreateFlow ? 'Quote Sent' : (selectedLead ? getLeadCurrentStatus(selectedLead) : 'Quote Sent');
+      const targetStage = isCreateFlow ? ('Quote Sent' as CurrentStage) : (currentLeadStatus as CurrentStage || 'Quote Sent');
+
       await updateLeadFollowUp(
         currentLeadId,
-        'Quote Sent' as CurrentStage,
+        targetStage,
         fullNotes || 'Quotation created & follow-up scheduled',
         step3FollowUpDate,
         currentPkgCost,
         fullNotes || 'Quotation sent'
       );
+
+      await completeApprovedUnlockRequest(currentLeadId);
 
       localStorage.setItem(`follow_up_date_${currentLeadId}`, step3FollowUpDate);
       localStorage.setItem(`follow_up_notes_${currentLeadId}`, fullNotes);
@@ -10326,7 +10379,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               setOpenDropdownLeadId(null);
-                                              handleSelectLead(lead);
+                                              handleSelectLead(lead, 3);
                                             }}
                                             className="w-full h-8 px-3 text-xs font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-white rounded-lg border border-emerald-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
                                           >
