@@ -4685,20 +4685,46 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     // Ensure production entry exists or update it
     let existingProd = augmentedProduction.find(p => p.tracking_id === trackingId || p.tracking_id === orderId);
     let pId = existingProd?.production_id || `PRD-${Math.floor(4012 + Math.random() * 850)}`;
+    
+    const targetLead = leads.find(l => l.lead_id === targetOrder?.lead_id);
+
+    let eventNames = '';
+    let eventDates = '';
+    let eventTypes = '';
+    if (targetLead?.events) {
+       eventNames = targetLead.events.map((e:any) => e.event_name).filter(Boolean).join(', ');
+       eventDates = targetLead.events.map((e:any) => e.event_date).filter(Boolean).join(', ');
+       eventTypes = targetLead.events.map((e:any) => e.event_type).filter(Boolean).join(', ');
+    } else {
+       eventDates = targetOrder?.event_date || '';
+       eventTypes = targetOrder?.event_type || '';
+    }
+
     const newProd: any = {
       production_id: pId,
       tracking_id: trackingId,
       editor_assigned: existingProd?.editor_assigned || 'Unassigned',
       raw_footage_location: resolvedLink,
-      editing_status: existingProd?.editing_status || 'Verified Footage',
+      editing_status: existingProd?.editing_status || 'Raw Footage Received',
       remarks: `Raw footage received via ${storageType || 'Google Drive'}. ${uploadNotes || ''}`,
       order_id: orderId,
       lead_id: targetOrder?.lead_id || '',
-      customer_name: targetOrder?.customer_name || '',
+      customer_name: targetOrder?.customer_name || targetLead?.Customer_Name || '',
+      customer_mobile: targetLead?.Customer_Mobile || (targetOrder as any)?.customer_mobile || '',
+      whatsapp_number: targetLead?.WhatsApp_Number || (targetOrder as any)?.whatsapp_number || '',
+      event_names: eventNames,
+      event_dates: eventDates,
+      event_types: eventTypes,
+      team_members: typeof targetLead?.Team_Members === 'string' ? targetLead.Team_Members : JSON.stringify(targetLead?.Team_Members || []),
+      deliverables: typeof targetLead?.Deliverables === 'string' ? targetLead.Deliverables : JSON.stringify(targetLead?.Deliverables || []),
       event_id: targetOrder?.event_type || '',
       assigned_team: targetOrder?.assigned_team || 'Unassigned',
       final_consolidated_drive_link: resolvedLink,
-      current_status: 'Verified Footage',
+      sales_staff: targetOrder?.created_by || targetLead?.Sales_Staff || '',
+      operations_staff: currentUserName,
+      created_date: timestamp.split('T')[0],
+      created_time: timestamp.split('T')[1].split('.')[0],
+      current_status: 'Raw Footage Received',
       created_at: timestamp
     };
 

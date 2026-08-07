@@ -5584,6 +5584,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             ].map(col => {
               const colProds = production.filter(p => {
                 // Map logical status fallback helper
+                if (col.id === 'Pending') return p.editing_status === 'Pending' || p.editing_status === 'Raw Footage Received' || p.editing_status === 'Editor Assigned';
+                if (col.id === 'Editing') return p.editing_status === 'Editing' || p.editing_status === 'Editing Started' || p.editing_status === 'Editing In Progress';
+                if (col.id === 'Customer Review') return p.editing_status === 'Customer Review' || p.editing_status === 'Internal QC Review' || p.editing_status === 'Client Review Sent';
+                if (col.id === 'Revision Required') return p.editing_status === 'Revision Required' || p.editing_status === 'Revision In Progress';
+                if (col.id === 'Approved') return p.editing_status === 'Approved' || p.editing_status === 'Final Approval';
                 return p.editing_status === col.id;
               });
 
