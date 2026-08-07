@@ -1918,11 +1918,19 @@ _Please acknowledge receipt of this task assignment._`;
       })));
       const rolesJoined = assignedRoles.join(', ');
 
+      // Check if ANY required deliverable is missing a staff assignment
+      const isMissingAssignments = currentDeliverablesList.some(d => {
+        const rows = currentRowsMap[d] || [];
+        return !rows.some(r => r.staffId && r.staffId.trim() !== '');
+      });
+
+      const nextStatus = isMissingAssignments ? activeWorkflowProd.editing_status : 'Editor Assigned';
+
       await updateProduction(activeWorkflowProd.production_id, {
         editor_assigned: primaryEditor,
         assigned_staff: assignedStaffJoined,
-        editing_status: 'Editor Assigned',
-        production_status: 'Editor Assigned',
+        editing_status: nextStatus,
+        production_status: nextStatus,
         production_role: rolesJoined,
         assigned_role: rolesJoined,
         target_delivery_date: targetDate

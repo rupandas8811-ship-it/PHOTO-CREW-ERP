@@ -89,8 +89,9 @@ const StaffActionDropdown: React.FC<{
 
   // 4. Footage Handover (show only when current status is Event Ended)
   if (currentStatus === 'Event Ended') {
+    const hasEquipment = booking.equipmentItems && booking.equipmentItems.length > 0;
     actionOptions.push({
-      label: 'Footage Handover',
+      label: hasEquipment ? 'Footage Handover' : 'Raw Footage Upload',
       onClick: () => {
         onOpenPhotoModal('Equipment Handover');
         setIsOpen(false);
@@ -834,19 +835,28 @@ export const StaffModule: React.FC = () => {
 
     // --- EVENT START WORKFLOW ---
     if (stage === 'Event Start') {
+      const hasEquipment = booking.equipmentItems && booking.equipmentItems.length > 0;
       const hasAssetColl = !!modalPhotos['Asset Collection Photo Proof'];
       const hasEventStart = !!modalPhotos['Event Start Photo Proof'];
 
-      if (!hasAssetColl && hasEventStart) {
-        alert("Please upload the Asset Collection Photo Proof before uploading the Event Start Photo Proof.");
-        showToast("⚠️ Please upload the Asset Collection Photo Proof before uploading the Event Start Photo Proof.");
-        return;
-      }
+      if (hasEquipment) {
+        if (!hasAssetColl && hasEventStart) {
+          alert("Please upload the Asset Collection Photo Proof before uploading the Event Start Photo Proof.");
+          showToast("⚠️ Please upload the Asset Collection Photo Proof before uploading the Event Start Photo Proof.");
+          return;
+        }
 
-      if (!hasAssetColl && !hasEventStart) {
-        alert("Please upload the Asset Collection Photo Proof.");
-        showToast("⚠️ Please upload the Asset Collection Photo Proof.");
-        return;
+        if (!hasAssetColl && !hasEventStart) {
+          alert("Please upload the Asset Collection Photo Proof.");
+          showToast("⚠️ Please upload the Asset Collection Photo Proof.");
+          return;
+        }
+      } else {
+        if (!hasEventStart) {
+          alert("Please upload the Event Start Photo Proof.");
+          showToast("⚠️ Please upload the Event Start Photo Proof.");
+          return;
+        }
       }
 
       try {
@@ -911,9 +921,11 @@ export const StaffModule: React.FC = () => {
           return;
         }
 
-        // 2. FULL EVENT STARTED MODE: Both photos are provided
-        const reqItems = [
+        // 2. FULL EVENT STARTED MODE
+        const reqItems = hasEquipment ? [
           { name: 'Asset Collection Photo Proof', assetId: 'Asset Collection' },
+          { name: 'Event Start Photo Proof', assetId: 'Event Start' }
+        ] : [
           { name: 'Event Start Photo Proof', assetId: 'Event Start' }
         ];
 
@@ -1725,10 +1737,14 @@ export const StaffModule: React.FC = () => {
               {/* Equipment / Proof Items list with photo inputs */}
               <div className="space-y-4">
                 {(photoModalData.stage === 'Event Start'
-                  ? [
-                      { name: 'Asset Collection Photo Proof', assetId: 'Asset Collection', optional: false },
-                      { name: 'Event Start Photo Proof', assetId: 'Event Start', optional: false }
-                    ]
+                  ? (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0 
+                      ? [
+                          { name: 'Asset Collection Photo Proof', assetId: 'Asset Collection', optional: false },
+                          { name: 'Event Start Photo Proof', assetId: 'Event Start', optional: false }
+                        ]
+                      : [
+                          { name: 'Event Start Photo Proof', assetId: 'Event Start', optional: false }
+                        ])
                   : photoModalData.stage === 'Event Complete'
                   ? [
                       { name: 'Event Completion Photo Proof', assetId: 'Event Completion', optional: false }

@@ -1195,6 +1195,7 @@ export const OperationsLeads: React.FC = () => {
 
     setAssignValidationError(null);
     setValidationAttempted(false);
+    let overallMissingStaff = false;
     if (parentLeadInstance?.events) {
        let teamMembersConfig: { event_name: string; team_members: string[] }[] = [];
        try {
@@ -1309,9 +1310,7 @@ export const OperationsLeads: React.FC = () => {
     ) as string[];
 
     if (allAssignedEquipment.length === 0) {
-      setValidationAttempted(true);
-      setAssignValidationError("Please select at least one equipment item before saving.");
-      return;
+      overallMissingStaff = true;
     }
 
     try {
@@ -1421,7 +1420,7 @@ export const OperationsLeads: React.FC = () => {
       // Set status to Assigned Crew as requested for Status 1 workflow
       const currentOrderStage = matchedOrder?.current_stage || 'Operations Assigned';
       const isStaffAssigned = finalAssignments.length > 0;
-      const targetStage: CurrentStage = isStaffAssigned ? 'Assigned Crew' : (currentOrderStage as CurrentStage);
+      const targetStage: CurrentStage = (isStaffAssigned && !overallMissingStaff) ? 'Assigned Crew' : (currentOrderStage as CurrentStage);
 
       console.log("Saving assignment for order:", assigningOrderId, {
         photographer,
@@ -2129,9 +2128,9 @@ export const OperationsLeads: React.FC = () => {
                               label: 'View Details',
                               onClick: handleViewDetails
                             });
-                            if (allStaffHaveFootage) {
+                            if (isFootageHandover) {
                               actionItems.push({
-                                label: 'Verify Footage',
+                                label: 'Upload Final Footage',
                                 onClick: handleFootageModal
                               });
                             }
@@ -3320,7 +3319,7 @@ export const OperationsLeads: React.FC = () => {
               <div className="border-b border-zinc-800 pb-3 flex justify-between items-start">
                 <div>
                   <h3 className="text-base font-bold text-purple-400 font-mono uppercase flex items-center gap-2">
-                    <span>🎬</span> Verify Raw Footage
+                    <span>🎬</span> Final Consolidated Raw Footage
                   </h3>
                   <p className="text-xs text-zinc-400 mt-1">
                     Order ID: <strong className="text-zinc-200">{receivingFootageOrderId}</strong> | Customer: <strong className="text-zinc-200">{currentOrder?.customer_name || currentLead?.customer_name || 'N/A'}</strong>
