@@ -140,6 +140,7 @@ interface CompactQtyItemRowProps {
   placeholder: string;
   addLabel?: string;
   accentColor?: "indigo" | "emerald";
+  disabled?: boolean;
   onChange: (newValue: string) => void;
   onAdd?: () => void;
   onDelete: () => void;
@@ -149,12 +150,14 @@ const CompactQtyItemRow: React.FC<CompactQtyItemRowProps> = ({
   value,
   options,
   placeholder,
+  disabled = false,
   onChange,
   onDelete,
 }) => {
   const { qty, text } = React.useMemo(() => parseQtyAndText(value), [value]);
 
   const handleQtyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled) return;
     const rawVal = e.target.value;
     const newQty = parseInt(rawVal, 10);
     const validQty = isNaN(newQty) || newQty < 1 ? 1 : newQty;
@@ -162,19 +165,21 @@ const CompactQtyItemRow: React.FC<CompactQtyItemRowProps> = ({
   };
 
   const handleTextChange = (newText: string) => {
+    if (disabled) return;
     onChange(combineQtyAndText(qty, newText));
   };
 
   return (
-    <div className="flex items-center gap-2 bg-slate-950/40 border border-slate-800/80 p-2 sm:p-2.5 rounded-lg transition-all hover:border-slate-700/80">
+    <div className={`flex items-center gap-2 bg-slate-950/40 border border-slate-800/80 p-2 sm:p-2.5 rounded-lg transition-all ${disabled ? 'opacity-60 pointer-events-none' : 'hover:border-slate-700/80'}`}>
       <div className="flex items-center gap-1.5 shrink-0">
         <span className="text-[10px] font-bold text-slate-400 uppercase font-mono hidden sm:inline">Qty</span>
         <input
           type="number"
           min="1"
+          disabled={disabled}
           value={qty}
           onChange={handleQtyChange}
-          className="w-12 sm:w-16 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:outline-none rounded-md py-1 px-1.5 text-xs font-mono font-bold text-center text-white shrink-0"
+          className="w-12 sm:w-16 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:outline-none rounded-md py-1 px-1.5 text-xs font-mono font-bold text-center text-white shrink-0 disabled:opacity-50"
           placeholder="Qty"
           title="Quantity"
         />
@@ -185,16 +190,18 @@ const CompactQtyItemRow: React.FC<CompactQtyItemRowProps> = ({
           value={text}
           options={options}
           placeholder={placeholder}
+          disabled={disabled}
           onChange={handleTextChange}
-          className="w-full bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:outline-none rounded-md py-1 px-2.5 text-xs text-slate-100 font-medium"
+          className="w-full bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:outline-none rounded-md py-1 px-2.5 text-xs text-slate-100 font-medium disabled:opacity-50"
         />
       </div>
 
       <div className="shrink-0 flex items-center justify-center">
         <button
           type="button"
+          disabled={disabled}
           onClick={onDelete}
-          className="w-10 h-10 sm:w-auto sm:h-auto sm:px-2.5 sm:py-1 text-[16px] sm:text-[11px] text-rose-400 hover:text-rose-300 font-bold font-mono bg-rose-500/10 hover:bg-rose-500/20 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1 border border-rose-500/20"
+          className={`w-10 h-10 sm:w-auto sm:h-auto sm:px-2.5 sm:py-1 text-[16px] sm:text-[11px] text-rose-400 hover:text-rose-300 font-bold font-mono bg-rose-500/10 hover:bg-rose-500/20 rounded-md transition-all flex items-center justify-center gap-1 border border-rose-500/20 ${disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
         >
           <span className="sm:hidden">🗑</span>
           <span className="hidden sm:inline">Delete</span>
@@ -434,8 +441,36 @@ const generateQuotationPDF = (
   const pkgId = pkg ? (pkg.package_id || pkg.id || 'default') : 'default';
   const pkgName = pkg ? (pkg.package_name || pkg.name || 'Base Package') : 'Base Package';
 
-  const inclusionsList = (editableInclusions?.[pkgId] || []).filter(Boolean);
-  const deliverablesList = (editableDeliverables?.[pkgId] || []).filter(Boolean);
+  const inclusionsList = (editableInclusions?.[pkgId] || editableInclusions?.['Custom Package'] || editableInclusions?.['custom_package'] || []).filter(Boolean);
+
+  let rawDelList: string[] = [];
+  if (editableDeliverables?.[pkgId] && editableDeliverables[pkgId].filter(Boolean).length > 0) {
+    rawDelList = editableDeliverables[pkgId].filter(Boolean);
+  } else if (editableDeliverables?.['Custom Package'] && editableDeliverables['Custom Package'].filter(Boolean).length > 0) {
+    rawDelList = editableDeliverables['Custom Package'].filter(Boolean);
+  } else if (editableDeliverables?.['custom_package'] && editableDeliverables['custom_package'].filter(Boolean).length > 0) {
+    rawDelList = editableDeliverables['custom_package'].filter(Boolean);
+  } else if (editableDeliverables && Object.values(editableDeliverables).flat().filter(Boolean).length > 0) {
+    rawDelList = Object.values(editableDeliverables).flat().filter(Boolean);
+  } else {
+    const delText = lead?.deliverables_description || pkg?.deliverables || pkg?.deliverables_description || lead?.deliverables || '';
+    if (delText) {
+      try {
+        const parsed = JSON.parse(delText);
+        if (Array.isArray(parsed)) {
+          if (typeof parsed[0] === 'string') {
+            rawDelList = parsed;
+          } else if (parsed[0] && Array.isArray(parsed[0].deliverables)) {
+            rawDelList = parsed.flatMap((item: any) => Array.isArray(item.deliverables) ? item.deliverables : []);
+          }
+        }
+      } catch (e) {
+        rawDelList = delText.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
+      }
+    }
+  }
+
+  const deliverablesList = rawDelList.filter(Boolean).map(item => formatQtyItem(item));
 
   if (lead.events && lead.events.length > 0) {
     lead.events.forEach((event: any) => {
@@ -2142,7 +2177,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     });
   };
 
-  const isLeadLocked = selectedLead ? isRecordLocked(selectedLead.lead_id, 'Sales') : false;
+  const isLeadConfirmed = selectedLead
+    ? (['Confirm Order', 'Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed'].includes(selectedLead.status || '') ||
+       (selectedLead as any).current_status === 'Order Confirmed' ||
+       (selectedLead as any).booking_status === 'Confirmed' ||
+       (orders && orders.some(o => o.lead_id === selectedLead.lead_id && o.status !== 'Cancelled')))
+    : false;
+
+  const isApprovedUnlocked = selectedLead
+    ? (unlockRequests.some(r => (r.lead_id === selectedLead.lead_id || r.order_id === selectedLead.lead_id || r.project_id === selectedLead.lead_id) && (r.status === 'Approved' || r.request_status === 'Approved')) ||
+       unlockedRecords.some(r => r.recordId === selectedLead.lead_id && r.module === 'Sales'))
+    : false;
+
+  const isCrmLocked = isLeadConfirmed && !isApprovedUnlocked;
+  const isLeadLocked = isCrmLocked;
 
   const [openDropdownLeadId, setOpenDropdownLeadId] = useState<string | null>(null);
   const [dropdownCoords, setDropdownCoords] = useState<{ top: number | string, right: number | string, bottom: number | string }>({ top: 0, right: 0, bottom: 'auto' });
@@ -4456,9 +4504,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const remarksMatch = fullLead.remarks?.match(/\[CRM_COMPLETED_STEP:\s*(\d+)\]/);
     const explicitStep = localSavedStep ? parseInt(localSavedStep, 10) : (remarksMatch ? parseInt(remarksMatch[1], 10) : null);
 
-    // Navigation logic: always open first incomplete step. Never skip an incomplete step.
+    const isConfirmedLead = ['Confirm Order', 'Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed'].includes(fullLead.status || '') || (fullLead as any).current_status === 'Order Confirmed' || (fullLead as any).booking_status === 'Confirmed' || orders.some(o => o.lead_id === fullLead.lead_id && o.status !== 'Cancelled');
+    const isUnlockedLead = unlockRequests.some(r => (r.lead_id === fullLead.lead_id || r.order_id === fullLead.lead_id || r.project_id === fullLead.lead_id) && (r.status === 'Approved' || r.request_status === 'Approved')) || unlockedRecords.some(r => r.recordId === fullLead.lead_id && r.module === 'Sales');
+
+    // Navigation logic: always open first incomplete step. If lead is unlocked, open Step 3.
     let startStep = 1;
-    if (explicitStep) {
+    if (isConfirmedLead && isUnlockedLead) {
+      startStep = 3;
+    } else if (explicitStep) {
       if (explicitStep >= 2) startStep = 3;
       else if (explicitStep === 1) startStep = 2;
     } else {
