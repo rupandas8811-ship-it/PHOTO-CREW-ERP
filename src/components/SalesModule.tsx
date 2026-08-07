@@ -5846,29 +5846,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         throw new Error("Database insert did not return confirmation. Request not saved.");
       }
 
-      // 3. Update Lead / Order Status in Supabase
-      try {
-        await supabaseClient
-          .from('leads')
-          .update({ 
-            current_status: 'Unlock Request Pending',
-            status: 'Unlock Request Pending',
-            updated_at: new Date().toISOString()
-          })
-          .eq('lead_id', selectedUnlockLead.lead_id);
 
-        if (orderId) {
-          await supabaseClient
-            .from('orders')
-            .update({ 
-              order_status: 'Unlock Request Pending',
-              updated_at: new Date().toISOString()
-            })
-            .eq('order_id', orderId);
-        }
-      } catch (statusErr) {
-        console.error("Non-fatal error updating lead/order status:", statusErr);
-      }
 
       // 4. Send notification to Business Owner
       if (addNotification) {

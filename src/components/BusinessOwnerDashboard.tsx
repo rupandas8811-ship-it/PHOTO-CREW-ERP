@@ -274,56 +274,11 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
         throw new Error("Target Lead or Order record could not be found.");
       }
 
-      // 1. Update Lead/Order status in Supabase
-      console.log("[DEBUG handleApproveUnlock] Step 3: Update lead & order to Negotiation");
-      if (supabaseClient) {
-        if (effectiveLeadId) {
-          const { error: leadUpdErr } = await supabaseClient
-            .from('leads')
-            .update({ 
-              current_status: 'Negotiation',
-              status: 'Negotiation',
-              updated_at: new Date().toISOString()
-            })
-            .eq('lead_id', effectiveLeadId);
-
-          if (leadUpdErr) {
-            console.error("[DEBUG handleApproveUnlock] Lead status update error:", leadUpdErr);
-            throw new Error(`Failed to update lead status: ${leadUpdErr.message}`);
-          }
-        }
-
-        if (effectiveOrderId && effectiveOrderId !== effectiveLeadId) {
-          const { error: orderUpdErr } = await supabaseClient
-            .from('orders')
-            .update({ 
-              order_status: 'Negotiation',
-              current_stage: 'Negotiation',
-              updated_at: new Date().toISOString()
-            })
-            .eq('order_id', effectiveOrderId);
-
-          if (orderUpdErr) {
-            console.warn("[DEBUG handleApproveUnlock] Order status update warning:", orderUpdErr.message);
-          }
-        }
-      }
-
-      // 2. Call updateOrderStage if available
-      if (typeof updateOrderStage === 'function' && effectiveLeadId) {
-        try {
-          await updateOrderStage(effectiveLeadId, 'Negotiation');
-        } catch (stageErr: any) {
-          console.warn("[DEBUG handleApproveUnlock] updateOrderStage warning:", stageErr?.message || stageErr);
-        }
-      }
-
-      // 3. Update unlock_requests status to Approved
-      console.log("[DEBUG handleApproveUnlock] Step 4: Update unlock_requests status to Approved");
+      // 1. Update unlock_requests status to Approved
+      console.log("[DEBUG handleApproveUnlock] Step 3: Update unlock_requests status to Approved");
       if (supabaseClient) {
         let reqQuery = supabaseClient.from('unlock_requests').update({ 
            request_status: 'Approved',
-           status: 'Approved',
            approved_at: new Date().toISOString(),
            approved_by: currentUserName || 'Business Owner'
         });
@@ -403,7 +358,6 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       if (supabaseClient) {
         let reqQuery = supabaseClient.from('unlock_requests').update({ 
           request_status: 'Rejected',
-          status: 'Rejected',
           rejected_at: new Date().toISOString(),
           rejected_by: currentUserName || 'Business Owner'
         });
@@ -420,17 +374,6 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
 
         const { error: updErr } = await reqQuery;
         if (updErr) throw new Error(`Supabase error rejecting unlock request: ${updErr.message}`);
-
-        if (targetLeadId) {
-          await supabaseClient
-            .from('leads')
-            .update({ 
-              current_status: 'Negotiation',
-              status: 'Negotiation',
-              updated_at: new Date().toISOString()
-            })
-            .eq('lead_id', targetLeadId);
-        }
       }
         
       if (typeof logActivity === 'function') {
