@@ -10271,7 +10271,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               const isRejectedUnlock = latestUnlockRequest?.status === 'Rejected' || latestUnlockRequest?.request_status === 'Rejected';
                               const isApprovedUnlock = latestUnlockRequest?.status === 'Approved' || latestUnlockRequest?.request_status === 'Approved';
 
-                              if (isConfirmOrderStatus) {
+                               if (isPendingUnlock || isApprovedUnlock || isRejectedUnlock || isConfirmOrderStatus) {
                                 return (
                                   <div className="relative flex justify-end">
                                     <button
@@ -10279,10 +10279,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       id={`btn_actions_confirm_${lead.lead_id}`}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        if (isPendingUnlock) {
-                                          showToastMsg("Unlock request already submitted.", "error");
-                                          return;
-                                        }
                                         if (openDropdownLeadId === lead.lead_id) {
                                           setOpenDropdownLeadId(null);
                                         } else {
@@ -10303,15 +10299,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                           setOpenDropdownLeadId(lead.lead_id);
                                         }
                                       }}
-                                      className={`w-36 h-8 text-[11px] font-bold rounded-xl border transition-all cursor-pointer inline-flex items-center justify-between px-2 shadow shrink-0 ${
+                                      className={`w-36 h-8 text-[11px] font-bold rounded-xl border transition-all cursor-pointer inline-flex items-center justify-between px-2.5 shadow shrink-0 ${
                                         isPendingUnlock 
                                           ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border-amber-500/30' 
-                                          : isRejectedUnlock 
-                                            ? 'bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border-rose-500/30'
-                                            : 'bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-700'
+                                          : isApprovedUnlock 
+                                            ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/30'
+                                            : isRejectedUnlock 
+                                              ? 'bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border-rose-500/30'
+                                              : 'bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-700'
                                       }`}
                                     >
-                                      <span>{isPendingUnlock ? '🟡 Pending Approval' : isRejectedUnlock ? '🔴 Rejected' : '🔒 Request Unlock'}</span>
+                                      <span>
+                                        {isPendingUnlock ? '🟡 Action' : isApprovedUnlock ? '🟢 Action' : isRejectedUnlock ? '🔴 Action' : '🔒 Action'}
+                                      </span>
                                       <span className="text-[10px] ml-1">▼</span>
                                     </button>
 
@@ -10333,7 +10333,29 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                           <span>View CRM</span>
                                         </button>
 
-                                        {!isPendingUnlock && (
+                                        {isPendingUnlock ? (
+                                          <button
+                                            type="button"
+                                            disabled
+                                            className="w-full h-8 px-3 text-xs font-bold bg-amber-950/40 text-amber-400/60 rounded-lg border border-amber-900/20 flex items-center gap-2 cursor-not-allowed opacity-70"
+                                          >
+                                            <Clock className="w-3.5 h-3.5 shrink-0 text-amber-400/60" />
+                                            <span>Waiting for Approval</span>
+                                          </button>
+                                        ) : isApprovedUnlock ? (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setOpenDropdownLeadId(null);
+                                              handleSelectLead(lead);
+                                            }}
+                                            className="w-full h-8 px-3 text-xs font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-white rounded-lg border border-emerald-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                          >
+                                            <Edit className="w-3.5 h-3.5 shrink-0" />
+                                            <span>Edit Quotation</span>
+                                          </button>
+                                        ) : (
                                           <button
                                             type="button"
                                             onClick={(e) => {
@@ -10347,7 +10369,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                             className="w-full h-8 px-3 text-xs font-bold bg-amber-950 hover:bg-amber-900 text-amber-400 hover:text-white rounded-lg border border-amber-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
                                           >
                                             <Ban className="w-3.5 h-3.5 shrink-0" />
-                                            <span>{isRejectedUnlock ? '↻ Request Again' : 'Unlock Quotation'}</span>
+                                            <span>Unlock Quotation</span>
                                           </button>
                                         )}
                                       </div>,

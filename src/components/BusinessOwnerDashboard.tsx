@@ -721,39 +721,79 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                   <thead>
                     <tr className="bg-zinc-900/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
                       <th className="py-3 px-4">Order ID</th>
+                      <th className="py-3 px-4">Lead ID</th>
                       <th className="py-3 px-4">Customer Name</th>
                       <th className="py-3 px-4">Sales Staff</th>
-                      <th className="py-3 px-4">Request Date</th>
                       <th className="py-3 px-4">Reason</th>
+                      <th className="py-3 px-4">Request Date</th>
                       <th className="py-3 px-4">Status</th>
                       <th className="py-3 px-4 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-850">
                     {unlockRequests.map(request => {
-                      const orderDetails = orders.find(o => o.order_id === request.order_id);
-                      const leadDetails = leads.find(l => l.lead_id === request.lead_id);
+                      const orderDetails = orders.find(o => o.order_id === request.order_id || o.lead_id === request.lead_id);
+                      const leadDetails = leads.find(l => l.lead_id === request.lead_id || (request.order_id && l.lead_id === request.order_id));
+
+                      const customerName = 
+                        request.customer_name || 
+                        leadDetails?.customer_name || 
+                        orderDetails?.customer_name || 
+                        (request.action_url ? (() => { try { return JSON.parse(request.action_url).customer_name; } catch(e) { return null; } })() : null) || 
+                        '-';
+
+                      const orderId = request.order_id || orderDetails?.order_id || '-';
+                      const leadId = request.lead_id || leadDetails?.lead_id || '-';
+
+                      const staffName = 
+                        request.sales_staff_name || 
+                        request.requested_by_name || 
+                        leadDetails?.sales_person || 
+                        orderDetails?.sales_person || 
+                        (request.action_url ? (() => { try { return JSON.parse(request.action_url).sales_staff_name; } catch(e) { return null; } })() : null) || 
+                        'Sales Staff';
+
+                      const staffMobile = 
+                        request.sales_staff_mobile || 
+                        leadDetails?.sales_staff_mobile || 
+                        leadDetails?.mobile || 
+                        (request.action_url ? (() => { try { return JSON.parse(request.action_url).sales_staff_mobile; } catch(e) { return null; } })() : null) || 
+                        '-';
+
+                      const reqReason = request.reason || request.request_reason || request.title || 'Quotation unlock requested';
+                      const reqStatus = request.status || request.request_status || 'Pending';
+                      const reqDate = (request.requested_at || request.created_at) ? new Date(request.requested_at || request.created_at).toLocaleDateString() : '-';
+
                       return (
-                        <tr key={request.order_id} className="hover:bg-zinc-900/50 transition-colors">
-                          <td className="py-3 px-4 font-mono font-bold text-amber-400">{request.order_id}</td>
-                          <td className="py-3 px-4 text-zinc-300 font-bold">{request.customer_name || '-'}</td>
-                          <td className="py-3 px-4 text-zinc-400">
-                            <div>{request.sales_staff_name || '-'}</div>
-                            <div className="text-[10px] text-zinc-500 font-mono mt-0.5">Sales Team</div>
-                          </td>
-                          <td className="py-3 px-4 text-zinc-400">{request.requested_at ? new Date(request.requested_at).toLocaleDateString() : '-'}</td>
+                        <tr key={request.request_id || request.order_id} className="hover:bg-zinc-900/50 transition-colors">
+                          <td className="py-3 px-4 font-mono font-bold text-amber-400">{orderId}</td>
+                          <td className="py-3 px-4 font-mono text-xs text-indigo-400 font-semibold">{leadId}</td>
+                          <td className="py-3 px-4 text-zinc-100 font-bold text-sm">{customerName}</td>
                           <td className="py-3 px-4 text-zinc-300">
-                            <div>{request.reason}</div>
-                            {request.custom_reason && <div className="text-[10px] text-zinc-500 mt-0.5">{request.custom_reason}</div>}
+                            <div className="font-semibold text-zinc-200">{staffName}</div>
+                            <div className="text-[10px] text-zinc-400 font-mono mt-0.5">{staffMobile}</div>
                           </td>
+                          <td className="py-3 px-4 text-zinc-300">
+                            <div className="font-medium text-amber-200/90">{reqReason}</div>
+                            {request.custom_reason && <div className="text-[10px] text-zinc-400 mt-0.5">{request.custom_reason}</div>}
+                          </td>
+                          <td className="py-3 px-4 text-zinc-400 font-mono text-xs">{reqDate}</td>
                           <td className="py-3 px-4">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                              {request.status}
+                            <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold">
+                              {reqStatus}
                             </span>
                           </td>
                           <td className="py-3 px-4 text-right">
                             <button
-                              onClick={() => setUnlockRequestModal(request)}
+                              onClick={() => setUnlockRequestModal({
+                                ...request,
+                                customer_name: customerName,
+                                lead_id: leadId,
+                                order_id: orderId,
+                                sales_staff_name: staffName,
+                                sales_staff_mobile: staffMobile,
+                                reason: reqReason
+                              })}
                               className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded shadow text-xs font-bold transition-colors cursor-pointer"
                             >
                               Review
@@ -914,30 +954,32 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div>
-                  <div className="text-slate-400 font-medium mb-1">Order ID</div>
-                  <div className="text-amber-400 font-mono font-bold">{unlockRequestModal.project_id}</div>
+                  <div className="text-slate-400 font-medium mb-1">Order ID / Lead ID</div>
+                  <div className="text-amber-400 font-mono font-bold">{unlockRequestModal.order_id || unlockRequestModal.project_id || '-'}</div>
+                  <div className="text-indigo-400 font-mono text-[10px]">{unlockRequestModal.lead_id || '-'}</div>
                 </div>
                 <div>
                   <div className="text-slate-400 font-medium mb-1">Customer Name</div>
-                  <div className="text-white font-bold">{JSON.parse(unlockRequestModal.action_url || '{}').customer_name || '-'}</div>
+                  <div className="text-white font-bold text-sm">{unlockRequestModal.customer_name || '-'}</div>
                 </div>
                 <div>
                   <div className="text-slate-400 font-medium mb-1">Sales Staff</div>
-                  <div className="text-white">{JSON.parse(unlockRequestModal.action_url || '{}').sales_staff_name || '-'}</div>
+                  <div className="text-white font-medium">{unlockRequestModal.sales_staff_name || '-'}</div>
+                  <div className="text-slate-400 text-[10px] font-mono">{unlockRequestModal.sales_staff_mobile || '-'}</div>
                 </div>
                 <div>
                   <div className="text-slate-400 font-medium mb-1">Request Date</div>
-                  <div className="text-slate-300">{unlockRequestModal.created_at ? new Date(unlockRequestModal.created_at).toLocaleDateString() : '-'}</div>
+                  <div className="text-slate-300 font-mono">{(unlockRequestModal.requested_at || unlockRequestModal.created_at) ? new Date(unlockRequestModal.requested_at || unlockRequestModal.created_at).toLocaleDateString() : '-'}</div>
                 </div>
               </div>
               
               <div className="bg-slate-900 border border-slate-750 p-3 rounded-lg text-xs">
                 <div className="text-slate-400 font-medium mb-1 border-b border-slate-800 pb-1">Reason</div>
-                <div className="text-amber-300 font-bold mt-1.5">{unlockRequestModal.title}</div>
-                {unlockRequestModal.message && (
+                <div className="text-amber-300 font-bold mt-1.5">{unlockRequestModal.reason || unlockRequestModal.request_reason || unlockRequestModal.title || 'Quotation unlock requested'}</div>
+                {unlockRequestModal.custom_reason && (
                   <div className="text-slate-300 mt-2 bg-slate-950 p-2 rounded border border-slate-800">
                     <span className="text-slate-500 text-[10px] block mb-1">Custom Reason:</span>
-                    {unlockRequestModal.message}
+                    {unlockRequestModal.custom_reason}
                   </div>
                 )}
               </div>
