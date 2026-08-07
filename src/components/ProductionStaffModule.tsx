@@ -8,6 +8,7 @@ import {
 import { supabaseClient } from '../supabaseClient';
 import { EditorAssignment } from '../types';
 import { ProjectDetailModal } from './ProjectDetailModal';
+import { parseQtyAndText, formatQtyItem } from '../utils';
 
 // Image compression helper
 const compressImage = (file: File): Promise<string> => {
@@ -161,12 +162,7 @@ export const ProductionStaffModule: React.FC = () => {
         }
         
         // Determine unified status
-        let currentStatus = assignment.status;
-        if (prod?.editing_status) {
-          currentStatus = prod.editing_status as any;
-        } else if (order?.current_stage) {
-          currentStatus = order.current_stage as any;
-        }
+        let currentStatus = assignment.status || 'Assigned Editor';
 
         bookings.push({
             assignmentId: assignment.assignment_id,
