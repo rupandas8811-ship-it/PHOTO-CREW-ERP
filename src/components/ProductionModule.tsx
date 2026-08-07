@@ -14,7 +14,7 @@ import { Production, EditingStatus, Staff } from '../types';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { ProjectDetailModal } from './ProjectDetailModal';
-import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem } from '../utils';
+import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem, parseQtyAndText } from '../utils';
 import { AppLogo } from './AppLogo';
 import { StatusText } from './ui/StatusText';
 import { EventDropdownCell } from './EventDropdownCell';
@@ -1556,8 +1556,70 @@ ${coordinatorName}`;
   const [assignmentRows, setAssignmentRows] = useState<{ speciality: string; staffId: string; staffName: string }[]>([
     { speciality: '', staffId: '', staffName: '' }
   ]);
+  const [wfDeliverableAssignments, setWfDeliverableAssignments] = useState<{ qty: number; text: string; editor: string }[]>([]);
   const [wfError, setWfError] = useState('');
   const [wfSuccess, setWfSuccess] = useState('');
+
+  const handleOpenAssignEditor = (prod: Production) => {
+    setActiveWorkflowProd(prod);
+    setWfError('');
+    
+    // Parse target delivery date
+    const expected = prod.expected_delivery_date ? new Date(prod.expected_delivery_date) : null;
+    const existingDate = prod.target_delivery_date || (expected ? expected.toISOString().split('T')[0] : '');
+    setWfTargetDeliveryDate(existingDate);
+    
+    // Build deliverables from lead/order
+    const { order, lead } = resolveOrderAndLead(prod);
+    let deliverablesText = order?.deliverables_description || lead?.deliverables_description || '';
+    if (!deliverablesText && lead) {
+      const targetLeadQuotations = quotations?.filter((q: any) => q.lead_id === lead.lead_id) || [];
+      targetLeadQuotations.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      const targetLatestQuote = targetLeadQuotations[0];
+      if (targetLatestQuote) {
+        deliverablesText = targetLatestQuote.deliverables_description || '';
+      }
+    }
+    const parsedDeliverables = parseExactDeliverables(deliverablesText);
+    
+    const assignedForThis = editorAssignments.filter(a => a.production_id === prod.production_id);
+    
+    const tempMap = new Map<string, { qty: number; text: string; editor: string }>();
+    const usedAssignments = new Set<string>();
+    
+    for (const d of parsedDeliverables) {
+      const { qty, text } = parseQtyAndText(d);
+      if (text) {
+        const existing = tempMap.get(text);
+        if (existing) {
+          existing.qty += qty;
+        } else {
+          // Find existing assignment for this text
+          const existingAssignment = assignedForThis.find(a => a.speciality === text && !usedAssignments.has(a.assignment_id));
+          const editor = existingAssignment ? (existingAssignment.staff_name || 'Unassigned') : 'Unassigned';
+          if (existingAssignment) {
+            usedAssignments.add(existingAssignment.assignment_id);
+          }
+          tempMap.set(text, { qty, text, editor });
+        }
+      }
+    }
+    
+    const assignments = Array.from(tempMap.values());
+    
+    setWfDeliverableAssignments(assignments);
+    setWfProjectNotes(prod.project_notes || prod.remarks || '');
+    setWorkflowActionType('assign_editor');
+  };
+
+  const handleEditorChange = (index: number, editorName: string) => {
+    setWfDeliverableAssignments(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], editor: editorName };
+      return updated;
+    });
+  };
+
 
   // Step 4: Send For Review Form
   const [wfReviewLink, setWfReviewLink] = useState('');
@@ -2735,29 +2797,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               <div className="inline-flex flex-col gap-1 items-end">
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setActiveWorkflowProd(prod);
-                                    setWfEditor(prod.editor_assigned || 'Unassigned');
-                                    setWfTargetDeliveryDate('');
-                                    setWfPriority(prod.project_priority || 'Medium');
-                                    setWfProjectNotes(prod.project_notes || prod.remarks || '');
-                                    setWfInternalComments(prod.internal_comments || '');
-                                    setWfError('');
-                                    
-                                    const assignedForThis = editorAssignments.filter(a => a.production_id === prod.production_id);
-                                    setSelectedStaffIds(assignedForThis.map(a => a.staff_id));
-                                    if (assignedForThis.length > 0) {
-                                      setAssignmentRows(assignedForThis.map(a => ({
-                                        speciality: a.speciality,
-                                        staffId: a.staff_id,
-                                        staffName: a.staff_name
-                                      })));
-                                    } else {
-                                      setAssignmentRows([{ speciality: '', staffId: '', staffName: '' }]);
-                                    }
-                                    
-                                    setWorkflowActionType('assign_editor');
-                                  }}
+                                  onClick={() => handleOpenAssignEditor(prod)}
                                   className="px-3 py-1.5 bg-purple-600 border border-purple-500 text-white hover:bg-purple-500 hover:border-purple-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                   disabled={isProjectLocked(prod.editing_status)}
                                 >
@@ -3162,29 +3202,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               {(displayStatus === 'Raw Footage Received' || displayStatus === 'Verified Footage' || displayStatus === 'Footage Handover Verified' || displayStatus === 'Pending') && (
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setActiveWorkflowProd(prod);
-                                    setWfEditor(prod.editor_assigned || 'Unassigned');
-                                    setWfTargetDeliveryDate('');
-                                    setWfPriority(prod.project_priority || 'Medium');
-                                    setWfProjectNotes(prod.project_notes || prod.remarks || '');
-                                    setWfInternalComments(prod.internal_comments || '');
-                                    setWfError('');
-                                    
-                                    const assignedForThis = editorAssignments.filter(a => a.production_id === prod.production_id);
-                                    setSelectedStaffIds(assignedForThis.map(a => a.staff_id));
-                                    if (assignedForThis.length > 0) {
-                                      setAssignmentRows(assignedForThis.map(a => ({
-                                        speciality: a.speciality,
-                                        staffId: a.staff_id,
-                                        staffName: a.staff_name
-                                      })));
-                                    } else {
-                                      setAssignmentRows([{ speciality: '', staffId: '', staffName: '' }]);
-                                    }
-                                    
-                                    setWorkflowActionType('assign_editor');
-                                  }}
+                                  onClick={() => handleOpenAssignEditor(prod)}
                                   className="w-full max-w-[160px] px-3 py-1.5 bg-purple-600 border border-purple-500 text-white hover:bg-purple-500 hover:border-purple-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                   disabled={isProjectLocked(prod.editing_status)}
                                 >
@@ -7266,96 +7284,164 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   </div>
                 )}
 
-                {/* FORM: Assign Editor (Lead) */}
+                {/* FORM: Assign Editor */}
                 {workflowActionType === 'assign_editor' && activeWorkflowProd && (
                   <form onSubmit={async (e) => {
                     e.preventDefault();
-                    if (!wfEditor || wfEditor === 'Unassigned') {
-                      setWfError('Please select an editor.');
-                      return;
-                    }
-                    if (!wfTargetDeliveryDate || !wfTargetDeliveryTime) {
-                      setWfError('Target Delivery Date and Time are required.');
+                    if (!wfTargetDeliveryDate) {
+                      setWfError('Please select a Target Delivery Date.');
                       return;
                     }
                     
                     try {
                       setIsSaving(true);
-                      const dtStr = `${wfTargetDeliveryDate}T${wfTargetDeliveryTime}`;
+                      
+                      // 1. Delete all existing editor assignments for this production
+                      const { error: deleteError } = await supabaseClient
+                        .from('editor_assignments')
+                        .delete()
+                        .eq('production_id', activeWorkflowProd.production_id);
+                        
+                      if (deleteError) throw deleteError;
+                      
+                      // 2. Prepare and insert new assignments
+                      const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
+                      const orderId = order?.order_id || activeWorkflowProd?.tracking_id || activeWorkflowProd?.production_id;
+                      const eventId = activeWorkflowProd?.event_id || lead?.events?.[0]?.id || 'EVT-01';
+                      
+                      const newAssignments = [];
+                      for (const item of wfDeliverableAssignments) {
+                        if (!item.editor || item.editor === 'Unassigned') continue;
+                        const st = productionStaff.find(s => s.name === item.editor);
+                        if (st) {
+                          const id = `EDR-${Math.floor(100000 + Math.random() * 900000)}`;
+                          newAssignments.push({
+                            assignment_id: id,
+                            production_id: activeWorkflowProd.production_id,
+                            order_id: orderId,
+                            event_id: eventId,
+                            staff_id: st.staff_id,
+                            staff_name: item.editor,
+                            speciality: item.text,
+                            assigned_date: new Date().toISOString().split('T')[0],
+                            target_finish_date: wfTargetDeliveryDate,
+                            status: 'Assigned',
+                            created_at: new Date().toISOString()
+                          });
+                        }
+                      }
+                      
+                      if (newAssignments.length > 0) {
+                        const { error: insertError } = await supabaseClient
+                          .from('editor_assignments')
+                          .insert(newAssignments);
+                        if (insertError) throw insertError;
+                      }
+                      
+                      // 3. Update the production record
+                      const uniqueEditors = Array.from(new Set(newAssignments.map(a => a.staff_name)));
+                      const primaryEditor = uniqueEditors[0] || 'Unassigned';
+                      const assignedStaffJoined = uniqueEditors.join(', ');
+                      
+                      const activeStaffList = productionStaff.filter(s => s.status === 'Active');
+                      const assignedRoles = Array.from(new Set(newAssignments.map(a => {
+                        const staffMem = activeStaffList.find(s => s.staff_name === a.staff_name);
+                        return staffMem?.role || 'Editor';
+                      })));
+                      const rolesJoined = assignedRoles.join(', ') || 'Editor';
+                      
                       await updateProduction(activeWorkflowProd.production_id, {
-                        editor_assigned: wfEditor,
+                        editor_assigned: primaryEditor,
+                        assigned_staff: assignedStaffJoined,
                         target_delivery_date: wfTargetDeliveryDate,
-                        expected_delivery_date: dtStr,
+                        expected_delivery_date: wfTargetDeliveryDate,
                         project_notes: wfProjectNotes,
-                        editing_status: 'Assigned Editor'
+                        editing_status: 'Assigned Editor',
+                        production_status: 'Assigned Editor',
+                        production_role: rolesJoined,
+                        assigned_role: rolesJoined
                       });
                       
-                      const assignedForThis = editorAssignments.filter(a => a.production_id === activeWorkflowProd.production_id && a.staff_name === wfEditor);
-                      if (assignedForThis.length === 0) {
-                         const st = productionStaff.find(s => s.name === wfEditor);
-                         if (st) {
-                           await pushUpdate('editor_assignments', 'assignment_id', `assign-${Date.now()}`, {
-                             production_id: activeWorkflowProd.production_id,
-                             staff_id: st.staff_id,
-                             staff_name: wfEditor,
-                             speciality: 'Lead Editor',
-                             target_finish_date: wfTargetDeliveryDate,
-                             assigned_at: new Date().toISOString()
-                           });
-                         }
+                      if (typeof refreshData === 'function') {
+                        refreshData();
                       }
+                      
                       setActiveWorkflowProd(null);
                       setWorkflowActionType(null);
                     } catch (err: any) {
-                      setWfError(err.message || 'Failed to assign editor');
+                      setWfError(err.message || 'Failed to assign editors');
                     } finally {
                       setIsSaving(false);
                     }
-                  }} className="space-y-4 font-sans text-left">
+                  }} className="space-y-5 font-sans text-left">
                     <p className="text-[11px] text-zinc-400 mb-2">
-                      Assign a Lead Editor for this project.
+                      Assign one editor for each deliverable and specify the target delivery date.
                     </p>
                     {wfError && (
                       <div className="bg-rose-950/20 border border-rose-900/30 text-rose-400 text-xs p-3 rounded-xl font-mono">
                         ⚠️ {wfError}
                       </div>
                     )}
-                    <div>
-                      <label className="block text-[9px] font-mono text-zinc-500 uppercase mb-1 font-bold">Select Editor (Production Staff only) *</label>
-                      <select
-                        value={wfEditor}
-                        onChange={(e) => setWfEditor(e.target.value)}
+                    
+                    <div className="p-4 bg-zinc-900/20 border border-zinc-900 rounded-xl space-y-2">
+                      <label className="block text-[10px] font-mono text-[#a78bfa] uppercase font-bold tracking-widest">
+                        Target Delivery Date *
+                      </label>
+                      <input
+                        type="date"
                         required
-                        className="w-full bg-zinc-905 border border-zinc-900 text-xs rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-purple-500"
-                      >
-                        <option value="Unassigned">-- Select Editor --</option>
-                        {productionStaff.map(s => (
-                          <option key={s.staff_id} value={s.name}>{s.name}</option>
-                        ))}
-                      </select>
+                        value={wfTargetDeliveryDate}
+                        onChange={(e) => setWfTargetDeliveryDate(e.target.value)}
+                        className="w-full sm:w-64 bg-zinc-950 border border-zinc-900 text-xs rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-purple-500"
+                      />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase mb-1 font-bold">Target Delivery Date *</label>
-                        <input
-                          type="date"
-                          required
-                          value={wfTargetDeliveryDate}
-                          onChange={(e) => setWfTargetDeliveryDate(e.target.value)}
-                          className="w-full bg-zinc-905 border border-zinc-900 text-xs rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-purple-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase mb-1 font-bold">Target Delivery Time *</label>
-                        <input
-                          type="time"
-                          required
-                          value={wfTargetDeliveryTime}
-                          onChange={(e) => setWfTargetDeliveryTime(e.target.value)}
-                          className="w-full bg-zinc-905 border border-zinc-900 text-xs rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-purple-500"
-                        />
+
+                    <div className="border border-zinc-900 rounded-xl overflow-hidden bg-zinc-950">
+                      <div className="overflow-x-auto w-full">
+                        <table className="w-full text-left border-collapse min-w-[500px]">
+                          <thead>
+                            <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[9px] text-zinc-500 uppercase tracking-wider">
+                              <th className="px-4 py-2.5 font-bold w-[12%] text-center">Qty</th>
+                              <th className="px-4 py-2.5 font-bold w-[53%]">Deliverable Name</th>
+                              <th className="px-4 py-2.5 font-bold w-[35%]">Assign Editor</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-900 font-sans text-xs text-zinc-300">
+                            {wfDeliverableAssignments.length === 0 ? (
+                              <tr>
+                                <td colSpan={3} className="px-4 py-8 text-center text-zinc-500 font-mono text-xs">
+                                  No deliverables found for this order.
+                                </td>
+                              </tr>
+                            ) : (
+                              wfDeliverableAssignments.map((row, index) => (
+                                <tr key={index} className="hover:bg-zinc-900/10 transition-colors">
+                                  <td className="px-4 py-3 font-mono text-xs text-center font-bold text-zinc-400">
+                                    {row.qty}
+                                  </td>
+                                  <td className="px-4 py-3 font-semibold text-zinc-200">
+                                    {row.text}
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <select
+                                      value={row.editor}
+                                      onChange={(e) => handleEditorChange(index, e.target.value)}
+                                      className="w-full bg-zinc-905 border border-zinc-900 hover:border-zinc-800 text-xs text-zinc-300 rounded-xl px-2.5 py-1.5 font-mono focus:outline-none focus:border-purple-500 cursor-pointer h-9"
+                                    >
+                                      <option value="Unassigned">-- Select Editor --</option>
+                                      {productionStaff.map(s => (
+                                        <option key={s.staff_id} value={s.name}>{s.name}</option>
+                                      ))}
+                                    </select>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
+
                     <div>
                       <label className="block text-[9px] font-mono text-zinc-500 uppercase mb-1 font-bold">Notes (Optional)</label>
                       <textarea
@@ -7365,20 +7451,21 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         className="w-full bg-zinc-905 border border-zinc-900 text-xs rounded-xl px-3 py-2 text-white font-mono resize-none focus:outline-none focus:border-purple-500"
                       />
                     </div>
+
                     <div className="flex gap-3 pt-2">
                       <button
                         type="button"
                         onClick={() => { setActiveWorkflowProd(null); setWorkflowActionType(null); }}
-                        className="flex-1 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                        className="flex-1 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
                       >
                         Cancel
                       </button>
                       <button
                         type="submit"
                         disabled={isSaving}
-                        className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+                        className="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
                       >
-                        {isSaving ? 'Assigning...' : 'Assign Editor'}
+                        {isSaving ? 'Assigning...' : 'Assign Editors'}
                       </button>
                     </div>
                   </form>
