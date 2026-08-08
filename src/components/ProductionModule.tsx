@@ -7944,6 +7944,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         await updateProduction(activeWorkflowProd.production_id, {
                           editing_status: 'Client Acceptance'
                         });
+                        const targetOrderId = order?.order_id || activeWorkflowProd.order_id || activeWorkflowProd.tracking_id || activeWorkflowProd.lead_id || lead?.lead_id;
+                        if (targetOrderId && updateOrderStage) {
+                          await updateOrderStage(targetOrderId, 'Client Acceptance');
+                        }
                         setActiveWorkflowProd(null);
                         setWorkflowActionType(null);
                       } catch (err: any) {
@@ -8390,6 +8394,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                           // Execute update
                           await updateProduction(activeWorkflowProd.production_id, updates);
+
+                          const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
+                          const targetOrderId = order?.order_id || activeWorkflowProd.order_id || activeWorkflowProd.tracking_id || activeWorkflowProd.lead_id || lead?.lead_id;
+                          if (targetOrderId && updateOrderStage && selectedStage) {
+                            await updateOrderStage(targetOrderId, selectedStage as any);
+                          }
 
                           // Close the modal
                           setActiveWorkflowProd(null);

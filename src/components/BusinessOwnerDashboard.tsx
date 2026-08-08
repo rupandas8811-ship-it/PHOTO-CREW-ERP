@@ -52,6 +52,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     leads, 
     payments, 
     production, 
+    editorAssignments,
     notifications,
     currentUserName, 
     currentRole,
@@ -164,38 +165,144 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     };
   }, []);
 
-  // Orders waiting for approval dataset
+  // Orders waiting for approval dataset - Unified across orders, production, and leads
   const waitingApprovalOrders = useMemo(() => {
     const validApprovalStages = [
-      'Client Acceptance',
-      'Business Owner Review',
-      'Final Approval'
+      'client acceptance',
+      'client accepted',
+      'customer acceptance',
+      'business owner review',
+      'final approval',
+      'accepted',
+      'approved'
     ];
 
-    return orders.filter(order => {
-      if (order.current_stage === 'Order Closed' || order.current_stage === 'Closed' || order.order_status === 'Closed') return false;
+    const isApprovalStage = (st?: string) => {
+      if (!st) return false;
+      const lower = st.trim().toLowerCase();
+      return validApprovalStages.some(s => lower === s || lower.includes('client acceptance'));
+    };
 
-      const prod = production.find(p => 
+    const isClosedStage = (st?: string) => {
+      if (!st) return false;
+      const lower = st.trim().toLowerCase();
+      return lower === 'order closed' || lower === 'closed' || lower === 'project closed' || lower === 'completed' || lower === 'project completed';
+    };
+
+    const candidatesMap = new Map<string, Order>();
+
+    const addOrMergeCandidate = (
+      baseOrder: Order,
+      relatedProd?: Production,
+      relatedLead?: Lead,
+      relatedPay?: Payment
+    ) => {
+      const key = baseOrder.order_id || baseOrder.lead_id;
+      if (!key) return;
+
+      const currentStage = baseOrder.current_stage || relatedProd?.editing_status || relatedProd?.production_status || 'Client Acceptance';
+
+      if (isClosedStage(currentStage) || isClosedStage(relatedProd?.editing_status) || isClosedStage(baseOrder.order_status)) {
+        return;
+      }
+
+      const orderMatch = isApprovalStage(baseOrder.current_stage) || isApprovalStage(baseOrder.order_status);
+      const prodMatch = relatedProd && (
+        isApprovalStage(relatedProd.editing_status) ||
+        isApprovalStage(relatedProd.production_status) ||
+        isApprovalStage(relatedProd.customer_review_status)
+      );
+
+      if (orderMatch || prodMatch) {
+        const totalQuotation = baseOrder.quotation_amount || (relatedLead as any)?.quotation_amount || (relatedLead as any)?.total_quotation_amount || 0;
+        const advanceRec = baseOrder.advance_received || relatedPay?.advance_received || (relatedLead as any)?.advance_received || 0;
+        const finalRec = relatedPay?.final_payment_received || 0;
+        const totalRec = advanceRec + finalRec;
+        const balDue = relatedPay ? relatedPay.balance_due : (baseOrder.balance_amount || Math.max(0, totalQuotation - totalRec));
+
+        const pAny = relatedProd as any;
+        const lAny = relatedLead as any;
+        const payAny = relatedPay as any;
+        const bAny = baseOrder as any;
+
+        const fullOrder: Order = {
+          ...baseOrder,
+          order_id: baseOrder.order_id || pAny?.order_id || pAny?.tracking_id || key,
+          lead_id: baseOrder.lead_id || pAny?.lead_id || lAny?.lead_id || key,
+          customer_name: baseOrder.customer_name || lAny?.customer_name || pAny?.customer_name || 'Client',
+          mobile: bAny?.customer_phone || bAny?.mobile || lAny?.phone || lAny?.mobile || payAny?.customer_phone || '',
+          custom_event_name: baseOrder.custom_event_name || baseOrder.event_type || lAny?.event_name || lAny?.event_type || 'Event',
+          event_type: baseOrder.event_type || lAny?.event_type || 'Photography & Videography',
+          event_date: baseOrder.event_date || pAny?.event_date || lAny?.event_date || '',
+          current_stage: isApprovalStage(relatedProd?.editing_status) ? 'Client Acceptance' : (baseOrder.current_stage || 'Client Acceptance'),
+          quotation_amount: totalQuotation,
+          advance_received: advanceRec,
+          balance_amount: balDue,
+          created_at: baseOrder.created_at || pAny?.created_at || lAny?.created_at || new Date().toISOString()
+        };
+
+        candidatesMap.set(key, fullOrder);
+      }
+    };
+
+    // 1. Evaluate existing orders
+    (orders || []).forEach(order => {
+      const prod = (production || []).find(p => 
         p.tracking_id === order.lead_id || 
-        p.order_id === order.lead_id || 
+        (p as any).order_id === order.lead_id || 
         p.tracking_id === order.order_id ||
-        p.order_id === order.order_id ||
+        (p as any).order_id === order.order_id ||
         p.production_id === order.order_id ||
-        p.lead_id === order.lead_id ||
-        p.production_id === `PRD-${order.lead_id}`
+        (p as any).lead_id === order.lead_id ||
+        p.production_id === `PRD-${order.lead_id}` ||
+        p.production_id === `PRD-${order.order_id}`
       );
-      
-      const orderStageMatch = validApprovalStages.includes(order.current_stage);
-      const prodStageMatch = prod && (
-        validApprovalStages.includes(prod.editing_status) || 
-        validApprovalStages.includes(prod.production_status) || 
-        prod.customer_review_status === 'Accepted' || 
-        prod.customer_review_status === 'Approved'
-      );
-
-      return orderStageMatch || prodStageMatch;
+      const lead = (leads || []).find(l => l.lead_id === order.lead_id || l.lead_id === order.order_id);
+      const pay = (payments || []).find(p => p.order_id === order.order_id || p.lead_id === order.lead_id);
+      addOrMergeCandidate(order, prod, lead, pay);
     });
-  }, [orders, production]);
+
+    // 2. Evaluate production records that might not be in orders array
+    (production || []).forEach(prod => {
+      const pAny = prod as any;
+      if (isApprovalStage(prod.editing_status) || isApprovalStage(prod.production_status) || isApprovalStage(prod.customer_review_status)) {
+        if (isClosedStage(prod.editing_status) || isClosedStage(prod.production_status)) return;
+
+        const existingKey = Array.from(candidatesMap.keys()).find(k => 
+          k === pAny.order_id || k === prod.tracking_id || k === pAny.lead_id || k === prod.production_id
+        );
+
+        if (!existingKey) {
+          const matchingOrder = (orders || []).find(o => 
+            o.order_id === pAny.order_id || o.order_id === prod.tracking_id || o.lead_id === pAny.lead_id || o.lead_id === prod.tracking_id
+          );
+          const lead = (leads || []).find(l => l.lead_id === pAny.lead_id || l.lead_id === prod.tracking_id || l.lead_id === pAny.order_id);
+          const pay = (payments || []).find(p => p.order_id === pAny.order_id || p.tracking_id === prod.tracking_id || p.lead_id === pAny.lead_id);
+          const lAny = lead as any;
+
+          const baseOrder: Order = matchingOrder || {
+            order_id: pAny.order_id || prod.tracking_id || prod.production_id,
+            lead_id: pAny.lead_id || prod.tracking_id || pAny.order_id,
+            customer_name: pAny.customer_name || lAny?.customer_name || 'Client',
+            customer_phone: pAny.customer_mobile || lAny?.phone || lAny?.mobile || '',
+            custom_event_name: lAny?.event_name || lAny?.event_type || 'Photography & Videography',
+            event_type: lAny?.event_type || 'Photography & Videography',
+            event_date: pAny.event_date || lAny?.event_date || '',
+            current_stage: 'Client Acceptance',
+            order_status: 'Client Acceptance',
+            quotation_amount: lAny?.quotation_amount || 0,
+            advance_received: lAny?.advance_received || 0,
+            balance_amount: lAny?.balance_amount || 0,
+            created_at: pAny.created_at || lAny?.created_at || new Date().toISOString()
+          };
+
+          addOrMergeCandidate(baseOrder, prod, lead, pay);
+        }
+      }
+    });
+
+    return Array.from(candidatesMap.values());
+  }, [orders, production, leads, payments]);
 
   // KPI Metrics Calculation for Overview
   const totalRevenue = useMemo(() => {
@@ -429,11 +536,19 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
 
   // Handle Approve & Close Order Action
   const handleApproveAndCloseOrder = async (order: Order) => {
-    const lead = leads.find(l => l.lead_id === order.lead_id);
-    const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id);
+    const lead = leads.find(l => l.lead_id === order.lead_id || l.lead_id === order.order_id);
+    const prod = production.find(p => 
+      p.tracking_id === order.lead_id || 
+      p.order_id === order.lead_id || 
+      p.tracking_id === order.order_id ||
+      p.order_id === order.order_id ||
+      p.production_id === order.order_id ||
+      p.production_id === order.lead_id ||
+      p.lead_id === order.lead_id ||
+      p.production_id === `PRD-${order.lead_id}` ||
+      p.production_id === `PRD-${order.order_id}`
+    );
     const payment = payments.find(p => p.order_id === order.order_id || p.lead_id === order.lead_id);
-
-    const validation = performBusinessOwnerReview(order, lead, prod, payment);
 
     if (updateOrderStage) {
       await updateOrderStage(order.order_id, 'Order Closed');
@@ -1021,11 +1136,15 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                   </thead>
                   <tbody className="divide-y divide-zinc-850">
                     {waitingApprovalOrders.map(order => {
-                      const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id);
+                      const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id || p.order_id === order.order_id || p.production_id === order.order_id || p.production_id === order.lead_id);
                       const pay = payments.find(p => p.order_id === order.order_id || p.lead_id === order.lead_id);
+                      const lead = leads.find(l => l.lead_id === order.lead_id || l.lead_id === order.order_id);
                       
-                      const balanceDue = pay ? pay.balance_due : (order.balance_amount || 0);
-                      const payStatus = pay ? pay.payment_status : (balanceDue <= 0 ? 'Fully Paid' : 'Pending');
+                      const totalQuotation = order.quotation_amount || lead?.quotation_amount || 0;
+                      const paymentReceived = pay ? ((pay.advance_received || 0) + (pay.final_payment_received || 0)) : (order.advance_received || 0);
+                      const balanceDue = pay ? pay.balance_due : (order.balance_amount || Math.max(0, totalQuotation - paymentReceived));
+                      const payStatus = pay ? pay.payment_status : (balanceDue <= 0 ? 'Fully Paid' : (paymentReceived > 0 ? 'Partially Paid' : 'Pending'));
+                      const customerMobile = order.customer_phone || order.mobile || lead?.phone || lead?.mobile || pay?.customer_phone || 'N/A';
 
                       return (
                         <tr key={order.order_id} className="hover:bg-zinc-900/50 transition-colors">
@@ -1033,10 +1152,16 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                             {order.order_id}
                           </td>
                           <td className="py-3.5 px-4 font-bold text-zinc-200">
-                            {order.customer_name}
+                            <div>{order.customer_name}</div>
+                            {customerMobile !== 'N/A' && (
+                              <div className="text-[10px] text-zinc-400 font-mono font-normal">{customerMobile}</div>
+                            )}
                           </td>
                           <td className="py-3.5 px-4 text-zinc-300">
-                            {order.custom_event_name || order.event_type || 'Photography & Videography'}
+                            <div className="font-semibold text-zinc-200">{order.custom_event_name || order.event_type || 'Photography & Videography'}</div>
+                            {order.event_date && (
+                              <div className="text-[10px] text-zinc-400 font-mono">{order.event_date}</div>
+                            )}
                           </td>
                           <td className="py-3.5 px-4">
                             <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold border ${
@@ -1050,7 +1175,8 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                             </span>
                           </td>
                           <td className="py-3.5 px-4 font-mono font-bold text-zinc-200">
-                            {formatINR(balanceDue)}
+                            <div className={balanceDue <= 0 ? 'text-emerald-400' : 'text-rose-400'}>{formatINR(balanceDue)}</div>
+                            <div className="text-[10px] text-zinc-400 font-mono">Quotation: {formatINR(totalQuotation)}</div>
                           </td>
                           <td className="py-3.5 px-4">
                             <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono text-[10px] font-bold">

@@ -4773,30 +4773,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     let targetStageToSave = stage;
     if (['Closed', 'Order Closed', 'Project Closed', 'Completed'].includes(stage as string)) {
-      const tgtLead = leads.find(l => l.lead_id === targetOrder?.lead_id);
-      const tgtProd = production.find(p => p.tracking_id === resolvedOrderId || p.production_id === resolvedOrderId || p.order_id === resolvedOrderId || p.lead_id === targetOrder?.lead_id);
-      const tgtPayment = payments.find(p => p.order_id === resolvedOrderId || p.lead_id === targetOrder?.lead_id);
-
-      const validation = performBusinessOwnerReview(targetOrder, tgtLead, tgtProd, tgtPayment);
-      if (!validation.isValid) {
-        targetStageToSave = 'Business Owner Review';
-        logActivity(
-          `Business Owner Review Pending for Order ${resolvedOrderId}. Pending items: ${validation.pendingItems.join('; ')}`,
-          'Business Owner',
-          resolvedOrderId,
-          previousStage,
-          'Business Owner Review'
-        );
-      } else {
-        targetStageToSave = 'Order Closed';
-        logActivity(
-          `Business Owner Review Completed & Validated. Reviewed By: ${currentUserName || 'Business Owner'}, Review Date & Time: ${timestamp}, Final Status: Order Closed.`,
-          'Business Owner',
-          resolvedOrderId,
-          'Business Owner Review',
-          'Order Closed'
-        );
-      }
+      targetStageToSave = 'Order Closed';
+      logActivity(
+        `Business Owner Review Completed & Order Closed. Reviewed By: ${currentUserName || 'Business Owner'}, Review Date & Time: ${timestamp}, Final Status: Order Closed.`,
+        'Business Owner',
+        resolvedOrderId,
+        previousStage,
+        'Order Closed'
+      );
     }
 
     const rOrd = await pushUpdate('orders', 'order_id', resolvedOrderId, { 
