@@ -358,6 +358,9 @@ export const ProductionStaffModule: React.FC = () => {
         return { label: 'Editing Started', color: 'text-sky-400 bg-sky-500/10 border-sky-500/30' };
       case 'Customer Review': 
         return { label: 'Customer Review', color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' };
+      case 'Editing Completed':
+      case 'Editing Complete':
+        return { label: 'Editing Completed', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' };
       case 'Client Acceptance':
       case 'Business Owner Review':
       case 'Project Completed':
@@ -932,7 +935,7 @@ Thank you.`;
                                                 </button>
                                               )}
 
-                                              {/* Workflow Step 3: Re-send Customer Review, Upload Confirmation Proof & Client Acceptance */}
+                                              {/* Workflow Step 3: Re-send Customer Review & Upload Confirmation Proof */}
                                               {delivItem.status === 'Customer Review' && (
                                                 <>
                                                   <button
@@ -958,46 +961,14 @@ Thank you.`;
                                                   >
                                                     <CheckCircle2 className="w-4 h-4" /> Upload Confirmation Proof
                                                   </button>
-
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                      setActiveDropdownId(null);
-                                                      setClientAcceptanceModal(delivItem);
-                                                      setClientAcceptanceForm({
-                                                        checklist_1: false,
-                                                        checklist_2: false,
-                                                        checklist_3: false,
-                                                        communication_proof: '',
-                                                        internal_validation: true
-                                                      });
-                                                    }}
-                                                    className="w-full text-left px-4 py-2.5 text-xs text-emerald-400 hover:bg-emerald-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                                  >
-                                                    <ShieldCheck className="w-4 h-4" /> Client Acceptance
-                                                  </button>
                                                 </>
                                               )}
 
-                                              {/* Workflow Step 4: Editing Completed -> Client Acceptance */}
+                                              {/* Workflow Step 4: Editing Completed */}
                                               {(delivItem.status === 'Editing Completed' || delivItem.status === 'Editing Complete' || delivItem.status === 'Completed') && (
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    setActiveDropdownId(null);
-                                                    setClientAcceptanceModal(delivItem);
-                                                    setClientAcceptanceForm({
-                                                      checklist_1: false,
-                                                      checklist_2: false,
-                                                      checklist_3: false,
-                                                      communication_proof: delivItem.customer_communication_proof || '',
-                                                      internal_validation: true
-                                                    });
-                                                  }}
-                                                  className="w-full text-left px-4 py-2.5 text-xs text-emerald-400 hover:bg-emerald-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                                >
-                                                  <ShieldCheck className="w-4 h-4" /> Client Acceptance
-                                                </button>
+                                                <div className="px-4 py-2.5 bg-emerald-500/10 text-emerald-400 text-xs font-bold flex items-center gap-2 border-t border-zinc-800">
+                                                  <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Editing Completed
+                                                </div>
                                               )}
                                             </>
                                           )}
