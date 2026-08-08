@@ -692,32 +692,15 @@ ${coordinatorName}`;
     window.open(whatsappUrl, '_blank');
   };
 
-  // Dynamically compile active production projects/leads from leadsData / Supabase leads table
+  // Dynamically compile active production projects/leads from all available sources
   const leads = useMemo(() => {
-    const postProdStages = [
-      'Verified Footage',
-      'Footage Handover Verified',
-      'Raw Footage Received', 
-      'Assigned Editor',
-      'Editor Assigned', 
-      'Editing Started', 
-      'Editing In Progress', 
-      'Internal QC Review', 
-      'Customer Review',
-      'Client Review Sent', 
-      'Revision Required', 
-      'Revision In Progress', 
-      'Client Acceptance',
-      'Final Approval', 
-      'Delivered', 
-      'Project Delivered',
-      'Completed',
-      'Closed',
-      'Project Closed',
-      'Approved',
-      'Payment Pending',
-      'Project Completed',
-      'Project Cancelled'
+    const validProductionStages = [
+      'Verified Footage', 'Footage Handover Verified', 'Raw Footage Received', 'Raw Footage Uploaded',
+      'Assigned Editor', 'Editor Assigned', 'Assigned',
+      'Editing Started', 'Editing In Progress', 'Editing', 'Internal QC Review',
+      'Customer Review', 'Client Review Sent', 'Ready For Review', 'Revision Required', 'Revision In Progress',
+      'Editing Completed', 'Editing Complete', 'Final Approval',
+      'Client Acceptance', 'Order Closed', 'Closed', 'Completed', 'Project Closed', 'Approved', 'Payment Pending'
     ];
 
     const operationsOnlyStages = [
@@ -727,112 +710,195 @@ ${coordinatorName}`;
       'Footage Handover'
     ];
 
-    const validProductionStages = [
-      'Verified Footage', 'Footage Handover Verified', 'Raw Footage Received', 'Raw Footage Uploaded',
-      'Assigned Editor', 'Editor Assigned', 'Assigned',
-      'Editing Started', 'Editing In Progress', 'Editing', 'Internal QC Review',
-      'Customer Review', 'Client Review Sent', 'Ready For Review', 'Revision Required', 'Revision In Progress',
-      'Editing Completed', 'Editing Complete', 'Final Approval',
-      'Client Acceptance', 'Order Closed', 'Closed', 'Completed', 'Project Closed'
-    ];
+    // Build map of candidates keyed by primary order_id/lead_id/tracking_id
+    const candidatesMap = new Map<string, {
+      key: string;
+      lead?: any;
+      order?: any;
+      prod?: any;
+      rawFootage?: any;
+      assignments?: any[];
+    }>();
 
-    const mapped = (leadsData || []).filter(l => {
-      const order = orders.find(o => o.lead_id === l.lead_id || o.order_id === l.lead_id);
-      const rf = order ? rawFootage.find(f => f.order_id === order.order_id) : null;
-      const prod = production?.find(p => 
-        p.tracking_id === l.lead_id || 
-        p.lead_id === l.lead_id || 
-        p.production_id === `PRD-${l.lead_id}` ||
-        (order && (p.order_id === order.order_id || p.tracking_id === order.order_id || p.production_id === order.order_id || p.lead_id === order.lead_id)) ||
-        (rf && (p.tracking_id === rf.tracking_id || p.order_id === rf.order_id))
-      );
+    const getOrCreateCandidate = (key: string) => {
+      if (!key) return null;
+      let existing = candidatesMap.get(key);
+      if (!existing) {
+        for (const [k, c] of candidatesMap.entries()) {
+          if ((c.order && (c.order.order_id === key || c.order.lead_id === key)) ||
+              (c.lead && c.lead.lead_id === key) ||
+              (c.prod && (c.prod.production_id === key || c.prod.tracking_id === key || c.prod.order_id === key || c.prod.lead_id === key))) {
+            return c;
+          }
+        }
+        existing = { key };
+        candidatesMap.set(key, existing);
+      }
+      return existing;
+    };
 
-      const orderStage = order?.current_stage;
-      const prodStatus = prod?.editing_status || prod?.production_status;
-      const leadStatus = l.status || (l as any).current_status;
+    // 1. Process orders
+    (orders || []).forEach(order => {
+      const key = order.order_id || order.lead_id;
+      if (!key) return;
+      const cand = getOrCreateCandidate(key);
+      if (cand) cand.order = order;
+    });
 
-      // 1. Exclude Operations-only projects that have not reached Verified Footage / Production
+    // 2. Process production records
+    (production || []).forEach(p => {
+      const key = p.order_id || p.tracking_id || p.production_id || p.lead_id;
+      if (!key) return;
+      const cand = getOrCreateCandidate(key);
+      if (cand) cand.prod = p;
+    });
+
+    // 3. Process editorAssignments
+    (editorAssignments || []).forEach(ea => {
+      const key = ea.order_id || ea.production_id;
+      if (!key) return;
+      const cand = getOrCreateCandidate(key);
+      if (cand) {
+        if (!cand.assignments) cand.assignments = [];
+        cand.assignments.push(ea);
+      }
+    });
+
+    // 4. Process rawFootage
+    (rawFootage || []).forEach(rf => {
+      const key = rf.order_id || rf.tracking_id;
+      if (!key) return;
+      const cand = getOrCreateCandidate(key);
+      if (cand) cand.rawFootage = rf;
+    });
+
+    // 5. Process CRM leads
+    (leadsData || []).forEach(l => {
+      const key = l.lead_id;
+      if (!key) return;
+      const cand = getOrCreateCandidate(key);
+      if (cand) cand.lead = l;
+    });
+
+    const candidatesList: any[] = [];
+
+    for (const cand of candidatesMap.values()) {
+      // Cross-link lead, order, prod, rawFootage if not set
+      if (!cand.order) {
+        cand.order = (orders || []).find(o => 
+          (cand.lead && o.lead_id === cand.lead.lead_id) ||
+          (cand.prod && (o.order_id === cand.prod.order_id || o.order_id === cand.prod.tracking_id || o.lead_id === cand.prod.lead_id)) ||
+          (cand.rawFootage && o.order_id === cand.rawFootage.order_id)
+        );
+      }
+      if (!cand.lead) {
+        cand.lead = (leadsData || []).find(l => 
+          (cand.order && l.lead_id === cand.order.lead_id) ||
+          (cand.prod && (l.lead_id === cand.prod.lead_id || l.lead_id === cand.prod.tracking_id))
+        );
+      }
+      if (!cand.prod) {
+        cand.prod = (production || []).find(p => 
+          (cand.order && (p.order_id === cand.order.order_id || p.tracking_id === cand.order.order_id || p.production_id === cand.order.order_id || p.lead_id === cand.order.lead_id || p.production_id === `PRD-${cand.order.order_id}`)) ||
+          (cand.lead && (p.tracking_id === cand.lead.lead_id || p.lead_id === cand.lead.lead_id || p.production_id === `PRD-${cand.lead.lead_id}`))
+        );
+      }
+      if (!cand.rawFootage) {
+        cand.rawFootage = (rawFootage || []).find(rf => 
+          (cand.order && (rf.order_id === cand.order.order_id || rf.tracking_id === cand.order.order_id)) ||
+          (cand.prod && (rf.order_id === cand.prod.order_id || rf.tracking_id === cand.prod.tracking_id))
+        );
+      }
+      if (!cand.assignments || cand.assignments.length === 0) {
+        const orderId = cand.order?.order_id || cand.prod?.order_id || cand.prod?.tracking_id;
+        const prodId = cand.prod?.production_id;
+        cand.assignments = (editorAssignments || []).filter(ea => 
+          (orderId && (ea.order_id === orderId || ea.production_id === orderId)) ||
+          (prodId && (ea.production_id === prodId || ea.order_id === prodId))
+        );
+      }
+
+      // Check whether this candidate has entered Production workflow
+      const orderStage = cand.order?.current_stage;
+      const prodStatus = cand.prod?.editing_status || cand.prod?.production_status;
+      const leadStatus = cand.lead?.status || (cand.lead as any)?.current_status;
+
+      const hasProductionRecord = !!cand.prod;
+      const hasAssignments = cand.assignments && cand.assignments.length > 0;
+      const hasRawFootage = !!cand.rawFootage;
+      const isProdStage = validProductionStages.includes(prodStatus) || validProductionStages.includes(orderStage) || validProductionStages.includes(leadStatus);
+
+      // Exclude Operations-only projects that have NO production record, NO assignments, NO raw footage, and stage not in prod stages
       if (orderStage && operationsOnlyStages.includes(orderStage)) {
-        if (!prodStatus || !validProductionStages.includes(prodStatus)) {
-          return false;
+        if (!hasProductionRecord && !hasAssignments && !hasRawFootage && !isProdStage) {
+          continue;
+        }
+      } else if (!cand.order && leadStatus && operationsOnlyStages.includes(leadStatus)) {
+        if (!hasProductionRecord && !hasAssignments && !hasRawFootage && !isProdStage) {
+          continue;
         }
       }
 
-      if (!order && leadStatus && operationsOnlyStages.includes(leadStatus)) {
-        if (!prodStatus || !validProductionStages.includes(prodStatus)) {
-          return false;
-        }
-      }
-
-      // Filter for Production Staff / Editors: only see assigned projects & exclude Client Acceptance/Closed
+      // Filter for Production Staff role
       if (currentRole === 'Production Staff') {
         if (orderStage === 'Client Acceptance' || prodStatus === 'Client Acceptance' || orderStage === 'Order Closed' || prodStatus === 'Order Closed' || orderStage === 'Closed' || prodStatus === 'Closed') {
-          return false;
+          continue;
         }
 
         const myName = (currentUserName || '').trim().toLowerCase();
         const myId = currentUser?.id;
-        const prodId = prod?.production_id || order?.order_id || l.lead_id;
-        const assignedInAssignments = editorAssignments ? editorAssignments.some(ea => 
-          (ea.production_id === prodId || ea.production_id === `PRD-${l.lead_id}` || ea.order_id === order?.order_id) && 
+        const assignedInAssignments = cand.assignments?.some(ea => 
           ((ea.staff_name && ea.staff_name.trim().toLowerCase() === myName) || (ea.staff_id && ea.staff_id === myId))
+        );
+        const assignedInProd = cand.prod ? (
+          (cand.prod.editor_assigned && cand.prod.editor_assigned.toLowerCase().includes(myName)) || 
+          (cand.prod.assigned_staff && cand.prod.assigned_staff.toLowerCase().includes(myName))
         ) : false;
-        const assignedInProd = prod ? (
-          (prod.editor_assigned && prod.editor_assigned.toLowerCase().includes(myName)) || 
-          (prod.assigned_staff && prod.assigned_staff.toLowerCase().includes(myName))
-        ) : false;
-        if (!assignedInAssignments && !assignedInProd) return false;
+        if (!assignedInAssignments && !assignedInProd) continue;
       }
 
-      return true;
-    }).map(l => {
-      const order = orders.find(o => o.lead_id === l.lead_id || o.order_id === l.lead_id);
-      const rf = order ? rawFootage.find(f => f.order_id === order.order_id) : null;
-      const prod = production?.find(p => 
-        p.tracking_id === l.lead_id || 
-        p.lead_id === l.lead_id || 
-        p.production_id === `PRD-${l.lead_id}` ||
-        (order && (p.order_id === order.order_id || p.tracking_id === order.order_id || p.production_id === order.order_id || p.lead_id === order.lead_id)) ||
-        (rf && (p.tracking_id === rf.tracking_id || p.order_id === rf.order_id))
-      );
-      
-      const defaultTargetDate = l.event_date ? new Date(new Date(l.event_date).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : '';
-      
-      if (prod) {
-        return {
-          ...prod,
-          editor_assigned: prod.editor_assigned || (l as any).assigned_editor || 'Unassigned',
-          assigned_staff: prod.assigned_staff || (l as any).assigned_editors || '',
-          target_delivery_date: prod.target_delivery_date || (l as any).delivery_target_date || defaultTargetDate,
-          expected_delivery_date: prod.expected_delivery_date || prod.target_delivery_date || (l as any).delivery_target_date || defaultTargetDate,
-          editing_status: prod.editing_status || prod.production_status || (l as any).current_status || l.status
-        };
-      }
+      const l = cand.lead;
+      const order = cand.order;
+      const prod = cand.prod;
+      const rf = cand.rawFootage;
 
-      return {
-        production_id: `PRD-${l.lead_id}`,
-        tracking_id: rf?.tracking_id || order?.order_id || l.lead_id,
-        editor_assigned: (l as any).assigned_editor || 'Unassigned',
-        assigned_staff: (l as any).assigned_editors || '',
-        raw_footage_location: rf?.server_path || '',
-        editing_status: ((l as any).current_status || l.status) as any,
-        remarks: l.remarks || '',
-        project_priority: 'Medium',
-        target_delivery_date: (l as any).delivery_target_date || defaultTargetDate,
-        expected_delivery_date: (l as any).delivery_target_date || defaultTargetDate
+      const defaultTargetDate = (order?.event_date || l?.event_date) ? 
+        new Date(new Date(order?.event_date || l?.event_date).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : '';
+
+      const trackingId = order?.order_id || rf?.tracking_id || prod?.tracking_id || l?.lead_id || cand.key;
+      const prodId = prod?.production_id || `PRD-${trackingId}`;
+
+      const computedStatus = prod?.editing_status || prod?.production_status || order?.current_stage || (l as any)?.current_status || l?.status || 'Verified Footage';
+
+      const candidateObj = {
+        ...(prod || {}),
+        production_id: prodId,
+        tracking_id: trackingId,
+        order_id: order?.order_id || prod?.order_id || trackingId,
+        lead_id: l?.lead_id || order?.lead_id || trackingId,
+        customer_name: order?.customer_name || l?.customer_name || prod?.customer_name || 'Client',
+        customer_mobile: order?.customer_phone || order?.mobile || l?.mobile || prod?.customer_mobile || '',
+        editor_assigned: prod?.editor_assigned || (l as any)?.assigned_editor || 'Unassigned',
+        assigned_staff: prod?.assigned_staff || (l as any)?.assigned_editors || '',
+        raw_footage_location: prod?.raw_footage_location || rf?.server_path || order?.raw_footage_link || '',
+        editing_status: computedStatus,
+        remarks: prod?.remarks || l?.remarks || order?.remarks || '',
+        project_priority: prod?.project_priority || 'Medium',
+        target_delivery_date: prod?.target_delivery_date || (l as any)?.delivery_target_date || defaultTargetDate,
+        expected_delivery_date: prod?.expected_delivery_date || prod?.target_delivery_date || (l as any)?.delivery_target_date || defaultTargetDate
       };
-    });
 
-    mapped.sort((a, b) => {
-      const leadA = leadsData?.find(l => l.lead_id === a.tracking_id || `PRD-${l.lead_id}` === a.production_id);
-      const leadB = leadsData?.find(l => l.lead_id === b.tracking_id || `PRD-${l.lead_id}` === b.production_id);
-      const timeA = leadA ? (leadA.created_at ? new Date(leadA.created_at).getTime() : new Date(leadA.created_date).getTime()) : 0;
-      const timeB = leadB ? (leadB.created_at ? new Date(leadB.created_at).getTime() : new Date(leadB.created_date).getTime()) : 0;
+      candidatesList.push(candidateObj);
+    }
+
+    candidatesList.sort((a, b) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
       return timeB - timeA;
     });
 
-    return mapped;
-  }, [leadsData, orders, rawFootage, production]);
+    return candidatesList;
+  }, [leadsData, orders, rawFootage, production, editorAssignments, currentRole, currentUserName, currentUser]);
 
   // Staff Performance Filter State
   const [staffRoleFilter, setStaffRoleFilter] = useState<'All' | 'Editor' | 'Album Designer' | 'Retoucher' | 'Motion Graphics Designer'>('All');
@@ -1199,7 +1265,13 @@ ${coordinatorName}`;
   };
 
   const getAssignedEditorsList = (prod: Production) => {
-    const fromAssignments = (editorAssignments || []).filter(a => a.production_id === prod.production_id);
+    const fromAssignments = (editorAssignments || []).filter(a => 
+      a.production_id === prod.production_id ||
+      a.production_id === (prod as any).order_id ||
+      a.production_id === prod.tracking_id ||
+      a.order_id === (prod as any).order_id ||
+      a.order_id === prod.tracking_id
+    );
     if (fromAssignments.length > 0) {
       return fromAssignments.map(a => {
         const staffRec = (productionStaff || []).find(s => s.staff_id === a.staff_id || s.name === a.staff_name);
@@ -1329,7 +1401,13 @@ ${coordinatorName}`;
       return 'Client Acceptance';
     }
 
-    const assignments = (editorAssignments || []).filter(a => a.production_id === prod.production_id);
+    const assignments = (editorAssignments || []).filter(a => 
+      a.production_id === prod.production_id ||
+      a.production_id === (prod as any).order_id ||
+      a.production_id === prod.tracking_id ||
+      a.order_id === (prod as any).order_id ||
+      a.order_id === prod.tracking_id
+    );
     
     if (assignments.length > 0) {
       const getTaskStageRank = (st: string, driveLink?: string) => {
@@ -1514,16 +1592,22 @@ Production Team`;
     return s === 'Project Delivered' || s === 'Completed' || raw === 'Delivered' || raw === 'Project Delivered' || raw === 'Closed' || raw === 'Project Closed' || raw === 'Completed' || raw === 'Project Completed' || s === 'Project Completed' || raw === 'Project Cancelled' || s === 'Project Cancelled' || raw === 'Order Closed' || s === 'Order Closed';
   };
 
-  // Base list filtered by applied date range, customer name, and order ID (Supabase leads table data source)
+  // Base list filtered by applied date range, customer name, and order ID
   const filteredLeadsList = useMemo(() => {
     return leads.filter(prod => {
-      const { order } = resolveOrderAndLead(prod);
-      if (!order) return false;
+      const { order: foundOrder, lead } = resolveOrderAndLead(prod);
+      const order = foundOrder || {
+        order_id: prod.order_id || prod.tracking_id || prod.production_id,
+        customer_name: prod.customer_name || lead?.customer_name || 'Client',
+        event_type: lead?.event_type || 'Event',
+        event_date: prod.event_date || lead?.event_date || '',
+        current_stage: prod.editing_status || 'Verified Footage'
+      };
 
       // Event date matching (format is YYYY-MM-DD)
       const eventDate = order.event_date || '';
-      if (appliedStartDate && eventDate < appliedStartDate) return false;
-      if (appliedEndDate && eventDate > appliedEndDate) return false;
+      if (appliedStartDate && eventDate && eventDate < appliedStartDate) return false;
+      if (appliedEndDate && eventDate && eventDate > appliedEndDate) return false;
 
       // Search matching
       if (appliedCustName) {
@@ -1536,7 +1620,7 @@ Production Team`;
 
       return true;
     });
-  }, [leads, orders, rawFootage, appliedStartDate, appliedEndDate, appliedCustName, appliedOrdId]);
+  }, [leads, orders, rawFootage, leadsData, appliedStartDate, appliedEndDate, appliedCustName, appliedOrdId]);
 
   // Computed counts for the five distinct analytics cards
   const countNewProjects = useMemo(() => filteredLeadsList.filter(isNewProject).length, [filteredLeadsList]);
@@ -3150,8 +3234,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     ];
 
                     const filteredLeads = filteredLeadsList.filter(prod => {
-                      const { order } = resolveOrderAndLead(prod);
-                      if (!order) return false;
+                      const { order: foundOrder, lead } = resolveOrderAndLead(prod);
+                      const order = foundOrder || {
+                        order_id: prod.order_id || prod.tracking_id || prod.production_id,
+                        customer_name: prod.customer_name || lead?.customer_name || 'Client',
+                        event_type: lead?.event_type || 'Event',
+                        event_date: prod.event_date || lead?.event_date || '',
+                        current_stage: prod.editing_status || 'Verified Footage'
+                      };
                       
                       // For Production Staff, exclude Client Acceptance and Order Closed
                       const displayStatus = getAutomatedProductionStatus(prod);
@@ -3160,7 +3250,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       }
                       
                       const searchLower = leadSearch.toLowerCase();
-                      const clientMatch = order.customer_name?.toLowerCase().includes(searchLower) || order.order_id.toLowerCase().includes(searchLower);
+                      const clientMatch = (order.customer_name || '').toLowerCase().includes(searchLower) || (order.order_id || '').toLowerCase().includes(searchLower);
                       if (leadSearch && !clientMatch) return false;
 
                       const pVal = getProductionPriority(prod);
@@ -3205,8 +3295,16 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     }
 
                     return filteredLeads.map((prod) => {
-                      const { order } = resolveOrderAndLead(prod);
-                      if (!order) return null;
+                      const { order: foundOrder, lead: foundLead } = resolveOrderAndLead(prod);
+                      const order = foundOrder || {
+                        order_id: prod.order_id || prod.tracking_id || prod.production_id,
+                        customer_name: prod.customer_name || foundLead?.customer_name || 'Client',
+                        event_type: foundLead?.event_type || 'Event',
+                        event_date: prod.event_date || foundLead?.event_date || '',
+                        current_stage: prod.editing_status || 'Verified Footage',
+                        quotation_amount: 0,
+                        lead_id: prod.lead_id || prod.tracking_id
+                      };
 
                       const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
                       const priority = getProductionPriority(prod);
@@ -8811,7 +8909,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 </thead>
                 <tbody className="divide-y divide-zinc-900 text-zinc-300 font-sans">
                   {(() => {
-                    const assignments = (editorAssignments || []).filter(a => a.production_id === assignedEditorsModalProd.production_id);
+                    const assignments = (editorAssignments || []).filter(a => 
+                      a.production_id === assignedEditorsModalProd.production_id ||
+                      a.production_id === assignedEditorsModalProd.order_id ||
+                      a.production_id === assignedEditorsModalProd.tracking_id ||
+                      a.order_id === assignedEditorsModalProd.order_id ||
+                      a.order_id === assignedEditorsModalProd.tracking_id
+                    );
                     
                     let rows: { name: string; deliverable: string; status: string; link: string }[] = [];
 
