@@ -9337,12 +9337,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   onClick={() => {
                     setEditingPackage(null);
                     setPkgForm({ 
-                      package_name: '', 
-                      category: 'Weddings', 
-                      price: 0, 
-                      status: 'Active', 
-                      deliverables: '', 
-                      team_members: '', 
+                                   team_members: '', 
                       seasonal_offer: '',
                       terms_conditions: '',
                       event_type: '',
@@ -9350,7 +9345,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       package_includes: ''
                     });
                     setPkgTeamMembers([{ qty: 1, name: '' }]);
-                    setPkgDeliverablesList([]);
+                    setPkgDeliverablesList([{ qty: 1, name: '' }]);
                     setPkgDeliverableInput('');
                     setCustomCategory('');
                     setIsAddFormOpen(true);
@@ -9373,7 +9368,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             {/* In-place Add / Edit Package Modal */}
             {(isAddFormOpen || editingPackage) && (
               <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto animate-fade-in text-left text-xs bg-black/70">
-                <div id="add_edit_package_modal" className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl my-auto p-4 sm:p-6 space-y-5 shadow-2xl relative text-slate-350 max-h-[92vh] flex flex-col">
+                <div id="add_edit_package_modal" className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl my-auto p-4 sm:p-6 space-y-4 shadow-2xl relative text-slate-350 max-h-[90vh] flex flex-col overflow-hidden">
                   {/* Modal Header */}
                   <div className="border-b border-slate-800 pb-3 flex items-center justify-between shrink-0">
                     <h4 className="text-sm sm:text-base font-bold text-slate-100 font-mono tracking-wide flex items-center gap-2">
@@ -9398,7 +9393,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           package_includes: ''
                         });
                         setPkgTeamMembers([{ qty: 1, name: '' }]);
-                        setPkgDeliverablesList([]);
+                        setPkgDeliverablesList([{ qty: 1, name: '' }]);
                         setPkgDeliverableInput('');
                         setCustomCategory('');
                       }}
@@ -9410,14 +9405,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   </div>
 
                   {/* Scrollable Form Body */}
-                  <div className="overflow-y-auto pr-1 space-y-5 text-xs text-slate-300 flex-1">
+                  <div className="overflow-y-auto overflow-x-hidden pr-1 space-y-4 text-xs text-slate-300 flex-1 w-full max-w-full">
                     {/* SECTION 1: PACKAGE DETAILS */}
-                    <div className="space-y-3">
+                    <div className="space-y-3 w-full max-w-full">
                       <label className="block text-slate-300 font-bold uppercase tracking-wider text-[11px] font-mono text-emerald-400">
                         Package Details
                       </label>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 w-full">
                         {/* Package Name */}
                         <div>
                           <label className="block text-slate-300 font-semibold mb-1 text-xs">
@@ -9481,29 +9476,28 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     </div>
 
                     {/* SECTION 2: TEAM MEMBERS INCLUDED */}
-                    <div className="border-t border-slate-800/80 pt-4 space-y-3">
+                    <div className="border-t border-slate-800/80 pt-4 space-y-3 w-full max-w-full">
                       <div className="flex items-center justify-between">
                         <label className="block text-slate-300 font-bold uppercase tracking-wider text-[11px] font-mono">
                           Team Members Included
                         </label>
                       </div>
 
-                      {/* Desktop Column Header */}
-                      <div className="hidden md:flex items-center gap-3 px-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        <div className="flex-1">Team Member Name / Role</div>
-                        <div className="w-24 text-center">Qty</div>
-                        <div className="w-10 text-center">Remove</div>
+                      {/* Column Header */}
+                      <div className="flex items-center gap-2 sm:gap-3 px-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        <div className="flex-1 min-w-0">Team Member Name / Role</div>
+                        <div className="w-[60px] sm:w-[75px] text-center shrink-0">Qty</div>
+                        <div className="w-9 sm:w-10 text-center shrink-0">Remove</div>
                       </div>
 
-                      <div className="space-y-2.5 max-h-[180px] overflow-y-auto pr-1">
+                      <div className="space-y-2.5 max-h-[180px] overflow-y-auto overflow-x-hidden pr-1 w-full max-w-full">
                         {pkgTeamMembers.map((member, index) => (
                           <div 
                             key={index} 
-                            className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 space-y-2 md:space-y-0 md:bg-transparent md:border-0 md:p-0 md:flex md:items-center md:gap-3 animate-fade-in"
+                            className="flex items-center gap-2 sm:gap-3 w-full min-w-0 animate-fade-in"
                           >
                             {/* Member Name */}
-                            <div className="flex-1">
-                              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1 md:hidden">Team Member Name</label>
+                            <div className="flex-1 min-w-0">
                               <input
                                 type="text"
                                 placeholder="e.g. Candid Photographer"
@@ -9517,37 +9511,34 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               />
                             </div>
 
-                            {/* Qty & Remove (Stacked on Mobile, Row on Desktop) */}
-                            <div className="flex items-center justify-between gap-3 pt-1 md:pt-0 md:contents">
-                              <div className="w-28 md:w-24 shrink-0">
-                                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1 md:hidden">Qty</label>
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={member.qty || 1}
-                                  onChange={(e) => {
-                                    const newList = [...pkgTeamMembers];
-                                    newList[index] = { ...member, qty: Math.max(1, parseInt(e.target.value) || 1) };
-                                    setPkgTeamMembers(newList);
-                                  }}
-                                  className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl py-2 px-2.5 text-xs font-mono font-bold text-center text-emerald-400 focus:outline-none"
-                                />
-                              </div>
+                            {/* Qty */}
+                            <div className="w-[60px] sm:w-[75px] shrink-0">
+                              <input
+                                type="number"
+                                min="1"
+                                value={member.qty || 1}
+                                onChange={(e) => {
+                                  const newList = [...pkgTeamMembers];
+                                  newList[index] = { ...member, qty: Math.max(1, parseInt(e.target.value) || 1) };
+                                  setPkgTeamMembers(newList);
+                                }}
+                                className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl py-2 px-1 text-xs font-mono font-bold text-center text-emerald-400 focus:outline-none"
+                              />
+                            </div>
 
-                              <div className="shrink-0 md:w-10 md:flex md:justify-center">
-                                <label className="block text-[10px] uppercase font-bold text-transparent mb-1 md:hidden">Remove</label>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const newList = pkgTeamMembers.filter((_, idx) => idx !== index);
-                                    setPkgTeamMembers(newList.length > 0 ? newList : [{ qty: 1, name: '' }]);
-                                  }}
-                                  className="p-2 text-slate-400 hover:text-rose-400 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-rose-500/30 rounded-xl transition-all cursor-pointer flex items-center justify-center min-w-[38px] h-[38px]"
-                                  title="Remove item"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
-                              </div>
+                            {/* Remove */}
+                            <div className="w-9 sm:w-10 shrink-0 flex justify-center">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newList = pkgTeamMembers.filter((_, idx) => idx !== index);
+                                  setPkgTeamMembers(newList.length > 0 ? newList : [{ qty: 1, name: '' }]);
+                                }}
+                                className="w-9 h-9 sm:w-10 sm:h-10 text-slate-400 hover:text-rose-400 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-rose-500/30 rounded-xl transition-all cursor-pointer flex items-center justify-center"
+                                title="Remove item"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
                             </div>
                           </div>
                         ))}
@@ -9564,29 +9555,28 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     </div>
 
                     {/* SECTION 3: DELIVERABLES */}
-                    <div className="border-t border-slate-800/80 pt-4 space-y-3">
+                    <div className="border-t border-slate-800/80 pt-4 space-y-3 w-full max-w-full">
                       <div className="flex items-center justify-between">
                         <label className="block text-slate-300 font-bold uppercase tracking-wider text-[11px] font-mono">
                           Deliverables
                         </label>
                       </div>
 
-                      {/* Desktop Column Header */}
-                      <div className="hidden md:flex items-center gap-3 px-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        <div className="flex-1">Deliverable Name / Description</div>
-                        <div className="w-24 text-center">Qty</div>
-                        <div className="w-10 text-center">Remove</div>
+                      {/* Column Header */}
+                      <div className="flex items-center gap-2 sm:gap-3 px-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        <div className="flex-1 min-w-0">Deliverable Name / Description</div>
+                        <div className="w-[60px] sm:w-[75px] text-center shrink-0">Qty</div>
+                        <div className="w-9 sm:w-10 text-center shrink-0">Remove</div>
                       </div>
 
-                      <div className="space-y-2.5 max-h-[180px] overflow-y-auto pr-1">
+                      <div className="space-y-2.5 max-h-[180px] overflow-y-auto overflow-x-hidden pr-1 w-full max-w-full">
                         {pkgDeliverablesList.map((del, index) => (
                           <div 
                             key={index} 
-                            className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 space-y-2.5 md:space-y-0 md:bg-transparent md:border-0 md:p-0 md:flex md:items-center md:gap-3 animate-fade-in"
+                            className="flex items-center gap-2 sm:gap-3 w-full min-w-0 animate-fade-in"
                           >
                             {/* Deliverable Name */}
-                            <div className="flex-1">
-                              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1 md:hidden">Deliverable Name / Description</label>
+                            <div className="flex-1 min-w-0">
                               <input
                                 type="text"
                                 placeholder="e.g. Traditional 30 Edited Photos"
@@ -9601,39 +9591,37 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               />
                             </div>
 
-                            {/* Qty & Remove (Stacked on Mobile, Row on Desktop) */}
-                            <div className="flex items-center justify-between gap-3 pt-1 md:pt-0 md:contents">
-                              <div className="w-28 md:w-24 shrink-0">
-                                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1 md:hidden">Qty</label>
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={del.qty || 1}
-                                  onChange={(e) => {
-                                    const newList = [...pkgDeliverablesList];
-                                    newList[index] = { ...del, qty: Math.max(1, parseInt(e.target.value) || 1) };
-                                    setPkgDeliverablesList(newList);
-                                    setPkgForm({ ...pkgForm, deliverables: JSON.stringify(newList) });
-                                  }}
-                                  className="w-full bg-slate-950 border border-slate-750 focus:border-emerald-500 rounded-xl py-2 px-2.5 text-xs font-mono font-bold text-center text-emerald-400 focus:outline-none"
-                                />
-                              </div>
+                            {/* Qty */}
+                            <div className="w-[60px] sm:w-[75px] shrink-0">
+                              <input
+                                type="number"
+                                min="1"
+                                value={del.qty || 1}
+                                onChange={(e) => {
+                                  const newList = [...pkgDeliverablesList];
+                                  newList[index] = { ...del, qty: Math.max(1, parseInt(e.target.value) || 1) };
+                                  setPkgDeliverablesList(newList);
+                                  setPkgForm({ ...pkgForm, deliverables: JSON.stringify(newList) });
+                                }}
+                                className="w-full bg-slate-950 border border-slate-750 focus:border-emerald-500 rounded-xl py-2 px-1 text-xs font-mono font-bold text-center text-emerald-400 focus:outline-none"
+                              />
+                            </div>
 
-                              <div className="shrink-0 md:w-10 md:flex md:justify-center">
-                                <label className="block text-[10px] uppercase font-bold text-transparent mb-1 md:hidden">Remove</label>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const newList = pkgDeliverablesList.filter((_, idx) => idx !== index);
-                                    setPkgDeliverablesList(newList);
-                                    setPkgForm({ ...pkgForm, deliverables: JSON.stringify(newList) });
-                                  }}
-                                  className="p-2 text-slate-400 hover:text-rose-400 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-rose-500/30 rounded-xl transition-all cursor-pointer flex items-center justify-center min-w-[38px] h-[38px]"
-                                  title="Remove item"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
-                              </div>
+                            {/* Remove */}
+                            <div className="w-9 sm:w-10 shrink-0 flex justify-center">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newList = pkgDeliverablesList.filter((_, idx) => idx !== index);
+                                  const updatedList = newList.length > 0 ? newList : [{ qty: 1, name: '' }];
+                                  setPkgDeliverablesList(updatedList);
+                                  setPkgForm({ ...pkgForm, deliverables: JSON.stringify(updatedList) });
+                                }}
+                                className="w-9 h-9 sm:w-10 sm:h-10 text-slate-400 hover:text-rose-400 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-rose-500/30 rounded-xl transition-all cursor-pointer flex items-center justify-center"
+                                title="Remove item"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
                             </div>
                           </div>
                         ))}
@@ -9671,7 +9659,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           package_includes: ''
                         });
                         setPkgTeamMembers([{ qty: 1, name: '' }]);
-                        setPkgDeliverablesList([]);
+                        setPkgDeliverablesList([{ qty: 1, name: '' }]);
                         setPkgDeliverableInput('');
                         setCustomCategory('');
                       }}
@@ -9736,7 +9724,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             package_includes: ''
                           });
                           setPkgTeamMembers([{ qty: 1, name: '' }]);
-                          setPkgDeliverablesList([]);
+                          setPkgDeliverablesList([{ qty: 1, name: '' }]);
                           setCustomCategory('');
                         } catch (err: any) {
                           alert(`Failed to save package: ${err.message || err}`);
