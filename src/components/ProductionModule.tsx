@@ -745,7 +745,7 @@ ${coordinatorName}`;
       );
 
       const stage = prod?.editing_status || prod?.production_status || l.status || order?.current_stage;
-      if (stage && !postProdStages.includes(stage) && !postProdStages.includes(l.status) && !postProdStages.includes(order?.current_stage || '')) return false;
+      if (!order && !prod && stage && !postProdStages.includes(stage) && !postProdStages.includes(l.status) && !postProdStages.includes(order?.current_stage || '')) return false;
 
       // Filter for Production Staff / Editors: only see assigned projects
       if (currentRole === 'Production Staff') {
@@ -1161,18 +1161,19 @@ ${coordinatorName}`;
 
   const getProductionStatus = (prod: Production): string => {
     const status = (prod.editing_status || 'Raw Footage Received') as string;
-    if (status === 'Pending' || status === 'Raw Footage Received' || status === 'Verified Footage' || status === 'Footage Handover Verified') return 'Raw Footage Received';
-    if (status === 'Editor Assigned') return 'Editor Assigned';
-    if (status === 'Editing Started') return 'Editing Started';
-    if (status === 'Editing' || status === 'Editing In Progress') return 'Editing In Progress';
-    if (status === 'Internal QC Review') return 'Internal QC Review';
-    if (status === 'Ready For Review' || status === 'Client Review Sent' || status === 'Customer Review') return 'Client Review Sent';
-    if (status === 'Revision Required') return 'Revision Required';
-    if (status === 'Revision In Progress') return 'Revision In Progress';
-    if (status === 'Approved' || status === 'Final Approval') return 'Final Approval';
-    if (status === 'Delivered' || status === 'Project Delivered' || status === 'Payment Pending') return 'Project Delivered';
-    if (status === 'Closed' || status === 'Project Closed' || status === 'Completed' || status === 'Project Completed') return 'Completed';
-    if (status === 'Project Cancelled' || status === 'Cancelled' || status === 'Canceled') return 'Project Cancelled';
+    if (['Pending', 'Raw Footage Received', 'Verified Footage', 'Footage Handover Verified', 'Raw Footage Uploaded'].includes(status)) return 'Raw Footage Received';
+    if (['Editor Assigned', 'Assigned Editor', 'Assigned'].includes(status)) return 'Assigned Editor';
+    if (['Editing Started', 'Editing', 'Editing In Progress'].includes(status)) return 'Editing Started';
+    if (['Internal QC Review'].includes(status)) return 'Internal QC Review';
+    if (['Ready For Review', 'Client Review Sent', 'Customer Review'].includes(status)) return 'Customer Review';
+    if (['Editing Completed', 'Editing Complete'].includes(status)) return 'Editing Completed';
+    if (['Client Acceptance'].includes(status)) return 'Client Acceptance';
+    if (['Revision Required'].includes(status)) return 'Revision Required';
+    if (['Revision In Progress'].includes(status)) return 'Revision In Progress';
+    if (['Approved', 'Final Approval'].includes(status)) return 'Final Approval';
+    if (['Delivered', 'Project Delivered', 'Payment Pending'].includes(status)) return 'Project Delivered';
+    if (['Closed', 'Project Closed', 'Completed', 'Project Completed'].includes(status)) return 'Completed';
+    if (['Project Cancelled', 'Cancelled', 'Canceled'].includes(status)) return 'Project Cancelled';
     return status;
   };
 
@@ -1439,14 +1440,20 @@ Production Team`;
   // Matching helper functions for custom analytics card groupings (matching raw & standardized)
   const isNewProject = (prod: Production) => {
     const s = getProductionStatus(prod);
+    const autoS = getAutomatedProductionStatus(prod);
     const raw = prod.editing_status as string;
-    return s === 'Raw Footage Received' || s === 'Editor Assigned' || raw === 'Raw Footage Received' || raw === 'Editor Assigned' || raw === 'Pending';
+    return s === 'Raw Footage Received' || s === 'Assigned Editor' || s === 'Editor Assigned' ||
+           autoS === 'Raw Footage Received' || autoS === 'Assigned Editor' || autoS === 'Editor Assigned' || autoS === 'Verified Footage' ||
+           ['Raw Footage Received', 'Verified Footage', 'Footage Handover Verified', 'Editor Assigned', 'Assigned Editor', 'Pending'].includes(raw);
   };
 
   const isInProgressEdit = (prod: Production) => {
     const s = getProductionStatus(prod);
+    const autoS = getAutomatedProductionStatus(prod);
     const raw = prod.editing_status as string;
-    return s === 'Editing Started' || s === 'Editing In Progress' || s === 'Internal QC Review' || raw === 'Editing Started' || raw === 'Editing' || raw === 'Editing In Progress' || raw === 'Internal QC Review';
+    return s === 'Editing Started' || s === 'Editing In Progress' || s === 'Internal QC Review' || s === 'Assigned Editor' || s === 'Editor Assigned' ||
+           autoS === 'Editing Started' || autoS === 'Customer Review' || autoS === 'Editing Completed' || autoS === 'Assigned Editor' ||
+           ['Editing Started', 'Editing', 'Editing In Progress', 'Internal QC Review', 'Assigned Editor', 'Editor Assigned'].includes(raw);
   };
 
   const isClientApproved = (prod: Production) => {
@@ -3121,8 +3128,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       if (statusFilter === 'Overdue') {
                         const days = calculateDaysRemaining(prod.target_delivery_date || prod.expected_delivery_date);
                         if (!(days !== null && days < 0 && prod.editing_status !== 'Delivered' && prod.editing_status !== 'Closed' && prod.editing_status as any !== 'Project Closed' && prod.editing_status as any !== 'Project Delivered' && prod.editing_status as any !== 'Completed')) return false;
-                      } else if (statusFilter !== 'All' && sVal !== statusFilter) {
-                        return false;
+                      } else if (statusFilter !== 'All') {
+                        const matchStatus = (sVal === statusFilter) || (displayStatus === statusFilter) || (prod.editing_status === statusFilter) ||
+                          (statusFilter === 'Assigned Editor' && (sVal === 'Assigned Editor' || displayStatus === 'Assigned Editor' || prod.editing_status === 'Editor Assigned' || prod.editing_status === 'Assigned Editor')) ||
+                          (statusFilter === 'Editing Started' && (sVal === 'Editing Started' || displayStatus === 'Editing Started' || prod.editing_status === 'Editing In Progress' || prod.editing_status === 'Editing')) ||
+                          (statusFilter === 'Customer Review' && (sVal === 'Customer Review' || displayStatus === 'Customer Review' || prod.editing_status === 'Client Review Sent' || prod.editing_status === 'Ready For Review')) ||
+                          (statusFilter === 'Editing Completed' && (sVal === 'Editing Completed' || displayStatus === 'Editing Completed' || prod.editing_status === 'Editing Complete'));
+                        if (!matchStatus) return false;
                       }
 
                       // Active Card filtration
