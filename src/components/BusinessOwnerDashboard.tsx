@@ -468,6 +468,45 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     setTimeout(() => setApprovalFeedback(null), 5000);
   };
 
+  // Handle Reject Back to Production
+  const handleRejectBackToProduction = async (order: Order) => {
+    const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id || p.order_id === order.order_id);
+    
+    if (updateOrderStage) {
+      await updateOrderStage(order.order_id, 'Production' as any);
+    }
+    
+    if (prod && updateProduction) {
+      await updateProduction(prod.production_id, {
+        editing_status: 'Assigned Editor' as any,
+        production_status: 'In Progress' as any,
+        remarks: `Rejected back to Production by Business Owner (${currentUserName || 'Business Owner'}) on ${new Date().toLocaleString('en-IN')}`
+      });
+      
+      if (supabaseClient) {
+        await supabaseClient
+          .from('editor_assignments')
+          .update({ status: 'Assigned' })
+          .eq('production_id', prod.production_id);
+      }
+    }
+
+    if (logActivity) {
+      logActivity(
+        `Order ${order.order_id} rejected and sent back to production by Business Owner.`,
+        'Business Owner',
+        order.order_id,
+        'Business Owner Review',
+        'Production'
+      );
+    }
+
+    setApprovalFeedback(`Order ${order.order_id} has been rejected back to production.`);
+    setReviewModalOrder(null);
+    setCalendarEventModal(null);
+    setTimeout(() => setApprovalFeedback(null), 5000);
+  };
+
   return (
     <div className="space-y-6 text-zinc-100 font-sans pb-12">
       
@@ -1069,6 +1108,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
           currentRole={currentRole}
           onClose={() => setReviewModalOrder(null)}
           onApprove={() => handleApproveAndCloseOrder(reviewModalOrder)}
+          onReject={() => handleRejectBackToProduction(reviewModalOrder)}
         />
       )}
 
@@ -1722,6 +1762,7 @@ interface ReviewAndCloseModalProps {
   currentRole?: string;
   onClose: () => void;
   onApprove: () => void;
+  onReject?: () => void;
 }
 
 const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
@@ -1731,7 +1772,8 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
   payments,
   currentRole = 'Business Owner',
   onClose,
-  onApprove
+  onApprove,
+  onReject
 }) => {
   const lead = leads.find(l => l.lead_id === order.lead_id);
   const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id);
@@ -1915,6 +1957,15 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
             >
               Cancel
             </button>
+
+            {isBusinessOwner && onReject && (
+              <button
+                onClick={onReject}
+                className="px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 font-bold text-xs hover:bg-rose-500/20 transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <span>Reject Back to Production</span>
+              </button>
+            )}
 
             {isBusinessOwner && (
               <button

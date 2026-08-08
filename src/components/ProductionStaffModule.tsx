@@ -84,7 +84,7 @@ export const ProductionStaffModule: React.FC = () => {
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
 
   // Selected project for ProjectDetailModal
-  const [selectedProjectForDetail, setSelectedProjectForDetail] = useState<{ order: any; lead: any } | null>(null);
+  const [selectedProjectForDetail, setSelectedProjectForDetail] = useState<string | null>(null);
 
   // Modal States for Production Workflow
   // 1. Editing Started Modal
@@ -429,7 +429,7 @@ Thank you.`;
 
   return (
     <div className="p-4 sm:p-6 bg-black min-h-screen text-white font-sans selection:bg-purple-500/30">
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-[1400px] mx-auto space-y-6">
         
         {/* HEADER PANEL */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-zinc-900/50 p-5 rounded-2xl border border-zinc-800 shadow-xl">
@@ -449,7 +449,7 @@ Thank you.`;
           <div className="flex items-center gap-3 px-4 py-2.5 bg-purple-500/10 border border-purple-500/20 rounded-xl">
             <Activity className="w-5 h-5 text-purple-400" />
             <div>
-              <div className="text-[10px] uppercase font-mono text-zinc-400">Assigned Tasks</div>
+              <div className="text-[10px] uppercase font-mono text-zinc-400">Assigned Deliverables</div>
               <span className="text-xl font-black text-white">{activeBookings.length} Active</span>
             </div>
           </div>
@@ -465,11 +465,11 @@ Thank you.`;
           </div>
         )}
 
-        {/* TASKS LIST */}
+        {/* TASKS TABLE */}
         <div className="space-y-4">
           <div className="flex items-center justify-between pl-1">
             <h2 className="text-xs font-mono font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
-              <span>🎬 My Assigned Tasks</span>
+              <span>🎬 My Assigned Deliverables</span>
               <span className="px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 text-[10px]">{activeBookings.length}</span>
             </h2>
           </div>
@@ -477,168 +477,258 @@ Thank you.`;
           {activeBookings.length === 0 ? (
             <div className="text-center py-16 bg-zinc-900/30 rounded-2xl border border-zinc-800/50 border-dashed space-y-2">
               <CheckCircle2 className="w-12 h-12 text-zinc-700 mx-auto" />
-              <p className="text-zinc-400 font-medium text-sm">No active tasks assigned specifically to you right now.</p>
+              <p className="text-zinc-400 font-medium text-sm">No active deliverables assigned specifically to you right now.</p>
               <p className="text-zinc-600 text-xs">New assignments made by Production Manager will automatically appear here.</p>
             </div>
           ) : (
-            <div className="grid gap-4">
-              {activeBookings.map((b) => {
-                const badge = getStatusBadge(b.status);
-                const isLocked = ['Client Acceptance', 'Business Owner Review', 'Project Completed', 'Completed', 'Order Closed'].includes(b.status) || b.orderObj?.current_stage === 'Business Owner Review';
+            <div className="bg-zinc-950 border border-zinc-900 rounded-2xl overflow-hidden shadow-2xl">
+              <div className="overflow-x-auto w-full">
+                <table className="w-full text-left border-collapse min-w-[1100px]">
+                  <thead>
+                    <tr className="bg-zinc-900/70 border-b border-zinc-800 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
+                      <th className="px-4 py-3.5 font-bold">Order ID</th>
+                      <th className="px-4 py-3.5 font-bold">Customer</th>
+                      <th className="px-4 py-3.5 font-bold">Event Name</th>
+                      <th className="px-4 py-3.5 font-bold">Deliverable</th>
+                      <th className="px-4 py-3.5 font-bold text-center">Qty</th>
+                      <th className="px-4 py-3.5 font-bold">Raw Footage Link</th>
+                      <th className="px-4 py-3.5 font-bold">Edited Link</th>
+                      <th className="px-4 py-3.5 font-bold">Target Delivery Date</th>
+                      <th className="px-4 py-3.5 font-bold">Current Status</th>
+                      <th className="px-4 py-3.5 font-bold text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-900 text-xs font-sans">
+                    {activeBookings.map((b) => {
+                      const badge = getStatusBadge(b.status);
+                      const isLocked = ['Client Acceptance', 'Business Owner Review', 'Project Completed', 'Completed', 'Order Closed'].includes(b.status) || b.orderObj?.current_stage === 'Business Owner Review';
 
-                return (
-                  <div 
-                    key={b.assignmentId} 
-                    className="bg-zinc-900/60 border border-zinc-800 rounded-2xl overflow-visible hover:border-purple-500/30 transition-all shadow-lg"
-                  >
-                    <div className="p-4 sm:p-5">
-                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                        
-                        <div className="flex-1 min-w-0 space-y-2">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-800 text-zinc-300 border border-zinc-700">
+                      // Quantity and clean name parsing
+                      const parsedDeliv = parseQtyAndText(b.deliverable);
+                      const delivQty = parsedDeliv.qty || 1;
+                      const delivName = parsedDeliv.text || b.deliverable;
+
+                      // Raw Footage Drive Link resolution
+                      const matchedOp = b.orderId ? operations.find(o => o.order_id === b.orderId) : null;
+                      const opsDriveLink = matchedOp ? (matchedOp.raw_footage_drive_link || matchedOp.Raw_Footage_Drive_Link || matchedOp.consolidated_drive_link || matchedOp.Consolidated_Drive_Link) : null;
+                      const rawFootageLink = (opsDriveLink || b.assignmentObj?.raw_footage_link || b.prodObj?.raw_footage_drive_link || '').trim();
+
+                      // Edited Drive Link resolution
+                      const editedDriveLink = (b.prodObj?.edited_drive_link || b.assignmentObj?.edited_drive_link || '').trim();
+
+                      return (
+                        <tr key={b.assignmentId} className="hover:bg-zinc-900/40 transition-colors">
+                          {/* 1. Order ID */}
+                          <td className="px-4 py-3.5">
+                            <span 
+                              onClick={() => setSelectedProjectForDetail(b.orderId)}
+                              className="font-mono font-bold text-violet-400 hover:text-violet-300 hover:underline cursor-pointer block"
+                              title="Click to view full dossier"
+                            >
                               {b.orderId}
                             </span>
-                            <span className={`px-2.5 py-0.5 rounded text-[10px] font-mono font-bold border ${badge.color}`}>
+                            <span className="text-[10px] text-zinc-500 font-mono block">{b.assignmentId}</span>
+                          </td>
+
+                          {/* 2. Customer Name & Phone */}
+                          <td className="px-4 py-3.5">
+                            <div className="font-bold text-white text-xs">{b.customerName}</div>
+                            <div className="text-[10px] text-zinc-400 font-mono mt-0.5">{b.customerMobile || 'No contact'}</div>
+                          </td>
+
+                          {/* 3. Event Name & Date */}
+                          <td className="px-4 py-3.5">
+                            <div className="font-semibold text-zinc-200">{b.eventName}</div>
+                            <div className="text-[10px] text-zinc-400 font-mono flex items-center gap-1 mt-0.5">
+                              <Calendar className="w-3 h-3 text-zinc-500" />
+                              {b.eventDate || '—'}
+                            </div>
+                          </td>
+
+                          {/* 4. Deliverable */}
+                          <td className="px-4 py-3.5">
+                            <div className="font-bold text-purple-300 flex items-center gap-1.5">
+                              <span>🎯 {delivName}</span>
+                            </div>
+                          </td>
+
+                          {/* 5. Quantity */}
+                          <td className="px-4 py-3.5 font-mono font-bold text-center">
+                            <span className="px-2.5 py-0.5 rounded bg-zinc-900 text-zinc-200 text-xs border border-zinc-800">
+                              {delivQty}
+                            </span>
+                          </td>
+
+                          {/* 6. Raw Footage Drive Link */}
+                          <td className="px-4 py-3.5 font-mono">
+                            {rawFootageLink && (rawFootageLink.startsWith('http://') || rawFootageLink.startsWith('https://')) ? (
+                              <a
+                                href={rawFootageLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                referrerPolicy="no-referrer"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 rounded-lg text-[10px] font-bold transition-all cursor-pointer max-w-[130px] truncate"
+                                title={rawFootageLink}
+                              >
+                                <LinkIcon className="w-3 h-3 shrink-0" />
+                                <span className="truncate">Open Drive</span>
+                              </a>
+                            ) : (
+                              <span className="text-zinc-600 italic text-[11px]">Not Provided</span>
+                            )}
+                          </td>
+
+                          {/* 7. Edited Drive Link */}
+                          <td className="px-4 py-3.5 font-mono">
+                            {editedDriveLink && (editedDriveLink.startsWith('http://') || editedDriveLink.startsWith('https://')) ? (
+                              <a
+                                href={editedDriveLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                referrerPolicy="no-referrer"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-lg text-[10px] font-bold transition-all cursor-pointer max-w-[130px] truncate"
+                                title={editedDriveLink}
+                              >
+                                <LinkIcon className="w-3 h-3 shrink-0" />
+                                <span className="truncate">Edited Link</span>
+                              </a>
+                            ) : (
+                              <span className="text-zinc-600 italic text-[11px]">Pending Upload</span>
+                            )}
+                          </td>
+
+                          {/* 8. Target Delivery Date */}
+                          <td className="px-4 py-3.5 font-mono text-zinc-300 whitespace-nowrap">
+                            {b.targetFinishDate ? (
+                              <span className="font-semibold text-zinc-200">{b.targetFinishDate}</span>
+                            ) : (
+                              <span className="text-zinc-600 italic">Not set</span>
+                            )}
+                          </td>
+
+                          {/* 9. Current Status */}
+                          <td className="px-4 py-3.5 whitespace-nowrap">
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border ${badge.color}`}>
                               {badge.label}
                             </span>
-                          </div>
-                          
-                          <h3 className="text-lg font-black text-white truncate">
-                            {b.customerName}
-                          </h3>
-                          <div className="text-xs text-purple-400 font-bold flex items-center gap-2">
-                            <span>🎯 {b.deliverable}</span>
-                          </div>
+                          </td>
 
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs pt-1">
-                            <div className="flex items-center gap-1.5 text-zinc-400">
-                              <Calendar className="w-3.5 h-3.5 text-zinc-500" />
-                              <span>Event: <strong className="text-zinc-200">{b.eventDate || 'N/A'}</strong></span>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-zinc-400">
-                              <Clock className="w-3.5 h-3.5 text-zinc-500" />
-                              <span>Expected Delivery: <strong className="text-zinc-200">{b.targetFinishDate || 'N/A'}</strong></span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* ACTIONS DROPDOWN */}
-                        <div className="relative shrink-0 sm:w-52 self-end sm:self-center">
-                          <button
-                            type="button"
-                            onClick={() => setActiveDropdownId(activeDropdownId === b.assignmentId ? null : b.assignmentId)}
-                            className="w-full py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wider bg-purple-600 hover:bg-purple-500 text-white transition-all flex items-center justify-between gap-2 shadow-lg shadow-purple-600/20 cursor-pointer"
-                          >
-                            <span className="flex items-center gap-1.5">
-                              <span>⚡ Actions</span>
-                            </span>
-                            <ChevronDown className="w-4 h-4" />
-                          </button>
-
-                          {/* DROPDOWN MENU */}
-                          {activeDropdownId === b.assignmentId && (
-                            <div className="absolute right-0 mt-2 w-56 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-40 overflow-hidden divide-y divide-zinc-800 animate-in fade-in zoom-in-95">
-                              
-                              {/* Option 1: View Details */}
+                          {/* 10. Action Dropdown */}
+                          <td className="px-4 py-3.5 text-center relative">
+                            <div className="relative inline-block text-left">
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setActiveDropdownId(null);
-                                  setSelectedProjectForDetail({ order: b.orderObj, lead: b.leadObj });
-                                }}
-                                className="w-full text-left px-4 py-2.5 text-xs text-zinc-200 hover:bg-purple-600/20 hover:text-purple-300 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                onClick={() => setActiveDropdownId(activeDropdownId === b.assignmentId ? null : b.assignmentId)}
+                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-purple-600 hover:bg-purple-500 text-white transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
                               >
-                                <Eye className="w-4 h-4 text-purple-400" /> View Details
+                                <span>⚡ Action</span>
+                                <ChevronDown className="w-3.5 h-3.5" />
                               </button>
 
-                              {/* Locked State Notification */}
-                              {isLocked ? (
-                                <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-[11px] font-bold flex items-center gap-2">
-                                  <Lock className="w-3.5 h-3.5" /> Client Acceptance Complete (Locked)
-                                </div>
-                              ) : (
-                                <>
-                                  {/* Workflow Step 1: Editing Started */}
-                                  {(b.status === 'Assigned Editor' || b.status === 'Editor Assigned' || b.status === 'Assigned' || b.status === 'Raw Footage Received') && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setActiveDropdownId(null);
-                                        setEditingStartedModal(b);
-                                        setEditingStartedForm({
-                                          expected_delivery_date: b.targetFinishDate || new Date().toISOString().split('T')[0],
-                                          estimated_completion_date: b.targetFinishDate || new Date().toISOString().split('T')[0],
-                                          estimated_completion_time: '18:00'
-                                        });
-                                      }}
-                                      className="w-full text-left px-4 py-2.5 text-xs text-sky-400 hover:bg-sky-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                    >
-                                      <Play className="w-4 h-4" /> Editing Started
-                                    </button>
-                                  )}
+                              {/* DROPDOWN MENU */}
+                              {activeDropdownId === b.assignmentId && (
+                                <div className="absolute right-0 mt-2 w-56 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden divide-y divide-zinc-800 animate-in fade-in zoom-in-95">
+                                  
+                                  {/* View Details */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveDropdownId(null);
+                                      setSelectedProjectForDetail(b.orderId);
+                                    }}
+                                    className="w-full text-left px-4 py-2.5 text-xs text-zinc-200 hover:bg-purple-600/20 hover:text-purple-300 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                  >
+                                    <Eye className="w-4 h-4 text-purple-400" /> View Details
+                                  </button>
 
-                                  {/* Workflow Step 2: Customer Review */}
-                                  {b.status === 'Editing Started' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setActiveDropdownId(null);
-                                        setCustomerReviewModal(b);
-                                        setCustomerReviewForm({ edited_drive_link: b.prodObj?.edited_drive_link || '' });
-                                      }}
-                                      className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                    >
-                                      <UserCheck className="w-4 h-4" /> Customer Review
-                                    </button>
-                                  )}
-
-                                  {/* Workflow Step 3: Re-send Customer Review & Client Acceptance */}
-                                  {b.status === 'Customer Review' && (
+                                  {/* Locked State Notification */}
+                                  {isLocked ? (
+                                    <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-[11px] font-bold flex items-center gap-2">
+                                      <Lock className="w-3.5 h-3.5" /> Client Acceptance Complete
+                                    </div>
+                                  ) : (
                                     <>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setActiveDropdownId(null);
-                                          setCustomerReviewModal(b);
-                                          setCustomerReviewForm({ edited_drive_link: b.prodObj?.edited_drive_link || '' });
-                                        }}
-                                        className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                      >
-                                        <RefreshCw className="w-4 h-4" /> Re-send Customer Review
-                                      </button>
+                                      {/* Workflow Step 1: Editing Started */}
+                                      {(b.status === 'Assigned Editor' || b.status === 'Editor Assigned' || b.status === 'Assigned' || b.status === 'Raw Footage Received') && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveDropdownId(null);
+                                            setEditingStartedModal(b);
+                                            setEditingStartedForm({
+                                              expected_delivery_date: b.targetFinishDate || new Date().toISOString().split('T')[0],
+                                              estimated_completion_date: b.targetFinishDate || new Date().toISOString().split('T')[0],
+                                              estimated_completion_time: '18:00'
+                                            });
+                                          }}
+                                          className="w-full text-left px-4 py-2.5 text-xs text-sky-400 hover:bg-sky-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                        >
+                                          <Play className="w-4 h-4" /> Start Editing
+                                        </button>
+                                      )}
 
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setActiveDropdownId(null);
-                                          setClientAcceptanceModal(b);
-                                          setClientAcceptanceForm({
-                                            checklist_1: false,
-                                            checklist_2: false,
-                                            checklist_3: false,
-                                            communication_proof: '',
-                                            internal_validation: true
-                                          });
-                                        }}
-                                        className="w-full text-left px-4 py-2.5 text-xs text-emerald-400 hover:bg-emerald-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                      >
-                                        <ShieldCheck className="w-4 h-4" /> Client Acceptance
-                                      </button>
+                                      {/* Workflow Step 2: Customer Review */}
+                                      {b.status === 'Editing Started' && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveDropdownId(null);
+                                            setCustomerReviewModal(b);
+                                            setCustomerReviewForm({ edited_drive_link: b.prodObj?.edited_drive_link || '' });
+                                          }}
+                                          className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                        >
+                                          <UserCheck className="w-4 h-4" /> Upload Review
+                                        </button>
+                                      )}
+
+                                      {/* Workflow Step 3: Re-send Customer Review & Client Acceptance */}
+                                      {b.status === 'Customer Review' && (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setActiveDropdownId(null);
+                                              setCustomerReviewModal(b);
+                                              setCustomerReviewForm({ edited_drive_link: b.prodObj?.edited_drive_link || '' });
+                                            }}
+                                            className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                          >
+                                            <RefreshCw className="w-4 h-4" /> Re-send Review Link
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setActiveDropdownId(null);
+                                              setClientAcceptanceModal(b);
+                                              setClientAcceptanceForm({
+                                                checklist_1: false,
+                                                checklist_2: false,
+                                                checklist_3: false,
+                                                communication_proof: '',
+                                                internal_validation: true
+                                              });
+                                            }}
+                                            className="w-full text-left px-4 py-2.5 text-xs text-emerald-400 hover:bg-emerald-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                          >
+                                            <ShieldCheck className="w-4 h-4" /> Client Acceptance
+                                          </button>
+                                        </>
+                                      )}
                                     </>
                                   )}
-                                </>
+
+                                </div>
                               )}
-
                             </div>
-                          )}
-                        </div>
-
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -1017,8 +1107,7 @@ Thank you.`;
         <ProjectDetailModal
           isOpen={!!selectedProjectForDetail}
           onClose={() => setSelectedProjectForDetail(null)}
-          order={selectedProjectForDetail.order}
-          lead={selectedProjectForDetail.lead}
+          orderId={selectedProjectForDetail}
         />
       )}
 
