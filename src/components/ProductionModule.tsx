@@ -318,7 +318,7 @@ const StaffSelectDropdown = React.memo(({
   // If the Staff Type changes, clear any previously selected staff member that no longer matches the selected type or is not active
   useEffect(() => {
     if (selectedStaffId && productionStaff.length > 0) {
-      const match = productionStaff.find(s => s.staff_id === selectedStaffId);
+      const match = (productionStaff || []).find(s => s.staff_id === selectedStaffId);
       if (match) {
         const type = match.staff_type || (match as any).Staff_Type || 'In-House';
         const cleanType = type.replace(/[\s-]/g, '').toLowerCase();
@@ -335,7 +335,7 @@ const StaffSelectDropdown = React.memo(({
 
   const currentStaff = useMemo(() => {
     // Note: look in the entire active productionStaff list first, but only allow showing it if it matches the active status and current staffType filter
-    const staffMember = productionStaff.find(s => s.staff_id === selectedStaffId);
+    const staffMember = (productionStaff || []).find(s => s.staff_id === selectedStaffId);
     if (!staffMember || staffMember.status !== 'Active') return null;
     const type = staffMember.staff_type || (staffMember as any).Staff_Type || 'In-House';
     const cleanType = type.replace(/[\s-]/g, '').toLowerCase();
@@ -406,7 +406,7 @@ const StaffSelectDropdown = React.memo(({
             </div>
           ) : (
             <>
-              {filteredStaff.map(s => {
+              {(filteredStaff || []).map(s => {
                   const isBusy = editorAssignments.some(a => a.staff_id === s.staff_id && a.status !== 'Completed');
                   const isAlreadyAssigned = allRowsForDeliverable.some(r => r.staffId === s.staff_id && r.id !== rowId);
                   return (
@@ -549,12 +549,12 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     if (!prodItem) return { order: undefined, lead: undefined };
     
     // 1. Try to find via raw footage matching tracking_id or order_id
-    const rf = rawFootage.find(f => f.tracking_id === prodItem.tracking_id || f.order_id === prodItem.tracking_id || f.order_id === prodItem.order_id);
+    const rf = (rawFootage || []).find(f => f.tracking_id === prodItem.tracking_id || f.order_id === prodItem.tracking_id || f.order_id === prodItem.order_id);
     
     // 2. Find order by order_id or lead_id matching tracking_id
-    let order = orders.find(o => o.order_id === prodItem.tracking_id || o.lead_id === prodItem.tracking_id || o.order_id === prodItem.order_id || o.lead_id === prodItem.lead_id);
+    let order = (orders || []).find(o => o.order_id === prodItem.tracking_id || o.lead_id === prodItem.tracking_id || o.order_id === prodItem.order_id || o.lead_id === prodItem.lead_id);
     if (!order && rf) {
-      order = orders.find(o => o.order_id === rf.order_id);
+      order = (orders || []).find(o => o.order_id === rf.order_id);
     }
     
     // 3. Find lead by lead_id matching tracking_id or order's lead_id
@@ -572,7 +572,7 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     const leadId = prodItem.lead_id || lead?.lead_id || order?.lead_id;
 
     // 1. Check Operations record matching order_id or lead_id or tracking_id
-    const matchedOp = operations.find(o => 
+    const matchedOp = (operations || []).find(o => 
       (orderId && o.order_id === orderId) ||
       (leadId && o.lead_id === leadId) ||
       (prodItem.tracking_id && (o.order_id === prodItem.tracking_id || o.lead_id === prodItem.tracking_id))
@@ -590,7 +590,7 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     }
 
     // 2. Check Raw Footage table matching order_id or tracking_id
-    const rf = rawFootage.find(f => 
+    const rf = (rawFootage || []).find(f => 
       (orderId && f.order_id === orderId) || 
       (prodItem.tracking_id && (f.tracking_id === prodItem.tracking_id || f.order_id === prodItem.tracking_id))
     );
@@ -637,7 +637,7 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     const reportingTime = whatsappShareData?.reporting_time && whatsappShareData.reporting_time !== '—' ? whatsappShareData.reporting_time : null;
     const assignedEquipment = whatsappShareData?.assigned_equipment && whatsappShareData.assigned_equipment !== '—' ? whatsappShareData.assigned_equipment : null;
 
-    const deliverableLines = deliverables.map((d: any, index: number) => {
+    const deliverableLines = (Array.isArray(deliverables) ? deliverables : []).map((d: any, index: number) => {
       return `${index + 1}. ${d.name} (Deadline: ${d.deadline || globalDeadline})`;
     }).join('\n');
 
@@ -725,7 +725,7 @@ ${coordinatorName}`;
       let existing = candidatesMap.get(key);
       if (!existing) {
         for (const [k, c] of candidatesMap.entries()) {
-          if ((c.order && (c.order.order_id === key || c.order.lead_id === key)) ||
+          if ((c.order && (c.order?.order_id === key || c.order?.lead_id === key)) ||
               (c.lead && c.lead.lead_id === key) ||
               (c.prod && (c.prod.production_id === key || c.prod.tracking_id === key || c.prod.order_id === key || c.prod.lead_id === key))) {
             return c;
@@ -739,7 +739,7 @@ ${coordinatorName}`;
 
     // 1. Process orders
     (orders || []).forEach(order => {
-      const key = order.order_id || order.lead_id;
+      const key = order?.order_id || order?.lead_id;
       if (!key) return;
       const cand = getOrCreateCandidate(key);
       if (cand) cand.order = order;
@@ -793,19 +793,19 @@ ${coordinatorName}`;
       }
       if (!cand.lead) {
         cand.lead = (leadsData || []).find(l => 
-          (cand.order && l.lead_id === cand.order.lead_id) ||
+          (cand.order && l.lead_id === cand.order?.lead_id) ||
           (cand.prod && (l.lead_id === cand.prod.lead_id || l.lead_id === cand.prod.tracking_id))
         );
       }
       if (!cand.prod) {
         cand.prod = (production || []).find(p => 
-          (cand.order && (p.order_id === cand.order.order_id || p.tracking_id === cand.order.order_id || p.production_id === cand.order.order_id || p.lead_id === cand.order.lead_id || p.production_id === `PRD-${cand.order.order_id}`)) ||
+          (cand.order && (p.order_id === cand.order?.order_id || p.tracking_id === cand.order?.order_id || p.production_id === cand.order?.order_id || p.lead_id === cand.order?.lead_id || p.production_id === `PRD-${cand.order?.order_id}`)) ||
           (cand.lead && (p.tracking_id === cand.lead.lead_id || p.lead_id === cand.lead.lead_id || p.production_id === `PRD-${cand.lead.lead_id}`))
         );
       }
       if (!cand.rawFootage) {
         cand.rawFootage = (rawFootage || []).find(rf => 
-          (cand.order && (rf.order_id === cand.order.order_id || rf.tracking_id === cand.order.order_id)) ||
+          (cand.order && (rf.order_id === cand.order?.order_id || rf.tracking_id === cand.order?.order_id)) ||
           (cand.prod && (rf.order_id === cand.prod.order_id || rf.tracking_id === cand.prod.tracking_id))
         );
       }
@@ -958,7 +958,7 @@ ${coordinatorName}`;
   }, [specialities, DEFAULT_PRODUCTION_ROLES]);
 
   const getStaffRosterStats = (memberName: string) => {
-    const assigned = production.filter(prod => 
+    const assigned = (production || []).filter(prod => 
       prod.editor_assigned === memberName || 
       (prod.assigned_staff && prod.assigned_staff.includes(memberName))
     );
@@ -1083,7 +1083,7 @@ ${coordinatorName}`;
       alert('No staff data available to export.');
       return;
     }
-    const dataForSheet = filteredStaff.map(s => {
+    const dataForSheet = (filteredStaff || []).map(s => {
       const stats = getStaffRosterStats(s.name);
       return {
         "Employee ID": s.employee_id || s.staff_id,
@@ -1324,7 +1324,7 @@ ${coordinatorName}`;
 
     // Fallback to editorAssignments if list is empty
     if (list.length === 0) {
-      const assignedForThis = (editorAssignments || []).filter(a => a.production_id === prod.production_id || (order?.order_id && a.order_id === order.order_id));
+      const assignedForThis = (editorAssignments || []).filter(a => a.production_id === prod.production_id || (order?.order_id && a.order_id === order?.order_id));
       const map = new Map<string, number>();
       assignedForThis.forEach(a => {
         const spec = a.speciality;
@@ -1479,7 +1479,7 @@ Production Team`;
 
   const getAssignedEditorsText = (prod: Production): string => {
     const assigned_editors = (() => {
-      const fromAssignments = editorAssignments.filter(a => a.production_id === prod.production_id);
+      const fromAssignments = (editorAssignments || []).filter(a => a.production_id === prod.production_id);
       if (fromAssignments.length > 0) {
         return fromAssignments.map(a => ({ name: a.staff_name }));
       }
@@ -1594,9 +1594,9 @@ Production Team`;
 
   // Base list filtered by applied date range, customer name, and order ID
   const filteredLeadsList = useMemo(() => {
-    return leads.filter(prod => {
+    return (leads || []).filter(prod => {
       const { order: foundOrder, lead } = resolveOrderAndLead(prod);
-      const order = { ...foundOrder, mobile: foundOrder?.mobile || foundLead?.mobile || 'No contact phone',
+      const order = { ...foundOrder, mobile: foundOrder?.mobile || lead?.mobile || 'No contact phone',
         order_id: prod.order_id || prod.tracking_id || prod.production_id,
         customer_name: prod.customer_name || lead?.customer_name || 'Client',
         event_type: lead?.event_type || 'Event',
@@ -1605,17 +1605,17 @@ Production Team`;
       };
 
       // Event date matching (format is YYYY-MM-DD)
-      const eventDate = order.event_date || '';
+      const eventDate = order?.event_date || '';
       if (appliedStartDate && eventDate && eventDate < appliedStartDate) return false;
       if (appliedEndDate && eventDate && eventDate > appliedEndDate) return false;
 
       // Search matching
       if (appliedCustName) {
-        const cName = order.customer_name || '';
+        const cName = order?.customer_name || '';
         if (!cName.toLowerCase().includes(appliedCustName.toLowerCase())) return false;
       }
       if (appliedOrdId) {
-        if (!order.order_id.toLowerCase().includes(appliedOrdId.toLowerCase())) return false;
+        if (!order?.order_id.toLowerCase().includes(appliedOrdId.toLowerCase())) return false;
       }
 
       return true;
@@ -1631,7 +1631,7 @@ Production Team`;
 
   // Report download utilities
   const downloadCSVReport = () => {
-    const data = filteredLeadsList.map(prod => {
+    const data = (filteredLeadsList || []).map(prod => {
       const { order } = resolveOrderAndLead(prod);
       return {
         'ORDER_ID': order?.order_id || '',
@@ -1668,7 +1668,7 @@ Production Team`;
 
   const downloadExcelReport = () => {
     try {
-      const data = filteredLeadsList.map(prod => {
+      const data = (filteredLeadsList || []).map(prod => {
         const { order } = resolveOrderAndLead(prod);
         return {
           'ORDER ID': order?.order_id || '',
@@ -1791,7 +1791,7 @@ Production Team`;
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
     
-    const rowsHtml = filteredLeadsList.map(prod => {
+    const rowsHtml = (filteredLeadsList || []).map(prod => {
       const { order } = resolveOrderAndLead(prod);
       return `
         <tr>
@@ -1870,8 +1870,8 @@ Production Team`;
   useEffect(() => {
     const handler = (e: any) => {
       if (e.detail.role === 'production') {
-        const p = production.find(prod => {
-          const rf = rawFootage.find(x => x.tracking_id === prod.tracking_id);
+        const p = (production || []).find(prod => {
+          const rf = (rawFootage || []).find(x => x.tracking_id === prod.tracking_id);
           return rf?.order_id === e.detail.orderId;
         });
         if (p) {
@@ -1923,7 +1923,7 @@ Production Team`;
     }
     const parsedDeliverables = parseExactDeliverables(deliverablesText);
     
-    const assignedForThis = editorAssignments.filter(a => a.production_id === prod.production_id);
+    const assignedForThis = (editorAssignments || []).filter(a => a.production_id === prod.production_id);
     
     const tempMap = new Map<string, { qty: number; text: string; editor: string; assignment_id?: string; status?: string }>();
     const usedAssignments = new Set<string>();
@@ -2090,10 +2090,10 @@ Production Team`;
 
       // Find resolved order & lead
       const trackingId = prodData.tracking_id;
-      const rfItem = rawFootage.find(f => f.tracking_id === trackingId || f.order_id === trackingId);
-      let orderData = orders.find(o => o.order_id === trackingId || o.lead_id === trackingId);
+      const rfItem = (rawFootage || []).find(f => f.tracking_id === trackingId || f.order_id === trackingId);
+      let orderData = (orders || []).find(o => o.order_id === trackingId || o.lead_id === trackingId);
       if (!orderData && rfItem) {
-        orderData = orders.find(o => o.order_id === rfItem.order_id);
+        orderData = (orders || []).find(o => o.order_id === rfItem.order_id);
       }
 
       const leadId = orderData?.lead_id || trackingId;
@@ -2188,13 +2188,13 @@ _Please acknowledge receipt of this task assignment._`;
       !['Approved', 'Delivered', 'Final Approval', 'Project Delivered', 'Project Closed', 'Closed'].includes(p.editing_status)
     );
 
-    return activeProjects.map(p => {
+    return (activeProjects || []).map(p => {
       const trackingIdClean = p.tracking_id?.replace('PRD-', '');
       const linkedOrder = (orders || []).find(o => o.order_id === p.tracking_id || o.lead_id === trackingIdClean);
       const linkedLead = (leads || []).find(l => l.lead_id === p.tracking_id || l.lead_id === trackingIdClean);
       const orderId = linkedOrder?.order_id || p.tracking_id || 'N/A';
       
-      const assignmentRecord = editorAssignments.find(a => 
+      const assignmentRecord = (editorAssignments || []).find(a => 
         a.production_id === p.production_id && a.staff_name?.toLowerCase() === memberNameLower
       );
       
@@ -2287,7 +2287,7 @@ _Please acknowledge receipt of this task assignment._`;
 
       // 2. Prepare and insert new assignments
       const newAssignments = [];
-      const activeStaffList = productionStaff.filter(s => s.status === 'Active');
+      const activeStaffList = (productionStaff || []).filter(s => s.status === 'Active');
       const currentDeliverablesList = Object.keys(currentRowsMap);
       const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
       const orderId = order?.order_id || activeWorkflowProd?.tracking_id || activeWorkflowProd?.production_id;
@@ -2467,7 +2467,7 @@ _Please acknowledge receipt of this task assignment._`;
                   }
                   initialDatesMap[deliverable] = a.target_finish_date || '';
 
-                  const st = productionStaff.find(s => s.staff_id === a.staff_id);
+                  const st = (productionStaff || []).find(s => s.staff_id === a.staff_id);
                   if (st && (st.staff_type || (st as any).Staff_Type)) {
                     initialStaffTypeMap[deliverable] = (st.staff_type || (st as any).Staff_Type) as 'In-House' | 'Freelancer';
                   }
@@ -2478,7 +2478,7 @@ _Please acknowledge receipt of this task assignment._`;
                 const existingForDeliverable = loadedAssignments.filter(a => a.speciality === deliverable);
                 if (existingForDeliverable.length > 0) {
                   initialRowsMap[deliverable] = existingForDeliverable.map(a => {
-                    const staffMem = productionStaff.find(s => s.staff_id === a.staff_id);
+                    const staffMem = (productionStaff || []).find(s => s.staff_id === a.staff_id);
                     const type = staffMem?.staff_type || (staffMem as any)?.Staff_Type || 'In-House';
                     return {
                       id: a.assignment_id || `row-${Math.random()}`,
@@ -2589,20 +2589,20 @@ _Please acknowledge receipt of this task assignment._`;
 
   const getRawFootageStatus = (prod: Production) => {
     if (prod.raw_footage_status) return prod.raw_footage_status;
-    const rf = rawFootage.find(r => r.tracking_id === prod.tracking_id);
+    const rf = (rawFootage || []).find(r => r.tracking_id === prod.tracking_id);
     if (rf && rf.status === 'Received') return 'Footage Received';
     return 'Pending';
   };
 
   const handleSendWhatsAppTask = (prod: Production, targetStaffName?: string, customNote?: string) => {
-    const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id);
-    const order = rf ? orders.find(o => o.order_id === rf.order_id) : null;
+    const rf = (rawFootage || []).find(f => f.tracking_id === prod.tracking_id);
+    const order = rf ? (orders || []).find(o => o.order_id === rf.order_id) : null;
     
     const staffName = targetStaffName || prod.editor_assigned || 'Production Staff';
-    const customerName = order ? order.customer_name : 'Valued Client';
-    const orderId = order ? order.order_id : 'N/A';
-    const projectName = order ? (order.package_name || order.event_type) : 'Project Event';
-    const eventDate = order ? order.event_date : 'N/A';
+    const customerName = order ? order?.customer_name : 'Valued Client';
+    const orderId = order ? order?.order_id : 'N/A';
+    const projectName = order ? (order.package_name || order?.event_type) : 'Project Event';
+    const eventDate = order ? order?.event_date : 'N/A';
     const targetDate = prod.target_delivery_date || prod.expected_delivery_date || 'N/A';
     const priority = prod.project_priority || 'Medium';
     const notes = customNote || prod.remarks || 'Please process this assignment as per guidelines.';
@@ -2663,7 +2663,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
   const handleMarkDelivered = () => {
     if (!selectedProdId) return;
-    const item = production.find((p) => p.production_id === selectedProdId);
+    const item = (production || []).find((p) => p.production_id === selectedProdId);
     if (!item) return;
 
     markDelivered(item.tracking_id, 'Approved and Delivered via Photo Crew ERP Vault.');
@@ -2675,10 +2675,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
   const today = new Date();
 
   // Filter/Derived definitions
-  const newProjects = leads.filter(p => !p.editor_assigned || p.editor_assigned === 'Unassigned');
-  const assignedProjects = leads.filter(p => p.editor_assigned && p.editor_assigned !== 'Unassigned' && p.editing_status !== 'Project Delivered' && p.editing_status !== 'Delivered' && p.editing_status !== 'Completed');
-  const pendingProjects = leads.filter(p => !['Final Approval', 'Approved', 'Project Delivered', 'Delivered', 'Project Closed', 'Closed', 'Completed'].includes(p.editing_status));
-  const delayedProjects = leads.filter(p => {
+  const newProjects = (leads || []).filter(p => !p.editor_assigned || p.editor_assigned === 'Unassigned');
+  const assignedProjects = (leads || []).filter(p => p.editor_assigned && p.editor_assigned !== 'Unassigned' && p.editing_status !== 'Project Delivered' && p.editing_status !== 'Delivered' && p.editing_status !== 'Completed');
+  const pendingProjects = (leads || []).filter(p => !['Final Approval', 'Approved', 'Project Delivered', 'Delivered', 'Project Closed', 'Closed', 'Completed'].includes(p.editing_status));
+  const delayedProjects = (leads || []).filter(p => {
     if (['Final Approval', 'Approved', 'Project Delivered', 'Delivered', 'Project Closed', 'Closed', 'Completed'].includes(p.editing_status)) return false;
     if (!p.expected_delivery_date) return false;
     return new Date(p.expected_delivery_date) < today;
@@ -2686,10 +2686,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
   // Calculate stats for pipeline counters
   const statTotalVideo = leads.length;
-  const statPendingVideo = leads.filter(p => ['Pending', 'New Raw Footage Arrived', 'Raw Footage Received', 'Editor Assigned', 'Verified Footage', 'Footage Handover Verified'].includes(p.editing_status)).length;
-  const statEditingVideo = leads.filter(p => ['Editing Started', 'Editing In Progress', 'Editing'].includes(p.editing_status)).length;
-  const statReviewVideo = leads.filter(p => ['Internal QC Review', 'Client Review Sent', 'Customer Review', 'Ready For Review', 'Revision Required', 'Revision In Progress'].includes(p.editing_status)).length;
-  const statApprovedVideo = leads.filter(p => ['Approved', 'Final Approval'].includes(p.editing_status)).length;
+  const statPendingVideo = (leads || []).filter(p => ['Pending', 'New Raw Footage Arrived', 'Raw Footage Received', 'Editor Assigned', 'Verified Footage', 'Footage Handover Verified'].includes(p.editing_status)).length;
+  const statEditingVideo = (leads || []).filter(p => ['Editing Started', 'Editing In Progress', 'Editing'].includes(p.editing_status)).length;
+  const statReviewVideo = (leads || []).filter(p => ['Internal QC Review', 'Client Review Sent', 'Customer Review', 'Ready For Review', 'Revision Required', 'Revision In Progress'].includes(p.editing_status)).length;
+  const statApprovedVideo = (leads || []).filter(p => ['Approved', 'Final Approval'].includes(p.editing_status)).length;
 
   const visibleProduction = leads;
 
@@ -2698,7 +2698,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
     const nameLower = (staffName || '').toLowerCase();
     
     // Check dynamic assignments table first
-    const staffAssignments = editorAssignments.filter(a => a.staff_name.toLowerCase() === nameLower);
+    const staffAssignments = (editorAssignments || []).filter(a => a.staff_name.toLowerCase() === nameLower);
     
     const assignedCount = staffAssignments.length;
     const completedCount = staffAssignments.filter(a => a.status === 'Completed').length;
@@ -2710,7 +2710,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
     ).length;
 
     // Backward compatibility for direct assignments
-    const fallbackActive = production.filter(p => 
+    const fallbackActive = (production || []).filter(p => 
       p.editor_assigned?.toLowerCase() === nameLower && 
       p.editing_status !== 'Delivered' && p.editing_status !== 'Approved'
     ).length;
@@ -3081,27 +3081,27 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         const { order } = resolveOrderAndLead(prod);
                         if (!order) return null;
 
-                        const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
-                        const op = operations?.find(o => o.order_id === order.order_id);
-                        const matchedSa = staffAssignments ? staffAssignments.filter(sa => sa.order_id === order.order_id) : [];
+                        const rf = (rawFootage || []).find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
+                        const op = operations?.find(o => o.order_id === order?.order_id);
+                        const matchedSa = staffAssignments ? staffAssignments.filter(sa => sa.order_id === order?.order_id) : [];
 
                         const editorsList = getAssignedEditorsList(prod);
 
                         const prodStatus = getProductionStatus(prod);
-                        const lead = leadsData?.find(l => l.lead_id === order.lead_id);
+                        const lead = leadsData?.find(l => l.lead_id === order?.lead_id);
 
                         return (
                           <tr key={prod.production_id} className="hover:bg-zinc-900/40 transition-all font-mono">
-                            <td className="p-3 text-violet-400 font-bold">{order.order_id}</td>
-                            <td className="p-3 font-sans font-bold text-white">{order.customer_name}</td>
+                            <td className="p-3 text-violet-400 font-bold">{order?.order_id}</td>
+                            <td className="p-3 font-sans font-bold text-white">{order?.customer_name}</td>
                             <td className="p-3 text-zinc-300 font-sans">
                               <EventDropdownCell 
                                 type="name" 
-                                items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || ev.event_type || 'Other') : [order.event_type || 'Other']} 
+                                items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || ev.event_type || 'Other') : [order?.event_type || 'Other']} 
                                 events={lead?.events}
                               />
                             </td>
-                            <td className="p-3 text-zinc-400">{order.event_date || 'N/A'}</td>
+                            <td className="p-3 text-zinc-400">{order?.event_date || 'N/A'}</td>
                             <td className="p-3 font-sans text-center">
                               {editorsList.length > 0 ? (
                                 <span 
@@ -3235,7 +3235,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                     const filteredLeads = filteredLeadsList.filter(prod => {
                       const { order: foundOrder, lead } = resolveOrderAndLead(prod);
-                      const order = { ...foundOrder, mobile: foundOrder?.mobile || foundLead?.mobile || 'No contact phone',
+                      const order = { ...foundOrder, mobile: foundOrder?.mobile || lead?.mobile || 'No contact phone',
                         order_id: prod.order_id || prod.tracking_id || prod.production_id,
                         customer_name: prod.customer_name || lead?.customer_name || 'Client',
                         event_type: lead?.event_type || 'Event',
@@ -3250,7 +3250,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       }
                       
                       const searchLower = leadSearch.toLowerCase();
-                      const clientMatch = (order.customer_name || '').toLowerCase().includes(searchLower) || (order.order_id || '').toLowerCase().includes(searchLower);
+                      const clientMatch = (order?.customer_name || '').toLowerCase().includes(searchLower) || (order?.order_id || '').toLowerCase().includes(searchLower);
                       if (leadSearch && !clientMatch) return false;
 
                       const pVal = getProductionPriority(prod);
@@ -3294,7 +3294,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       );
                     }
 
-                    return filteredLeads.map((prod) => {
+                    return (filteredLeads || []).map((prod) => {
                       const { order: foundOrder, lead: foundLead } = resolveOrderAndLead(prod);
                       const order = { ...foundOrder, mobile: foundOrder?.mobile || foundLead?.mobile || 'No contact phone',
                         order_id: prod.order_id || prod.tracking_id || prod.production_id,
@@ -3306,15 +3306,15 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         lead_id: prod.lead_id || prod.tracking_id
                       };
 
-                      const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
+                      const rf = (rawFootage || []).find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
                       const priority = getProductionPriority(prod);
                       const status = prod.editing_status || 'Pending';
-                      const lead = leadsData?.find(l => l.lead_id === order.lead_id);
+                      const lead = leadsData?.find(l => l.lead_id === order?.lead_id);
                       const displayStatus = getAutomatedProductionStatus(prod);
                       const daysRem = calculateDaysRemaining(prod.target_delivery_date || prod.expected_delivery_date);
 
                       // Payments calculations
-                      const payment = payments.find(p => p.order_id === order.order_id);
+                      const payment = (payments || []).find(p => p.order_id === order?.order_id);
                       const totalAmount = order.quotation_amount || 0;
                       const advanceReceived = payment?.advance_received !== undefined ? payment.advance_received : (payment?.advance_paid || 0);
                       const balanceDue = payment?.balance_due !== undefined ? payment.balance_due : (totalAmount - advanceReceived);
@@ -3383,13 +3383,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           <td className="px-3 py-2 align-middle">
                             <span 
                               onClick={() => {
-                                setMasterOrderIdForDetail(order.order_id);
+                                setMasterOrderIdForDetail(order?.order_id);
                                 setIsDetailModalOpen(true);
                               }}
                               className="font-mono font-bold text-violet-400 hover:underline cursor-pointer block"
                               title="Click to view full order dossier details"
                             >
-                              {order.order_id}
+                              {order?.order_id}
                             </span>
                             
                           </td>
@@ -3415,9 +3415,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               const pLogs = (logs || []).filter(log => 
                                 log.record_id === prod.production_id ||
                                 log.record_id === prod.tracking_id ||
-                                log.record_id === order.order_id
+                                log.record_id === order?.order_id
                               );
-                              const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
+                              const rf = (rawFootage || []).find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
                               const computedRfDate = rf && (rf.status === 'Received' || rf.raw_received) 
                                 ? (rf.uploaded_date || rf.event_completed_date) 
                                 : '';
@@ -3436,15 +3436,15 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               setLeadRawFootageDate(toInputDateFormat((prod as any).raw_footage_received_date || computedRfDate));
                               setLeadClientReviewDate(toInputDateFormat((prod as any).client_review_upload_date || (crLog ? crLog.timestamp : null)));
                               setLeadClientApprovalDate(toInputDateFormat((prod as any).client_approval_date || (caLog ? caLog.timestamp : null)));
-                            }}>{order.customer_name}</div>
-                            <div className="text-[10px] text-zinc-500 mt-0.5 font-normal">{foundOrder?.mobile || foundLead?.mobile || 'No contact phone'}</div>
+                            }}>{order?.customer_name}</div>
+                            <div className="text-[10px] text-zinc-500 mt-0.5 font-normal">{foundOrder?.mobile || lead?.mobile || 'No contact phone'}</div>
                           </td>
 
                           {/* Event Type */}
                           <td className="p-4 text-left font-sans text-zinc-300">
                             <EventDropdownCell 
                               type="name" 
-                              items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || ev.event_type || 'Other') : [order.event_type || 'Other']} 
+                              items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || ev.event_type || 'Other') : [order?.event_type || 'Other']} 
                               events={lead?.events}
                             />
                           </td>
@@ -3715,9 +3715,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   const pLogs = (logs || []).filter(log => 
                                     log.record_id === prod.production_id ||
                                     log.record_id === prod.tracking_id ||
-                                    log.record_id === order.order_id
+                                    log.record_id === order?.order_id
                                   );
-                                  const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
+                                  const rf = (rawFootage || []).find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
                                   const computedRfDate = rf && (rf.status === 'Received' || rf.raw_received) 
                                     ? (rf.uploaded_date || rf.event_completed_date) 
                                     : '';
@@ -3772,10 +3772,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
         const totalEditors = productionStaff.length;
         const activeEditors = (productionStaff || []).filter(s => s.status === 'Active' || s.status === 'On Duty' || s.status === 'active' || s.status === 'Active Status').length;
-        const assignedProjects = production.filter(p => p.editor_assigned).length;
+        const assignedProjects = (production || []).filter(p => p.editor_assigned).length;
         
         // Projects In Progress
-        const inProgressProjects = production.filter(p => 
+        const inProgressProjects = (production || []).filter(p => 
           p.editing_status === 'Editing In Progress' || 
           p.editing_status === 'Editing Started' || 
           p.editing_status === 'Revision In Progress' || 
@@ -3785,7 +3785,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         ).length;
 
         // Completed Projects
-        const completedProjects = production.filter(p => 
+        const completedProjects = (production || []).filter(p => 
           p.editing_status === 'Delivered' || 
           p.editing_status === 'Project Delivered' || 
           p.editing_status === 'Closed' || 
@@ -3795,13 +3795,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         ).length;
 
         // Client Approved Projects
-        const clientApprovedProjects = production.filter(p => 
+        const clientApprovedProjects = (production || []).filter(p => 
           p.editing_status === 'Approved' || 
           p.editing_status === 'Final Approval'
         ).length;
 
         // Revision Projects
-        const revisionProjects = production.filter(p => 
+        const revisionProjects = (production || []).filter(p => 
           p.editing_status === 'Revision Required' || 
           p.editing_status === 'Revision In Progress' || 
           p.correction_needed || 
@@ -4021,7 +4021,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900 font-mono">
-                  {filteredStaff.map((member) => {
+                  {(filteredStaff || []).map((member) => {
                     const stats = getStaffRosterStats(member.name);
 
                     return (
@@ -4280,12 +4280,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
       {/* 3. OVERALL PERFORMANCE */}
       {activeSubTab === 'overall_performance' && (() => {
         const totalProjects = production.length;
-        const totalInProgress = production.filter(p => p.editing_status === 'Editing').length;
-        const totalDelivered = production.filter(p => p.editing_status === 'Delivered').length;
+        const totalInProgress = (production || []).filter(p => p.editing_status === 'Editing').length;
+        const totalDelivered = (production || []).filter(p => p.editing_status === 'Delivered').length;
         
         const today = new Date();
         today.setHours(0,0,0,0);
-        const totalOverdue = production.filter(p => {
+        const totalOverdue = (production || []).filter(p => {
           if (p.editing_status === 'Delivered' || p.production_status === 'Closed') return false;
           const deadline = p.expected_delivery_date || p.target_delivery_date;
           if (!deadline) return false;
@@ -4338,7 +4338,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
         // Chart Data 2: Staff Performance Ranking
         const staffRankingData = (productionStaff || []).map(member => {
-          const finished = production.filter(p => 
+          const finished = (production || []).filter(p => 
             (p.editor_assigned === member.name || (p.assigned_staff && p.assigned_staff.includes(member.name))) && 
             (p.editing_status === 'Delivered' || p.production_status === 'Closed')
           ).length;
@@ -4357,7 +4357,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         // Chart Data 4: Workload Distribution (Projects assigned per role)
         const roleWorkloads = (productionStaff || []).reduce((acc, curr) => {
           const roleHead = curr.role.split(' ')[0] || 'Editor';
-          const cnt = production.filter(p => 
+          const cnt = (production || []).filter(p => 
             p.editor_assigned === curr.name || (p.assigned_staff && p.assigned_staff.includes(curr.name))
           ).length;
           acc[roleHead] = (acc[roleHead] || 0) + cnt;
@@ -4525,13 +4525,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
       {/* 4. DELIVERIES DESK */}
       {activeSubTab === 'deliveries_desk' && (() => {
         // Compute delivery-specific metrics
-        const readyCount = production.filter(p => p.editing_status === 'Approved').length;
-        const deliveredCount = production.filter(p => p.editing_status === 'Delivered').length;
-        const pendingCount = production.filter(p => p.editing_status !== 'Delivered' && p.editing_status !== 'Approved').length;
+        const readyCount = (production || []).filter(p => p.editing_status === 'Approved').length;
+        const deliveredCount = (production || []).filter(p => p.editing_status === 'Delivered').length;
+        const pendingCount = (production || []).filter(p => p.editing_status !== 'Delivered' && p.editing_status !== 'Approved').length;
         
         const today = new Date();
         today.setHours(0,0,0,0);
-        const overdueCount = production.filter(p => {
+        const overdueCount = (production || []).filter(p => {
           if (p.editing_status === 'Delivered' || p.production_status === 'Closed') return false;
           const deadline = p.expected_delivery_date || p.target_delivery_date;
           if (!deadline) return false;
@@ -4597,13 +4597,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         );
                       }
 
-                      return production.map(prod => {
-                        const rf = rawFootage.find(f => f.tracking_id === prod.tracking_id);
-                        const order = rf ? orders.find(o => o.order_id === rf.order_id) : null;
+                      return (production || []).map(prod => {
+                        const rf = (rawFootage || []).find(f => f.tracking_id === prod.tracking_id);
+                        const order = rf ? (orders || []).find(o => o.order_id === rf.order_id) : null;
                         
-                        const customerName = order ? order.customer_name : 'Unknown';
+                        const customerName = order ? order?.customer_name : 'Unknown';
                         const editorName = prod.editor_assigned || 'Unassigned';
-                        const deliveryType = order ? order.event_type : 'Cinematic Highlights';
+                        const deliveryType = order ? order?.event_type : 'Cinematic Highlights';
                         const targetDeliveryStr = prod.target_delivery_date || prod.expected_delivery_date || 'N/A';
                         const actualDeliveryStr = prod.delivery_date || prod.actual_delivery_date || 'Not Handed Over';
 
@@ -4843,9 +4843,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             </h3>
             
             <div className="mt-6 space-y-4">
-              {production.map(prod => {
-                const rawFootageItem = rawFootage.find(rf => rf.tracking_id === prod.tracking_id);
-                const orderItem = rawFootageItem ? orders.find(o => o.order_id === rawFootageItem.order_id) : null;
+              {(production || []).map(prod => {
+                const rawFootageItem = (rawFootage || []).find(rf => rf.tracking_id === prod.tracking_id);
+                const orderItem = rawFootageItem ? (orders || []).find(o => o.order_id === rawFootageItem.order_id) : null;
                 const isDelayed = delayedProjects.some(dp => dp.production_id === prod.production_id);
 
                 return (
@@ -4975,8 +4975,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               </div>
               
               <div className="space-y-4 max-h-[600px] overflow-y-auto pr-1">
-                {editorAssignments.map((assign) => {
-                  const correlatedProj = production.find(p => p.production_id === assign.production_id);
+                {(editorAssignments || []).map((assign) => {
+                  const correlatedProj = (production || []).find(p => p.production_id === assign.production_id);
                   const clientName = correlatedProj ? correlatedProj.couple_name || correlatedProj.tracking_id : 'Unknown Project';
 
                   return (
@@ -5078,7 +5078,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
       {activeSubTab === 'crew_roster' && (() => {
         // Find tasks for a staff member that are not completed
         const getStaffActiveTasks = (staffName: string) => {
-          return editorAssignments.filter(a => 
+          return (editorAssignments || []).filter(a => 
             a.staff_name.toLowerCase() === staffName.toLowerCase() && 
             a.status !== 'Completed'
           );
@@ -5086,11 +5086,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
         // Find event name for a production project
         const getTaskEventName = (productionId: string) => {
-          const correlatedProj = production.find(p => p.production_id === productionId);
+          const correlatedProj = (production || []).find(p => p.production_id === productionId);
           if (!correlatedProj) return 'Project';
           const trackingId = correlatedProj.tracking_id;
           
-          const linkedOrder = orders.find(o => o.order_id === trackingId || o.lead_id === trackingId);
+          const linkedOrder = (orders || []).find(o => o.order_id === trackingId || o.lead_id === trackingId);
           if (linkedOrder) {
             return linkedOrder.event_type || linkedOrder.custom_event_name || 'Project';
           }
@@ -5105,11 +5105,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
         // Find event date for a production project
         const getTaskEventDate = (productionId: string) => {
-          const correlatedProj = production.find(p => p.production_id === productionId);
+          const correlatedProj = (production || []).find(p => p.production_id === productionId);
           if (!correlatedProj) return '—';
           const trackingId = correlatedProj.tracking_id;
           
-          const linkedOrder = orders.find(o => o.order_id === trackingId || o.lead_id === trackingId);
+          const linkedOrder = (orders || []).find(o => o.order_id === trackingId || o.lead_id === trackingId);
           if (linkedOrder && linkedOrder.event_date) {
             return linkedOrder.event_date;
           }
@@ -5625,7 +5625,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             member.mobile.includes(searchLower) ||
                             (member.whatsapp_number || '').includes(searchLower);
 
-                          const activeAssignments = editorAssignments.filter(a =>
+                          const activeAssignments = (editorAssignments || []).filter(a =>
                             a.staff_name.toLowerCase() === member.name.toLowerCase() &&
                             a.status !== 'Completed'
                           );
@@ -5655,8 +5655,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           );
                         }
 
-                        return filteredStaff.map((member) => {
-                          const activeAssignments = editorAssignments.filter(a =>
+                        return (filteredStaff || []).map((member) => {
+                          const activeAssignments = (editorAssignments || []).filter(a =>
                             a.staff_name.toLowerCase() === member.name.toLowerCase() &&
                             a.status !== 'Completed'
                           );
@@ -5874,7 +5874,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const correlatedProj = (production || []).find(p => p.production_id === assign.production_id);
                       const { order } = resolveOrderAndLead(correlatedProj);
                       const trackingId = correlatedProj?.tracking_id;
-                      const orderId = order?.order_id && order.order_id !== 'NULL' && order.order_id !== 'NIL' ? order.order_id : (trackingId || 'N/A');
+                      const orderId = order?.order_id && order?.order_id !== 'NULL' && order?.order_id !== 'NIL' ? order?.order_id : (trackingId || 'N/A');
                       
                       const staffName = assign.staff_name || 'Unassigned';
                       const isCompleted = assign.status === 'Completed';
@@ -6020,7 +6020,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               { id: 'Revision Required', name: 'Revision Needed' },
               { id: 'Approved', name: 'Approved' }
             ].map(col => {
-              const colProds = production.filter(p => {
+              const colProds = (production || []).filter(p => {
                 // Map logical status fallback helper
                 if (col.id === 'Pending') return p.editing_status === 'Pending' || p.editing_status === 'Raw Footage Received' || p.editing_status === 'Editor Assigned' || p.editing_status === 'Verified Footage' || p.editing_status === 'Footage Handover Verified';
                 if (col.id === 'Editing') return p.editing_status === 'Editing' || p.editing_status === 'Editing Started' || p.editing_status === 'Editing In Progress';
@@ -6113,7 +6113,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               <span className="absolute bottom-2 right-2 text-zinc-800/10 font-bold text-5xl select-none font-mono">RD</span>
               <div className="text-zinc-500 text-[10px] font-mono uppercase tracking-wider">Ready for Delivery</div>
               <div className="text-2xl font-black text-emerald-400 font-mono mt-1">
-                {production.filter(p => p.editing_status === 'Approved').length}
+                {(production || []).filter(p => p.editing_status === 'Approved').length}
               </div>
               <p className="text-[10px] text-zinc-400 mt-2 font-mono">Client authorized and approved</p>
             </div>
@@ -6122,7 +6122,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               <span className="absolute bottom-2 right-2 text-zinc-800/10 font-bold text-5xl select-none font-mono">DF</span>
               <div className="text-zinc-500 text-[10px] font-mono uppercase tracking-wider">Delivered Projects</div>
               <div className="text-2xl font-black text-indigo-400 font-mono mt-1">
-                {production.filter(p => p.editing_status === 'Delivered').length}
+                {(production || []).filter(p => p.editing_status === 'Delivered').length}
               </div>
               <p className="text-[10px] text-zinc-400 mt-2 font-mono">Closed & archived dispatch packages</p>
             </div>
@@ -6131,7 +6131,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               <span className="absolute bottom-2 right-2 text-zinc-800/10 font-bold text-5xl select-none font-mono">PD</span>
               <div className="text-zinc-500 text-[10px] font-mono uppercase tracking-wider">In Production Pipeline</div>
               <div className="text-2xl font-black text-amber-500 font-mono mt-1">
-                {production.filter(p => p.editing_status !== 'Approved' && p.editing_status !== 'Delivered').length}
+                {(production || []).filter(p => p.editing_status !== 'Approved' && p.editing_status !== 'Delivered').length}
               </div>
               <p className="text-[10px] text-zinc-400 mt-2 font-mono">Currently undergoing processing</p>
             </div>
@@ -6145,7 +6145,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             </h3>
             
             <div className="mt-6 space-y-4">
-              {production.map(prod => {
+              {(production || []).map(prod => {
                 const isApproved = prod.editing_status === 'Approved';
                 const isDelivered = prod.editing_status === 'Delivered';
 
@@ -6210,7 +6210,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               {(productionStaff || []).map(member => {
                 const memberNameClean = member.name || 'Unnamed Editor';
                 const wl = getStaffWorkload(memberNameClean);
-                const activeJobs = production.filter(p => 
+                const activeJobs = (production || []).filter(p => 
                   p.editor_assigned?.toLowerCase() === memberNameClean.toLowerCase() && 
                   p.editing_status !== 'Delivered'
                 );
@@ -6398,11 +6398,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             
             <div className="p-5 space-y-4 text-xs font-sans text-left">
               {(() => {
-                const prodItem = production.find((p) => p.production_id === selectedProdId)!;
+                const prodItem = (production || []).find((p) => p.production_id === selectedProdId)!;
                 const currentCanEdit = canEdit && !isProjectLocked(prodItem.editing_status);
                 if (!prodItem) return null;
-                const rawFootageItem = rawFootage.find((rf) => rf.tracking_id === prodItem.tracking_id);
-                const linkedOrder = rawFootageItem ? orders.find((o) => o.order_id === rawFootageItem.order_id) : undefined;
+                const rawFootageItem = (rawFootage || []).find((rf) => rf.tracking_id === prodItem.tracking_id);
+                const linkedOrder = rawFootageItem ? (orders || []).find((o) => o.order_id === rawFootageItem.order_id) : undefined;
                 const isPendingFootageAudit = linkedOrder?.current_stage === 'Event Completed';
                 return (
                   <div className="space-y-4">
@@ -6703,11 +6703,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         const projectLogs = (logs || []).filter(log => 
           log.record_id === selectedLeadProd.production_id ||
           log.record_id === selectedLeadProd.tracking_id ||
-          log.record_id === order.order_id
+          log.record_id === order?.order_id
         );
 
         // Load payments info
-        const payment = payments.find(p => p.order_id === order.order_id);
+        const payment = (payments || []).find(p => p.order_id === order?.order_id);
         const totalAmount = order.quotation_amount || 0;
         const advanceReceived = payment?.advance_received !== undefined ? payment.advance_received : (payment?.advance_paid || 0);
         const balanceDue = payment?.balance_due !== undefined ? payment.balance_due : (totalAmount - advanceReceived);
@@ -6789,16 +6789,16 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         const formattedHandoverDate = selectedLeadProd.delivery_date ? formatDate(selectedLeadProd.delivery_date) : 'Pending';
 
         // Resolve customer details
-        const customerName = order.customer_name || lead?.customer_name || '—';
-        const customerMobile = order.mobile || lead?.mobile || '—';
+        const customerName = order?.customer_name || lead?.customer_name || '—';
+        const customerMobile = order?.mobile || lead?.mobile || '—';
         const customerWhatsApp = order.whatsapp_number || lead?.whatsapp_number || customerMobile || '—';
 
         // Resolve Event Scheduled details
         const eventList = lead?.events && lead.events.length > 0 
           ? lead.events 
           : [{
-              event_name: order.custom_event_name || lead?.custom_event_name || order.event_type || lead?.event_type || 'Event',
-              event_date: order.event_date || lead?.event_date || '—',
+              event_name: order.custom_event_name || lead?.custom_event_name || order?.event_type || lead?.event_type || 'Event',
+              event_date: order?.event_date || lead?.event_date || '—',
               event_start_time: order.event_time || lead?.event_time || '—'
             }];
 
@@ -6817,7 +6817,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
         parsedDeliverables = parseExactDeliverables(deliverablesText);
 
-        const linkedAssignments = editorAssignments.filter(a => a.production_id === selectedLeadProd.production_id);
+        const linkedAssignments = (editorAssignments || []).filter(a => a.production_id === selectedLeadProd.production_id);
         const assignedDeliverables = Array.from(new Set(linkedAssignments.map(a => a.speciality).filter(Boolean))) as string[];
         const allLeadDeliverables = Array.from(new Set([...parsedDeliverables, ...assignedDeliverables]));
 
@@ -6830,7 +6830,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 <div>
                   <h3 className="text-lg font-black text-white flex items-center gap-2">
                     <span className="px-2 py-0.5 bg-violet-500/10 text-violet-400 border border-violet-500/20 text-[9px] font-mono tracking-widest uppercase rounded font-black">Project Dossier</span>
-                    <span>Order Ref: {order.order_id}</span>
+                    <span>Order Ref: {order?.order_id}</span>
                   </h3>
                   <p className="text-xs text-zinc-400 mt-1 font-mono uppercase tracking-wider">
                     PRODUCTION MANAGER CONTROL DECK • SERIAL {selectedLeadProd.production_id}
@@ -6862,19 +6862,19 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       <div className="grid grid-cols-2 gap-3 text-xs text-zinc-400">
                         <div>
                           <span className="text-[9px] text-zinc-550 font-mono block">CUSTOMER NAME</span>
-                          <span className="text-zinc-205 font-bold block mt-0.5 text-zinc-300">{order.customer_name}</span>
+                          <span className="text-zinc-205 font-bold block mt-0.5 text-zinc-300">{order?.customer_name}</span>
                         </div>
                         <div>
                           <span className="text-[9px] text-zinc-550 font-mono block">MOBILE NUMBER</span>
-                          <span className="text-zinc-205 font-bold block mt-0.5 text-zinc-300">{order.mobile || 'None logged'}</span>
+                          <span className="text-zinc-205 font-bold block mt-0.5 text-zinc-300">{order?.mobile || 'None logged'}</span>
                         </div>
                         <div>
                           <span className="text-[9px] text-zinc-555 font-mono block">CONTRACT TYPE</span>
-                          <span className="text-zinc-205 font-bold block mt-0.5 text-zinc-300">{order.event_type}</span>
+                          <span className="text-zinc-205 font-bold block mt-0.5 text-zinc-300">{order?.event_type}</span>
                         </div>
                         <div>
                           <span className="text-[9px] text-zinc-555 font-mono block">EVENT SCHEDULED</span>
-                          <span className="text-zinc-205 font-bold block mt-0.5 font-mono text-zinc-300">{order.event_date}</span>
+                          <span className="text-zinc-205 font-bold block mt-0.5 font-mono text-zinc-300">{order?.event_date}</span>
                         </div>
                       </div>
                     </div>
@@ -7266,14 +7266,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
       {/* STEP-BY-STEP INTERACTIVE WORKFLOW MODALS */}
       {activeWorkflowProd && workflowActionType && (() => {
-        const order = orders.find(o => {
-          const rf = rawFootage.find(f => f.tracking_id === activeWorkflowProd.tracking_id);
+        const order = (orders || []).find(o => {
+          const rf = (rawFootage || []).find(f => f.tracking_id === activeWorkflowProd.tracking_id);
           return rf?.order_id === o.order_id;
         });
-        const customerName = order ? order.customer_name : 'Customer';
-        const orderId = order ? order.order_id : 'Order';
+        const customerName = order ? order?.customer_name : 'Customer';
+        const orderId = order ? order?.order_id : 'Order';
         
-        const payment = order ? payments.find(p => p.order_id === order.order_id) : null;
+        const payment = order ? (payments || []).find(p => p.order_id === order?.order_id) : null;
         const totalAmount = order?.quotation_amount || 0;
         const advanceReceived = payment?.advance_received !== undefined ? payment.advance_received : (payment?.advance_paid || 0);
         const balanceDue = payment?.balance_due !== undefined ? payment.balance_due : (totalAmount - advanceReceived);
@@ -7711,7 +7711,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     try {
                       setIsSaving(true);
                       
-                      const assignedForThis = editorAssignments.filter(a => a.production_id === activeWorkflowProd.production_id);
+                      const assignedForThis = (editorAssignments || []).filter(a => a.production_id === activeWorkflowProd.production_id);
                       const isReassignment = assignedForThis.length > 0;
 
                       // 1. Delete all existing editor assignments for this production
@@ -7730,7 +7730,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const newAssignments = [];
                       for (const item of wfDeliverableAssignments) {
                         if (!item.editor || item.editor === 'Unassigned') continue;
-                        const st = productionStaff.find(s => s.name === item.editor);
+                        const st = (productionStaff || []).find(s => s.name === item.editor);
                         if (st) {
                           const originalAssignment = assignedForThis.find(a => a.speciality === item.text);
                           const hasChanged = originalAssignment ? originalAssignment.staff_name !== item.editor : true;
@@ -7770,7 +7770,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const primaryEditor = uniqueEditors[0] || 'Unassigned';
                       const assignedStaffJoined = uniqueEditors.join(', ');
                       
-                      const activeStaffList = productionStaff.filter(s => s.status === 'Active');
+                      const activeStaffList = (productionStaff || []).filter(s => s.status === 'Active');
                       const assignedRoles = Array.from(new Set(newAssignments.map(a => {
                         const staffMem = activeStaffList.find(s => s.staff_name === a.staff_name);
                         return staffMem?.role || 'Editor';
@@ -7885,7 +7885,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       className="w-full bg-zinc-905 border border-zinc-900 hover:border-zinc-800 text-xs text-zinc-300 rounded-xl px-2.5 py-1.5 font-mono focus:outline-none focus:border-purple-500 cursor-pointer h-9"
                                     >
                                       <option value="Unassigned">-- Select Editor --</option>
-                                      {productionStaff.map(s => (
+                                      {(productionStaff || []).map(s => (
                                         <option key={s.staff_id} value={s.name}>{s.name}</option>
                                       ))}
                                     </select>
@@ -8318,7 +8318,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   const projectLogs = (logs || []).filter(log => 
                     log.record_id === activeWorkflowProd.production_id ||
                     log.record_id === activeWorkflowProd.tracking_id ||
-                    (order && log.record_id === order.order_id)
+                    (order && log.record_id === order?.order_id)
                   );
 
                   const findLogForStage = (stage: string) => {
@@ -8758,9 +8758,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         return;
                       }
 
-                      const currentOrder = orders.find(o => o.order_id === activeWorkflowProd.tracking_id || o.lead_id === activeWorkflowProd.tracking_id);
-                      const currentLead = leads.find(l => l.lead_id === (currentOrder?.lead_id || activeWorkflowProd.tracking_id));
-                      const currentPayment = payments.find(p => p.order_id === (currentOrder?.order_id || activeWorkflowProd.tracking_id) || p.lead_id === (currentLead?.lead_id));
+                      const currentOrder = (orders || []).find(o => o.order_id === activeWorkflowProd.tracking_id || o.lead_id === activeWorkflowProd.tracking_id);
+                      const currentLead = (leads || []).find(l => l.lead_id === (currentOrder?.lead_id || activeWorkflowProd.tracking_id));
+                      const currentPayment = (payments || []).find(p => p.order_id === (currentOrder?.order_id || activeWorkflowProd.tracking_id) || p.lead_id === (currentLead?.lead_id));
 
                       const validation = performBusinessOwnerReview(currentOrder, currentLead, activeWorkflowProd, currentPayment);
 
@@ -9252,7 +9252,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             
                             {/* Deliverables for this crew */}
                             <div className="space-y-1 pl-2 border-l border-purple-900/50">
-                              {deliverables.map((d: any, idx: number) => (
+                              {(Array.isArray(deliverables) ? deliverables : []).map((d: any, idx: number) => (
                                 <div key={idx} className="text-[11px] text-zinc-400 flex items-center justify-between font-sans">
                                   <span>• {d.name}</span>
                                   <span className="text-[10px] text-zinc-500 font-mono">Deadline: {d.deadline || whatsappShareData.global_deadline}</span>
@@ -9694,7 +9694,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           if (leadMatch) {
                             clientName = `${leadMatch.client_name} - ${leadMatch.event_type || 'Wedding'}`;
                           } else {
-                            const orderMatch = orders.find(o => o.order_id === proj.tracking_id || o.lead_id === proj.tracking_id);
+                            const orderMatch = (orders || []).find(o => o.order_id === proj.tracking_id || o.lead_id === proj.tracking_id);
                             if (orderMatch) {
                               clientName = `${orderMatch.client_name} - Project`;
                             } else {
@@ -9962,7 +9962,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           const correlatedProj = (production || []).find(p => p.production_id === task.production_id);
                           const { order } = resolveOrderAndLead(correlatedProj);
                           const trackingId = correlatedProj?.tracking_id;
-                          const orderId = order?.order_id && order.order_id !== 'NULL' && order.order_id !== 'NIL' ? order.order_id : (trackingId || 'N/A');
+                          const orderId = order?.order_id && order?.order_id !== 'NULL' && order?.order_id !== 'NIL' ? order?.order_id : (trackingId || 'N/A');
                           const eventName = order?.event_type || order?.custom_event_name || 'Project';
 
                           return (
@@ -10038,7 +10038,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         editing_status: 'Customer Review'
                       });
                       if (order?.order_id) {
-                        await updateOrderStage(order.order_id, 'Customer Review');
+                        await updateOrderStage(order?.order_id, 'Customer Review');
                       }
                       
                       // Trigger WhatsApp Web with encoded text
@@ -10204,7 +10204,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       await updateProduction(clientAcceptanceProd.production_id, updates);
                       
                       if (order?.order_id) {
-                        await updateOrderStage(order.order_id, 'Client Acceptance');
+                        await updateOrderStage(order?.order_id, 'Client Acceptance');
                       }
                       
                       setClientAcceptanceProd(null);
