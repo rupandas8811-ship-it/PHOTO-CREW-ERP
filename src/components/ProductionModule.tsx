@@ -1596,7 +1596,7 @@ Production Team`;
   const filteredLeadsList = useMemo(() => {
     return leads.filter(prod => {
       const { order: foundOrder, lead } = resolveOrderAndLead(prod);
-      const order = foundOrder || {
+      const order = { ...foundOrder, mobile: foundOrder?.mobile || foundLead?.mobile || 'No contact phone',
         order_id: prod.order_id || prod.tracking_id || prod.production_id,
         customer_name: prod.customer_name || lead?.customer_name || 'Client',
         event_type: lead?.event_type || 'Event',
@@ -3235,7 +3235,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                     const filteredLeads = filteredLeadsList.filter(prod => {
                       const { order: foundOrder, lead } = resolveOrderAndLead(prod);
-                      const order = foundOrder || {
+                      const order = { ...foundOrder, mobile: foundOrder?.mobile || foundLead?.mobile || 'No contact phone',
                         order_id: prod.order_id || prod.tracking_id || prod.production_id,
                         customer_name: prod.customer_name || lead?.customer_name || 'Client',
                         event_type: lead?.event_type || 'Event',
@@ -3296,7 +3296,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                     return filteredLeads.map((prod) => {
                       const { order: foundOrder, lead: foundLead } = resolveOrderAndLead(prod);
-                      const order = foundOrder || {
+                      const order = { ...foundOrder, mobile: foundOrder?.mobile || foundLead?.mobile || 'No contact phone',
                         order_id: prod.order_id || prod.tracking_id || prod.production_id,
                         customer_name: prod.customer_name || foundLead?.customer_name || 'Client',
                         event_type: foundLead?.event_type || 'Event',
@@ -3380,7 +3380,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       return (
                         <tr key={prod.production_id} className="hover:bg-zinc-900/30 transition-all font-mono text-xs">
                           {/* Order ID */}
-                          <td className="p-4">
+                          <td className="px-3 py-2 align-middle">
                             <span 
                               onClick={() => {
                                 setMasterOrderIdForDetail(order.order_id);
@@ -3391,11 +3391,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             >
                               {order.order_id}
                             </span>
-                            <span className="text-[10px] text-zinc-550 block font-mono">{prod.production_id}</span>
+                            
                           </td>
 
                           {/* Customer Name */}
-                          <td className="p-4 font-bold text-white text-left font-sans">
+                          <td className="px-3 py-2 font-bold text-white text-left font-sans align-middle">
                             <div className="hover:text-violet-300 transition-colors cursor-pointer" onClick={() => {
                               setSelectedLeadProd(prod);
                               setDossierError('');
@@ -3437,7 +3437,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               setLeadClientReviewDate(toInputDateFormat((prod as any).client_review_upload_date || (crLog ? crLog.timestamp : null)));
                               setLeadClientApprovalDate(toInputDateFormat((prod as any).client_approval_date || (caLog ? caLog.timestamp : null)));
                             }}>{order.customer_name}</div>
-                            <div className="text-[10px] text-zinc-455 mt-0.5 font-normal">{order.mobile || 'No contact phone'}</div>
+                            <div className="text-[10px] text-zinc-500 mt-0.5 font-normal">{foundOrder?.mobile || foundLead?.mobile || 'No contact phone'}</div>
                           </td>
 
                           {/* Event Type */}
@@ -3512,7 +3512,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           </td>
 
                           {/* Current Status */}
-                          <td className="p-4">
+                          <td className="px-3 py-2 align-middle">
                             <StatusText status={displayStatus} />
                           </td>
 
@@ -3522,7 +3522,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           </td>
 
                           {/* Remaining Days */}
-                          <td className="p-4">
+                          <td className="px-3 py-2 align-middle">
                             {!isAssigned ? (
                               <span className={`inline-flex px-2 py-0.5 rounded font-bold border font-mono ${flagBg}`}>
                                 Pending
@@ -3538,7 +3538,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                           {/* Payment Status */}
                           {currentRole !== 'Production Team' && (
-                            <td className="p-4">
+                            <td className="px-3 py-2 align-middle">
                               <span className={`inline-flex px-2.5 py-0.5 rounded text-[10px] font-mono font-black border ${payBadge}`}>
                                 {payStatus}
                               </span>
@@ -10196,9 +10196,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     try {
                       setIsSaving(true);
                       
-                      const updates: Partial<Production> = {
+                      const updates: any = {
                         editing_status: 'Client Acceptance',
-                        client_communication_proof: caCommunicationProof
+                        client_communication_proof: caCommunicationProof,
                       };
                       
                       await updateProduction(clientAcceptanceProd.production_id, updates);

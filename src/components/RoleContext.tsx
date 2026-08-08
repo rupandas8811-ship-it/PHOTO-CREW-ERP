@@ -4367,6 +4367,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     // Set production state in Supabase
     try {
       if (targetProd) {
+         
         const rProd = await pushUpdate('production', 'production_id', targetProd.production_id, updates);
         if (!rProd?.success) {
           console.warn("[updateProduction] DB operation failed for production table update, will fallback to Leads:", rProd?.error);
@@ -4875,7 +4876,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         delivery_date: timestamp.split('T')[0],
         remarks: finalRemarks
       };
-      const rProd = await pushUpdate('production', 'production_id', targetProd.production_id, updates);
+       
+        const rProd = await pushUpdate('production', 'production_id', targetProd.production_id, updates);
       if (!rProd?.success) {
         throw new Error("Failed to update production: " + rProd?.error);
       } else {
