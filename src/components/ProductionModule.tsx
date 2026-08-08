@@ -10133,8 +10133,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       
                       await updateProduction(clientAcceptanceProd.production_id, updates);
                       
-                      if (order?.order_id) {
-                        await updateOrderStage(order?.order_id, 'Client Acceptance');
+                      const targetId = order?.order_id || trackingId;
+                      if (targetId) {
+                        await updateOrderStage(targetId, 'Client Acceptance' as any);
                       }
                       
                       if (refreshData) {

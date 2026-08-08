@@ -950,7 +950,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       'Event Started', 'Event Start', 'Event Ended', 'Event End', 'Event Completed', 'Event Complete',
       'Footage Handover', 'Equipment Handover', 'Footage Handover Verified', 'Verified Footage', 'Raw Footage Received',
       'Editor Assigned', 'Assigned Editor', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Client Review Sent', 'Internal Review', 'Client Review', 'Revision Required', 'Revision In Progress', 'Revision', 'Final Approval', 'Project Delivered', 'Project Closed',
-      'Customer Review', 'Approved', 'Delivered', 'Payment Pending', 'Closed', 'Business Owner Review', 'Order Closed', 'Client Acceptance'
+      'Customer Review', 'Approved', 'Delivered', 'Payment Pending', 'Closed', 'Business Owner Review', 'Order Closed'
     ];
     
     // Start with existing booked/restored orders from DB
@@ -1271,8 +1271,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'customer_review_status', 'delivery_date', 'remarks', 'project_priority',
         'target_delivery_date', 'actual_delivery_date', 'assigned_staff', 'project_notes',
         'internal_comments', 'raw_footage_status', 'production_status', 'approval_status',
-        'editing_progress', 'client_communication_proof', 'order_id', 'lead_id', 'customer_name',
-        'event_id', 'assigned_team', 'final_consolidated_drive_link', 'current_status'
+        'editing_progress'
       ],
       payments: [
         'payment_id', 'order_id', 'quotation_amount', 'advance_received', 'balance_due', 
@@ -1643,7 +1642,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (sanitized.current_stage) {
           sanitized.order_status = ['Closed', 'Delivered', 'Paid'].includes(sanitized.current_stage) ? sanitized.current_stage : 'Confirmed';
         }
-      }
       // -------------------------------
       
       if (Object.keys(sanitized).length === 0) {
