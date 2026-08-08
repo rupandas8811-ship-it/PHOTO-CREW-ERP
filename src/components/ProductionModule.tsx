@@ -733,7 +733,7 @@ ${coordinatorName}`;
       'Editing Started', 'Editing In Progress', 'Editing', 'Internal QC Review',
       'Customer Review', 'Client Review Sent', 'Ready For Review', 'Revision Required', 'Revision In Progress',
       'Editing Completed', 'Editing Complete', 'Final Approval',
-      'Client Acceptance'
+      'Client Acceptance', 'Order Closed', 'Closed', 'Completed', 'Project Closed'
     ];
 
     const mapped = (leadsData || []).filter(l => {
@@ -1499,7 +1499,7 @@ Production Team`;
   const isClientApproved = (prod: Production) => {
     const s = getProductionStatus(prod);
     const raw = prod.editing_status as string;
-    return s === 'Final Approval' || s === 'Project Delivered' || s === 'Completed' || raw === 'Approved' || raw === 'Final Approval' || raw === 'Delivered' || raw === 'Project Delivered' || raw === 'Closed' || raw === 'Project Closed' || raw === 'Completed' || raw === 'Payment Pending';
+    return s === 'Final Approval' || s === 'Project Delivered' || s === 'Completed' || raw === 'Approved' || raw === 'Final Approval' || raw === 'Delivered' || raw === 'Project Delivered' || raw === 'Closed' || raw === 'Project Closed' || raw === 'Completed' || raw === 'Payment Pending' || raw === 'Client Acceptance' || raw === 'Order Closed' || s === 'Order Closed';
   };
 
   const isClientNotApproved = (prod: Production) => {
@@ -1511,7 +1511,7 @@ Production Team`;
   const isTotalProjectsCompleted = (prod: Production) => {
     const s = getProductionStatus(prod);
     const raw = prod.editing_status as string;
-    return s === 'Project Delivered' || s === 'Completed' || raw === 'Delivered' || raw === 'Project Delivered' || raw === 'Closed' || raw === 'Project Closed' || raw === 'Completed' || raw === 'Project Completed' || s === 'Project Completed' || raw === 'Project Cancelled' || s === 'Project Cancelled';
+    return s === 'Project Delivered' || s === 'Completed' || raw === 'Delivered' || raw === 'Project Delivered' || raw === 'Closed' || raw === 'Project Closed' || raw === 'Completed' || raw === 'Project Completed' || s === 'Project Completed' || raw === 'Project Cancelled' || s === 'Project Cancelled' || raw === 'Order Closed' || s === 'Order Closed';
   };
 
   // Base list filtered by applied date range, customer name, and order ID (Supabase leads table data source)
@@ -2841,11 +2841,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-300 focus:outline-none focus:ring-1 focus:ring-violet-505 font-mono cursor-pointer"
                 >
                   <option value="All">All Statuses</option>
+                  <option value="Verified Footage">Verified Footage</option>
                   <option value="Assigned Editor">Assigned Editor</option>
                   <option value="Editing Started">Editing Started</option>
                   <option value="Customer Review">Customer Review</option>
                   <option value="Editing Completed">Editing Completed</option>
                   <option value="Client Acceptance">Client Acceptance</option>
+                  <option value="Order Closed">Order Closed</option>
                 </select>
               </div>
 
@@ -3151,12 +3153,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const { order } = resolveOrderAndLead(prod);
                       if (!order) return false;
                       
-                      // Filter out closed projects, and for Production Staff filter out Client Acceptance
+                      // For Production Staff, exclude Client Acceptance and Order Closed
                       const displayStatus = getAutomatedProductionStatus(prod);
-                      if (displayStatus === 'Order Closed' || displayStatus === 'Completed' || displayStatus === 'Closed') {
-                        return false;
-                      }
-                      if (currentRole === 'Production Staff' && displayStatus === 'Client Acceptance') {
+                      if (currentRole === 'Production Staff' && (displayStatus === 'Client Acceptance' || displayStatus === 'Order Closed' || displayStatus === 'Completed' || displayStatus === 'Closed')) {
                         return false;
                       }
                       
@@ -3170,13 +3169,16 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const sVal = getProductionStatus(prod);
                       if (statusFilter === 'Overdue') {
                         const days = calculateDaysRemaining(prod.target_delivery_date || prod.expected_delivery_date);
-                        if (!(days !== null && days < 0 && prod.editing_status !== 'Delivered' && prod.editing_status !== 'Closed' && prod.editing_status as any !== 'Project Closed' && prod.editing_status as any !== 'Project Delivered' && prod.editing_status as any !== 'Completed')) return false;
+                        if (!(days !== null && days < 0 && prod.editing_status !== 'Delivered' && prod.editing_status !== 'Closed' && prod.editing_status as any !== 'Project Closed' && prod.editing_status as any !== 'Project Delivered' && prod.editing_status as any !== 'Completed' && prod.editing_status as any !== 'Order Closed')) return false;
                       } else if (statusFilter !== 'All') {
                         const matchStatus = (sVal === statusFilter) || (displayStatus === statusFilter) || (prod.editing_status === statusFilter) ||
+                          (statusFilter === 'Verified Footage' && (sVal === 'Verified Footage' || displayStatus === 'Verified Footage' || prod.editing_status === 'Verified Footage' || prod.editing_status === 'Raw Footage Received' || prod.editing_status === 'Footage Handover Verified')) ||
                           (statusFilter === 'Assigned Editor' && (sVal === 'Assigned Editor' || displayStatus === 'Assigned Editor' || prod.editing_status === 'Editor Assigned' || prod.editing_status === 'Assigned Editor')) ||
                           (statusFilter === 'Editing Started' && (sVal === 'Editing Started' || displayStatus === 'Editing Started' || prod.editing_status === 'Editing In Progress' || prod.editing_status === 'Editing')) ||
                           (statusFilter === 'Customer Review' && (sVal === 'Customer Review' || displayStatus === 'Customer Review' || prod.editing_status === 'Client Review Sent' || prod.editing_status === 'Ready For Review')) ||
-                          (statusFilter === 'Editing Completed' && (sVal === 'Editing Completed' || displayStatus === 'Editing Completed' || prod.editing_status === 'Editing Complete'));
+                          (statusFilter === 'Editing Completed' && (sVal === 'Editing Completed' || displayStatus === 'Editing Completed' || prod.editing_status === 'Editing Complete')) ||
+                          (statusFilter === 'Client Acceptance' && (sVal === 'Client Acceptance' || displayStatus === 'Client Acceptance' || prod.editing_status === 'Client Acceptance')) ||
+                          (statusFilter === 'Order Closed' && (sVal === 'Order Closed' || displayStatus === 'Order Closed' || prod.editing_status === 'Order Closed' || prod.editing_status === 'Closed' || prod.editing_status === 'Completed' || prod.editing_status === 'Project Closed'));
                         if (!matchStatus) return false;
                       }
 
@@ -3541,6 +3543,29 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       >
                                         <span>📤</span> Send Review Link
                                       </button>
+                                    </div>
+                                  );
+                                }
+
+                                // 4. Client Acceptance: Show transferred badge
+                                if (displayStatus === 'Client Acceptance') {
+                                  return (
+                                    <div className="flex flex-col gap-1 w-full items-center">
+                                      <span className="px-2.5 py-1 bg-purple-500/15 border border-purple-500/30 text-purple-300 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 font-mono">
+                                        ✓ Client Acceptance
+                                      </span>
+                                      <span className="text-[9px] text-zinc-400 font-mono">Awaiting BO Approval</span>
+                                    </div>
+                                  );
+                                }
+
+                                // 5. Order Closed: Show read-only Order Closed badge
+                                if (displayStatus === 'Order Closed' || displayStatus === 'Closed' || displayStatus === 'Completed' || displayStatus === 'Project Closed') {
+                                  return (
+                                    <div className="flex flex-col gap-1 w-full items-center">
+                                      <span className="px-2.5 py-1 bg-zinc-800/90 border border-zinc-700 text-zinc-400 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 font-mono">
+                                        🔒 Order Closed
+                                      </span>
                                     </div>
                                   );
                                 }
@@ -10250,7 +10275,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 const isProjectLocked = (status?: string): boolean => {
   if (!status) return false;
   const s = status.toLowerCase();
-  return ['project completed', 'completed', 'delivered', 'project delivered', 'project cancelled', 'cancelled', 'canceled', 'closed', 'project closed'].includes(s);
+  return ['project completed', 'completed', 'delivered', 'project delivered', 'project cancelled', 'cancelled', 'canceled', 'closed', 'project closed', 'order closed'].includes(s);
 };
 
 
