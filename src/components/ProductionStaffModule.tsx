@@ -166,6 +166,11 @@ export const ProductionStaffModule: React.FC = () => {
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4000);
+  };
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
 
   // Selected project for ProjectDetailModal
@@ -198,20 +203,7 @@ export const ProductionStaffModule: React.FC = () => {
   const [editingCompletedModal, setEditingCompletedModal] = useState<any | null>(null);
   const [editingCompletedForm, setEditingCompletedForm] = useState({ confirmation_proof: '' });
 
-  // 4. Client Acceptance Modal
-  const [clientAcceptanceModal, setClientAcceptanceModal] = useState<any | null>(null);
-  const [clientAcceptanceForm, setClientAcceptanceForm] = useState({
-    checklist_1: false,
-    checklist_2: false,
-    checklist_3: false,
-    communication_proof: '',
-    internal_validation: true
-  });
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 4000);
-  };
 
   // Build assigned bookings list grouped by Order/Event for logged in assigned editor
   useEffect(() => {
@@ -252,6 +244,18 @@ export const ProductionStaffModule: React.FC = () => {
         
         // Determine unified status
         let currentStatus = assignment.status || 'Assigned Editor';
+
+        const excludedStatuses = ['Client Acceptance', 'Business Owner Review', 'Project Completed', 'Completed', 'Order Closed', 'Closed'];
+        const operationsOnlyStages = ['Order Confirmed', 'Confirm Order', 'New Order', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Completed', 'Event Ended', 'Footage Handover'];
+
+        // Exclude deliverables that are Client Acceptance / Closed, or where the order is still in Operations without raw footage verification
+        if (excludedStatuses.includes(currentStatus) || (order && excludedStatuses.includes(order.current_stage)) || (prod && excludedStatuses.includes(prod.editing_status))) {
+          return;
+        }
+
+        if (order && operationsOnlyStages.includes(order.current_stage) && (!prod || !['Verified Footage', 'Footage Handover Verified', 'Raw Footage Received', 'Assigned Editor', 'Editor Assigned', 'Editing Started', 'Customer Review', 'Editing Completed'].includes(prod.editing_status))) {
+          return;
+        }
 
         // Raw Footage Drive Link resolution across Operations / Raw Footage / Production / Assignment sources
         const rawFootageLink = getRawFootageDriveLink(assignment, prod, order, lead, operations);
@@ -366,7 +370,7 @@ export const ProductionStaffModule: React.FC = () => {
       case 'Project Completed':
       case 'Completed': 
       case 'Order Closed':
-        return { label: 'Client Acceptance (Transferred)', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' };
+        return { label: 'Editing Completed', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' };
       default: 
         return { label: status, color: 'text-zinc-400 bg-zinc-500/10 border-zinc-500/30' };
     }
@@ -576,76 +580,7 @@ Thank you.`;
     }
   };
 
-  // 3. Submit Client Acceptance Modal
-  const handleClientAcceptanceSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!clientAcceptanceModal) return;
-
-    if (!clientAcceptanceForm.checklist_1 || !clientAcceptanceForm.checklist_2 || !clientAcceptanceForm.checklist_3) {
-      alert("Validation Failed: Please complete all required items in the Final Delivery Checklist.");
-      return;
-    }
-
-    if (!clientAcceptanceForm.communication_proof) {
-      alert("Validation Failed: Please upload or provide Customer Communication Proof.");
-      return;
-    }
-
-    if (!clientAcceptanceForm.internal_validation) {
-      alert("Validation Failed: Please check Internal Validation.");
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const timestamp = new Date().toISOString();
-      const b = clientAcceptanceModal;
-
-      await updateEditorAssignmentStatus(b.assignmentId, 'Completed' as any);
-
-      await pushUpdate('editor_assignments', 'assignment_id', b.assignmentId, {
-        customer_communication_proof: clientAcceptanceForm.communication_proof,
-        accepted_at: timestamp,
-        status: 'Client Acceptance'
-      });
-
-      if (b.prodObj?.production_id) {
-        await updateProduction(b.prodObj.production_id, {
-          editing_status: 'Client Acceptance' as any,
-          production_status: 'Client Acceptance' as any,
-          actual_delivery_date: timestamp.split('T')[0],
-          remarks: `Client Acceptance verified by ${staffName} on ${new Date().toLocaleDateString()}`
-        });
-      }
-
-      // System Action: Transfer project to Business Owner Dashboard for final review
-      if (b.orderId) {
-        await updateOrderStage(b.orderId, 'Client Acceptance' as any);
-      }
-      if (b.leadId) {
-        await updateLead(b.leadId, {
-          status: 'Client Acceptance' as any,
-          current_status: 'Client Acceptance' as any
-        });
-      }
-
-      setClientAcceptanceModal(null);
-      setClientAcceptanceForm({
-        checklist_1: false,
-        checklist_2: false,
-        checklist_3: false,
-        communication_proof: '',
-        internal_validation: true
-      });
-      await refreshData();
-      showToast('🏆 Client Acceptance Verified! Project automatically transferred to Business Owner Dashboard.');
-    } catch (err: any) {
-      console.error('Error submitting Client Acceptance:', err);
-      alert('Failed to submit: ' + (err.message || 'Please try again.'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  // End of Production Staff handlers
 
   return (
     <div className="p-4 sm:p-6 bg-black min-h-screen text-white font-sans selection:bg-purple-500/30">
@@ -897,7 +832,7 @@ Thank you.`;
                                           {/* Locked State Notification */}
                                           {isDelivLocked ? (
                                             <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-[11px] font-bold flex items-center gap-2">
-                                              <Lock className="w-3.5 h-3.5" /> Client Acceptance Complete
+                                              <Lock className="w-3.5 h-3.5" /> Editing Completed
                                             </div>
                                           ) : (
                                             <>
@@ -1295,148 +1230,7 @@ Thank you.`;
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* 4. CLIENT ACCEPTANCE MODAL POPUP */}
-      {/* ========================================================= */}
-      {clientAcceptanceModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto scrollbar-thin">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-base font-bold text-white">Client Acceptance</h3>
-              </div>
-              <button 
-                onClick={() => setClientAcceptanceModal(null)}
-                className="text-zinc-400 hover:text-white p-1 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <p className="text-xs text-zinc-400">
-              Verify the final delivery checklist and upload customer communication proof to complete Production and transfer project to Business Owner.
-            </p>
-
-            <form onSubmit={handleClientAcceptanceSubmit} className="space-y-4">
-              
-              {/* CHECKLIST */}
-              <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 space-y-3">
-                <label className="block text-xs font-mono font-bold text-emerald-400 uppercase flex items-center gap-1.5">
-                  <CheckSquare className="w-4 h-4" /> Final Delivery Checklist <span className="text-rose-400">*</span>
-                </label>
-                
-                <label className="flex items-start gap-2 text-xs text-zinc-200 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={clientAcceptanceForm.checklist_1}
-                    onChange={(e) => setClientAcceptanceForm({ ...clientAcceptanceForm, checklist_1: e.target.checked })}
-                    className="mt-0.5 rounded border-zinc-700 text-emerald-600 focus:ring-emerald-500"
-                  />
-                  <span>1. All Video & Photo Deliverables Rendered in Full Resolution</span>
-                </label>
-
-                <label className="flex items-start gap-2 text-xs text-zinc-200 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={clientAcceptanceForm.checklist_2}
-                    onChange={(e) => setClientAcceptanceForm({ ...clientAcceptanceForm, checklist_2: e.target.checked })}
-                    className="mt-0.5 rounded border-zinc-700 text-emerald-600 focus:ring-emerald-500"
-                  />
-                  <span>2. Color Grading & Audio Mix Verified with Client Specifications</span>
-                </label>
-
-                <label className="flex items-start gap-2 text-xs text-zinc-200 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={clientAcceptanceForm.checklist_3}
-                    onChange={(e) => setClientAcceptanceForm({ ...clientAcceptanceForm, checklist_3: e.target.checked })}
-                    className="mt-0.5 rounded border-zinc-700 text-emerald-600 focus:ring-emerald-500"
-                  />
-                  <span>3. Customer Final Sign-off & Confirmation Received</span>
-                </label>
-              </div>
-
-              {/* COMMUNICATION PROOF */}
-              <div>
-                <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
-                  Customer Communication Proof <span className="text-rose-400">*</span>
-                </label>
-
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={async (e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      const compressed = await compressImage(e.target.files[0]);
-                      setClientAcceptanceForm({ ...clientAcceptanceForm, communication_proof: compressed });
-                    }
-                  }}
-                  className="w-full text-xs text-zinc-300 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-600 file:text-white hover:file:bg-emerald-500 cursor-pointer mb-2"
-                />
-
-                <div className="text-[10px] text-zinc-500 text-center uppercase font-mono my-1">- OR ENTER PROOF IMAGE URL -</div>
-
-                <input
-                  type="text"
-                  placeholder="https://..."
-                  value={clientAcceptanceForm.communication_proof}
-                  onChange={(e) => setClientAcceptanceForm({ ...clientAcceptanceForm, communication_proof: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
-                />
-
-                {clientAcceptanceForm.communication_proof && (
-                  <div className="mt-2 text-[11px] text-emerald-400 font-mono font-bold flex items-center gap-1">
-                    <Check className="w-3.5 h-3.5" /> Communication Proof Attached
-                  </div>
-                )}
-              </div>
-
-              {/* INTERNAL VALIDATION */}
-              <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="internal_validation_cb"
-                  checked={clientAcceptanceForm.internal_validation}
-                  onChange={(e) => setClientAcceptanceForm({ ...clientAcceptanceForm, internal_validation: e.target.checked })}
-                  className="rounded border-zinc-700 text-emerald-600 focus:ring-emerald-500"
-                />
-                <label htmlFor="internal_validation_cb" className="text-xs text-zinc-300 font-bold cursor-pointer">
-                  Internal Validation Verified <span className="text-rose-400">*</span>
-                </label>
-              </div>
-
-              <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-3 text-[11px] text-purple-300 flex items-center gap-2">
-                <span>🚀</span> Submission will automatically update status to Client Acceptance & transfer project to Business Owner Dashboard.
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
-                <button
-                  type="button"
-                  onClick={() => setClientAcceptanceModal(null)}
-                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={
-                    isSubmitting || 
-                    !clientAcceptanceForm.checklist_1 || 
-                    !clientAcceptanceForm.checklist_2 || 
-                    !clientAcceptanceForm.checklist_3 || 
-                    !clientAcceptanceForm.communication_proof ||
-                    !clientAcceptanceForm.internal_validation
-                  }
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer shadow-lg shadow-emerald-600/20"
-                >
-                  {isSubmitting ? 'Transferring...' : 'Submit & Transfer to Business Owner Dashboard 🏆'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* PROJECT DETAIL MODAL */}
       {selectedProjectForDetail && (

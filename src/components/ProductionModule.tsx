@@ -720,6 +720,22 @@ ${coordinatorName}`;
       'Project Cancelled'
     ];
 
+    const operationsOnlyStages = [
+      'Order Confirmed', 'Confirm Order', 'New Order', 'Order Created',
+      'Operations Assigned', 'Assigned Crew', 'Staff Assigned', 'Crew Assigned',
+      'Event Scheduled', 'Event Started', 'Event Completed', 'Event Ended',
+      'Footage Handover'
+    ];
+
+    const validProductionStages = [
+      'Verified Footage', 'Footage Handover Verified', 'Raw Footage Received', 'Raw Footage Uploaded',
+      'Assigned Editor', 'Editor Assigned', 'Assigned',
+      'Editing Started', 'Editing In Progress', 'Editing', 'Internal QC Review',
+      'Customer Review', 'Client Review Sent', 'Ready For Review', 'Revision Required', 'Revision In Progress',
+      'Editing Completed', 'Editing Complete', 'Final Approval',
+      'Client Acceptance'
+    ];
+
     const mapped = (leadsData || []).filter(l => {
       const order = orders.find(o => o.lead_id === l.lead_id || o.order_id === l.lead_id);
       const rf = order ? rawFootage.find(f => f.order_id === order.order_id) : null;
@@ -731,11 +747,29 @@ ${coordinatorName}`;
         (rf && (p.tracking_id === rf.tracking_id || p.order_id === rf.order_id))
       );
 
-      const stage = prod?.editing_status || prod?.production_status || l.status || order?.current_stage;
-      if (!order && !prod && stage && !postProdStages.includes(stage) && !postProdStages.includes(l.status) && !postProdStages.includes(order?.current_stage || '')) return false;
+      const orderStage = order?.current_stage;
+      const prodStatus = prod?.editing_status || prod?.production_status;
+      const leadStatus = l.status || (l as any).current_status;
 
-      // Filter for Production Staff / Editors: only see assigned projects
+      // 1. Exclude Operations-only projects that have not reached Verified Footage / Production
+      if (orderStage && operationsOnlyStages.includes(orderStage)) {
+        if (!prodStatus || !validProductionStages.includes(prodStatus)) {
+          return false;
+        }
+      }
+
+      if (!order && leadStatus && operationsOnlyStages.includes(leadStatus)) {
+        if (!prodStatus || !validProductionStages.includes(prodStatus)) {
+          return false;
+        }
+      }
+
+      // Filter for Production Staff / Editors: only see assigned projects & exclude Client Acceptance/Closed
       if (currentRole === 'Production Staff') {
+        if (orderStage === 'Client Acceptance' || prodStatus === 'Client Acceptance' || orderStage === 'Order Closed' || prodStatus === 'Order Closed' || orderStage === 'Closed' || prodStatus === 'Closed') {
+          return false;
+        }
+
         const myName = (currentUserName || '').trim().toLowerCase();
         const myId = currentUser?.id;
         const prodId = prod?.production_id || order?.order_id || l.lead_id;
@@ -1213,7 +1247,7 @@ ${coordinatorName}`;
       }
     }
 
-    const targetEvent = targetEventOnly ? (prod.custom_event_name || prod.event_type || order?.custom_event_name || order?.event_type) : undefined;
+    const targetEvent = targetEventOnly ? ((prod as any).custom_event_name || (prod as any).event_type || order?.custom_event_name || order?.event_type) : undefined;
     let list = parseDeliverablesWithQty(deliverablesText, targetEvent);
 
     // Fallback to editorAssignments if list is empty
@@ -3117,9 +3151,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const { order } = resolveOrderAndLead(prod);
                       if (!order) return false;
                       
-                      // Filter out projects that have reached Client Acceptance or Order Closed
+                      // Filter out closed projects, and for Production Staff filter out Client Acceptance
                       const displayStatus = getAutomatedProductionStatus(prod);
-                      if (displayStatus === 'Client Acceptance' || displayStatus === 'Order Closed' || displayStatus === 'Completed' || displayStatus === 'Closed') {
+                      if (displayStatus === 'Order Closed' || displayStatus === 'Completed' || displayStatus === 'Closed') {
+                        return false;
+                      }
+                      if (currentRole === 'Production Staff' && displayStatus === 'Client Acceptance') {
                         return false;
                       }
                       
@@ -3468,8 +3505,24 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   );
                                 }
 
-                                // 3. Editing Completed: Show "Client Acceptance" button
+                                // 3. Editing Completed: Show "Client Acceptance" button for Production Manager only
                                 if (displayStatus === 'Editing Completed') {
+                                  if (currentRole === 'Production Staff') {
+                                    return (
+                                      <div className="flex flex-col gap-1.5 w-full items-center">
+                                        <span className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1">
+                                          ✓ Editing Completed
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenResendReviewPopup(prod)}
+                                          className="w-full max-w-[160px] px-3 py-1.5 bg-indigo-600/90 border border-indigo-500 text-white hover:bg-indigo-500 hover:border-indigo-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1"
+                                        >
+                                          <span>📤</span> Send Review Link
+                                        </button>
+                                      </div>
+                                    );
+                                  }
                                   return (
                                     <div className="flex flex-col gap-1.5 w-full items-center">
                                       <button
