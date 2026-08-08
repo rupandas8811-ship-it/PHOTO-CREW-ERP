@@ -46,6 +46,91 @@ const compressImage = (file: File): Promise<string> => {
   });
 };
 
+// Helper to extract Raw Footage Drive Link across Operations / Raw Footage / Production / Editor Assignment sources
+const getRawFootageDriveLink = (assignment: any, prod: any, order: any, lead: any, operations: any[]): string => {
+  const orderId = order?.order_id || prod?.order_id || assignment?.order_id || prod?.tracking_id;
+  const leadId = lead?.lead_id || order?.lead_id || prod?.lead_id || assignment?.production_id;
+  const trackingId = prod?.tracking_id || assignment?.production_id;
+
+  // 1. Check Operations table matching order_id, lead_id, or tracking_id
+  const matchedOp = (operations || []).find(o => 
+    (orderId && (o.order_id === orderId || o.lead_id === orderId)) ||
+    (leadId && (o.lead_id === leadId || o.order_id === leadId)) ||
+    (trackingId && (o.order_id === trackingId || o.lead_id === trackingId)) ||
+    (assignment?.production_id && (o.order_id === assignment.production_id || o.lead_id === assignment.production_id))
+  );
+
+  const opsLink = matchedOp ? (
+    matchedOp.raw_footage_drive_link || 
+    matchedOp.Raw_Footage_Drive_Link || 
+    matchedOp.consolidated_drive_link || 
+    matchedOp.Consolidated_Drive_Link
+  ) : null;
+
+  if (opsLink && typeof opsLink === 'string' && opsLink.trim() !== '') {
+    return opsLink.trim();
+  }
+
+  // 2. Check assignment object direct field
+  if ((assignment as any)?.raw_footage_link && typeof (assignment as any).raw_footage_link === 'string' && ((assignment as any).raw_footage_link as string).trim() !== '') {
+    return ((assignment as any).raw_footage_link as string).trim();
+  }
+
+  // 3. Check Production object direct fields
+  if (prod?.raw_footage_drive_link && typeof prod.raw_footage_drive_link === 'string' && prod.raw_footage_drive_link.trim() !== '') {
+    return prod.raw_footage_drive_link.trim();
+  }
+  if (prod?.raw_footage_location && typeof prod.raw_footage_location === 'string' && prod.raw_footage_location.trim() !== '' && !prod.raw_footage_location.startsWith('s3://')) {
+    return prod.raw_footage_location.trim();
+  }
+
+  // 4. Fallback for raw_footage_location
+  if (prod?.raw_footage_location && typeof prod.raw_footage_location === 'string' && prod.raw_footage_location.trim() !== '') {
+    return prod.raw_footage_location.trim();
+  }
+
+  return '';
+};
+
+// Helper to extract resolved Event Name without generic 'Project' fallback unless genuinely empty
+const getResolvedEventName = (lead: any, order: any, prod: any): string => {
+  const leadEventFirstName = lead?.events && lead.events.length > 0 
+    ? (lead.events[0]?.event_name || lead.events[0]?.event_type) 
+    : null;
+
+  const candidate = (
+    leadEventFirstName ||
+    lead?.event_name ||
+    lead?.custom_event_name ||
+    order?.event_name ||
+    order?.custom_event_name ||
+    prod?.event_name ||
+    lead?.custom_event_type ||
+    lead?.event_type ||
+    order?.event_type ||
+    prod?.event_type ||
+    order?.project_name ||
+    prod?.project_name ||
+    ''
+  ).toString().trim();
+
+  if (candidate && candidate !== 'Project' && candidate !== 'Other' && candidate !== 'Unnamed Event') {
+    return candidate;
+  }
+
+  const secondary = (
+    lead?.custom_event_name || 
+    order?.custom_event_name || 
+    lead?.custom_event_type || 
+    lead?.event_type || 
+    order?.event_type || 
+    prod?.event_type || 
+    ''
+  ).toString().trim();
+
+  return (secondary && secondary !== 'Other') ? secondary : 'Event';
+};
+
 export const ProductionStaffModule: React.FC = () => {
   const { 
     currentUser, 
@@ -168,10 +253,16 @@ export const ProductionStaffModule: React.FC = () => {
         // Determine unified status
         let currentStatus = assignment.status || 'Assigned Editor';
 
-        // Raw Footage Drive Link resolution
-        const matchedOp = (order?.order_id || prod?.order_id) ? operations.find(o => o.order_id === (order?.order_id || prod?.order_id)) : null;
-        const opsDriveLink = matchedOp ? (matchedOp.raw_footage_drive_link || matchedOp.Raw_Footage_Drive_Link || matchedOp.consolidated_drive_link || matchedOp.Consolidated_Drive_Link) : null;
-        const rawFootageLink = (opsDriveLink || (assignment as any).raw_footage_link || prod?.raw_footage_drive_link || prod?.raw_footage_location || '').trim();
+        // Raw Footage Drive Link resolution across Operations / Raw Footage / Production / Assignment sources
+        const rawFootageLink = getRawFootageDriveLink(assignment, prod, order, lead, operations);
+
+        // Event Name resolution across Lead / Order / Production sources
+        const eventName = getResolvedEventName(lead, order, prod);
+
+        // Customer details resolution
+        const customerName = (lead?.customer_name || order?.customer_name || prod?.customer_name || 'Client').trim();
+        const customerMobile = (lead?.mobile || order?.customer_phone || prod?.customer_mobile || '').trim();
+        const eventDate = (lead?.events?.[0]?.event_date || lead?.event_date || order?.event_date || prod?.event_date || '').trim();
 
         // Edited Drive Link resolution
         const editedDriveLink = (assignment.edited_drive_link || prod?.edited_drive_link || '').trim();
@@ -180,10 +271,10 @@ export const ProductionStaffModule: React.FC = () => {
             assignmentId: assignment.assignment_id,
             orderId: order?.order_id || prod?.order_id || prod?.tracking_id || assignment.order_id || assignment.production_id || 'ORD-ASSIGNED',
             leadId: lead?.lead_id || order?.lead_id || prod?.lead_id,
-            customerName: lead?.customer_name || order?.customer_name || prod?.customer_name || 'Client',
-            customerMobile: lead?.mobile || order?.customer_phone || prod?.customer_mobile || '',
-            eventDate: lead?.events?.[0]?.event_date || lead?.event_date || order?.event_date || prod?.event_date || '',
-            eventName: lead?.events?.[0]?.event_name || lead?.event_type || order?.event_type || 'Project',
+            customerName,
+            customerMobile,
+            eventDate,
+            eventName,
             deliverable: assignment.speciality,
             targetFinishDate: prod?.target_delivery_date || prod?.expected_delivery_date || assignment.target_finish_date || '',
             status: currentStatus,
@@ -614,11 +705,40 @@ Thank you.`;
                 return (
                   <div key={grp.groupId} className="bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl space-y-0">
                     {/* TASK HEADER PANEL */}
-                    <div className="p-4 sm:p-5 bg-zinc-900/80 border-b border-zinc-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 items-center flex-1">
+                    <div className="p-4 sm:p-5 bg-zinc-900/90 border-b border-zinc-800 flex flex-col xl:flex-row xl:items-center justify-between gap-5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-start flex-1">
+                        
+                        {/* Customer */}
+                        <div className="space-y-0.5">
+                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Customer</div>
+                          <div className="font-black text-white text-base leading-snug truncate" title={grp.customerName}>
+                            {grp.customerName}
+                          </div>
+                          {grp.customerMobile ? (
+                            <div className="text-xs text-emerald-400 font-mono font-semibold flex items-center gap-1 mt-0.5">
+                              <span>📞</span>
+                              <span>{grp.customerMobile}</span>
+                            </div>
+                          ) : (
+                            <div className="text-[10px] text-zinc-500 font-mono mt-0.5">No contact</div>
+                          )}
+                        </div>
+
+                        {/* Event Name */}
+                        <div className="space-y-0.5">
+                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Event Name</div>
+                          <div className="font-bold text-purple-300 text-sm truncate" title={grp.eventName}>
+                            {grp.eventName}
+                          </div>
+                          <div className="text-[11px] text-zinc-400 font-mono flex items-center gap-1 mt-0.5">
+                            <Calendar className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                            <span>{grp.eventDate || '—'}</span>
+                          </div>
+                        </div>
+
                         {/* Order ID */}
-                        <div>
-                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Order ID</div>
+                        <div className="space-y-0.5">
+                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Order ID</div>
                           <span 
                             onClick={() => setSelectedProjectForDetail(grp.orderId)}
                             className="font-mono font-bold text-violet-400 hover:text-violet-300 hover:underline cursor-pointer text-sm block truncate"
@@ -626,56 +746,43 @@ Thank you.`;
                           >
                             {grp.orderId}
                           </span>
-                        </div>
-
-                        {/* Customer */}
-                        <div>
-                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Customer</div>
-                          <div className="font-bold text-white text-xs truncate">{grp.customerName}</div>
-                          <div className="text-[10px] text-zinc-400 font-mono">{grp.customerMobile || 'No contact'}</div>
-                        </div>
-
-                        {/* Event Name */}
-                        <div>
-                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Event Name</div>
-                          <div className="font-semibold text-zinc-200 text-xs truncate">{grp.eventName}</div>
-                          <div className="text-[10px] text-zinc-400 font-mono flex items-center gap-1 mt-0.5">
-                            <Calendar className="w-3 h-3 text-zinc-500 shrink-0" />
-                            <span>{grp.eventDate || '—'}</span>
-                          </div>
+                          {grp.leadId && grp.leadId !== grp.orderId && (
+                            <span className="text-[10px] text-zinc-500 font-mono block">Ref: {grp.leadId}</span>
+                          )}
                         </div>
 
                         {/* Raw Footage Link */}
-                        <div>
-                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Raw Footage Link</div>
-                          {grp.rawFootageLink && (grp.rawFootageLink.startsWith('http://') || grp.rawFootageLink.startsWith('https://')) ? (
+                        <div className="space-y-0.5">
+                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Raw Footage Link</div>
+                          {grp.rawFootageLink && typeof grp.rawFootageLink === 'string' && grp.rawFootageLink.trim() !== '' ? (
                             <a
-                              href={grp.rawFootageLink.startsWith('http') ? grp.rawFootageLink : `https://${grp.rawFootageLink}`}
+                              href={grp.rawFootageLink.trim().startsWith('http') ? grp.rawFootageLink.trim() : `https://${grp.rawFootageLink.trim()}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               referrerPolicy="no-referrer"
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 rounded-lg text-[10px] font-bold transition-all cursor-pointer max-w-[130px] truncate"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm mt-0.5"
                               title={grp.rawFootageLink}
                             >
-                              <LinkIcon className="w-3 h-3 shrink-0" />
-                              <span className="truncate">Open Drive</span>
+                              <LinkIcon className="w-3.5 h-3.5 shrink-0" />
+                              <span>View Raw Footage</span>
                             </a>
                           ) : (
-                            <span className="text-zinc-600 italic text-[11px]">Not Provided</span>
+                            <span className="text-zinc-500 italic text-xs font-mono block pt-1">Not Provided</span>
                           )}
                         </div>
 
                         {/* Target Delivery Date */}
-                        <div>
-                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Target Delivery Date</div>
-                          <span className="font-mono text-xs text-zinc-300 font-semibold">{grp.targetFinishDate || 'Not set'}</span>
+                        <div className="space-y-0.5">
+                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Target Delivery Date</div>
+                          <span className="font-mono text-xs text-zinc-200 font-bold block pt-1">{grp.targetFinishDate || 'Not set'}</span>
                         </div>
+
                       </div>
 
                       {/* Overall Task Status Badge */}
-                      <div className="shrink-0 flex md:flex-col items-center md:items-end justify-between border-t md:border-t-0 border-zinc-800 pt-2 md:pt-0">
-                        <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider mb-1">Overall Task Status</div>
-                        <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-mono font-bold border ${badge.color}`}>
+                      <div className="shrink-0 flex xl:flex-col items-center xl:items-end justify-between border-t xl:border-t-0 border-zinc-800 pt-3 xl:pt-0">
+                        <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider mb-1 font-bold">Overall Task Status</div>
+                        <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-mono font-bold border ${badge.color}`}>
                           {badge.label}
                         </span>
                       </div>
