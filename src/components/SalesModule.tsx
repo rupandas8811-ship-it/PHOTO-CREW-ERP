@@ -9337,7 +9337,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   onClick={() => {
                     setEditingPackage(null);
                     setPkgForm({ 
-                                   team_members: '', 
+                      package_name: '', 
+                      category: 'Weddings', 
+                      price: 0, 
+                      status: 'Active', 
+                      deliverables: '', 
+                      team_members: '', 
                       seasonal_offer: '',
                       terms_conditions: '',
                       event_type: '',
@@ -9405,7 +9410,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   </div>
 
                   {/* Scrollable Form Body */}
-                  <div className="overflow-y-auto overflow-x-hidden pr-1 space-y-4 text-xs text-slate-300 flex-1 w-full max-w-full">
+                  <div className="overflow-y-auto overflow-x-hidden pr-1 pb-6 space-y-5 text-xs text-slate-300 flex-1 min-h-0 w-full max-w-full">
                     {/* SECTION 1: PACKAGE DETAILS */}
                     <div className="space-y-3 w-full max-w-full">
                       <label className="block text-slate-300 font-bold uppercase tracking-wider text-[11px] font-mono text-emerald-400">
@@ -9490,7 +9495,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         <div className="w-9 sm:w-10 text-center shrink-0">Remove</div>
                       </div>
 
-                      <div className="space-y-2.5 max-h-[180px] overflow-y-auto overflow-x-hidden pr-1 w-full max-w-full">
+                      <div className="space-y-2.5 w-full max-w-full">
                         {pkgTeamMembers.map((member, index) => (
                           <div 
                             key={index} 
@@ -9569,7 +9574,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         <div className="w-9 sm:w-10 text-center shrink-0">Remove</div>
                       </div>
 
-                      <div className="space-y-2.5 max-h-[180px] overflow-y-auto overflow-x-hidden pr-1 w-full max-w-full">
+                      <div className="space-y-2.5 w-full max-w-full">
                         {pkgDeliverablesList.map((del, index) => (
                           <div 
                             key={index} 
@@ -9639,7 +9644,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   </div>
 
                   {/* Modal Footer */}
-                  <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800 shrink-0">
+                  <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800 shrink-0 bg-slate-900 z-10">
                     <button
                       type="button"
                       onClick={() => {
