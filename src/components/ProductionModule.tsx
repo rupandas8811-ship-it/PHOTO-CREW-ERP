@@ -1597,7 +1597,7 @@ Production Team`;
     return (leads || []).filter(prod => {
       const { order: foundOrder, lead } = resolveOrderAndLead(prod);
       const order = { ...foundOrder, mobile: foundOrder?.mobile || lead?.mobile || 'No contact phone',
-        order_id: prod.order_id || prod.tracking_id || prod.production_id,
+        order_id: foundOrder?.order_id || prod.order_id || prod.tracking_id || prod.production_id,
         customer_name: prod.customer_name || lead?.customer_name || 'Client',
         event_type: lead?.event_type || 'Event',
         event_date: prod.event_date || lead?.event_date || '',
@@ -3558,191 +3558,121 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           <td className="p-4 text-center">
                             <div className="flex flex-col gap-1.5 items-center justify-center">
                               {(() => {
-                                // 1. Pre-assignment: Show "Assign Editor" button
-                                if (displayStatus === 'Raw Footage Received' || displayStatus === 'Verified Footage' || displayStatus === 'Footage Handover Verified' || displayStatus === 'Pending') {
-                                  return (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenAssignEditor(prod)}
-                                      className="w-full max-w-[160px] px-3 py-1.5 bg-purple-600 border border-purple-500 text-white hover:bg-purple-500 hover:border-purple-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                                      disabled={isProjectLocked(prod.editing_status)}
-                                    >
-                                      <span>👤</span> Assign Editor
-                                    </button>
-                                  );
-                                }
-
-                                // 2. Post-assignment but before completed: Show "Reassign Editor" dropdown
-                                if (displayStatus === 'Assigned Editor' || displayStatus === 'Editing Started' || displayStatus === 'Customer Review') {
-                                  return (
-                                    <div className="flex flex-col gap-1.5 w-full items-center">
-                                      <div className="w-full max-w-[160px]">
-                                        <select
-                                          value=""
-                                          onChange={(e) => {
-                                            if (e.target.value === 'reassign') {
-                                              handleOpenAssignEditor(prod);
-                                            }
-                                          }}
-                                          className="w-full text-zinc-100 bg-zinc-950 border border-zinc-800 hover:border-zinc-700 text-[10.5px] font-sans font-bold py-1.5 px-2.5 rounded focus:outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer text-center"
-                                        >
-                                          <option value="" disabled>▼ Action</option>
-                                          <option value="reassign">Reassign Editor</option>
-                                        </select>
-                                      </div>
-
-                                      {/* Auxiliary Send Review Link Button for Customer Review */}
-                                      {displayStatus === 'Customer Review' && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleOpenResendReviewPopup(prod)}
-                                          className="w-full max-w-[160px] px-3 py-1.5 bg-indigo-600/90 border border-indigo-500 text-white hover:bg-indigo-500 hover:border-indigo-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1"
-                                        >
-                                          <span>📤</span> Send Review Link
-                                        </button>
-                                      )}
-                                    </div>
-                                  );
-                                }
-
-                                // 3. Editing Completed: Show "Client Acceptance" button for Production Manager only
-                                if (displayStatus === 'Editing Completed') {
-                                  if (currentRole === 'Production Staff') {
-                                    return (
-                                      <div className="flex flex-col gap-1.5 w-full items-center">
-                                        <span className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1">
-                                          ✓ Editing Completed
-                                        </span>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleOpenResendReviewPopup(prod)}
-                                          className="w-full max-w-[160px] px-3 py-1.5 bg-indigo-600/90 border border-indigo-500 text-white hover:bg-indigo-500 hover:border-indigo-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1"
-                                        >
-                                          <span>📤</span> Send Review Link
-                                        </button>
-                                      </div>
-                                    );
-                                  }
-                                  return (
-                                    <div className="flex flex-col gap-1.5 w-full items-center">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleOpenClientAcceptance(prod)}
-                                        className="w-full max-w-[160px] px-3 py-1.5 bg-emerald-600 border border-emerald-500 text-white hover:bg-emerald-500 hover:border-emerald-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1"
-                                      >
-                                        <span>✓</span> Client Acceptance
-                                      </button>
-
-                                      {/* Auxiliary Send Review Link Button */}
-                                      <button
-                                        type="button"
-                                        onClick={() => handleOpenResendReviewPopup(prod)}
-                                        className="w-full max-w-[160px] px-3 py-1.5 bg-indigo-600/90 border border-indigo-500 text-white hover:bg-indigo-500 hover:border-indigo-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer flex items-center justify-center gap-1"
-                                      >
-                                        <span>📤</span> Send Review Link
-                                      </button>
-                                    </div>
-                                  );
-                                }
-
-                                // 4. Client Acceptance: Show transferred badge
-                                if (displayStatus === 'Client Acceptance') {
-                                  return (
-                                    <div className="flex flex-col gap-1 w-full items-center">
-                                      <span className="px-2.5 py-1 bg-purple-500/15 border border-purple-500/30 text-purple-300 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 font-mono">
-                                        ✓ Client Acceptance
-                                      </span>
-                                      <span className="text-[9px] text-zinc-400 font-mono">Awaiting BO Approval</span>
-                                    </div>
-                                  );
-                                }
-
-                                // 5. Order Closed: Show read-only Order Closed badge
-                                if (displayStatus === 'Order Closed' || displayStatus === 'Closed' || displayStatus === 'Completed' || displayStatus === 'Project Closed') {
-                                  return (
-                                    <div className="flex flex-col gap-1 w-full items-center">
-                                      <span className="px-2.5 py-1 bg-zinc-800/90 border border-zinc-700 text-zinc-400 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 font-mono">
-                                        🔒 Order Closed
-                                      </span>
-                                    </div>
-                                  );
-                                }
-
-                                return null;
-                              })()}
-
-                              {(() => {
-                                const isEditorAssigned = prod.editor_assigned && prod.editor_assigned !== 'Unassigned' && prod.editor_assigned.trim() !== '';
-                                const hasSavedAssignments = editorAssignments.some(a => a.production_id === prod.production_id);
-                                const isStatusActive = displayStatus && !isProjectLocked(displayStatus) && 
-                                                       prod.editing_status && !isProjectLocked(prod.editing_status);
+                                const isEditorAssigned = prod.editor_assigned && prod.editor_assigned !== "Unassigned" && prod.editor_assigned.trim() !== "";
+                                const hasSavedAssignments = (editorAssignments || []).some(a => a.production_id === prod.production_id);
+                                const isStatusActive = displayStatus && !isProjectLocked(displayStatus) && prod.editing_status && !isProjectLocked(prod.editing_status);
                                 
-                                if (isEditorAssigned && hasSavedAssignments && isStatusActive) {
-                                  return (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        prepareEditorWhatsappData(prod.production_id);
+                                return (
+                                  <>
+                                    {displayStatus === "Client Acceptance" && (
+                                      <div className="flex flex-col gap-1 w-full items-center mb-1">
+                                        <span className="px-2.5 py-1 bg-purple-500/15 border border-purple-500/30 text-purple-300 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 font-mono">
+                                          ✓ Client Acceptance
+                                        </span>
+                                        <span className="text-[9px] text-zinc-400 font-mono">Awaiting BO Approval</span>
+                                      </div>
+                                    )}
+                                    
+                                    {(displayStatus === "Order Closed" || displayStatus === "Closed" || displayStatus === "Completed" || displayStatus === "Project Closed") && (
+                                      <div className="flex flex-col gap-1 w-full items-center mb-1">
+                                        <span className="px-2.5 py-1 bg-zinc-800/90 border border-zinc-700 text-zinc-400 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 font-mono">
+                                          🔒 Order Closed
+                                        </span>
+                                      </div>
+                                    )}
+                                    
+                                    {displayStatus === "Editing Completed" && currentRole === "Production Staff" && (
+                                      <span className="px-3 py-1.5 mb-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 w-full max-w-[160px]">
+                                        ✓ Editing Completed
+                                      </span>
+                                    )}
+                                    
+                                    <select
+                                      value=""
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (!val) return;
+                                        if (val === "assign" || val === "reassign") {
+                                          handleOpenAssignEditor(prod);
+                                        } else if (val === "send_review") {
+                                          handleOpenResendReviewPopup(prod);
+                                        } else if (val === "client_acceptance") {
+                                          handleOpenClientAcceptance(prod);
+                                        } else if (val === "share") {
+                                          prepareEditorWhatsappData(prod.production_id);
+                                        } else if (val === "edit_dossier") {
+                                          setSelectedLeadProd(prod);
+                                          setDossierError("");
+                                          setDossierSuccessMessage("");
+                                          setLeadEditor(prod.editor_assigned || "Unassigned");
+                                          setLeadStaff(prod.assigned_staff ? prod.assigned_staff.split(", ").map(s => s.trim()) : []);
+                                          setAssignRoleFilter("");
+                                          setLeadPriority(prod.project_priority || "Medium");
+                                          setLeadFootageStatus(getRawFootageStatus(prod));
+                                          setLeadProdStatus(getProductionStatus(prod));
+                                          setLeadRemarks(prod.remarks || "");
+                                          setLeadStartDate(prod.editing_start_date || "");
+                                          setLeadTargetDeliveryDate(prod.target_delivery_date || "");
+                                          setLeadExpectedDeliveryDate(prod.expected_delivery_date || "");
+                                          setLeadActualDeliveryDate(prod.delivery_date || prod.actual_delivery_date || "");
+                                          const pLogs = (logs || []).filter(log => 
+                                            log.record_id === prod.production_id ||
+                                            log.record_id === prod.tracking_id ||
+                                            log.record_id === order?.order_id
+                                          );
+                                          const rf = (rawFootage || []).find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
+                                          const computedRfDate = rf && (rf.status === "Received" || rf.raw_received) 
+                                            ? (rf.uploaded_date || rf.event_completed_date) 
+                                            : "";
+                                          const crLog = pLogs.find(log => 
+                                            log.new_stage === "Client Review Sent" || 
+                                            log.new_stage === "Customer Review" ||
+                                            log.action.includes("Client Review Sent") ||
+                                            log.action.includes("Customer Review")
+                                          );
+                                          const caLog = pLogs.find(log => 
+                                            log.new_stage === "Final Approval" || 
+                                            log.new_stage === "Approved" ||
+                                            log.action.includes("Final Approval") ||
+                                            log.action.includes("Approved")
+                                          );
+                                          setLeadRawFootageDate(toInputDateFormat((prod as any).raw_footage_received_date || computedRfDate));
+                                          setLeadClientReviewDate(toInputDateFormat((prod as any).client_review_upload_date || (crLog ? crLog.timestamp : null)));
+                                          setLeadClientApprovalDate(toInputDateFormat((prod as any).client_approval_date || (caLog ? caLog.timestamp : null)));
+                                        }
                                       }}
-                                      className="w-full max-w-[160px] px-2 py-1 bg-emerald-600 border border-emerald-500 text-white hover:bg-emerald-500 hover:border-emerald-400 transition-all text-[9px] font-bold uppercase tracking-wider rounded-lg shadow-sm cursor-pointer flex items-center justify-center gap-1"
+                                      className="w-full max-w-[160px] text-zinc-100 bg-zinc-950 border border-zinc-800 hover:border-zinc-700 text-[10px] font-black uppercase tracking-wider py-1.5 px-2.5 rounded shadow-md cursor-pointer text-center"
                                     >
-                                      <span>💬</span> Share
-                                    </button>
-                                  );
-                                }
-                                return null;
+                                      <option value="" disabled>▼ Action</option>
+                                      
+                                      {(displayStatus === "Raw Footage Received" || displayStatus === "Verified Footage" || displayStatus === "Footage Handover Verified" || displayStatus === "Pending") && (
+                                        <option value="assign">👤 Assign Editor</option>
+                                      )}
+                                      
+                                      {(displayStatus === "Assigned Editor" || displayStatus === "Editing Started" || displayStatus === "Customer Review") && (
+                                        <option value="reassign">Reassign Editor</option>
+                                      )}
+                                      
+                                      {(displayStatus === "Customer Review" || displayStatus === "Editing Completed") && (
+                                        <option value="send_review">📤 Send Review Link</option>
+                                      )}
+                                      
+                                      {displayStatus === "Editing Completed" && currentRole !== "Production Staff" && (
+                                        <option value="client_acceptance">✓ Client Acceptance</option>
+                                      )}
+                                      
+                                      {isEditorAssigned && hasSavedAssignments && isStatusActive && (
+                                        <option value="share">💬 Share</option>
+                                      )}
+                                      
+                                      <option value="edit_dossier">✎ Edit Full Dossier</option>
+                                    </select>
+                                  </>
+                                );
                               })()}
-
-                              {/* Detail Dossier link */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedLeadProd(prod);
-                                  setDossierError('');
-                                  setDossierSuccessMessage('');
-                                  setLeadEditor(prod.editor_assigned || 'Unassigned');
-                                  setLeadStaff(prod.assigned_staff ? prod.assigned_staff.split(', ').map(s => s.trim()) : []);
-                                  setAssignRoleFilter('');
-                                  setLeadPriority(prod.project_priority || 'Medium');
-                                  setLeadFootageStatus(getRawFootageStatus(prod));
-                                  setLeadProdStatus(getProductionStatus(prod));
-                                  setLeadRemarks(prod.remarks || '');
-                                  setLeadStartDate(prod.editing_start_date || '');
-                                  setLeadTargetDeliveryDate(prod.target_delivery_date || '');
-                                  setLeadExpectedDeliveryDate(prod.expected_delivery_date || '');
-                                  setLeadActualDeliveryDate(prod.delivery_date || prod.actual_delivery_date || '');
-
-                                  const pLogs = (logs || []).filter(log => 
-                                    log.record_id === prod.production_id ||
-                                    log.record_id === prod.tracking_id ||
-                                    log.record_id === order?.order_id
-                                  );
-                                  const rf = (rawFootage || []).find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
-                                  const computedRfDate = rf && (rf.status === 'Received' || rf.raw_received) 
-                                    ? (rf.uploaded_date || rf.event_completed_date) 
-                                    : '';
-                                  const crLog = pLogs.find(log => 
-                                    log.new_stage === 'Client Review Sent' || 
-                                    log.new_stage === 'Customer Review' ||
-                                    log.action.includes('Client Review Sent') ||
-                                    log.action.includes('Customer Review')
-                                  );
-                                  const caLog = pLogs.find(log => 
-                                    log.new_stage === 'Final Approval' || 
-                                    log.new_stage === 'Approved' ||
-                                    log.action.includes('Final Approval') ||
-                                    log.action.includes('Approved')
-                                  );
-                                  setLeadRawFootageDate(toInputDateFormat((prod as any).raw_footage_received_date || computedRfDate));
-                                  setLeadClientReviewDate(toInputDateFormat((prod as any).client_review_upload_date || (crLog ? crLog.timestamp : null)));
-                                  setLeadClientApprovalDate(toInputDateFormat((prod as any).client_approval_date || (caLog ? caLog.timestamp : null)));
-                                }}
-                                className="hidden text-[9px] text-zinc-500 hover:text-zinc-350 hover:underline mt-0.5 cursor-pointer"
-                              >
-                                Edit Full Dossier ✎
-                              </button>
                             </div>
                           </td>
+
                         </tr>
                       );
                     });
@@ -10207,6 +10137,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         await updateOrderStage(order?.order_id, 'Client Acceptance');
                       }
                       
+                      if (refreshData) {
+                        refreshData();
+                      }
                       setClientAcceptanceProd(null);
                     } catch (err: any) {
                       alert("Error finalizing Client Acceptance: " + (err.message || err));

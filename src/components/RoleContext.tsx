@@ -4367,10 +4367,11 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     // Set production state in Supabase
     try {
       if (targetProd) {
-         
+        
         const rProd = await pushUpdate('production', 'production_id', targetProd.production_id, updates);
         if (!rProd?.success) {
           console.warn("[updateProduction] DB operation failed for production table update, will fallback to Leads:", rProd?.error);
+          throw new Error(rProd?.error || "DB operation failed for production table update");
         } else {
           setProduction(prev => prev.map(p => p.production_id === targetProd.production_id ? { ...p, ...updates } : p));
         }
@@ -4391,12 +4392,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         const rProd = await pushInsert('production', newProd);
         if (!rProd?.success) {
           console.warn("[updateProduction] DB operation failed for production table insert, will fallback to Leads:", rProd?.error);
+          throw new Error(rProd?.error || "DB operation failed for production table insert");
         } else {
           setProduction(prev => [newProd, ...prev]);
         }
       }
     } catch (prodErr: any) {
       console.warn("[updateProduction] Production DB write exception:", prodErr?.message || prodErr);
+      throw prodErr;
     }
 
     const actualTrackingId = targetProd ? targetProd.tracking_id : inferredTrackingId;
