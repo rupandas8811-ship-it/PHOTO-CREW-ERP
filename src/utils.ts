@@ -429,20 +429,122 @@ export function parseTeamMembers(teamMembersStr: string | undefined | null): str
   return trimmed.split(',').map(item => item.trim()).filter(Boolean);
 }
 
-export function parseQtyAndText(raw: string | undefined | null): { qty: number; text: string } {
-  if (!raw || typeof raw !== "string") return { qty: 1, text: "" };
-  const str = raw.trim();
-  if (!str) return { qty: 1, text: "" };
+export function parseQtyAndText(raw: any): { qty: number; text: string } {
+  if (raw === null || raw === undefined) return { qty: 1, text: "" };
   
-  const match = str.match(/^(\d+)\s*[\*xX×\-]?\s*(.*)$/);
-  if (match) {
-    const q = parseInt(match[1], 10);
+  if (typeof raw === "object") {
+    const q = Number(raw.qty || raw.quantity || raw.count || 1);
     const qty = isNaN(q) || q < 1 ? 1 : q;
-    let text = match[2] ? match[2].trim() : "";
-    text = text.replace(/^[xX×\*\-]\s*/, "").trim();
-    return { qty, text: text || str };
+    const t = String(raw.name || raw.text || raw.deliverable || raw.title || "").trim();
+    return { qty, text: t };
   }
+
+  const str = String(raw).trim();
+  if (!str) return { qty: 1, text: "" };
+
+  // 1. Leading quantity: e.g. "2 x Traditional Photos", "2 - Traditional Photos", "2 Photos", "2 × Photos", "2x Photos"
+  const leadingMatch = str.match(/^(\d+)\s*[\*xX×\-–—]?\s*(.*)$/);
+  if (leadingMatch) {
+    const q = parseInt(leadingMatch[1], 10);
+    const qty = isNaN(q) || q < 1 ? 1 : q;
+    let text = leadingMatch[2] ? leadingMatch[2].trim() : "";
+    text = text.replace(/^[xX×\*\-–—]\s*/, "").trim();
+    if (text) return { qty, text };
+  }
+
+  // 2. Trailing quantity: e.g. "Traditional Photos - Qty: 2", "Traditional Photos (Qty: 2)", "Traditional Photos x2"
+  const trailingMatch = str.match(/^(.*?)\s*[\(\-–—]?\s*(?:qty|quantity|count|x|×)?\s*[:=\-–—]?\s*(\d+)\s*[\)]?$/i);
+  if (trailingMatch && trailingMatch[1].trim()) {
+    const q = parseInt(trailingMatch[2], 10);
+    const qty = isNaN(q) || q < 1 ? 1 : q;
+    const text = trailingMatch[1].trim().replace(/[\(\-–—]\s*(?:qty|quantity|count|x|×)?\s*$/i, "").trim();
+    if (text) return { qty, text };
+  }
+
   return { qty: 1, text: str };
+}
+
+export function parseDeliverablesWithQty(
+  description: string | undefined | null,
+  targetEventName?: string
+): { name: string; qty: number }[] {
+  if (!description) return [];
+
+  let itemsRaw: any[] = [];
+
+  // 1. Try parsing JSON
+  if (typeof description === 'string' && (description.trim().startsWith('[') || description.trim().startsWith('{'))) {
+    try {
+      const parsed = JSON.parse(description);
+      if (Array.isArray(parsed)) {
+        // Case A: Array of event objects: [{ event_name: "...", deliverables: [...] }]
+        if (parsed[0] && typeof parsed[0] === 'object' && ('event_name' in parsed[0] || 'event_type' in parsed[0] || 'deliverables' in parsed[0])) {
+          let targetEvents = parsed;
+          if (targetEventName) {
+            const matched = parsed.filter((ev: any) => {
+              const evName = (ev.event_name || ev.event_type || ev.name || '').toLowerCase();
+              return evName.includes(targetEventName.toLowerCase()) || targetEventName.toLowerCase().includes(evName);
+            });
+            if (matched.length > 0) targetEvents = matched;
+          }
+          targetEvents.forEach((ev: any) => {
+            if (Array.isArray(ev.deliverables)) {
+              itemsRaw.push(...ev.deliverables);
+            } else if (typeof ev.deliverables === 'string') {
+              itemsRaw.push(ev.deliverables);
+            }
+          });
+        } 
+        // Case B: Array of items directly: [{ qty: 2, name: "..." }] or ["2 x Photo"]
+        else {
+          itemsRaw = parsed;
+        }
+      } else if (parsed && typeof parsed === 'object') {
+        if (Array.isArray(parsed.deliverables)) {
+          itemsRaw = parsed.deliverables;
+        }
+      }
+    } catch (e) {
+      // Fallback
+    }
+  }
+
+  // 2. If no JSON items extracted, treat description as plain text
+  if (itemsRaw.length === 0 && typeof description === 'string') {
+    itemsRaw = description.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+  }
+
+  // 3. Process raw items into { name, qty }
+  const result: { name: string; qty: number }[] = [];
+  const map = new Map<string, number>();
+
+  itemsRaw.forEach(item => {
+    if (!item) return;
+    let qty = 1;
+    let text = '';
+
+    if (typeof item === 'object' && item !== null) {
+      qty = Number(item.qty || item.quantity || item.count || 1);
+      if (isNaN(qty) || qty < 1) qty = 1;
+      text = String(item.name || item.text || item.deliverable || item.title || '').trim();
+    } else {
+      const parsedItem = parseQtyAndText(String(item));
+      qty = parsedItem.qty;
+      text = parsedItem.text;
+    }
+
+    if (text) {
+      text = text.replace(/^[\*\-•xX×]\s*/, '').trim();
+      const existingQty = map.get(text) || 0;
+      map.set(text, existingQty + qty);
+    }
+  });
+
+  map.forEach((qty, name) => {
+    result.push({ name, qty });
+  });
+
+  return result;
 }
 
 export function formatQtyItem(raw: string | undefined | null): string {

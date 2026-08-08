@@ -14,7 +14,7 @@ import { Production, EditingStatus, Staff } from '../types';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { ProjectDetailModal } from './ProjectDetailModal';
-import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem, parseQtyAndText } from '../utils';
+import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem, parseQtyAndText, parseDeliverablesWithQty } from '../utils';
 import { AppLogo } from './AppLogo';
 import { StatusText } from './ui/StatusText';
 import { EventDropdownCell } from './EventDropdownCell';
@@ -71,22 +71,9 @@ function toInputDateFormat(dateStr?: string | null): string {
   }
 }
 
-function parseExactDeliverables(description: string): string[] {
-  if (!description) return [];
-  try {
-    const parsed = JSON.parse(description);
-    if (Array.isArray(parsed)) {
-      if (typeof parsed[0] === 'string') {
-        return parsed.map((s: any) => formatQtyItem(String(s).trim())).filter(Boolean);
-      } else if (parsed[0] && Array.isArray(parsed[0].deliverables)) {
-        return parsed[0].deliverables.map((s: any) => formatQtyItem(String(s).trim())).filter(Boolean);
-      }
-    }
-  } catch (e) {}
-  return description
-    .split(/[,\n]/)
-    .map(line => formatQtyItem(line.trim()))
-    .filter(Boolean);
+function parseExactDeliverables(description: string, targetEventName?: string): string[] {
+  const list = parseDeliverablesWithQty(description, targetEventName);
+  return list.map(item => `${item.qty} × ${item.name}`);
 }
 
 function formatWhatsAppNumber(phone: string) {
@@ -1212,8 +1199,10 @@ ${coordinatorName}`;
     return [];
   };
 
-  const getAssignedEditorsTableData = (prod: Production): { staff_name: string; deliverable: string; qty: number; status: string }[] => {
+  const getAssignedDeliverablesForProd = (prod: Production, targetEventOnly: boolean = false): { name: string; qty: number }[] => {
+    if (!prod) return [];
     const { order, lead } = resolveOrderAndLead(prod);
+    
     let deliverablesText = order?.deliverables_description || lead?.deliverables_description || '';
     if (!deliverablesText && lead) {
       const targetLeadQuotations = quotations?.filter((q: any) => q.lead_id === lead.lead_id) || [];
@@ -1223,30 +1212,46 @@ ${coordinatorName}`;
         deliverablesText = targetLatestQuote.deliverables_description || '';
       }
     }
-    const parsedDeliverables = parseExactDeliverables(deliverablesText);
+
+    const targetEvent = targetEventOnly ? (prod.custom_event_name || prod.event_type || order?.custom_event_name || order?.event_type) : undefined;
+    let list = parseDeliverablesWithQty(deliverablesText, targetEvent);
+
+    // Fallback to editorAssignments if list is empty
+    if (list.length === 0) {
+      const assignedForThis = (editorAssignments || []).filter(a => a.production_id === prod.production_id || (order?.order_id && a.order_id === order.order_id));
+      const map = new Map<string, number>();
+      assignedForThis.forEach(a => {
+        const spec = a.speciality;
+        if (spec) {
+          const { qty, text } = parseQtyAndText(spec);
+          if (text) {
+            map.set(text, (map.get(text) || 0) + (qty || 1));
+          }
+        }
+      });
+      map.forEach((qty, name) => {
+        list.push({ name, qty });
+      });
+    }
+
+    return list;
+  };
+
+  const getAssignedEditorsTableData = (prod: Production): { staff_name: string; deliverable: string; qty: number; status: string }[] => {
+    const assignedDeliverables = getAssignedDeliverablesForProd(prod, true);
     const assignedForThis = (editorAssignments || []).filter(a => a.production_id === prod.production_id);
     
     const results: { staff_name: string; deliverable: string; qty: number; status: string }[] = [];
     const usedAssignments = new Set<string>();
     
-    // Map parsed deliverables
-    const parsedMap = new Map<string, number>();
-    for (const d of parsedDeliverables) {
-      const { qty, text } = parseQtyAndText(d);
-      if (text) {
-        parsedMap.set(text, (parsedMap.get(text) || 0) + qty);
-      }
-    }
-    
-    // For each unique deliverable, match with assignments
-    parsedMap.forEach((qty, text) => {
-      const matchingAssignments = assignedForThis.filter(a => a.speciality === text && !usedAssignments.has(a.assignment_id));
+    assignedDeliverables.forEach(item => {
+      const matchingAssignments = assignedForThis.filter(a => a.speciality === item.name && !usedAssignments.has(a.assignment_id));
       if (matchingAssignments.length > 0) {
         matchingAssignments.forEach(a => {
           results.push({
             staff_name: a.staff_name || 'Unassigned',
-            deliverable: text,
-            qty: qty,
+            deliverable: item.name,
+            qty: item.qty,
             status: a.status || 'Assigned Editor'
           });
           usedAssignments.add(a.assignment_id);
@@ -1254,8 +1259,8 @@ ${coordinatorName}`;
       } else {
         results.push({
           staff_name: 'Unassigned',
-          deliverable: text,
-          qty: qty,
+          deliverable: item.name,
+          qty: item.qty,
           status: 'Pending Assignment'
         });
       }
@@ -1264,10 +1269,11 @@ ${coordinatorName}`;
     // Add remaining unmatched assignments
     assignedForThis.forEach(a => {
       if (!usedAssignments.has(a.assignment_id)) {
+        const { qty, text } = parseQtyAndText(a.speciality);
         results.push({
           staff_name: a.staff_name || 'Unassigned',
-          deliverable: a.speciality || 'Deliverable',
-          qty: 1,
+          deliverable: text || a.speciality || 'Deliverable',
+          qty: qty || 1,
           status: a.status || 'Assigned Editor'
         });
       }
@@ -7749,18 +7755,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 {workflowActionType === 'delivery_checklist' && activeWorkflowProd && (() => {
                   const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
                   const customerName = order?.customer_name || lead?.customer_name || '—';
-                  const eventName = order?.custom_event_name || lead?.custom_event_name || '—';
-                  const eventType = order?.event_type || lead?.event_type || '—';
-                  let deliverablesText = order?.deliverables_description || lead?.deliverables_description || '';
-                  if (!deliverablesText && lead) {
-                    const targetLeadQuotations = quotations?.filter((q: any) => q.lead_id === lead.lead_id) || [];
-                    targetLeadQuotations.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-                    const targetLatestQuote = targetLeadQuotations[0];
-                    if (targetLatestQuote) {
-                      deliverablesText = targetLatestQuote.deliverables_description || '';
-                    }
-                  }
-                  const checklistItems = parseExactDeliverables(deliverablesText);
+                  const eventName = activeWorkflowProd.custom_event_name || order?.custom_event_name || lead?.custom_event_name || '—';
+                  const eventType = activeWorkflowProd.event_type || order?.event_type || lead?.event_type || '—';
+                  
+                  const assignedDeliverables = getAssignedDeliverablesForProd(activeWorkflowProd, true);
 
                   return (
                     <form onSubmit={async (e) => {
@@ -7794,25 +7792,38 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       </div>
 
                       <div className="space-y-3">
-                        <h4 className="text-[10px] text-[#a78bfa] uppercase font-black tracking-widest font-mono border-b border-zinc-900 pb-2">
-                          Deliverables Checklist
+                        <h4 className="text-[10px] text-[#a78bfa] uppercase font-black tracking-widest font-mono border-b border-zinc-900 pb-2 flex items-center justify-between">
+                          <span>Deliverables Checklist</span>
+                          <span className="text-zinc-500 font-normal">Order: {order?.order_id || activeWorkflowProd.tracking_id}</span>
                         </h4>
-                        {checklistItems.length === 0 ? (
+                        {assignedDeliverables.length === 0 ? (
                           <div className="text-zinc-500 text-xs italic font-mono p-4 text-center bg-zinc-900/20 rounded-xl">
-                            No deliverables found. Check to proceed.
-                            <label className="flex items-center gap-3 mt-3 justify-center text-zinc-300">
+                            No assigned deliverables found for this order/event.
+                            <label className="flex items-center gap-3 mt-3 justify-center text-zinc-300 cursor-pointer">
                               <input type="checkbox" required className="w-4 h-4 accent-purple-500 bg-zinc-900 border-zinc-700 rounded" />
                               <span className="font-semibold text-xs">Proceed without deliverables</span>
                             </label>
                           </div>
                         ) : (
-                          <div className="space-y-2">
-                            {checklistItems.map((item, idx) => (
-                              <label key={idx} className="flex items-center gap-3 p-3 bg-zinc-905 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900 transition-colors">
-                                <input type="checkbox" required className="w-4 h-4 accent-purple-500 bg-zinc-900 border-zinc-700 rounded cursor-pointer" />
-                                <span className="font-semibold text-xs text-zinc-300">
-                                  {item} <span className="text-zinc-500 font-normal ml-1">(Completed and Delivered)</span>
-                                </span>
+                          <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                            {assignedDeliverables.map((item, idx) => (
+                              <label key={idx} className="flex items-center justify-between p-3.5 bg-zinc-900/50 border border-zinc-850 rounded-xl cursor-pointer hover:bg-zinc-900 transition-colors">
+                                <div className="flex items-center gap-3">
+                                  <input type="checkbox" required className="w-4 h-4 accent-purple-500 bg-zinc-950 border-zinc-700 rounded cursor-pointer" />
+                                  <div>
+                                    <span className="font-bold text-xs text-zinc-200 uppercase tracking-tight block">
+                                      {item.name}
+                                    </span>
+                                    <span className="text-[10px] text-zinc-500 block font-mono">
+                                      STATUS: <span className="text-emerald-400 font-bold">Ready for Delivery</span>
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <span className="inline-block px-2.5 py-1 bg-purple-500/10 text-purple-300 font-mono text-xs font-bold rounded-lg border border-purple-500/20">
+                                    Qty: {item.qty}
+                                  </span>
+                                </div>
                               </label>
                             ))}
                           </div>
