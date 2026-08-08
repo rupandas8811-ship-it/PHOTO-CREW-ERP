@@ -128,11 +128,10 @@ export const ProductionStaffModule: React.FC = () => {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Build assigned bookings list ONLY for logged in assigned editor
+  // Build assigned bookings list grouped by Order/Event for logged in assigned editor
   useEffect(() => {
     if (!resolvedStaffId && !staffName && !currentUser?.id) return;
 
-    const bookings: any[] = [];
     // Strict filter: ONLY tasks assigned to THIS staff member
     const myAssignments = editorAssignments.filter(ea => {
       const matchId = (resolvedStaffId && ea.staff_id && ea.staff_id === resolvedStaffId) ||
@@ -142,6 +141,7 @@ export const ProductionStaffModule: React.FC = () => {
       return matchId || matchName;
     });
 
+    const individualDeliverables: any[] = [];
     myAssignments.forEach(assignment => {
         // Resolve production, order, and lead records flexibly
         const prod = production.find(p => 
@@ -168,9 +168,17 @@ export const ProductionStaffModule: React.FC = () => {
         // Determine unified status
         let currentStatus = assignment.status || 'Assigned Editor';
 
-        bookings.push({
+        // Raw Footage Drive Link resolution
+        const matchedOp = (order?.order_id || prod?.order_id) ? operations.find(o => o.order_id === (order?.order_id || prod?.order_id)) : null;
+        const opsDriveLink = matchedOp ? (matchedOp.raw_footage_drive_link || matchedOp.Raw_Footage_Drive_Link || matchedOp.consolidated_drive_link || matchedOp.Consolidated_Drive_Link) : null;
+        const rawFootageLink = (opsDriveLink || (assignment as any).raw_footage_link || prod?.raw_footage_drive_link || prod?.raw_footage_location || '').trim();
+
+        // Edited Drive Link resolution
+        const editedDriveLink = (assignment.edited_drive_link || prod?.edited_drive_link || '').trim();
+
+        individualDeliverables.push({
             assignmentId: assignment.assignment_id,
-            orderId: order?.order_id || prod?.order_id || prod?.tracking_id || assignment.production_id,
+            orderId: order?.order_id || prod?.order_id || prod?.tracking_id || assignment.order_id || assignment.production_id || 'ORD-ASSIGNED',
             leadId: lead?.lead_id || order?.lead_id || prod?.lead_id,
             customerName: lead?.customer_name || order?.customer_name || prod?.customer_name || 'Client',
             customerMobile: lead?.mobile || order?.customer_phone || prod?.customer_mobile || '',
@@ -179,6 +187,8 @@ export const ProductionStaffModule: React.FC = () => {
             deliverable: assignment.speciality,
             targetFinishDate: prod?.target_delivery_date || prod?.expected_delivery_date || assignment.target_finish_date || '',
             status: currentStatus,
+            rawFootageLink,
+            editedDriveLink,
             assignmentObj: assignment,
             orderObj: order,
             leadObj: lead,
@@ -186,8 +196,66 @@ export const ProductionStaffModule: React.FC = () => {
         });
     });
 
-    setActiveBookings(bookings);
-  }, [staffName, resolvedStaffId, currentUser, editorAssignments, orders, leads, production]);
+    // Group deliverables by Order ID + Event Name for this staff member
+    const groupsMap = new Map<string, any>();
+    individualDeliverables.forEach(item => {
+      const groupKey = `${item.orderId}_${item.eventName}`;
+      if (!groupsMap.has(groupKey)) {
+        groupsMap.set(groupKey, {
+          groupId: groupKey,
+          orderId: item.orderId,
+          leadId: item.leadId,
+          customerName: item.customerName,
+          customerMobile: item.customerMobile,
+          eventName: item.eventName,
+          eventDate: item.eventDate,
+          targetFinishDate: item.targetFinishDate,
+          rawFootageLink: item.rawFootageLink,
+          orderObj: item.orderObj,
+          leadObj: item.leadObj,
+          prodObj: item.prodObj,
+          deliverables: []
+        });
+      }
+
+      const grp = groupsMap.get(groupKey);
+      grp.deliverables.push(item);
+      if (!grp.rawFootageLink && item.rawFootageLink) {
+        grp.rawFootageLink = item.rawFootageLink;
+      }
+    });
+
+    // Calculate stage rank helper
+    const getTaskStageRank = (st: string, driveLink?: string) => {
+      const status = st || '';
+      if (['Client Acceptance', 'Business Owner Review', 'Project Completed', 'Completed', 'Order Closed'].includes(status)) return 5;
+      if (['Editing Completed', 'Editing Complete'].includes(status)) return 4;
+      if (['Customer Review', 'Client Review', 'Client Review Sent'].includes(status) || (driveLink && driveLink.trim() !== '')) return 3;
+      if (['Editing Started', 'In Progress', 'Editing In Progress'].includes(status)) return 2;
+      if (['Assigned Editor', 'Editor Assigned', 'Assigned'].includes(status)) return 1;
+      return 0;
+    };
+
+    // Overall status per grouped task
+    const groupedList = Array.from(groupsMap.values()).map(grp => {
+      const ranks = grp.deliverables.map((d: any) => getTaskStageRank(d.status, d.editedDriveLink));
+      const minRank = Math.min(...ranks);
+
+      let overallStatus = 'Assigned Editor';
+      if (minRank >= 5) overallStatus = 'Client Acceptance';
+      else if (minRank >= 4) overallStatus = 'Editing Completed';
+      else if (minRank >= 3) overallStatus = 'Customer Review';
+      else if (minRank >= 2) overallStatus = 'Editing Started';
+      else if (minRank >= 1) overallStatus = 'Assigned Editor';
+
+      return {
+        ...grp,
+        overallStatus
+      };
+    });
+
+    setActiveBookings(groupedList);
+  }, [staffName, resolvedStaffId, currentUser, editorAssignments, orders, leads, production, operations]);
 
   const getStatusBadge = (status: string) => {
     switch(status) {
@@ -539,287 +607,307 @@ Thank you.`;
               <p className="text-zinc-600 text-xs">New assignments made by Production Manager will automatically appear here.</p>
             </div>
           ) : (
-            <div className="bg-zinc-950 border border-zinc-900 rounded-2xl overflow-hidden shadow-2xl">
-              <div className="overflow-x-auto w-full">
-                <table className="w-full text-left border-collapse min-w-[1100px]">
-                  <thead>
-                    <tr className="bg-zinc-900/70 border-b border-zinc-800 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
-                      <th className="px-4 py-3.5 font-bold">Order ID</th>
-                      <th className="px-4 py-3.5 font-bold">Customer</th>
-                      <th className="px-4 py-3.5 font-bold">Event Name</th>
-                      <th className="px-4 py-3.5 font-bold">Deliverable</th>
-                      <th className="px-4 py-3.5 font-bold text-center">Qty</th>
-                      <th className="px-4 py-3.5 font-bold">Raw Footage Link</th>
-                      <th className="px-4 py-3.5 font-bold">Edited Link</th>
-                      <th className="px-4 py-3.5 font-bold">Target Delivery Date</th>
-                      <th className="px-4 py-3.5 font-bold">Current Status</th>
-                      <th className="px-4 py-3.5 font-bold text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-900 text-xs font-sans">
-                    {activeBookings.map((b) => {
-                      const badge = getStatusBadge(b.status);
-                      const isLocked = ['Client Acceptance', 'Business Owner Review', 'Project Completed', 'Completed', 'Order Closed'].includes(b.status) || b.orderObj?.current_stage === 'Business Owner Review';
+            <div className="space-y-6">
+              {activeBookings.map((grp) => {
+                const badge = getStatusBadge(grp.overallStatus);
 
-                      // Quantity and clean name parsing
-                      const parsedDeliv = parseQtyAndText(b.deliverable);
-                      const delivQty = parsedDeliv.qty || 1;
-                      const delivName = parsedDeliv.text || b.deliverable;
+                return (
+                  <div key={grp.groupId} className="bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl space-y-0">
+                    {/* TASK HEADER PANEL */}
+                    <div className="p-4 sm:p-5 bg-zinc-900/80 border-b border-zinc-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 items-center flex-1">
+                        {/* Order ID */}
+                        <div>
+                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Order ID</div>
+                          <span 
+                            onClick={() => setSelectedProjectForDetail(grp.orderId)}
+                            className="font-mono font-bold text-violet-400 hover:text-violet-300 hover:underline cursor-pointer text-sm block truncate"
+                            title="Click to view full dossier"
+                          >
+                            {grp.orderId}
+                          </span>
+                        </div>
 
-                      // Raw Footage Drive Link resolution
-                      const matchedOp = b.orderId ? operations.find(o => o.order_id === b.orderId) : null;
-                      const opsDriveLink = matchedOp ? (matchedOp.raw_footage_drive_link || matchedOp.Raw_Footage_Drive_Link || matchedOp.consolidated_drive_link || matchedOp.Consolidated_Drive_Link) : null;
-                      const rawFootageLink = (opsDriveLink || b.assignmentObj?.raw_footage_link || b.prodObj?.raw_footage_drive_link || b.prodObj?.raw_footage_location || '').trim();
+                        {/* Customer */}
+                        <div>
+                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Customer</div>
+                          <div className="font-bold text-white text-xs truncate">{grp.customerName}</div>
+                          <div className="text-[10px] text-zinc-400 font-mono">{grp.customerMobile || 'No contact'}</div>
+                        </div>
 
-                      // Edited Drive Link resolution
-                      const editedDriveLink = (b.prodObj?.edited_drive_link || b.assignmentObj?.edited_drive_link || '').trim();
+                        {/* Event Name */}
+                        <div>
+                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Event Name</div>
+                          <div className="font-semibold text-zinc-200 text-xs truncate">{grp.eventName}</div>
+                          <div className="text-[10px] text-zinc-400 font-mono flex items-center gap-1 mt-0.5">
+                            <Calendar className="w-3 h-3 text-zinc-500 shrink-0" />
+                            <span>{grp.eventDate || '—'}</span>
+                          </div>
+                        </div>
 
-                      return (
-                        <tr key={b.assignmentId} className="hover:bg-zinc-900/40 transition-colors">
-                          {/* 1. Order ID */}
-                          <td className="px-4 py-3.5">
-                            <span 
-                              onClick={() => setSelectedProjectForDetail(b.orderId)}
-                              className="font-mono font-bold text-violet-400 hover:text-violet-300 hover:underline cursor-pointer block"
-                              title="Click to view full dossier"
+                        {/* Raw Footage Link */}
+                        <div>
+                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Raw Footage Link</div>
+                          {grp.rawFootageLink && (grp.rawFootageLink.startsWith('http://') || grp.rawFootageLink.startsWith('https://')) ? (
+                            <a
+                              href={grp.rawFootageLink.startsWith('http') ? grp.rawFootageLink : `https://${grp.rawFootageLink}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              referrerPolicy="no-referrer"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 rounded-lg text-[10px] font-bold transition-all cursor-pointer max-w-[130px] truncate"
+                              title={grp.rawFootageLink}
                             >
-                              {b.orderId}
-                            </span>
-                            <span className="text-[10px] text-zinc-500 font-mono block">{b.assignmentId}</span>
-                          </td>
+                              <LinkIcon className="w-3 h-3 shrink-0" />
+                              <span className="truncate">Open Drive</span>
+                            </a>
+                          ) : (
+                            <span className="text-zinc-600 italic text-[11px]">Not Provided</span>
+                          )}
+                        </div>
 
-                          {/* 2. Customer Name & Phone */}
-                          <td className="px-4 py-3.5">
-                            <div className="font-bold text-white text-xs">{b.customerName}</div>
-                            <div className="text-[10px] text-zinc-400 font-mono mt-0.5">{b.customerMobile || 'No contact'}</div>
-                          </td>
+                        {/* Target Delivery Date */}
+                        <div>
+                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Target Delivery Date</div>
+                          <span className="font-mono text-xs text-zinc-300 font-semibold">{grp.targetFinishDate || 'Not set'}</span>
+                        </div>
+                      </div>
 
-                          {/* 3. Event Name & Date */}
-                          <td className="px-4 py-3.5">
-                            <div className="font-semibold text-zinc-200">{b.eventName}</div>
-                            <div className="text-[10px] text-zinc-400 font-mono flex items-center gap-1 mt-0.5">
-                              <Calendar className="w-3 h-3 text-zinc-500" />
-                              {b.eventDate || '—'}
-                            </div>
-                          </td>
+                      {/* Overall Task Status Badge */}
+                      <div className="shrink-0 flex md:flex-col items-center md:items-end justify-between border-t md:border-t-0 border-zinc-800 pt-2 md:pt-0">
+                        <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider mb-1">Overall Task Status</div>
+                        <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-mono font-bold border ${badge.color}`}>
+                          {badge.label}
+                        </span>
+                      </div>
+                    </div>
 
-                          {/* 4. Deliverable */}
-                          <td className="px-4 py-3.5">
-                            <div className="font-bold text-purple-300 flex items-center gap-1.5">
-                              <span>🎯 {delivName}</span>
-                            </div>
-                          </td>
+                    {/* ASSIGNED DELIVERABLES TABLE */}
+                    <div className="p-4 bg-zinc-950/90">
+                      <div className="text-[11px] font-mono font-bold text-zinc-400 uppercase tracking-wider mb-3 flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          <span>📦 Assigned Deliverables</span>
+                          <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px]">
+                            {grp.deliverables.length} {grp.deliverables.length === 1 ? 'Deliverable' : 'Deliverables'}
+                          </span>
+                        </span>
+                        <span className="text-[10px] text-zinc-500 font-normal">Assigned to: <strong className="text-purple-400">{staffName}</strong></span>
+                      </div>
 
-                          {/* 5. Quantity */}
-                          <td className="px-4 py-3.5 font-mono font-bold text-center">
-                            <span className="px-2.5 py-0.5 rounded bg-zinc-900 text-zinc-200 text-xs border border-zinc-800">
-                              {delivQty}
-                            </span>
-                          </td>
+                      <div className="overflow-x-auto w-full">
+                        <table className="w-full text-left border-collapse min-w-[750px]">
+                          <thead>
+                            <tr className="bg-zinc-900/50 border-b border-zinc-800 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
+                              <th className="px-3.5 py-2.5 font-bold">Deliverable</th>
+                              <th className="px-3.5 py-2.5 font-bold text-center">Qty</th>
+                              <th className="px-3.5 py-2.5 font-bold">Current Status</th>
+                              <th className="px-3.5 py-2.5 font-bold">Edited Drive Link</th>
+                              <th className="px-3.5 py-2.5 font-bold text-center">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-900/80 text-xs font-sans">
+                            {grp.deliverables.map((delivItem: any) => {
+                              const delivBadge = getStatusBadge(delivItem.status);
+                              const isDelivLocked = ['Client Acceptance', 'Business Owner Review', 'Project Completed', 'Completed', 'Order Closed'].includes(delivItem.status) || grp.orderObj?.current_stage === 'Business Owner Review';
 
-                          {/* 6. Raw Footage Drive Link */}
-                          <td className="px-4 py-3.5 font-mono">
-                            {rawFootageLink && (rawFootageLink.startsWith('http://') || rawFootageLink.startsWith('https://')) ? (
-                              <a
-                                href={rawFootageLink}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                referrerPolicy="no-referrer"
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 rounded-lg text-[10px] font-bold transition-all cursor-pointer max-w-[130px] truncate"
-                                title={rawFootageLink}
-                              >
-                                <LinkIcon className="w-3 h-3 shrink-0" />
-                                <span className="truncate">Open Drive</span>
-                              </a>
-                            ) : (
-                              <span className="text-zinc-600 italic text-[11px]">Not Provided</span>
-                            )}
-                          </td>
+                              const parsedDeliv = parseQtyAndText(delivItem.deliverable);
+                              const delivQty = parsedDeliv.qty || 1;
+                              const delivName = parsedDeliv.text || delivItem.deliverable;
 
-                          {/* 7. Edited Drive Link */}
-                          <td className="px-4 py-3.5 font-mono">
-                            {editedDriveLink && (editedDriveLink.startsWith('http://') || editedDriveLink.startsWith('https://')) ? (
-                              <a
-                                href={editedDriveLink}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                referrerPolicy="no-referrer"
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-lg text-[10px] font-bold transition-all cursor-pointer max-w-[130px] truncate"
-                                title={editedDriveLink}
-                              >
-                                <LinkIcon className="w-3 h-3 shrink-0" />
-                                <span className="truncate">Edited Link</span>
-                              </a>
-                            ) : (
-                              <span className="text-zinc-600 italic text-[11px]">Pending Upload</span>
-                            )}
-                          </td>
-
-                          {/* 8. Target Delivery Date */}
-                          <td className="px-4 py-3.5 font-mono text-zinc-300 whitespace-nowrap">
-                            {b.targetFinishDate ? (
-                              <span className="font-semibold text-zinc-200">{b.targetFinishDate}</span>
-                            ) : (
-                              <span className="text-zinc-600 italic">Not set</span>
-                            )}
-                          </td>
-
-                          {/* 9. Current Status */}
-                          <td className="px-4 py-3.5 whitespace-nowrap">
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border ${badge.color}`}>
-                              {badge.label}
-                            </span>
-                          </td>
-
-                          {/* 10. Action Dropdown */}
-                          <td className="px-4 py-3.5 text-center relative">
-                            <div className="relative inline-block text-left">
-                              <button
-                                type="button"
-                                onClick={() => setActiveDropdownId(activeDropdownId === b.assignmentId ? null : b.assignmentId)}
-                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-purple-600 hover:bg-purple-500 text-white transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
-                              >
-                                <span>⚡ Action</span>
-                                <ChevronDown className="w-3.5 h-3.5" />
-                              </button>
-
-                              {/* DROPDOWN MENU */}
-                              {activeDropdownId === b.assignmentId && (
-                                <div className="absolute right-0 mt-2 w-56 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden divide-y divide-zinc-800 animate-in fade-in zoom-in-95">
-                                  
-                                  {/* View Details */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setActiveDropdownId(null);
-                                      setSelectedProjectForDetail(b.orderId);
-                                    }}
-                                    className="w-full text-left px-4 py-2.5 text-xs text-zinc-200 hover:bg-purple-600/20 hover:text-purple-300 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                  >
-                                    <Eye className="w-4 h-4 text-purple-400" /> View Details
-                                  </button>
-
-                                  {/* Locked State Notification */}
-                                  {isLocked ? (
-                                    <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-[11px] font-bold flex items-center gap-2">
-                                      <Lock className="w-3.5 h-3.5" /> Client Acceptance Complete
+                              return (
+                                <tr key={delivItem.assignmentId} className="hover:bg-zinc-900/40 transition-colors">
+                                  {/* Deliverable Name */}
+                                  <td className="px-3.5 py-3 font-bold text-purple-300">
+                                    <div className="flex items-center gap-2">
+                                      <span>🎯 {delivName}</span>
                                     </div>
-                                  ) : (
-                                    <>
-                                      {/* Workflow Step 1: Editing Started */}
-                                      {(b.status === 'Assigned Editor' || b.status === 'Editor Assigned' || b.status === 'Assigned' || b.status === 'Raw Footage Received') && (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setActiveDropdownId(null);
-                                            setEditingStartedModal(b);
-                                            setEditingStartedForm({
-                                              expected_delivery_date: b.targetFinishDate || new Date().toISOString().split('T')[0],
-                                              estimated_completion_date: b.targetFinishDate || new Date().toISOString().split('T')[0],
-                                              estimated_completion_time: '18:00'
-                                            });
-                                          }}
-                                          className="w-full text-left px-4 py-2.5 text-xs text-sky-400 hover:bg-sky-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                        >
-                                          <Play className="w-4 h-4" /> Start Editing
-                                        </button>
-                                      )}
+                                    <span className="text-[10px] text-zinc-500 font-mono font-normal block mt-0.5">{delivItem.assignmentId}</span>
+                                  </td>
 
-                                      {/* Workflow Step 2: Customer Review */}
-                                      {b.status === 'Editing Started' && (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setActiveDropdownId(null);
-                                            setCustomerReviewModal(b);
-                                            setCustomerReviewForm({ edited_drive_link: b.prodObj?.edited_drive_link || '' });
-                                          }}
-                                          className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                        >
-                                          <UserCheck className="w-4 h-4" /> Upload Review
-                                        </button>
-                                      )}
+                                  {/* Qty */}
+                                  <td className="px-3.5 py-3 font-mono font-bold text-center">
+                                    <span className="px-2.5 py-0.5 rounded bg-zinc-900 text-zinc-200 text-xs border border-zinc-800">
+                                      {delivQty}
+                                    </span>
+                                  </td>
 
-                                      {/* Workflow Step 3: Re-send Customer Review, Upload Confirmation Proof & Client Acceptance */}
-                                      {b.status === 'Customer Review' && (
-                                        <>
+                                  {/* Status */}
+                                  <td className="px-3.5 py-3 whitespace-nowrap">
+                                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border ${delivBadge.color}`}>
+                                      {delivBadge.label}
+                                    </span>
+                                  </td>
+
+                                  {/* Edited Link */}
+                                  <td className="px-3.5 py-3 font-mono">
+                                    {delivItem.editedDriveLink && (delivItem.editedDriveLink.startsWith('http://') || delivItem.editedDriveLink.startsWith('https://')) ? (
+                                      <a
+                                        href={delivItem.editedDriveLink.startsWith('http') ? delivItem.editedDriveLink : `https://${delivItem.editedDriveLink}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        referrerPolicy="no-referrer"
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-lg text-[10px] font-bold transition-all cursor-pointer max-w-[150px] truncate"
+                                        title={delivItem.editedDriveLink}
+                                      >
+                                        <LinkIcon className="w-3 h-3 shrink-0" />
+                                        <span className="truncate">View Link</span>
+                                      </a>
+                                    ) : (
+                                      <span className="text-zinc-600 italic text-[11px]">Pending Upload</span>
+                                    )}
+                                  </td>
+
+                                  {/* Action Dropdown */}
+                                  <td className="px-3.5 py-3 text-center relative">
+                                    <div className="relative inline-block text-left">
+                                      <button
+                                        type="button"
+                                        onClick={() => setActiveDropdownId(activeDropdownId === delivItem.assignmentId ? null : delivItem.assignmentId)}
+                                        className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-purple-600 hover:bg-purple-500 text-white transition-all flex items-center gap-1.5 shadow-md cursor-pointer mx-auto"
+                                      >
+                                        <span>⚡ Action</span>
+                                        <ChevronDown className="w-3.5 h-3.5" />
+                                      </button>
+
+                                      {/* DROPDOWN MENU */}
+                                      {activeDropdownId === delivItem.assignmentId && (
+                                        <div className="absolute right-0 mt-2 w-56 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden divide-y divide-zinc-800 animate-in fade-in zoom-in-95 text-left">
+                                          
+                                          {/* View Details */}
                                           <button
                                             type="button"
                                             onClick={() => {
                                               setActiveDropdownId(null);
-                                              setCustomerReviewModal(b);
-                                              setCustomerReviewForm({ edited_drive_link: b.prodObj?.edited_drive_link || '' });
+                                              setSelectedProjectForDetail(grp.orderId);
                                             }}
-                                            className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                            className="w-full text-left px-4 py-2.5 text-xs text-zinc-200 hover:bg-purple-600/20 hover:text-purple-300 font-bold flex items-center gap-2 transition-colors cursor-pointer"
                                           >
-                                            <RefreshCw className="w-4 h-4" /> Re-send Review Link
+                                            <Eye className="w-4 h-4 text-purple-400" /> View Details
                                           </button>
 
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setActiveDropdownId(null);
-                                              setEditingCompletedModal(b);
-                                              setEditingCompletedForm({ confirmation_proof: '' });
-                                            }}
-                                            className="w-full text-left px-4 py-2.5 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                          >
-                                            <CheckCircle2 className="w-4 h-4" /> Upload Confirmation Proof
-                                          </button>
+                                          {/* Locked State Notification */}
+                                          {isDelivLocked ? (
+                                            <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-[11px] font-bold flex items-center gap-2">
+                                              <Lock className="w-3.5 h-3.5" /> Client Acceptance Complete
+                                            </div>
+                                          ) : (
+                                            <>
+                                              {/* Workflow Step 1: Editing Started */}
+                                              {(delivItem.status === 'Assigned Editor' || delivItem.status === 'Editor Assigned' || delivItem.status === 'Assigned' || delivItem.status === 'Raw Footage Received') && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setActiveDropdownId(null);
+                                                    setEditingStartedModal(delivItem);
+                                                    setEditingStartedForm({
+                                                      expected_delivery_date: delivItem.targetFinishDate || new Date().toISOString().split('T')[0],
+                                                      estimated_completion_date: delivItem.targetFinishDate || new Date().toISOString().split('T')[0],
+                                                      estimated_completion_time: '18:00'
+                                                    });
+                                                  }}
+                                                  className="w-full text-left px-4 py-2.5 text-xs text-sky-400 hover:bg-sky-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                                >
+                                                  <Play className="w-4 h-4" /> Start Editing
+                                                </button>
+                                              )}
 
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setActiveDropdownId(null);
-                                              setClientAcceptanceModal(b);
-                                              setClientAcceptanceForm({
-                                                checklist_1: false,
-                                                checklist_2: false,
-                                                checklist_3: false,
-                                                communication_proof: '',
-                                                internal_validation: true
-                                              });
-                                            }}
-                                            className="w-full text-left px-4 py-2.5 text-xs text-emerald-400 hover:bg-emerald-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                          >
-                                            <ShieldCheck className="w-4 h-4" /> Client Acceptance
-                                          </button>
-                                        </>
+                                              {/* Workflow Step 2: Customer Review */}
+                                              {delivItem.status === 'Editing Started' && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setActiveDropdownId(null);
+                                                    setCustomerReviewModal(delivItem);
+                                                    setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '' });
+                                                  }}
+                                                  className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                                >
+                                                  <UserCheck className="w-4 h-4" /> Upload Review
+                                                </button>
+                                              )}
+
+                                              {/* Workflow Step 3: Re-send Customer Review, Upload Confirmation Proof & Client Acceptance */}
+                                              {delivItem.status === 'Customer Review' && (
+                                                <>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setActiveDropdownId(null);
+                                                      setCustomerReviewModal(delivItem);
+                                                      setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '' });
+                                                    }}
+                                                    className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                                  >
+                                                    <RefreshCw className="w-4 h-4" /> Re-send Review Link
+                                                  </button>
+
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setActiveDropdownId(null);
+                                                      setEditingCompletedModal(delivItem);
+                                                      setEditingCompletedForm({ confirmation_proof: '' });
+                                                    }}
+                                                    className="w-full text-left px-4 py-2.5 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                                  >
+                                                    <CheckCircle2 className="w-4 h-4" /> Upload Confirmation Proof
+                                                  </button>
+
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setActiveDropdownId(null);
+                                                      setClientAcceptanceModal(delivItem);
+                                                      setClientAcceptanceForm({
+                                                        checklist_1: false,
+                                                        checklist_2: false,
+                                                        checklist_3: false,
+                                                        communication_proof: '',
+                                                        internal_validation: true
+                                                      });
+                                                    }}
+                                                    className="w-full text-left px-4 py-2.5 text-xs text-emerald-400 hover:bg-emerald-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                                  >
+                                                    <ShieldCheck className="w-4 h-4" /> Client Acceptance
+                                                  </button>
+                                                </>
+                                              )}
+
+                                              {/* Workflow Step 4: Editing Completed -> Client Acceptance */}
+                                              {(delivItem.status === 'Editing Completed' || delivItem.status === 'Editing Complete' || delivItem.status === 'Completed') && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setActiveDropdownId(null);
+                                                    setClientAcceptanceModal(delivItem);
+                                                    setClientAcceptanceForm({
+                                                      checklist_1: false,
+                                                      checklist_2: false,
+                                                      checklist_3: false,
+                                                      communication_proof: delivItem.customer_communication_proof || '',
+                                                      internal_validation: true
+                                                    });
+                                                  }}
+                                                  className="w-full text-left px-4 py-2.5 text-xs text-emerald-400 hover:bg-emerald-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                                >
+                                                  <ShieldCheck className="w-4 h-4" /> Client Acceptance
+                                                </button>
+                                              )}
+                                            </>
+                                          )}
+                                        </div>
                                       )}
-
-                                      {/* Workflow Step 4: Editing Completed -> Client Acceptance */}
-                                      {(b.status === 'Editing Completed' || b.status === 'Editing Complete' || b.status === 'Completed') && (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setActiveDropdownId(null);
-                                            setClientAcceptanceModal(b);
-                                            setClientAcceptanceForm({
-                                              checklist_1: false,
-                                              checklist_2: false,
-                                              checklist_3: false,
-                                              communication_proof: b.customer_communication_proof || '',
-                                              internal_validation: true
-                                            });
-                                          }}
-                                          className="w-full text-left px-4 py-2.5 text-xs text-emerald-400 hover:bg-emerald-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                        >
-                                          <ShieldCheck className="w-4 h-4" /> Client Acceptance
-                                        </button>
-                                      )}
-                                    </>
-                                  )}
-
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
