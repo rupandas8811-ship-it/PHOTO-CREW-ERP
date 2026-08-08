@@ -109,7 +109,11 @@ export const ProductionStaffModule: React.FC = () => {
   } | null>(null);
   const [copiedSuccess, setCopiedSuccess] = useState(false);
 
-  // 3. Client Acceptance Modal
+  // 3. Editing Completed Modal
+  const [editingCompletedModal, setEditingCompletedModal] = useState<any | null>(null);
+  const [editingCompletedForm, setEditingCompletedForm] = useState({ confirmation_proof: '' });
+
+  // 4. Client Acceptance Modal
   const [clientAcceptanceModal, setClientAcceptanceModal] = useState<any | null>(null);
   const [clientAcceptanceForm, setClientAcceptanceForm] = useState({
     checklist_1: false,
@@ -356,6 +360,60 @@ Thank you.`;
     }
   };
 
+  // 3. Submit Editing Completed Modal
+  const handleEditingCompletedSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCompletedModal) return;
+
+    if (!editingCompletedForm.confirmation_proof.trim()) {
+      alert("Validation Failed: Please upload or provide Customer Confirmation Proof or Image.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const timestamp = new Date().toISOString();
+      const b = editingCompletedModal;
+      const proofStr = editingCompletedForm.confirmation_proof.trim();
+
+      await updateEditorAssignmentStatus(b.assignmentId, 'Editing Completed' as any);
+
+      await pushUpdate('editor_assignments', 'assignment_id', b.assignmentId, {
+        customer_communication_proof: proofStr,
+        status: 'Editing Completed'
+      });
+
+      if (b.prodObj?.production_id) {
+        await updateProduction(b.prodObj.production_id, {
+          editing_status: 'Editing Completed' as any,
+          production_status: 'Editing Completed' as any,
+          client_communication_proof: proofStr,
+          remarks: `Editing Completed & Customer Confirmation Proof uploaded by ${staffName} on ${new Date().toLocaleDateString()}`
+        });
+      }
+
+      if (b.orderId) {
+        await updateOrderStage(b.orderId, 'Editing Completed' as any);
+      }
+      if (b.leadId) {
+        await updateLead(b.leadId, {
+          status: 'Editing Completed' as any,
+          current_status: 'Editing Completed' as any
+        });
+      }
+
+      setEditingCompletedModal(null);
+      setEditingCompletedForm({ confirmation_proof: '' });
+      await refreshData();
+      showToast('🎉 Status updated to Editing Completed!');
+    } catch (err: any) {
+      console.error('Error submitting Editing Completed:', err);
+      alert('Failed to submit: ' + (err.message || 'Please try again.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // 3. Submit Client Acceptance Modal
   const handleClientAcceptanceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -511,7 +569,7 @@ Thank you.`;
                       // Raw Footage Drive Link resolution
                       const matchedOp = b.orderId ? operations.find(o => o.order_id === b.orderId) : null;
                       const opsDriveLink = matchedOp ? (matchedOp.raw_footage_drive_link || matchedOp.Raw_Footage_Drive_Link || matchedOp.consolidated_drive_link || matchedOp.Consolidated_Drive_Link) : null;
-                      const rawFootageLink = (opsDriveLink || b.assignmentObj?.raw_footage_link || b.prodObj?.raw_footage_drive_link || '').trim();
+                      const rawFootageLink = (opsDriveLink || b.assignmentObj?.raw_footage_link || b.prodObj?.raw_footage_drive_link || b.prodObj?.raw_footage_location || '').trim();
 
                       // Edited Drive Link resolution
                       const editedDriveLink = (b.prodObj?.edited_drive_link || b.assignmentObj?.edited_drive_link || '').trim();
@@ -682,7 +740,7 @@ Thank you.`;
                                         </button>
                                       )}
 
-                                      {/* Workflow Step 3: Re-send Customer Review & Client Acceptance */}
+                                      {/* Workflow Step 3: Re-send Customer Review, Upload Confirmation Proof & Client Acceptance */}
                                       {b.status === 'Customer Review' && (
                                         <>
                                           <button
@@ -695,6 +753,18 @@ Thank you.`;
                                             className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
                                           >
                                             <RefreshCw className="w-4 h-4" /> Re-send Review Link
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setActiveDropdownId(null);
+                                              setEditingCompletedModal(b);
+                                              setEditingCompletedForm({ confirmation_proof: '' });
+                                            }}
+                                            className="w-full text-left px-4 py-2.5 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                          >
+                                            <CheckCircle2 className="w-4 h-4" /> Upload Confirmation Proof
                                           </button>
 
                                           <button
@@ -715,6 +785,27 @@ Thank you.`;
                                             <ShieldCheck className="w-4 h-4" /> Client Acceptance
                                           </button>
                                         </>
+                                      )}
+
+                                      {/* Workflow Step 4: Editing Completed -> Client Acceptance */}
+                                      {(b.status === 'Editing Completed' || b.status === 'Editing Complete' || b.status === 'Completed') && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveDropdownId(null);
+                                            setClientAcceptanceModal(b);
+                                            setClientAcceptanceForm({
+                                              checklist_1: false,
+                                              checklist_2: false,
+                                              checklist_3: false,
+                                              communication_proof: b.customer_communication_proof || '',
+                                              internal_validation: true
+                                            });
+                                          }}
+                                          className="w-full text-left px-4 py-2.5 text-xs text-emerald-400 hover:bg-emerald-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                        >
+                                          <ShieldCheck className="w-4 h-4" /> Client Acceptance
+                                        </button>
                                       )}
                                     </>
                                   )}
@@ -960,7 +1051,86 @@ Thank you.`;
       )}
 
       {/* ========================================================= */}
-      {/* 3. CLIENT ACCEPTANCE MODAL POPUP */}
+      {/* 3. EDITING COMPLETED MODAL POPUP */}
+      {/* ========================================================= */}
+      {editingCompletedModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-base font-bold text-white">Upload Customer Confirmation Proof</h3>
+              </div>
+              <button 
+                onClick={() => setEditingCompletedModal(null)}
+                className="text-zinc-400 hover:text-white p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-400">
+              Upload customer confirmation image or proof confirming edits/revisions are completed. This will update status to <strong className="text-indigo-400">Editing Completed</strong>.
+            </p>
+
+            <form onSubmit={handleEditingCompletedSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
+                  Customer Confirmation Image / Proof <span className="text-rose-400">*</span>
+                </label>
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      const compressed = await compressImage(e.target.files[0]);
+                      setEditingCompletedForm({ ...editingCompletedForm, confirmation_proof: compressed });
+                    }
+                  }}
+                  className="w-full text-xs text-zinc-300 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer mb-2"
+                />
+
+                <div className="text-[10px] text-zinc-500 text-center uppercase font-mono my-1">- OR ENTER PROOF IMAGE URL / DRIVE LINK -</div>
+
+                <input
+                  type="text"
+                  placeholder="https://..."
+                  value={editingCompletedForm.confirmation_proof}
+                  onChange={(e) => setEditingCompletedForm({ ...editingCompletedForm, confirmation_proof: e.target.value })}
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+                />
+
+                {editingCompletedForm.confirmation_proof && (
+                  <div className="mt-2 text-[11px] text-indigo-400 font-mono font-bold flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5" /> Confirmation Proof Attached
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingCompletedModal(null)}
+                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting || !editingCompletedForm.confirmation_proof.trim()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer shadow-lg shadow-indigo-600/20"
+                >
+                  {isSubmitting ? 'Saving...' : 'Submit & Mark Editing Completed 🎯'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* 4. CLIENT ACCEPTANCE MODAL POPUP */}
       {/* ========================================================= */}
       {clientAcceptanceModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">

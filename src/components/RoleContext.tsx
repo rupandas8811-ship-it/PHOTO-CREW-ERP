@@ -5802,21 +5802,31 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           
           // Do not override terminal statuses
           if (!['Completed', 'Closed', 'Client Acceptance', 'Project Closed', 'Order Closed', 'Final Approval'].includes(baseStatus)) {
-            const hasTasks = totalTasks > 0;
-            const allReachedComplete = hasTasks && allTasks.every(t => 
-              t.status === 'Completed' || t.status === 'Editing Complete' || t.status === 'Editing Completed'
-            );
-            const anyCustomerReview = allTasks.some(t => t.status === 'Customer Review');
-            const anyStarted = allTasks.some(t => t.status === 'Editing Started' || t.status === 'In Progress');
+            if (totalTasks > 0) {
+              const getTaskStageRank = (st: string, driveLink?: string) => {
+                const s = st || '';
+                if (['Client Acceptance'].includes(s)) return 5;
+                if (['Completed', 'Editing Completed', 'Editing Complete'].includes(s)) return 4;
+                if (['Customer Review', 'Client Review', 'Client Review Sent'].includes(s) || (driveLink && driveLink.trim() !== '')) return 3;
+                if (['Editing Started', 'In Progress', 'Editing In Progress'].includes(s)) return 2;
+                if (['Assigned Editor', 'Editor Assigned', 'Assigned'].includes(s)) return 1;
+                return 0;
+              };
 
-            if (allReachedComplete) {
-              nextEditingStatus = 'Editing Completed' as any;
-            } else if (anyCustomerReview) {
-              nextEditingStatus = 'Customer Review';
-            } else if (anyStarted) {
-              nextEditingStatus = 'Editing Started';
-            } else {
-              nextEditingStatus = 'Assigned Editor';
+              const ranks = allTasks.map(t => getTaskStageRank(t.status, t.edited_drive_link));
+              const minRank = Math.min(...ranks);
+
+              if (minRank >= 5) {
+                nextEditingStatus = 'Client Acceptance' as any;
+              } else if (minRank >= 4) {
+                nextEditingStatus = 'Editing Completed' as any;
+              } else if (minRank >= 3) {
+                nextEditingStatus = 'Customer Review' as any;
+              } else if (minRank >= 2) {
+                nextEditingStatus = 'Editing Started' as any;
+              } else if (minRank >= 1) {
+                nextEditingStatus = 'Assigned Editor' as any;
+              }
             }
           }
           

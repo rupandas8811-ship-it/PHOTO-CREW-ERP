@@ -6,7 +6,7 @@ import {
   Play, CheckCircle2, UserCheck, Eye, EyeOff, Calendar, Lock, Layers, AlertCircle, Ban, RefreshCw, Clock,
   PlusSquare, ArrowRight, CheckSquare, AlertTriangle, Truck, Users, BarChart3, TrendingUp, Sparkles, UserPlus, ChevronRight,
   Aperture, Camera, Sliders, ShieldCheck, Image, Download, Printer, FileSpreadsheet, FileText, Search,
-  Trash2, X, Mail, MessageSquare, Edit3, MapPin, Plus, Phone
+  Trash2, X, Mail, MessageSquare, Edit3, MapPin, Plus, Phone, ExternalLink
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
@@ -574,6 +574,68 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     const lead = leadsData?.find(l => l.lead_id === prodItem.tracking_id || l.lead_id === order?.lead_id || l.lead_id === prodItem.lead_id);
     
     return { order, lead };
+  };
+
+  // Robustly extract Raw Footage Drive Link from Operations / Raw Footage / Production / Staff Assignment sources
+  const getRawFootageDriveLink = (prodItem: any): string => {
+    if (!prodItem) return '';
+
+    const { order, lead } = resolveOrderAndLead(prodItem);
+    const orderId = prodItem.order_id || order?.order_id || prodItem.tracking_id;
+    const leadId = prodItem.lead_id || lead?.lead_id || order?.lead_id;
+
+    // 1. Check Operations record matching order_id or lead_id or tracking_id
+    const matchedOp = operations.find(o => 
+      (orderId && o.order_id === orderId) ||
+      (leadId && o.lead_id === leadId) ||
+      (prodItem.tracking_id && (o.order_id === prodItem.tracking_id || o.lead_id === prodItem.tracking_id))
+    );
+
+    const opsLink = matchedOp ? (
+      matchedOp.raw_footage_drive_link || 
+      matchedOp.Raw_Footage_Drive_Link || 
+      matchedOp.consolidated_drive_link || 
+      matchedOp.Consolidated_Drive_Link
+    ) : null;
+
+    if (opsLink && opsLink.trim() !== '') {
+      return opsLink.trim();
+    }
+
+    // 2. Check Raw Footage table matching order_id or tracking_id
+    const rf = rawFootage.find(f => 
+      (orderId && f.order_id === orderId) || 
+      (prodItem.tracking_id && (f.tracking_id === prodItem.tracking_id || f.order_id === prodItem.tracking_id))
+    );
+    if (rf?.server_path && rf.server_path.trim() !== '' && !rf.server_path.startsWith('s3://')) {
+      return rf.server_path.trim();
+    }
+
+    // 3. Check Production item direct fields
+    if (prodItem.raw_footage_location && prodItem.raw_footage_location.trim() !== '' && !prodItem.raw_footage_location.startsWith('s3://')) {
+      return prodItem.raw_footage_location.trim();
+    }
+    if ((prodItem as any).raw_footage_drive_link && ((prodItem as any).raw_footage_drive_link as string).trim() !== '') {
+      return ((prodItem as any).raw_footage_drive_link as string).trim();
+    }
+
+    // 4. Check Raw Footage table server_path fallback
+    if (rf?.server_path && rf.server_path.trim() !== '') {
+      return rf.server_path.trim();
+    }
+
+    // 5. Check Production item raw_footage_location fallback
+    if (prodItem.raw_footage_location && prodItem.raw_footage_location.trim() !== '') {
+      return prodItem.raw_footage_location.trim();
+    }
+
+    // 6. Check staff_assignments / editorAssignments for any raw_footage_link
+    const matchingSA = (editorAssignments || []).find(a => a.production_id === prodItem.production_id || (orderId && a.order_id === orderId));
+    if ((matchingSA as any)?.raw_footage_link && ((matchingSA as any).raw_footage_link as string).trim() !== '') {
+      return ((matchingSA as any).raw_footage_link as string).trim();
+    }
+
+    return '';
   };
 
   const getPersonalizedMessage = (staff: any, deliverables: any[]) => {
@@ -1217,7 +1279,7 @@ ${coordinatorName}`;
     const baseStatus = (prod.editing_status || 'Pending') as string;
     
     // 1. Order Closed (After Business Owner final approval)
-    if (baseStatus === 'Order Closed' || baseStatus === 'Closed' || baseStatus === 'Completed' || baseStatus === 'Project Closed') {
+    if (['Order Closed', 'Closed', 'Completed', 'Project Closed'].includes(baseStatus)) {
       return 'Order Closed';
     }
     
@@ -1229,33 +1291,24 @@ ${coordinatorName}`;
     const assignments = (editorAssignments || []).filter(a => a.production_id === prod.production_id);
     
     if (assignments.length > 0) {
-      // 3. Editing Completed (Only when ALL assigned editors have completed their assigned deliverables)
-      const allCompleted = assignments.every(a => 
-        ['Completed', 'Editing Completed', 'Editing Complete'].includes(a.status as string)
-      );
-      if (allCompleted) {
-        return 'Editing Completed';
-      }
+      const getTaskStageRank = (st: string, driveLink?: string) => {
+        const status = st || '';
+        if (['Client Acceptance'].includes(status)) return 5;
+        if (['Completed', 'Editing Completed', 'Editing Complete'].includes(status)) return 4;
+        if (['Customer Review', 'Client Review', 'Client Review Sent'].includes(status) || (driveLink && driveLink.trim() !== '')) return 3;
+        if (['Editing Started', 'In Progress', 'Editing In Progress'].includes(status)) return 2;
+        if (['Assigned Editor', 'Editor Assigned', 'Assigned'].includes(status)) return 1;
+        return 0;
+      };
 
-      // 4. Customer Review (When at least one assigned editor uploads the Edited Drive Link or is in Customer/Client Review status)
-      const hasUploadedDriveLink = assignments.some(a => 
-        (((a as any).edited_drive_link && ((a as any).edited_drive_link as string).trim() !== '') || 
-        ['Customer Review', 'Client Review'].includes(a.status as string))
-      ) || ((prod as any).edited_drive_link && ((prod as any).edited_drive_link as string).trim() !== '');
-      if (hasUploadedDriveLink) {
-        return 'Customer Review';
-      }
+      const ranks = assignments.map(a => getTaskStageRank(a.status, (a as any).edited_drive_link));
+      const minRank = Math.min(...ranks);
 
-      // 5. Editing Started (When any assigned editor starts editing)
-      const anyStarted = assignments.some(a => 
-        ['Editing Started', 'In Progress', 'Editing In Progress'].includes(a.status as string)
-      );
-      if (anyStarted) {
-        return 'Editing Started';
-      }
-
-      // 6. Assigned Editor (Immediately after Assign Editor, or when all deliverables have been assigned)
-      return 'Assigned Editor';
+      if (minRank >= 5) return 'Client Acceptance';
+      if (minRank >= 4) return 'Editing Completed';
+      if (minRank >= 3) return 'Customer Review';
+      if (minRank >= 2) return 'Editing Started';
+      if (minRank >= 1) return 'Assigned Editor';
     }
 
     // Pre-assignment statuses (e.g. Verified Footage, Footage Handover Verified, Raw Footage Received, Pending)
@@ -1929,9 +1982,7 @@ Production Team`;
       const eventType = selectedEvent?.event_type || selectedEvent?.event_shoot_type || orderData?.event_type || 'Shoot Type';
 
       // Raw footage drive link
-      const matchedOp = orderData ? operations.find(o => o.order_id === orderData.order_id) : null;
-      const opsDriveLink = matchedOp ? (matchedOp.raw_footage_drive_link || matchedOp.Raw_Footage_Drive_Link || matchedOp.consolidated_drive_link || matchedOp.Consolidated_Drive_Link) : null;
-      const driveLink = opsDriveLink || prodData?.raw_footage_location || rfItem?.server_path || '—';
+      const driveLink = getRawFootageDriveLink(prodData) || '—';
 
       // Target Delivery date
       const targetDate = prodData?.target_delivery_date || prodData?.expected_delivery_date || '—';
@@ -2933,16 +2984,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             </td>
                             <td className="p-3">
                               {(() => {
-                                const { order } = resolveOrderAndLead(prod);
-                                const matchedOp = order ? operations.find(o => o.order_id === order.order_id) : null;
-                                const opsDriveLink = matchedOp ? (matchedOp.raw_footage_drive_link || matchedOp.Raw_Footage_Drive_Link || matchedOp.consolidated_drive_link || matchedOp.Consolidated_Drive_Link) : null;
-                                const finalDriveLink = (opsDriveLink || rf?.server_path || '').trim();
-                                const isDriveLinkAvailable = finalDriveLink !== '' && (finalDriveLink.startsWith('http://') || finalDriveLink.startsWith('https://'));
+                                const finalDriveLink = getRawFootageDriveLink(prod);
+                                const isDriveLinkAvailable = finalDriveLink !== '' && (finalDriveLink.startsWith('http://') || finalDriveLink.startsWith('https://') || finalDriveLink.includes('drive.google.com') || finalDriveLink.length > 5);
 
                                 if (isDriveLinkAvailable) {
+                                  const fullHref = finalDriveLink.startsWith('http') ? finalDriveLink : `https://${finalDriveLink}`;
                                   return (
                                     <a
-                                      href={finalDriveLink}
+                                      href={fullHref}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       referrerPolicy="no-referrer"
@@ -3263,16 +3312,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             {/* Raw Footage Link */}
                             <td className="p-4 text-left font-sans">
                               {(() => {
-                                const { order } = resolveOrderAndLead(prod);
-                                const matchedOp = order ? operations.find(o => o.order_id === order.order_id) : null;
-                                const opsDriveLink = matchedOp ? (matchedOp.raw_footage_drive_link || matchedOp.Raw_Footage_Drive_Link || matchedOp.consolidated_drive_link || matchedOp.Consolidated_Drive_Link) : null;
-                                const finalDriveLink = (opsDriveLink || rf?.server_path || '').trim();
-                                const isDriveLinkAvailable = finalDriveLink !== '' && (finalDriveLink.startsWith('http://') || finalDriveLink.startsWith('https://'));
+                                const finalDriveLink = getRawFootageDriveLink(prod);
+                                const isDriveLinkAvailable = finalDriveLink !== '' && (finalDriveLink.startsWith('http://') || finalDriveLink.startsWith('https://') || finalDriveLink.includes('drive.google.com') || finalDriveLink.length > 5);
 
                                 if (isDriveLinkAvailable) {
+                                  const fullHref = finalDriveLink.startsWith('http') ? finalDriveLink : `https://${finalDriveLink}`;
                                   return (
                                     <a
-                                      href={finalDriveLink}
+                                      href={fullHref}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       referrerPolicy="no-referrer"
@@ -7539,27 +7586,24 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       // Determine new status based on new assignments (do NOT reset if already higher or keep existing workflow)
                       let newEditingStatus = 'Assigned Editor';
                       if (newAssignments.length > 0) {
-                        const allCompleted = newAssignments.every(a => 
-                          ['Completed', 'Editing Completed', 'Editing Complete'].includes(a.status as string)
-                        );
-                        if (allCompleted) {
-                          newEditingStatus = 'Editing Completed';
-                        } else {
-                          const hasUploadedDriveLink = newAssignments.some(a => 
-                            (((a as any).edited_drive_link && ((a as any).edited_drive_link as string).trim() !== '') || 
-                            ['Customer Review', 'Client Review'].includes(a.status as string))
-                          ) || ((activeWorkflowProd as any).edited_drive_link && ((activeWorkflowProd as any).edited_drive_link as string).trim() !== '');
-                          if (hasUploadedDriveLink) {
-                            newEditingStatus = 'Customer Review';
-                          } else {
-                            const anyStarted = newAssignments.some(a => 
-                              ['Editing Started', 'In Progress', 'Editing In Progress'].includes(a.status as string)
-                            );
-                            if (anyStarted) {
-                              newEditingStatus = 'Editing Started';
-                            }
-                          }
-                        }
+                        const getTaskStageRank = (st: string, driveLink?: string) => {
+                          const status = st || '';
+                          if (['Client Acceptance'].includes(status)) return 5;
+                          if (['Completed', 'Editing Completed', 'Editing Complete'].includes(status)) return 4;
+                          if (['Customer Review', 'Client Review', 'Client Review Sent'].includes(status) || (driveLink && driveLink.trim() !== '')) return 3;
+                          if (['Editing Started', 'In Progress', 'Editing In Progress'].includes(status)) return 2;
+                          if (['Assigned Editor', 'Editor Assigned', 'Assigned'].includes(status)) return 1;
+                          return 0;
+                        };
+
+                        const ranks = newAssignments.map(a => getTaskStageRank(a.status, (a as any).edited_drive_link));
+                        const minRank = Math.min(...ranks);
+
+                        if (minRank >= 5) newEditingStatus = 'Client Acceptance';
+                        else if (minRank >= 4) newEditingStatus = 'Editing Completed';
+                        else if (minRank >= 3) newEditingStatus = 'Customer Review';
+                        else if (minRank >= 2) newEditingStatus = 'Editing Started';
+                        else if (minRank >= 1) newEditingStatus = 'Assigned Editor';
                       }
                       
                       await updateProduction(activeWorkflowProd.production_id, {
@@ -8205,18 +8249,24 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             </div>
                             <div className="flex flex-col pt-2 border-t border-zinc-900">
                               <span className="text-zinc-550 font-mono mb-1">Raw Footage Link:</span>
-                              {activeWorkflowProd.raw_footage_location ? (
-                                <a 
-                                  href={activeWorkflowProd.raw_footage_location} 
-                                  target="_blank" 
-                                  rel="noreferrer" 
-                                  className="text-cyan-400 hover:underline break-all font-mono text-[10px]"
-                                >
-                                  {activeWorkflowProd.raw_footage_location}
-                                </a>
-                              ) : (
-                                <span className="text-zinc-600 italic font-mono text-[10px]">No Link Attached</span>
-                              )}
+                              {(() => {
+                                const rawLink = getRawFootageDriveLink(activeWorkflowProd);
+                                if (rawLink) {
+                                  const fullHref = rawLink.startsWith('http') ? rawLink : `https://${rawLink}`;
+                                  return (
+                                    <a 
+                                      href={fullHref} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      referrerPolicy="no-referrer"
+                                      className="text-cyan-400 hover:underline break-all font-mono text-[10px]"
+                                    >
+                                      {rawLink}
+                                    </a>
+                                  );
+                                }
+                                return <span className="text-zinc-600 italic font-mono text-[10px]">No Link Attached</span>;
+                              })()}
                             </div>
                           </div>
 
@@ -8621,18 +8671,23 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         );
       })()}
 
-      {/* ASSIGNED EDITORS POPUP */}
+      {/* ASSIGNED EDITORS / TEAM POPUP */}
       {assignedEditorsModalProd && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
-          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all duration-300">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all duration-300">
             {/* Header */}
             <div className="p-5 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
               <div>
                 <span className="text-[9px] font-mono font-black uppercase tracking-widest text-indigo-400 block mb-0.5">
                   Production Lead • Assigned Team
                 </span>
-                <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">
-                  {assignedEditorsModalProd.production_id}
+                <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                  <span>{assignedEditorsModalProd.production_id}</span>
+                  {(() => {
+                    const { order, lead } = resolveOrderAndLead(assignedEditorsModalProd);
+                    const name = order?.customer_name || lead?.customer_name;
+                    return name ? <span className="text-zinc-400 font-sans font-normal text-xs">• {name}</span> : null;
+                  })()}
                 </h3>
               </div>
               <button
@@ -8644,67 +8699,97 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             </div>
             
             <div className="p-5 overflow-y-auto font-sans flex-1 overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse min-w-[600px]">
+              <table className="w-full text-left text-xs border-collapse min-w-[550px]">
                 <thead>
-                  <tr className="border-b border-zinc-900 bg-zinc-950/70 text-zinc-500 font-mono text-[9px] uppercase tracking-wider">
+                  <tr className="border-b border-zinc-900 bg-zinc-950/70 text-zinc-400 font-mono text-[10px] uppercase tracking-wider">
                     <th className="p-3 font-bold">Staff Name</th>
-                    <th className="p-3 font-bold">Staff Type</th>
-                    <th className="p-3 font-bold">Assigned Deliverable(s)</th>
-                    <th className="p-3 font-bold">Assigned Role</th>
-                    <th className="p-3 font-bold">Mobile Number</th>
+                    <th className="p-3 font-bold">Assigned Deliverable</th>
                     <th className="p-3 font-bold">Current Status</th>
+                    <th className="p-3 font-bold">Upload Link</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-900 text-zinc-300">
+                <tbody className="divide-y divide-zinc-900 text-zinc-300 font-sans">
                   {(() => {
-                    const editorsList = getAssignedEditorsList(assignedEditorsModalProd);
-                    if (editorsList.length === 0) {
+                    const assignments = (editorAssignments || []).filter(a => a.production_id === assignedEditorsModalProd.production_id);
+                    
+                    let rows: { name: string; deliverable: string; status: string; link: string }[] = [];
+
+                    if (assignments.length > 0) {
+                      rows = assignments.map(a => {
+                        const linkStr = (a.edited_drive_link || (a as any).raw_footage_link || (a as any).upload_link || (assignedEditorsModalProd as any).edited_drive_link || '').trim();
+                        return {
+                          name: a.staff_name || 'Unassigned',
+                          deliverable: a.speciality || 'Deliverable',
+                          status: a.status || 'Assigned Editor',
+                          link: linkStr
+                        };
+                      });
+                    } else {
+                      const list = getAssignedEditorsList(assignedEditorsModalProd);
+                      rows = list.map(ed => {
+                        const linkStr = (ed.edited_drive_link || (assignedEditorsModalProd as any).edited_drive_link || '').trim();
+                        return {
+                          name: ed.name,
+                          deliverable: ed.deliverable || (ed.deliverables ? ed.deliverables.join(', ') : 'Deliverable'),
+                          status: ed.status || 'Assigned Editor',
+                          link: linkStr
+                        };
+                      });
+                    }
+
+                    if (rows.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={6} className="p-6 text-center text-zinc-600 italic">
-                            No editors assigned.
+                          <td colSpan={4} className="p-6 text-center text-zinc-500 italic font-mono text-xs">
+                            No assigned staff or deliverables found for this order.
                           </td>
                         </tr>
                       );
                     }
-                    return editorsList.map((editor, idx) => (
-                      <tr key={idx} className="hover:bg-zinc-900/40">
-                        <td className="p-3 font-bold text-zinc-200">{editor.name}</td>
-                        <td className="p-3">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium ${
-                            editor.type === 'In-House' 
-                              ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' 
-                              : 'bg-orange-500/10 text-orange-400 border border-orange-500/20'
-                          }`}>
-                            {editor.type}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <div className="flex flex-wrap gap-1">
-                            {(editor.deliverables || editor.deliverable?.split(",") || []).map((del: string, i: number) => (
-                              <span key={i} className="px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded text-[9px] font-mono font-bold uppercase">
-                                {del.trim()}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="p-3">{editor.role}</td>
-                        <td className="p-3 font-mono text-zinc-400">{editor.mobile}</td>
-                        <td className="p-3">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium ${
-                            editor.status === 'Completed' || editor.status === 'Editing Complete'
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                              : editor.status === 'Client Review' || editor.status === 'Review Pending'
-                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                              : editor.status === 'Editing Started' || editor.status === 'In Progress'
-                              ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                              : 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20'
-                          }`}>
-                            {editor.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ));
+
+                    return rows.map((row, idx) => {
+                      const hasLink = row.link && (row.link.startsWith('http://') || row.link.startsWith('https://') || row.link.includes('drive.google.com') || row.link.length > 5);
+                      return (
+                        <tr key={idx} className="hover:bg-zinc-900/40 transition-colors">
+                          <td className="p-3 font-bold text-white font-sans">{row.name}</td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded text-xs font-mono font-bold">
+                              {row.deliverable}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
+                              ['Completed', 'Editing Completed', 'Editing Complete'].includes(row.status)
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                : ['Customer Review', 'Client Review'].includes(row.status)
+                                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                : ['Editing Started', 'In Progress', 'Editing In Progress'].includes(row.status)
+                                ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                            }`}>
+                              {row.status}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            {hasLink ? (
+                              <a
+                                href={row.link.startsWith('http') ? row.link : `https://${row.link}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                referrerPolicy="no-referrer"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:text-indigo-300 font-bold text-xs transition-colors cursor-pointer"
+                                title={row.link}
+                              >
+                                <span>View Link</span>
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            ) : (
+                              <span className="text-zinc-500 italic text-xs font-mono">Not Uploaded</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    });
                   })()}
                 </tbody>
               </table>

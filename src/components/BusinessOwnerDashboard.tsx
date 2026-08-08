@@ -169,12 +169,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     const validApprovalStages = [
       'Client Acceptance',
       'Business Owner Review',
-      'Customer Review',
-      'Editing Complete',
-      'Editing Completed',
-      'Final Approval',
-      'Approved',
-      'Project Delivered'
+      'Final Approval'
     ];
 
     return orders.filter(order => {
