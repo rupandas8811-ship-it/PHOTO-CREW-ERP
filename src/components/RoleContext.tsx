@@ -4370,6 +4370,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         const rProd = await pushUpdate('production', 'production_id', targetProd.production_id, updates);
         if (!rProd?.success) {
           console.warn("[updateProduction] DB operation failed for production table update, will fallback to Leads:", rProd?.error);
+        } else {
+          setProduction(prev => prev.map(p => p.production_id === targetProd.production_id ? { ...p, ...updates } : p));
         }
       } else {
         const newPId = productionId.startsWith('PRD-') ? `PRD-${Math.floor(100000 + Math.random() * 899999)}` : productionId;
@@ -4388,6 +4390,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         const rProd = await pushInsert('production', newProd);
         if (!rProd?.success) {
           console.warn("[updateProduction] DB operation failed for production table insert, will fallback to Leads:", rProd?.error);
+        } else {
+          setProduction(prev => [newProd, ...prev]);
         }
       }
     } catch (prodErr: any) {
@@ -4790,6 +4794,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     });
     if (!rOrd?.success) {
       throw new Error("Failed to update order stage: " + rOrd?.error);
+    } else {
+      setOrders(prev => prev.map(o => o.order_id === resolvedOrderId ? { ...o, current_stage: targetStageToSave } : o));
     }
 
     if (targetOrder) {
@@ -4863,14 +4869,17 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     // Update production status
     if (targetProd) {
       const finalRemarks = `${targetProd.remarks || ''}\n${remarks || 'Delivered to client.'}`;
-      const rProd = await pushUpdate('production', 'production_id', targetProd.production_id, {
+      const updates = {
         editing_status: 'Delivered',
         customer_review_status: 'Approved',
         delivery_date: timestamp.split('T')[0],
         remarks: finalRemarks
-      });
+      };
+      const rProd = await pushUpdate('production', 'production_id', targetProd.production_id, updates);
       if (!rProd?.success) {
         throw new Error("Failed to update production: " + rProd?.error);
+      } else {
+        setProduction(prev => prev.map(p => p.production_id === targetProd.production_id ? { ...p, ...updates } as any : p));
       }
     }
 
