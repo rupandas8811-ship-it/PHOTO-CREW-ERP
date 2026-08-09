@@ -178,16 +178,22 @@ export const ProductionStaffModule: React.FC = () => {
 
   // Modal States for Production Workflow
   // 1. Editing Started Modal
-  const [editingStartedModal, setEditingStartedModal] = useState<any | null>(null);
-  const [editingStartedForm, setEditingStartedForm] = useState({ 
+  const [editingStartedModal, setEditingStartedModal] = useState<{group: any, actionItem: any} | null>(null);
+  const [editingStartedForm, setEditingStartedForm] = useState<{
+    expected_delivery_date: string;
+    estimated_completion_date: string;
+    estimated_completion_time: string;
+    selectedIds: string[];
+  }>({ 
     expected_delivery_date: '',
     estimated_completion_date: '', 
-    estimated_completion_time: '' 
+    estimated_completion_time: '',
+    selectedIds: []
   });
 
   // 2. Customer Review Modal
-  const [customerReviewModal, setCustomerReviewModal] = useState<any | null>(null);
-  const [customerReviewForm, setCustomerReviewForm] = useState({ edited_drive_link: '' });
+  const [customerReviewModal, setCustomerReviewModal] = useState<{group: any, actionItem: any} | null>(null);
+  const [customerReviewForm, setCustomerReviewForm] = useState<{edited_drive_link: string, selectedIds: string[]}>({ edited_drive_link: '', selectedIds: [] });
 
   // WhatsApp Popup Modal (2nd Popup immediately after Customer Review save)
   const [whatsappModal, setWhatsappModal] = useState<{
@@ -200,8 +206,8 @@ export const ProductionStaffModule: React.FC = () => {
   const [copiedSuccess, setCopiedSuccess] = useState(false);
 
   // 3. Editing Completed Modal
-  const [editingCompletedModal, setEditingCompletedModal] = useState<any | null>(null);
-  const [editingCompletedForm, setEditingCompletedForm] = useState({ confirmation_proof: '' });
+  const [editingCompletedModal, setEditingCompletedModal] = useState<{group: any, actionItem: any} | null>(null);
+  const [editingCompletedForm, setEditingCompletedForm] = useState<{confirmation_proof: string, selectedIds: string[]}>({ confirmation_proof: '', selectedIds: [] });
 
 
 
@@ -394,27 +400,34 @@ export const ProductionStaffModule: React.FC = () => {
       alert("Please provide both Estimated Completion Date and Estimated Completion Time.");
       return;
     }
+    if (editingStartedForm.selectedIds.length === 0) {
+      alert("Please select at least one deliverable to update.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       const timestamp = new Date().toISOString();
-      const b = editingStartedModal;
+      const b = editingStartedModal.group;
+      const deliverablesToUpdate = b.deliverables.filter((d: any) => editingStartedForm.selectedIds.includes(d.assignmentId));
 
-      // Update Editor Assignment
-      await updateEditorAssignmentStatus(b.assignmentId, 'Editing Started' as any);
+      for (const deliv of deliverablesToUpdate) {
+        // Update Editor Assignment
+        await updateEditorAssignmentStatus(deliv.assignmentId, 'Editing Started' as any);
 
-      // Save estimated completion info & expected delivery date
-      await pushUpdate('editor_assignments', 'assignment_id', b.assignmentId, {
-        target_finish_date: editingStartedForm.estimated_completion_date,
-        estimated_completion_time: editingStartedForm.estimated_completion_time,
-        started_at: timestamp,
-        started_by: staffName,
-        status: 'Editing Started'
-      });
+        // Save estimated completion info & expected delivery date
+        await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, {
+          target_finish_date: editingStartedForm.estimated_completion_date,
+          estimated_completion_time: editingStartedForm.estimated_completion_time,
+          started_at: timestamp,
+          started_by: staffName,
+          status: 'Editing Started'
+        });
+      }
 
-      // Update Production record
-      if (b.prodObj?.production_id) {
-        await updateProduction(b.prodObj.production_id, {
+      const uniqueProdIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.prodObj?.production_id).filter(Boolean)));
+      for (const prodId of uniqueProdIds as string[]) {
+        await updateProduction(prodId, {
           editing_status: 'Editing Started',
           production_status: 'Editing Started',
           expected_delivery_date: editingStartedForm.expected_delivery_date || editingStartedForm.estimated_completion_date,
@@ -422,19 +435,23 @@ export const ProductionStaffModule: React.FC = () => {
         });
       }
 
-      // Update Orders & Leads
-      if (b.orderId) {
-        await updateOrderStage(b.orderId, 'Editing Started' as any);
+      const uniqueOrderIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.orderId).filter(Boolean)));
+      for (const orderId of uniqueOrderIds as string[]) {
+        if (orderId !== 'ORD-ASSIGNED') {
+          await updateOrderStage(orderId, 'Editing Started' as any);
+        }
       }
-      if (b.leadId) {
-        await updateLead(b.leadId, {
+
+      const uniqueLeadIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.leadId).filter(Boolean)));
+      for (const leadId of uniqueLeadIds as string[]) {
+        await updateLead(leadId, {
           status: 'Editing Started' as any,
           current_status: 'Editing Started' as any
         });
       }
 
       setEditingStartedModal(null);
-      setEditingStartedForm({ expected_delivery_date: '', estimated_completion_date: '', estimated_completion_time: '' });
+      setEditingStartedForm({ expected_delivery_date: '', estimated_completion_date: '', estimated_completion_time: '', selectedIds: [] });
       await refreshData();
       showToast('🚀 Status updated to Editing Started!');
     } catch (err: any) {
@@ -453,25 +470,33 @@ export const ProductionStaffModule: React.FC = () => {
       alert("Please provide the Edited Drive Link.");
       return;
     }
+    if (customerReviewForm.selectedIds.length === 0) {
+      alert("Please select at least one deliverable to update.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       const timestamp = new Date().toISOString();
-      const b = customerReviewModal;
+      const b = customerReviewModal.group;
       const editedLink = customerReviewForm.edited_drive_link.trim();
+      const deliverablesToUpdate = b.deliverables.filter((d: any) => customerReviewForm.selectedIds.includes(d.assignmentId));
 
-      await updateEditorAssignmentStatus(b.assignmentId, 'Customer Review' as any);
+      for (const deliv of deliverablesToUpdate) {
+        await updateEditorAssignmentStatus(deliv.assignmentId, 'Customer Review' as any);
 
-      // Save Edited Drive Link
-      await pushUpdate('editor_assignments', 'assignment_id', b.assignmentId, {
-        raw_footage_link: editedLink,
-        edited_drive_link: editedLink,
-        edited_link_uploaded_at: timestamp,
-        status: 'Customer Review'
-      });
+        // Save Edited Drive Link
+        await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, {
+          raw_footage_link: editedLink,
+          edited_drive_link: editedLink,
+          edited_link_uploaded_at: timestamp,
+          status: 'Customer Review'
+        });
+      }
 
-      if (b.prodObj?.production_id) {
-        await updateProduction(b.prodObj.production_id, {
+      const uniqueProdIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.prodObj?.production_id).filter(Boolean)));
+      for (const prodId of uniqueProdIds as string[]) {
+        await updateProduction(prodId, {
           editing_status: 'Customer Review',
           production_status: 'Customer Review',
           edited_drive_link: editedLink,
@@ -479,11 +504,16 @@ export const ProductionStaffModule: React.FC = () => {
         });
       }
 
-      if (b.orderId) {
-        await updateOrderStage(b.orderId, 'Customer Review' as any);
+      const uniqueOrderIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.orderId).filter(Boolean)));
+      for (const orderId of uniqueOrderIds as string[]) {
+        if (orderId !== 'ORD-ASSIGNED') {
+          await updateOrderStage(orderId, 'Customer Review' as any);
+        }
       }
-      if (b.leadId) {
-        await updateLead(b.leadId, {
+
+      const uniqueLeadIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.leadId).filter(Boolean)));
+      for (const leadId of uniqueLeadIds as string[]) {
+        await updateLead(leadId, {
           status: 'Customer Review' as any,
           current_status: 'Customer Review' as any
         });
@@ -506,7 +536,7 @@ Kindly let us know if any changes are required.
 Thank you.`;
 
       setCustomerReviewModal(null);
-      setCustomerReviewForm({ edited_drive_link: '' });
+      setCustomerReviewForm({ edited_drive_link: '', selectedIds: [] });
       await refreshData();
       showToast('📁 Edited Drive Link saved & moved to Customer Review!');
 
@@ -535,22 +565,30 @@ Thank you.`;
       alert("Validation Failed: Please upload or provide Customer Confirmation Proof or Image.");
       return;
     }
+    if (editingCompletedForm.selectedIds.length === 0) {
+      alert("Please select at least one deliverable to update.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       const timestamp = new Date().toISOString();
-      const b = editingCompletedModal;
+      const b = editingCompletedModal.group;
       const proofStr = editingCompletedForm.confirmation_proof.trim();
+      const deliverablesToUpdate = b.deliverables.filter((d: any) => editingCompletedForm.selectedIds.includes(d.assignmentId));
 
-      await updateEditorAssignmentStatus(b.assignmentId, 'Editing Completed' as any);
+      for (const deliv of deliverablesToUpdate) {
+        await updateEditorAssignmentStatus(deliv.assignmentId, 'Editing Completed' as any);
 
-      await pushUpdate('editor_assignments', 'assignment_id', b.assignmentId, {
-        customer_communication_proof: proofStr,
-        status: 'Editing Completed'
-      });
+        await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, {
+          customer_communication_proof: proofStr,
+          status: 'Editing Completed'
+        });
+      }
 
-      if (b.prodObj?.production_id) {
-        await updateProduction(b.prodObj.production_id, {
+      const uniqueProdIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.prodObj?.production_id).filter(Boolean)));
+      for (const prodId of uniqueProdIds as string[]) {
+        await updateProduction(prodId, {
           editing_status: 'Editing Completed' as any,
           production_status: 'Editing Completed' as any,
           client_communication_proof: proofStr,
@@ -558,18 +596,23 @@ Thank you.`;
         });
       }
 
-      if (b.orderId) {
-        await updateOrderStage(b.orderId, 'Editing Completed' as any);
+      const uniqueOrderIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.orderId).filter(Boolean)));
+      for (const orderId of uniqueOrderIds as string[]) {
+        if (orderId !== 'ORD-ASSIGNED') {
+          await updateOrderStage(orderId, 'Editing Completed' as any);
+        }
       }
-      if (b.leadId) {
-        await updateLead(b.leadId, {
+
+      const uniqueLeadIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.leadId).filter(Boolean)));
+      for (const leadId of uniqueLeadIds as string[]) {
+        await updateLead(leadId, {
           status: 'Editing Completed' as any,
           current_status: 'Editing Completed' as any
         });
       }
 
       setEditingCompletedModal(null);
-      setEditingCompletedForm({ confirmation_proof: '' });
+      setEditingCompletedForm({ confirmation_proof: '', selectedIds: [] });
       await refreshData();
       showToast('🎉 Status updated to Editing Completed!');
     } catch (err: any) {
@@ -581,6 +624,85 @@ Thank you.`;
   };
 
   // End of Production Staff handlers
+
+  const renderOrderHeader = (group: any) => (
+    <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 mb-4 text-[10px] font-mono text-zinc-400 space-y-1">
+      <div className="flex justify-between">
+        <span>Customer: <span className="text-white font-sans text-xs font-bold">{group.customerName}</span></span>
+        <span>Order ID: <span className="text-white">{group.orderId}</span></span>
+      </div>
+      <div className="flex justify-between">
+        <span>Event: <span className="text-white font-sans text-xs font-bold">{group.eventName}</span></span>
+        <span>Assigned To: <span className="text-white font-sans text-xs">{staffName || currentUser?.name || 'Staff'}</span></span>
+      </div>
+    </div>
+  );
+
+  const renderDeliverableChecklist = (
+    group: any,
+    selectedIds: string[],
+    setSelectedIds: (ids: string[]) => void,
+    validStatuses: string[]
+  ) => {
+    const validDeliverables = group.deliverables.filter((d: any) => validStatuses.includes(d.status));
+    if (validDeliverables.length === 0) return null;
+
+    return (
+      <div className="space-y-3 pt-3 border-t border-zinc-800">
+        <div className="flex items-center justify-between">
+          <label className="block text-[11px] font-mono font-bold text-zinc-300 uppercase">
+            Select Deliverables to Update
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              if (selectedIds.length === validDeliverables.length) {
+                setSelectedIds([]);
+              } else {
+                setSelectedIds(validDeliverables.map((d: any) => d.assignmentId));
+              }
+            }}
+            className="text-[10px] font-bold text-sky-400 hover:text-sky-300 cursor-pointer"
+          >
+            {selectedIds.length === validDeliverables.length ? 'Clear All' : 'Select All'}
+          </button>
+        </div>
+        <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+          {group.deliverables.map((d: any) => {
+            const isValid = validStatuses.includes(d.status);
+            const parsedDeliv = parseQtyAndText(d.deliverable);
+            const delivQty = parsedDeliv.qty || 1;
+            const delivName = parsedDeliv.text || d.deliverable;
+            const isSelected = selectedIds.includes(d.assignmentId);
+            return (
+              <label key={d.assignmentId} className={`flex items-start gap-3 p-3 rounded-xl border ${isValid ? isSelected ? 'bg-sky-500/10 border-sky-500/30' : 'bg-zinc-900 border-zinc-700 hover:border-zinc-500' : 'bg-zinc-950 border-zinc-800/50 opacity-50'} cursor-${isValid ? 'pointer' : 'not-allowed'} transition-colors`}>
+                {isValid ? (
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={(e) => {
+                      if (e.target.checked) setSelectedIds([...selectedIds, d.assignmentId]);
+                      else setSelectedIds(selectedIds.filter(id => id !== d.assignmentId));
+                    }}
+                    className="mt-1 shrink-0 accent-sky-500"
+                  />
+                ) : (
+                  <div className="mt-1 w-3.5 h-3.5 rounded border border-zinc-700 bg-zinc-900 shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-bold text-white flex justify-between gap-2">
+                    <span className="truncate">{delivName}</span>
+                    <span className="text-zinc-500 font-mono text-[10px] shrink-0">Qty: {delivQty}</span>
+                  </div>
+                  <div className="text-[10px] text-zinc-400 mt-1 font-mono">Current Status: {d.status}</div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="p-4 sm:p-6 bg-black min-h-screen text-white font-sans selection:bg-purple-500/30">
@@ -842,11 +964,12 @@ Thank you.`;
                                                   type="button"
                                                   onClick={() => {
                                                     setActiveDropdownId(null);
-                                                    setEditingStartedModal(delivItem);
+                                                    setEditingStartedModal({ group: grp, actionItem: delivItem });
                                                     setEditingStartedForm({
                                                       expected_delivery_date: delivItem.targetFinishDate || new Date().toISOString().split('T')[0],
                                                       estimated_completion_date: delivItem.targetFinishDate || new Date().toISOString().split('T')[0],
-                                                      estimated_completion_time: '18:00'
+                                                      estimated_completion_time: '18:00',
+                                                      selectedIds: [delivItem.assignmentId]
                                                     });
                                                   }}
                                                   className="w-full text-left px-4 py-2.5 text-xs text-sky-400 hover:bg-sky-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
@@ -861,8 +984,8 @@ Thank you.`;
                                                   type="button"
                                                   onClick={() => {
                                                     setActiveDropdownId(null);
-                                                    setCustomerReviewModal(delivItem);
-                                                    setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '' });
+                                                    setCustomerReviewModal({ group: grp, actionItem: delivItem });
+                                                    setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '', selectedIds: [delivItem.assignmentId] });
                                                   }}
                                                   className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
                                                 >
@@ -877,8 +1000,8 @@ Thank you.`;
                                                     type="button"
                                                     onClick={() => {
                                                       setActiveDropdownId(null);
-                                                      setCustomerReviewModal(delivItem);
-                                                      setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '' });
+                                                      setCustomerReviewModal({ group: grp, actionItem: delivItem });
+                                                      setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '', selectedIds: [delivItem.assignmentId] });
                                                     }}
                                                     className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
                                                   >
@@ -889,8 +1012,8 @@ Thank you.`;
                                                     type="button"
                                                     onClick={() => {
                                                       setActiveDropdownId(null);
-                                                      setEditingCompletedModal(delivItem);
-                                                      setEditingCompletedForm({ confirmation_proof: '' });
+                                                      setEditingCompletedModal({ group: grp, actionItem: delivItem });
+                                                      setEditingCompletedForm({ confirmation_proof: '', selectedIds: [delivItem.assignmentId] });
                                                     }}
                                                     className="w-full text-left px-4 py-2.5 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
                                                   >
@@ -932,8 +1055,8 @@ Thank you.`;
       {/* ========================================================= */}
       {editingStartedModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full w-full max-w-md shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <Play className="w-5 h-5 text-sky-400" />
                 <h3 className="text-base font-bold text-white">Editing Started</h3>
@@ -946,66 +1069,78 @@ Thank you.`;
               </button>
             </div>
 
-            <p className="text-xs text-zinc-400">
-              Please review the expected delivery date and enter your estimated completion date & time.
-            </p>
+            <div className="overflow-y-auto pr-2 custom-scrollbar">
+              {renderOrderHeader(editingStartedModal.group)}
+              
+              <p className="text-xs text-zinc-400 mb-4">
+                Please review the expected delivery date and enter your estimated completion date & time.
+              </p>
 
-            <form onSubmit={handleEditingStartedSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
-                  Expected Delivery Date (Pre-filled)
-                </label>
-                <input
-                  type="date"
-                  value={editingStartedForm.expected_delivery_date}
-                  onChange={(e) => setEditingStartedForm({ ...editingStartedForm, expected_delivery_date: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
-                />
-              </div>
+              <form id="editing-started-form" onSubmit={handleEditingStartedSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
+                    Expected Delivery Date (Pre-filled)
+                  </label>
+                  <input
+                    type="date"
+                    value={editingStartedForm.expected_delivery_date}
+                    onChange={(e) => setEditingStartedForm({ ...editingStartedForm, expected_delivery_date: e.target.value })}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
-                  Estimated Completion Date <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={editingStartedForm.estimated_completion_date}
-                  onChange={(e) => setEditingStartedForm({ ...editingStartedForm, estimated_completion_date: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
-                />
-              </div>
+                <div>
+                  <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
+                    Estimated Completion Date <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={editingStartedForm.estimated_completion_date}
+                    onChange={(e) => setEditingStartedForm({ ...editingStartedForm, estimated_completion_date: e.target.value })}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
-                  Estimated Completion Time <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  type="time"
-                  required
-                  value={editingStartedForm.estimated_completion_time}
-                  onChange={(e) => setEditingStartedForm({ ...editingStartedForm, estimated_completion_time: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
-                />
-              </div>
+                <div>
+                  <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
+                    Estimated Completion Time <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={editingStartedForm.estimated_completion_time}
+                    onChange={(e) => setEditingStartedForm({ ...editingStartedForm, estimated_completion_time: e.target.value })}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
+                  />
+                </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
-                <button
-                  type="button"
-                  onClick={() => setEditingStartedModal(null)}
-                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer shadow-lg shadow-sky-600/20"
-                >
-                  {isSubmitting ? 'Submitting...' : 'Submit & Start Editing'}
-                </button>
-              </div>
-            </form>
+                {renderDeliverableChecklist(
+                  editingStartedModal.group,
+                  editingStartedForm.selectedIds,
+                  (ids) => setEditingStartedForm({ ...editingStartedForm, selectedIds: ids }),
+                  ['Assigned Editor', 'Editor Assigned', 'Assigned', 'Raw Footage Received']
+                )}
+              </form>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800 shrink-0">
+              <button
+                type="button"
+                onClick={() => setEditingStartedModal(null)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                form="editing-started-form"
+                type="submit"
+                disabled={isSubmitting || editingStartedForm.selectedIds.length === 0}
+                className="px-4 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer shadow-lg shadow-sky-600/20"
+              >
+                {isSubmitting ? 'Submitting...' : 'Submit & Start Editing'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1015,8 +1150,8 @@ Thank you.`;
       {/* ========================================================= */}
       {customerReviewModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full w-full max-w-md shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <UserCheck className="w-5 h-5 text-amber-400" />
                 <h3 className="text-base font-bold text-white">Customer Review</h3>
@@ -1029,42 +1164,54 @@ Thank you.`;
               </button>
             </div>
 
-            <p className="text-xs text-zinc-400">
-              Provide the Edited Drive Link containing the preview videos/photos for customer review.
-            </p>
+            <div className="overflow-y-auto pr-2 custom-scrollbar">
+              {renderOrderHeader(customerReviewModal.group)}
 
-            <form onSubmit={handleCustomerReviewSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
-                  Edited Drive Link <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  type="url"
-                  required
-                  placeholder="https://drive.google.com/drive/folders/..."
-                  value={customerReviewForm.edited_drive_link}
-                  onChange={(e) => setCustomerReviewForm({ edited_drive_link: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
-                />
-              </div>
+              <p className="text-xs text-zinc-400 mb-4">
+                Provide the Edited Drive Link containing the preview videos/photos for customer review.
+              </p>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
-                <button
-                  type="button"
-                  onClick={() => setCustomerReviewModal(null)}
-                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer shadow-lg shadow-amber-600/20"
-                >
-                  {isSubmitting ? 'Submitting...' : 'Submit & Generate WhatsApp Message'}
-                </button>
-              </div>
-            </form>
+              <form id="customer-review-form" onSubmit={handleCustomerReviewSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
+                    Edited Drive Link <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="url"
+                    required
+                    placeholder="https://drive.google.com/drive/folders/..."
+                    value={customerReviewForm.edited_drive_link}
+                    onChange={(e) => setCustomerReviewForm({ ...customerReviewForm, edited_drive_link: e.target.value })}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                {renderDeliverableChecklist(
+                  customerReviewModal.group,
+                  customerReviewForm.selectedIds,
+                  (ids) => setCustomerReviewForm({ ...customerReviewForm, selectedIds: ids }),
+                  ['Editing Started', 'Customer Review']
+                )}
+              </form>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800 shrink-0">
+              <button
+                type="button"
+                onClick={() => setCustomerReviewModal(null)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                form="customer-review-form"
+                type="submit"
+                disabled={isSubmitting || customerReviewForm.selectedIds.length === 0}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer shadow-lg shadow-amber-600/20"
+              >
+                {isSubmitting ? 'Submitting...' : 'Submit & Generate WhatsApp Message'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1156,8 +1303,8 @@ Thank you.`;
       {/* ========================================================= */}
       {editingCompletedModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full w-full max-w-md shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-indigo-400" />
                 <h3 className="text-base font-bold text-white">Upload Customer Confirmation Proof</h3>
@@ -1170,62 +1317,74 @@ Thank you.`;
               </button>
             </div>
 
-            <p className="text-xs text-zinc-400">
-              Upload customer confirmation image or proof confirming edits/revisions are completed. This will update status to <strong className="text-indigo-400">Editing Completed</strong>.
-            </p>
+            <div className="overflow-y-auto pr-2 custom-scrollbar">
+              {renderOrderHeader(editingCompletedModal.group)}
 
-            <form onSubmit={handleEditingCompletedSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
-                  Customer Confirmation Image / Proof <span className="text-rose-400">*</span>
-                </label>
+              <p className="text-xs text-zinc-400 mb-4">
+                Upload customer confirmation image or proof confirming edits/revisions are completed. This will update status to <strong className="text-indigo-400">Editing Completed</strong>.
+              </p>
 
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={async (e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      const compressed = await compressImage(e.target.files[0]);
-                      setEditingCompletedForm({ ...editingCompletedForm, confirmation_proof: compressed });
-                    }
-                  }}
-                  className="w-full text-xs text-zinc-300 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer mb-2"
-                />
+              <form id="editing-completed-form" onSubmit={handleEditingCompletedSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
+                    Customer Confirmation Image / Proof <span className="text-rose-400">*</span>
+                  </label>
 
-                <div className="text-[10px] text-zinc-500 text-center uppercase font-mono my-1">- OR ENTER PROOF IMAGE URL / DRIVE LINK -</div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={async (e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        const compressed = await compressImage(e.target.files[0]);
+                        setEditingCompletedForm({ ...editingCompletedForm, confirmation_proof: compressed });
+                      }
+                    }}
+                    className="w-full text-xs text-zinc-300 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer mb-2"
+                  />
 
-                <input
-                  type="text"
-                  placeholder="https://..."
-                  value={editingCompletedForm.confirmation_proof}
-                  onChange={(e) => setEditingCompletedForm({ ...editingCompletedForm, confirmation_proof: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
-                />
+                  <div className="text-[10px] text-zinc-500 text-center uppercase font-mono my-1">- OR ENTER PROOF IMAGE URL / DRIVE LINK -</div>
 
-                {editingCompletedForm.confirmation_proof && (
-                  <div className="mt-2 text-[11px] text-indigo-400 font-mono font-bold flex items-center gap-1">
-                    <Check className="w-3.5 h-3.5" /> Confirmation Proof Attached
-                  </div>
+                  <input
+                    type="text"
+                    placeholder="https://..."
+                    value={editingCompletedForm.confirmation_proof}
+                    onChange={(e) => setEditingCompletedForm({ ...editingCompletedForm, confirmation_proof: e.target.value })}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+                  />
+                  
+                  {editingCompletedForm.confirmation_proof && (
+                    <div className="mt-2 text-[11px] text-indigo-400 font-mono font-bold flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" /> Confirmation Proof Attached
+                    </div>
+                  )}
+                </div>
+
+                {renderDeliverableChecklist(
+                  editingCompletedModal.group,
+                  editingCompletedForm.selectedIds,
+                  (ids) => setEditingCompletedForm({ ...editingCompletedForm, selectedIds: ids }),
+                  ['Customer Review', 'Client Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress']
                 )}
-              </div>
+              </form>
+            </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
-                <button
-                  type="button"
-                  onClick={() => setEditingCompletedModal(null)}
-                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting || !editingCompletedForm.confirmation_proof.trim()}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer shadow-lg shadow-indigo-600/20"
-                >
-                  {isSubmitting ? 'Saving...' : 'Submit & Mark Editing Completed 🎯'}
-                </button>
-              </div>
-            </form>
+            <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800 shrink-0">
+              <button
+                type="button"
+                onClick={() => setEditingCompletedModal(null)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                form="editing-completed-form"
+                type="submit"
+                disabled={isSubmitting || !editingCompletedForm.confirmation_proof.trim() || editingCompletedForm.selectedIds.length === 0}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer shadow-lg shadow-indigo-600/20"
+              >
+                {isSubmitting ? 'Saving...' : 'Submit & Mark Editing Completed 🎯'}
+              </button>
+            </div>
           </div>
         </div>
       )}
