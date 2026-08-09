@@ -1595,7 +1595,7 @@ export const StaffModule: React.FC = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[1000px]">
+              <table className="w-full text-left border-collapse min-w-max">
                 <thead>
                   <tr className="bg-zinc-950/60 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
                     <th className="py-4 px-6">Order ID</th>
@@ -1703,7 +1703,7 @@ export const StaffModule: React.FC = () => {
       {/* EQUIPMENT PHOTO PROOF VERIFICATION MODAL (EVENT START / EVENT COMPLETE) */}
       {photoModalData && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-zinc-800 bg-zinc-950/60 flex justify-between items-start">
               <div>
                 <span className="text-xs font-mono font-bold text-amber-400 uppercase tracking-widest block mb-1">
@@ -1898,7 +1898,7 @@ export const StaffModule: React.FC = () => {
       {/* PERSONAL CALENDAR EVENT POPUP MODAL */}
       {calendarModalDate && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-zinc-800 bg-zinc-950/60 flex justify-between items-start">
               <div>
                 <span className="text-xs font-mono font-bold text-amber-400 uppercase tracking-widest block mb-1">

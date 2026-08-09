@@ -739,7 +739,7 @@ Thank you.`;
                       </div>
 
                       <div className="overflow-x-auto w-full">
-                        <table className="w-full text-left border-collapse min-w-[750px]">
+                        <table className="w-full text-left border-collapse min-w-max">
                           <thead>
                             <tr className="bg-zinc-900/50 border-b border-zinc-800 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
                               <th className="px-3.5 py-2.5 font-bold">Deliverable</th>
@@ -932,7 +932,7 @@ Thank you.`;
       {/* ========================================================= */}
       {editingStartedModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full w-full max-w-md shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <div className="flex items-center gap-2">
                 <Play className="w-5 h-5 text-sky-400" />
@@ -1015,7 +1015,7 @@ Thank you.`;
       {/* ========================================================= */}
       {customerReviewModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full w-full max-w-md shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <div className="flex items-center gap-2">
                 <UserCheck className="w-5 h-5 text-amber-400" />
@@ -1074,7 +1074,7 @@ Thank you.`;
       {/* ========================================================= */}
       {whatsappModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-emerald-500/40 rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95">
+          <div className="bg-zinc-900 border border-emerald-500/40 rounded-2xl w-full w-full max-w-md shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <div className="flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-emerald-400" />
@@ -1156,7 +1156,7 @@ Thank you.`;
       {/* ========================================================= */}
       {editingCompletedModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full w-full max-w-md shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-indigo-400" />

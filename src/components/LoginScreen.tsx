@@ -343,8 +343,8 @@ export const LoginScreen: React.FC = () => {
     <div id="login_screen" className="min-h-screen bg-black text-zinc-100 flex flex-col justify-center items-center px-4 py-8 relative overflow-hidden font-sans antialiased">
       
       {/* Decorative cinematic photography lens lighting spots */}
-      <div className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] rounded-full bg-gradient-to-r from-amber-500/10 to-orange-550/0 blur-[130px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] rounded-full bg-gradient-to-l from-indigo-500/10 to-purple-550/0 blur-[130px] pointer-events-none" />
+      <div className="absolute top-[-10%] left-[-10%] w-full max-w-[600px] h-[600px] rounded-full bg-gradient-to-r from-amber-500/10 to-orange-550/0 blur-[130px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-full max-w-[600px] h-[600px] rounded-full bg-gradient-to-l from-indigo-500/10 to-purple-550/0 blur-[130px] pointer-events-none" />
 
       {/* Unified Centered Layout Container */}
       <div className="max-w-xl w-full flex flex-col gap-6 z-10 relative">
@@ -666,7 +666,7 @@ export const LoginScreen: React.FC = () => {
                 )}
               </div>
               
-              <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] font-mono">
                 {/* Read Status */}
                 <div className="flex items-center justify-between p-2 bg-zinc-950/80 rounded-xl border border-zinc-900">
                   <span className="text-zinc-550">Read Status</span>
@@ -782,7 +782,7 @@ export const LoginScreen: React.FC = () => {
       {/* Sign Up / Registration Modal */}
       {showSignUpModal && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md overflow-y-auto flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-lg w-full p-6 sm:p-8 relative shadow-2xl font-sans overflow-hidden">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-lg w-full p-6 sm:p-8 relative shadow-2xl font-sans overflow-hidden">
             {/* Viewfinder Corner Highlights */}
             <div className="absolute top-4 left-4 viewfinder-corner-tl" />
             <div className="absolute top-4 right-4 viewfinder-corner-tr" />

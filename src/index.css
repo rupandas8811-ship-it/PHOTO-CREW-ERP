@@ -529,3 +529,26 @@ input[type="time"] {
 input[type="datetime-local"] {
   color-scheme: dark;
 }
+
+
+/* Sidebar Collapsed State */
+.sidebar-collapsed span {
+  display: none !important;
+}
+.sidebar-collapsed button > div {
+  justify-content: center;
+  width: 100%;
+  padding-left: 0;
+  padding-right: 0;
+}
+.sidebar-collapsed button svg {
+  margin: 0 auto;
+}
+.sidebar-collapsed .p-3 > button {
+  display: none !important;
+}
+
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}

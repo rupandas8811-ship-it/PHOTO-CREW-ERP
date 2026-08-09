@@ -403,7 +403,7 @@ export const EquipmentManagement: React.FC = () => {
       )}
 
       {/* Dashboard Metrics Header */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { 
             title: 'TOTAL UNITS', 
@@ -661,7 +661,7 @@ export const EquipmentManagement: React.FC = () => {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[750px]">
+            <table className="w-full text-left border-collapse min-w-max">
               <thead>
                 <tr className="border-b border-zinc-850 text-[10px] font-mono uppercase text-zinc-400 bg-zinc-950/40">
                   <th className="p-3.5">Equipment Details</th>
@@ -838,7 +838,7 @@ export const EquipmentManagement: React.FC = () => {
         const assigned_quantity = selectedEq.quantity - (selectedEq.available_quantity ?? selectedEq.quantity);
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
               
               {/* Header block */}
               <div className="p-6 border-b border-zinc-850 bg-zinc-950/80 flex items-center justify-between">
@@ -1012,7 +1012,7 @@ export const EquipmentManagement: React.FC = () => {
       {/* Equipment Assignment Details Popup */}
       {busyEquipment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
             
             {/* Header block */}
             <div className="p-6 border-b border-zinc-850 bg-zinc-950/80 flex items-center justify-between">
@@ -1032,7 +1032,7 @@ export const EquipmentManagement: React.FC = () => {
             <div className="p-6 max-h-[60vh] overflow-y-auto space-y-4">
               {assignedEventsForBusyEquipment.length > 0 ? (
                 <div className="overflow-x-auto border border-zinc-850 rounded-2xl bg-zinc-950/20">
-                  <table className="w-full text-left border-collapse min-w-[500px]">
+                  <table className="w-full text-left border-collapse min-w-max">
                     <thead>
                       <tr className="border-b border-zinc-850 text-[10px] font-mono uppercase text-zinc-400 bg-zinc-950/50">
                         <th className="p-3.5">Equipment Name</th>

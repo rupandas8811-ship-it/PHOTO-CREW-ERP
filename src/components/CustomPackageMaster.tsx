@@ -936,7 +936,7 @@ export const CustomPackageMaster: React.FC = () => {
       {/* MODAL: ADD / EDIT ROLE */}
       {showRoleModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden p-6 space-y-5 relative">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md w-full shadow-2xl overflow-hidden p-6 space-y-5 relative">
             <div className="flex items-center justify-between border-b border-zinc-850 pb-4">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
@@ -1027,7 +1027,7 @@ export const CustomPackageMaster: React.FC = () => {
       {/* MODAL: ADD / EDIT DELIVERABLE */}
       {showDeliverableModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden p-6 space-y-5 relative">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md w-full shadow-2xl overflow-hidden p-6 space-y-5 relative">
             <div className="flex items-center justify-between border-b border-zinc-850 pb-4">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">

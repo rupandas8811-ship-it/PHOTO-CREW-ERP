@@ -7035,7 +7035,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       {/* Premium responsive Custom Dialog popup replacing native browser alerts */}
       {globalModalAlert && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-[4px] animate-in fade-in duration-200">
-          <div className="bg-zinc-950 border border-zinc-850 rounded-3xl p-6 max-w-sm w-full shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="bg-zinc-950 border border-zinc-850 rounded-3xl p-6 w-full max-w-sm w-full shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200">
             {/* Top gold calibrator ribbon decorator */}
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 animate-pulse" />
             

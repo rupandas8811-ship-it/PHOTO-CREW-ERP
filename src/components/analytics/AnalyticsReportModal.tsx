@@ -552,7 +552,7 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-      <div className="bg-zinc-950 border border-zinc-850 rounded-2xl w-full max-w-5xl shadow-2xl relative flex flex-col max-h-[90vh]">
+      <div className="bg-zinc-950 border border-zinc-850 rounded-2xl w-full w-full max-w-5xl shadow-2xl relative flex flex-col max-h-[90vh]">
         
         {/* Header bar */}
         <div className="p-4 sm:p-5 border-b border-zinc-850 flex items-center justify-between bg-zinc-950">
@@ -602,7 +602,7 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
 
           {/* Status Filter */}
           {reportType === 'sales' && (
-            <div className="flex flex-col gap-1 min-w-[130px]">
+            <div className="flex flex-col gap-1 min-w-max">
               <span className="text-[10px] text-zinc-500 font-mono font-bold uppercase tracking-wider">Status Option</span>
               <select
                 value={statusFilter}
@@ -618,7 +618,7 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
 
           {/* Event Type Filter */}
           {reportType === 'sales' && (
-            <div className="flex flex-col gap-1 min-w-[140px]">
+            <div className="flex flex-col gap-1 min-w-max">
               <span className="text-[10px] text-zinc-500 font-mono font-bold uppercase tracking-wider">Event Category</span>
               <select
                 value={eventTypeFilter}

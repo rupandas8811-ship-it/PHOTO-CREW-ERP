@@ -650,7 +650,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
         </div>
 
         {/* 5 Main Dashboard Section Tabs */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-5 pt-4 border-t border-zinc-850">
+        <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-5 gap-2 mt-5 pt-4 border-t border-zinc-850">
           <button
             onClick={() => handleSectionSwitch('overview')}
             className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
@@ -784,7 +784,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
           </div>
 
           {/* 4 KPI Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             
             {/* KPI 1: Total Revenue */}
             <div className="bg-gradient-to-b from-emerald-950/20 to-zinc-950 border border-emerald-500/20 rounded-2xl p-5 shadow-xl hover:border-emerald-500/40 transition-all relative overflow-hidden group">
@@ -998,7 +998,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse min-w-[1000px]">
+                <table className="w-full text-left text-xs border-collapse min-w-max">
                   <thead>
                     <tr className="bg-zinc-900/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
                       <th className="py-3 px-4">Order ID</th>
@@ -1122,7 +1122,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse min-w-[1000px]">
+                <table className="w-full text-left text-xs border-collapse min-w-max">
                   <thead>
                     <tr className="bg-zinc-900/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
                       <th className="py-3 px-4">Order ID</th>
@@ -1250,7 +1250,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
             </div>
             
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div>
                   <div className="text-slate-400 font-medium mb-1">Order ID / Lead ID</div>
                   <div className="text-amber-400 font-mono font-bold">{unlockRequestModal.order_id || unlockRequestModal.project_id || '-'}</div>
@@ -1749,7 +1749,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       </div>
 
       {/* Summary KPI Highlights Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-5 gap-3">
         <div className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5">
           <div className="text-[10px] font-mono text-zinc-500 uppercase font-bold">Total Revenue</div>
           <div className="text-lg font-black font-mono text-white mt-0.5">{formatINR(totalRevSum)}</div>
@@ -1812,7 +1812,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       {/* Table */}
       <div className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden shadow-2xl">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse min-w-[1200px]">
+          <table className="w-full text-left text-xs border-collapse min-w-max">
             <thead>
               <tr className="bg-zinc-900/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
                 <th className="py-3 px-4">Order ID</th>
@@ -1917,7 +1917,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl max-w-3xl w-full p-6 space-y-6 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-3xl w-full p-6 space-y-6 shadow-2xl relative animate-in fade-in zoom-in duration-200">
         
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-4 border-b border-zinc-850">
@@ -2129,7 +2129,7 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-md w-full p-6 space-y-5 shadow-2xl relative animate-in fade-in zoom-in duration-200">
         
         <div className="flex items-center justify-between pb-3 border-b border-zinc-850">
           <div>

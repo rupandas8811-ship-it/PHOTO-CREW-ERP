@@ -1623,7 +1623,7 @@ export const OperationsLeads: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* 1. Results Summary Row - 5 Operations Statuses */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
         {[
           { label: "Assigned Crew", val: stats.assignedCrew, theme: 'purple' as CameraLensTheme, filterValue: 'Assigned Crew', trendText: 'Rostered', chartPoints: [10, 18, 14, 25, 20, 31, 35] },
           { label: "Event Started", val: stats.eventStarted, theme: 'cyan' as CameraLensTheme, filterValue: "Event Started", trendText: 'Live On-Site', chartPoints: [5, 9, 7, 14, 11, 16, 15] },
@@ -1755,7 +1755,7 @@ export const OperationsLeads: React.FC = () => {
         </div>
             {/* Main Board Table */}
       <div className="bg-zinc-900/40 border border-zinc-850 rounded-2xl overflow-x-auto shadow-xl">
-        <table className="w-full text-left border-collapse min-w-[1240px]">
+        <table className="w-full text-left border-collapse min-w-max">
           <thead>
             <tr className="border-b border-zinc-850 text-[10px] font-mono tracking-widest uppercase text-zinc-400 bg-zinc-950/70 select-none">
               <th className="p-4 font-bold">Order ID</th>
@@ -2211,7 +2211,7 @@ export const OperationsLeads: React.FC = () => {
       {/* Slide-over or Inline modal for Crew and Equipment Assignment */}
       {assigningOrderId && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div id="assign_staff_modal" className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-4xl shadow-2xl relative animate-in zoom-in duration-200 overflow-hidden">
+          <div id="assign_staff_modal" className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-4xl shadow-2xl relative animate-in zoom-in duration-200 overflow-hidden">
             <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/40">
               <div className="flex items-center gap-2">
                 <span className="p-1 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-500 text-xs font-bold font-mono">Operations</span>
@@ -2431,7 +2431,7 @@ export const OperationsLeads: React.FC = () => {
                         
                         <div className="border border-zinc-900 rounded-xl overflow-hidden bg-zinc-950">
                           <div className="overflow-x-auto w-full">
-                            <table className="w-full text-left border-collapse min-w-[650px]">
+                            <table className="w-full text-left border-collapse min-w-max">
                               <thead>
                                 <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[9px] text-zinc-500 uppercase tracking-wider">
                                   <th className="px-3.5 py-2 font-bold w-[35%]">Team Member</th>
@@ -3041,7 +3041,7 @@ export const OperationsLeads: React.FC = () => {
       {/* Equipment Status Modal */}
       {selectedEquipmentStatus && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl relative p-5">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full w-full max-w-lg shadow-2xl relative p-5">
             <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-3">
               <h3 className="text-sm font-bold text-indigo-400 font-mono uppercase">
                 Equipment Verification • {selectedEquipmentStatus.staffName}
@@ -3126,7 +3126,7 @@ export const OperationsLeads: React.FC = () => {
       {/* Event Images Modal */}
       {selectedEventImages && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl relative p-5">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full w-full max-w-lg shadow-2xl relative p-5">
             <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-3">
               <h3 className="text-sm font-bold text-indigo-400 font-mono uppercase">
                 Event Images • {selectedEventImages.staffName}
@@ -3345,7 +3345,7 @@ export const OperationsLeads: React.FC = () => {
 
         return (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div id="raw_footage_modal" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl shadow-2xl relative p-6 max-h-[90vh] overflow-y-auto space-y-5 scrollbar-thin">
+            <div id="raw_footage_modal" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full w-full max-w-2xl shadow-2xl relative p-6 max-h-[90vh] overflow-y-auto space-y-5 scrollbar-thin">
               
               {/* Header */}
               <div className="border-b border-zinc-800 pb-3 flex justify-between items-start">
@@ -3671,7 +3671,7 @@ export const OperationsLeads: React.FC = () => {
       {/* Staff Assignment Success Modal */}
       {successModalData && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-md shadow-2xl p-6 relative animate-in zoom-in duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-md shadow-2xl p-6 relative animate-in zoom-in duration-200">
             <button 
               onClick={() => setSuccessModalData(null)}
               className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
@@ -3751,7 +3751,7 @@ export const OperationsLeads: React.FC = () => {
       {/* Multi-Staff WhatsApp Share picker */}
       {whatsappShareModalData && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl shadow-2xl p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-2xl shadow-2xl p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
             <button 
               onClick={() => setWhatsappShareModalData(null)}
               className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
@@ -3904,7 +3904,7 @@ export const OperationsLeads: React.FC = () => {
 
         return (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-4xl shadow-2xl p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-4xl shadow-2xl p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
               <button 
                 onClick={() => setViewingStaffOrderId(null)}
                 className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
@@ -3947,7 +3947,7 @@ export const OperationsLeads: React.FC = () => {
                         </div>
 
                         <div className="overflow-x-auto rounded-xl border border-zinc-800/80 bg-zinc-900/60 mt-2">
-                          <table className="w-full text-left border-collapse min-w-[750px]">
+                          <table className="w-full text-left border-collapse min-w-max">
                             <thead>
                               <tr className="bg-zinc-950/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
                                 <th className="py-2.5 px-3.5 font-bold whitespace-nowrap">Staff Name</th>
@@ -4237,7 +4237,7 @@ export const OperationsLeads: React.FC = () => {
         roster.length = 0; uniqueRosterStr.map(s => roster.push(JSON.parse(s)));
         return createPortal(
           <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full w-full max-w-lg shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
               <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-900/50">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-sm font-bold text-zinc-300">
@@ -4299,7 +4299,7 @@ export const OperationsLeads: React.FC = () => {
       {/* Floating Action Menu */}
       {activeMenuOrderId && createPortal(
         <div 
-          className="fixed z-[9999] min-w-[200px] max-w-[260px] w-[220px] bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 rounded-2xl shadow-2xl p-2 text-left animate-in fade-in zoom-in-95 duration-150 flex flex-col overflow-hidden actions-menu-container"
+          className="fixed z-[9999] min-w-max max-w-[260px] w-[220px] bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 rounded-2xl shadow-2xl p-2 text-left animate-in fade-in zoom-in-95 duration-150 flex flex-col overflow-hidden actions-menu-container"
           style={{
             left: `${menuCoords.x}px`,
             transform: `translateX(-100%) ${menuCoords.openUpward ? 'translateY(-100%)' : ''}`,
@@ -4340,7 +4340,7 @@ export const OperationsLeads: React.FC = () => {
       {/* Image Preview Modal */}
       {imagePreviewModal && createPortal(
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex flex-col items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in duration-200">
             <div className="flex items-center justify-between p-4 border-b border-zinc-800">
               <div>
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">{imagePreviewModal.stage}</h3>

@@ -264,7 +264,7 @@ export const ProductionRoleSpecialitiesModule: React.FC = () => {
 
                 {/* Center Area - Mapped Staff Count */}
                 <div className="flex items-center gap-3 font-mono">
-                  <div className="bg-zinc-900/60 border border-zinc-850 px-3 py-1.5 rounded-lg text-center min-w-[120px]">
+                  <div className="bg-zinc-900/60 border border-zinc-850 px-3 py-1.5 rounded-lg text-center min-w-max">
                     <div className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Mapped Staff</div>
                     <div className="text-xs font-black text-zinc-100 flex items-center justify-center gap-1 mt-0.5">
                       <Users className="w-3.5 h-3.5 text-zinc-400" />

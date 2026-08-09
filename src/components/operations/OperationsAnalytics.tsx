@@ -326,7 +326,8 @@ export const OperationsAnalytics: React.FC = () => {
             Scope Range: ${appliedStartDate || 'All Starts'} to ${appliedEndDate || 'All Ends'} | 
             Active Matches Count: ${filteredOrders.length}
           </div>
-          <table>
+          <div className="overflow-x-auto w-full max-w-full">
+<table>
             <thead>
               <tr>
                 <th>Order ID</th>
@@ -343,6 +344,7 @@ export const OperationsAnalytics: React.FC = () => {
               ${rowsHtml}
             </tbody>
           </table>
+</div>
           <div class="footer">Confidential System File - Photography Studio Executive Service</div>
         </body>
       </html>
@@ -487,7 +489,7 @@ export const OperationsAnalytics: React.FC = () => {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
           {[
             { id: 'total_events', label: 'Total Events', val: totalEvents.length, desc: 'Overall registry scope', color: 'text-indigo-400', focal: '50mm' },
             { id: 'events_scheduled', label: 'Events Scheduled', val: eventsScheduled.length, desc: 'Assignments confirmed', color: 'text-violet-400', focal: '85mm' },
@@ -728,7 +730,7 @@ export const OperationsAnalytics: React.FC = () => {
       {/* STAFF DETAILED MODAL / SLIDE DRAW PANEL */}
       {selectedStaff && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl relative text-left">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full w-full max-w-3xl overflow-hidden shadow-2xl relative text-left">
             
             {/* Header border decor focus ring corner */}
             <div className="absolute top-3 left-3 w-3 h-3 border-t-2 border-l-2 border-amber-500/80" />

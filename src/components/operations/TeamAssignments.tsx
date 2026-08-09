@@ -164,7 +164,7 @@ export const TeamAssignments: React.FC = () => {
 
                     <div className="space-y-1.5 pt-1 text-xs">
                       <span className="text-[9px] uppercase tracking-wider text-zinc-455 font-mono">Operations Squad</span>
-                      <div className="grid grid-cols-2 gap-2 text-zinc-300 font-mono text-[11px] bg-zinc-900/50 p-2.5 rounded-lg border border-zinc-850/40">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-zinc-300 font-mono text-[11px] bg-zinc-900/50 p-2.5 rounded-lg border border-zinc-850/40">
                         <div className="space-y-0.5">
                           <div className="text-[9px] text-zinc-500 font-bold">📸 PHOTO</div>
                           <div className="break-words font-sans font-bold text-zinc-200">{op.photographer_assigned}</div>
@@ -264,7 +264,7 @@ export const TeamAssignments: React.FC = () => {
         </h3>
 
         <div className="overflow-x-auto border border-zinc-850/50 rounded-xl">
-          <table className="w-full text-left border-collapse text-xs min-w-[900px]">
+          <table className="w-full text-left border-collapse text-xs min-w-max">
             <thead>
               <tr className="border-b border-zinc-850 text-[10px] font-mono text-zinc-400 uppercase bg-zinc-950/50">
                 <th className="py-3 px-4 font-black tracking-wide">Staff Role</th>

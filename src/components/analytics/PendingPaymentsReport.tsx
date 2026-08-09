@@ -550,7 +550,7 @@ export const PendingPaymentsReport: React.FC = () => {
       )}
 
       {/* Pending Payment Analytics Cards (Photocrew Lens-Inspired layout) */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4">
         
         {/* Card 1: Total Pending Orders */}
         <div 
@@ -798,7 +798,7 @@ export const PendingPaymentsReport: React.FC = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[1200px]">
+          <table className="w-full text-left border-collapse min-w-max">
             <thead>
               <tr className="border-b border-zinc-850 bg-zinc-900/30">
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-left">Order ID</th>
@@ -963,7 +963,7 @@ export const PendingPaymentsReport: React.FC = () => {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden"
+            className="w-full w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden"
           >
             <div className="flex justify-between items-center p-4 border-b border-zinc-850">
               <div>
@@ -1211,7 +1211,7 @@ export const PendingPaymentsReport: React.FC = () => {
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden"
+              className="w-full w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden"
             >
               <div className="flex justify-between items-center p-4 border-b border-zinc-850">
                 <div>
@@ -1238,7 +1238,7 @@ export const PendingPaymentsReport: React.FC = () => {
                 {/* Summary section */}
                 <div>
                   <h4 className="text-[10px] text-zinc-550 font-bold uppercase tracking-wider mb-2.5 font-mono">Payment Summary</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     <div className="p-3 bg-zinc-900 rounded-xl border border-zinc-850">
                       <span className="block text-[9px] text-zinc-400 uppercase font-mono">Quotation</span>
                       <span className="text-sm font-black text-white font-mono mt-0.5 block">

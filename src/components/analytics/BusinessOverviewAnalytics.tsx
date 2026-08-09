@@ -177,7 +177,7 @@ export const BusinessOverviewAnalytics: React.FC = () => {
             <h3 className="text-xs font-black uppercase tracking-wider text-zinc-300 font-mono">Revenue Analytics</h3>
           </div>
           
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <CameraLensStatsCard
               label="Total Revenue"
               val={totalRevenue}
@@ -251,7 +251,7 @@ export const BusinessOverviewAnalytics: React.FC = () => {
             <h3 className="text-xs font-black uppercase tracking-wider text-zinc-300 font-mono">Event Analytics</h3>
           </div>
           
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <CameraLensStatsCard
               label="Total Shoot Calls"
               val={totalEvents}
@@ -307,7 +307,7 @@ export const BusinessOverviewAnalytics: React.FC = () => {
             <h3 className="text-xs font-black uppercase tracking-wider text-zinc-300 font-mono">Payment Analytics</h3>
           </div>
           
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-3 gap-3">
             <CameraLensStatsCard
               label="Fully Settled"
               val={fullyPaidEvents}
@@ -345,7 +345,7 @@ export const BusinessOverviewAnalytics: React.FC = () => {
             <h3 className="text-xs font-black uppercase tracking-wider text-zinc-300 font-mono">Team / Capacity Analytics</h3>
           </div>
           
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <CameraLensStatsCard
               label="Total Manpower"
               val={activeStaffCount}

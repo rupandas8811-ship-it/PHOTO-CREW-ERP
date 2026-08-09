@@ -47,7 +47,7 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({ sidebarOpen, setSide
             <button
               id="header_sidebar_toggle"
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 flex items-center justify-center bg-zinc-900 hover:bg-zinc-850 text-zinc-300 hover:text-white border border-zinc-805 rounded-xl transition-all cursor-pointer shadow-md select-none touch-manipulation min-w-[38px] min-h-[38px]"
+              className="p-2 flex items-center justify-center bg-zinc-900 hover:bg-zinc-850 text-zinc-300 hover:text-white border border-zinc-805 rounded-xl transition-all cursor-pointer shadow-md select-none touch-manipulation min-w-max min-h-[38px]"
               title={sidebarOpen ? "Hide Navigation Sidebar" : "Show Navigation Sidebar"}
             >
               <Menu className="w-5 h-5 text-amber-500" />
@@ -69,7 +69,7 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({ sidebarOpen, setSide
 
           <button
             onClick={handleRefresh}
-            className="p-2 sm:px-3 sm:py-1.5 flex items-center gap-2 bg-emerald-500/5 hover:bg-emerald-500/15 text-emerald-400 hover:text-emerald-300 border border-emerald-500/15 hover:border-emerald-500/35 rounded-xl transition-all cursor-pointer shadow-md select-none touch-manipulation min-w-[38px] min-h-[38px] sm:min-w-0 sm:min-h-0"
+            className="p-2 sm:px-3 sm:py-1.5 flex items-center gap-2 bg-emerald-500/5 hover:bg-emerald-500/15 text-emerald-400 hover:text-emerald-300 border border-emerald-500/15 hover:border-emerald-500/35 rounded-xl transition-all cursor-pointer shadow-md select-none touch-manipulation min-w-max min-h-[38px] sm:min-w-0 sm:min-h-0"
             title="Refresh System Flow"
           >
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -78,7 +78,7 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({ sidebarOpen, setSide
 
           <button
             onClick={() => logout()}
-            className="p-2 sm:px-3 sm:py-1.5 flex items-center gap-2 bg-rose-500/5 hover:bg-rose-500/15 text-rose-400 hover:text-rose-300 border border-rose-500/15 hover:border-rose-500/30 rounded-xl transition-all cursor-pointer shadow-md select-none touch-manipulation min-w-[38px] min-h-[38px] sm:min-w-0 sm:min-h-0"
+            className="p-2 sm:px-3 sm:py-1.5 flex items-center gap-2 bg-rose-500/5 hover:bg-rose-500/15 text-rose-400 hover:text-rose-300 border border-rose-500/15 hover:border-rose-500/30 rounded-xl transition-all cursor-pointer shadow-md select-none touch-manipulation min-w-max min-h-[38px] sm:min-w-0 sm:min-h-0"
             title="Secure Logout"
           >
             <LogOut className="w-4 h-4" />

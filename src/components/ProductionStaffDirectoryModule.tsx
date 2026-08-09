@@ -621,7 +621,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
       {/* STAFF DIRECTORY TABLE */}
       <div className="bg-zinc-950 border border-zinc-900 rounded-2xl overflow-hidden shadow-2xl">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs min-w-[1000px]">
+          <table className="w-full text-left border-collapse text-xs min-w-max">
             <thead className="bg-[#0c0d10] text-[10px] font-mono text-zinc-500 uppercase tracking-widest border-b border-zinc-900">
               <tr>
                 <th className="py-4.5 px-5 font-black">Staff Member</th>
@@ -761,7 +761,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl relative"
+              className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-2xl overflow-hidden shadow-2xl relative"
             >
               {/* Header */}
               <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0d0e12]">
@@ -988,7 +988,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-zinc-950 border border-zinc-900 rounded-3xl w-full max-w-4xl overflow-hidden shadow-2xl relative"
+                className="bg-zinc-950 border border-zinc-900 rounded-3xl w-full w-full max-w-4xl overflow-hidden shadow-2xl relative"
               >
                 {/* Banner Header with Initials */}
                 <div className="relative overflow-hidden bg-[#0c0d11] p-6 border-b border-zinc-900 flex justify-between items-start">
@@ -1070,7 +1070,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                       Studio Performance Analytics Track
                     </h3>
                     
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                       {/* Metric 1 */}
                       <div className="bg-zinc-900/30 border border-zinc-900 p-4 rounded-2xl relative overflow-hidden">
                         <div className="text-[9px] text-zinc-500 uppercase tracking-widest">Assigned Projects</div>

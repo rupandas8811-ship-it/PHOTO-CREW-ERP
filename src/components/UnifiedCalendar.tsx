@@ -885,7 +885,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
       )}
 
       {/* 2. Top-Level Activity Dashboard Widgets */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
         {/* Events Today */}
         <div 
           onClick={() => {
@@ -1708,7 +1708,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                           className={`p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition cursor-pointer ${col.card}`}
                         >
                           <div className="flex items-start gap-3 w-full sm:w-auto">
-                            <div className="flex flex-col items-center bg-zinc-950 px-3 py-2 rounded-xl text-center min-w-[70px] border border-zinc-900">
+                            <div className="flex flex-col items-center bg-zinc-950 px-3 py-2 rounded-xl text-center min-w-max border border-zinc-900">
                               <span className="text-[10px] font-mono text-zinc-400 font-bold uppercase">
                                 {parseLocalDate(ev.date).toLocaleDateString('en-US', { month: 'short' })}
                               </span>
@@ -1857,7 +1857,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
           id="dialog_add_memo"
           className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-fade-in"
         >
-          <div className="bg-zinc-900 border border-zinc-800 w-full max-w-lg p-6 rounded-2xl space-y-4 shadow-2xl relative">
+          <div className="bg-zinc-900 border border-zinc-800 w-full w-full max-w-lg p-6 rounded-2xl space-y-4 shadow-2xl relative">
             <button
               id="close_dialog_add_memo"
               onClick={() => {
@@ -1942,7 +1942,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
         <div 
           className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-fade-in overflow-y-auto"
         >
-          <div className="bg-zinc-900 border border-zinc-805 w-full max-w-6xl p-6 rounded-2xl shadow-2xl relative space-y-6 my-8">
+          <div className="bg-zinc-900 border border-zinc-805 w-full w-full max-w-6xl p-6 rounded-2xl shadow-2xl relative space-y-6 my-8">
             <button
               onClick={() => { setPopupDate(null); setPopupLeadId(null); }}
               className="absolute right-4 top-4 p-1.5 hover:bg-zinc-850 rounded-lg text-zinc-400 hover:text-white transition"
@@ -1956,7 +1956,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
             </div>
             
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse min-w-[1000px]">
+              <table className="w-full text-left text-xs border-collapse min-w-max">
                 <thead>
                   <tr className="bg-zinc-950/70 text-zinc-405 font-bold border-b border-zinc-850 text-[10px] uppercase font-mono tracking-wider">
                     <th className="p-3.5 pl-5">Order ID</th>
@@ -2064,7 +2064,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
       {/* TEAM POPUP */}
       {teamPopupEvent && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-zinc-950/90 backdrop-blur-md animate-in zoom-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 w-full max-w-5xl p-6 rounded-2xl shadow-2xl relative">
+          <div className="bg-zinc-900 border border-zinc-800 w-full w-full max-w-5xl p-6 rounded-2xl shadow-2xl relative">
             <button
               onClick={() => setTeamPopupEvent(null)}
               className="absolute right-4 top-4 p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition cursor-pointer"

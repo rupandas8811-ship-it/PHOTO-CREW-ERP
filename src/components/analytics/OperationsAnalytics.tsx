@@ -115,7 +115,7 @@ export const OperationsAnalytics: React.FC = () => {
       </div>
 
       {/* Operational 8 Analytics Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
         <CameraLensStatsCard
           label="Orders Received"
@@ -531,7 +531,7 @@ export const OperationsAnalytics: React.FC = () => {
           return (
             <div className="space-y-6">
               {/* STAFF KPI CARDS GRID */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 lg:grid-cols-7 gap-3">
                 
                 {/* 1. Total Operations Staff */}
                 <div 
@@ -692,7 +692,7 @@ export const OperationsAnalytics: React.FC = () => {
                   </div>
 
                   {/* Role Selector */}
-                  <div className="relative min-w-[160px]">
+                  <div className="relative min-w-max">
                     <span className="absolute left-2.5 top-[11px] text-[9px] font-mono uppercase tracking-wider text-zinc-650 font-black">Role:</span>
                     <select
                       value={staffRoleFilter}
@@ -806,7 +806,7 @@ export const OperationsAnalytics: React.FC = () => {
               {/* STAFF DETAILS DRAWER / MODAL POPUP */}
               {selectedStaffDetail && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
-                  <div className="bg-zinc-950 border border-zinc-850 w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+                  <div className="bg-zinc-950 border border-zinc-850 w-full w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
                     
                     {/* Modal Header */}
                     <div className="p-5 border-b border-zinc-900 bg-zinc-900/60 flex items-center justify-between">

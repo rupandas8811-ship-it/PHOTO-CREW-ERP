@@ -269,7 +269,7 @@ export const SalesStaffManagementModule: React.FC = () => {
       {/* Add Form Modal */}
       {showAddForm && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
               <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-indigo-400" />
@@ -328,7 +328,7 @@ export const SalesStaffManagementModule: React.FC = () => {
       {/* Edit Form Modal */}
       {showEditForm && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
               <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
                 <PenTool className="w-5 h-5 text-indigo-400" />
@@ -383,7 +383,7 @@ export const SalesStaffManagementModule: React.FC = () => {
       {/* Reset Password Modal */}
       {showResetPwdForm && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
               <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
                 <Lock className="w-4 h-4 text-sky-400" />

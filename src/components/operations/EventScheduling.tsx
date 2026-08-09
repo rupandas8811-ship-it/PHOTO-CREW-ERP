@@ -116,7 +116,7 @@ export const EventScheduling: React.FC = () => {
                   </div>
 
                   {/* Datetime row */}
-                  <div className="grid grid-cols-2 gap-2 text-xs border-y border-zinc-850 py-3 font-mono">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs border-y border-zinc-850 py-3 font-mono">
                     <div className="space-y-1">
                       <div className="text-[9px] uppercase tracking-wider text-zinc-450 flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5 text-zinc-550" />
@@ -138,7 +138,7 @@ export const EventScheduling: React.FC = () => {
                   {/* Crew Assignment card */}
                   <div className="space-y-1.5 pt-1 text-xs">
                     <span className="text-[9px] uppercase tracking-wider text-zinc-455 font-mono">Allocated Squad</span>
-                    <div className="grid grid-cols-2 gap-y-2 gap-x-1 text-zinc-300 font-mono text-[11px]">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-1 text-zinc-300 font-mono text-[11px]">
                       <div>📸 {op?.photographer_assigned || 'Pending'}</div>
                       <div>🎥 {op?.videographer_assigned || 'Pending'}</div>
                       {op?.drone_operator_assigned !== 'None' && op?.drone_operator_assigned && (
@@ -179,7 +179,7 @@ export const EventScheduling: React.FC = () => {
                           <span className="text-[10px] font-mono font-bold text-amber-500 uppercase">TIMETABLE ADJUSTMENT ID: {ord.order_id}</span>
                           <button onClick={() => setSchedulingId(null)} className="text-xs text-zinc-400 hover:text-white cursor-pointer">✕</button>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <div className="space-y-1">
                             <label className="text-[9px] uppercase font-mono text-zinc-450 block">Reporting lock</label>
                             <input

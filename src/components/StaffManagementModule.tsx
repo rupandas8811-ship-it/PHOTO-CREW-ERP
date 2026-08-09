@@ -253,7 +253,7 @@ export const StaffManagementModule: React.FC = () => {
         <div className="space-y-6">
           
           {/* Key Metrics row */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
             
             {/* Total Staff member count */}
             <div className="bg-zinc-950 border border-zinc-900 p-5 rounded-2xl relative overflow-hidden group hover:border-violet-500/20 transition-all shadow-md">
@@ -667,7 +667,7 @@ export const StaffManagementModule: React.FC = () => {
                 <span>Skills / Specialities</span>
                 <span className="text-rose-500">*</span>
               </label>
-              <div className="grid grid-cols-2 gap-2 bg-zinc-900 border border-zinc-800 rounded-xl p-3 max-h-48 overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-zinc-900 border border-zinc-800 rounded-xl p-3 max-h-48 overflow-y-auto">
                 {specialities.filter(s => s.active).map(spec => (
                   <label key={spec.speciality_id} className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -746,7 +746,7 @@ export const StaffManagementModule: React.FC = () => {
               />
               
               {showPhotoTip && (
-                <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl space-y-2 mt-2 text-[11px] font-mono text-zinc-400 leading-relaxed max-w-full">
+                <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl space-y-2 mt-2 text-[11px] font-mono text-zinc-400 leading-relaxed w-full max-w-full">
                   <div className="font-bold text-white flex items-center gap-1">
                     <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                     <span>Instant Copy-Paste Placeholders</span>

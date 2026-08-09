@@ -112,11 +112,11 @@ export const NotificationsModule: React.FC = () => {
 
         {/* Counter cards in header */}
         <div className="flex items-center gap-3 z-10">
-          <div className="bg-zinc-900/80 border border-zinc-800 p-3 px-4 rounded-xl text-center min-w-[100px]">
+          <div className="bg-zinc-900/80 border border-zinc-800 p-3 px-4 rounded-xl text-center min-w-max">
             <span className="text-[9px] text-zinc-500 font-mono block uppercase">Total Alerts</span>
             <span className="text-sm font-black text-white font-mono">{totalNotifications}</span>
           </div>
-          <div className="bg-red-500/5 border border-red-500/20 p-3 px-4 rounded-xl text-center min-w-[100px]">
+          <div className="bg-red-500/5 border border-red-500/20 p-3 px-4 rounded-xl text-center min-w-max">
             <span className="text-[9px] text-red-400/80 font-mono block uppercase">Unread</span>
             <span className="text-sm font-black text-red-400 font-mono animate-pulse">{unreadCount}</span>
           </div>
@@ -410,7 +410,7 @@ export const NotificationsModule: React.FC = () => {
 
         return (
           <div id="notification_detail_modal" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-            <div className="bg-zinc-950 border border-zinc-950 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl relative flex flex-col border border-zinc-900">
+            <div className="bg-zinc-950 border border-zinc-950 rounded-2xl w-full w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl relative flex flex-col border border-zinc-900">
               
               {/* Header */}
               <div className="p-5 border-b border-zinc-900 flex items-center justify-between bg-zinc-900/40 sticky top-0 z-10 backdrop-blur-md">
@@ -466,7 +466,7 @@ export const NotificationsModule: React.FC = () => {
                 </div>
 
                 {/* Priority Status Level block */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="p-3.5 bg-[#020202] border border-zinc-900 rounded-xl text-left space-y-1">
                     <span className="text-[9px] font-mono uppercase text-zinc-500 block">Priority Level</span>
                     <strong className={`text-xs uppercase font-mono tracking-widest font-black ${

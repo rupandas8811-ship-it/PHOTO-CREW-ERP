@@ -1828,7 +1828,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         <body>
           <h1>LEADS DIRECTORY REPORT</h1>
           <p>Generated on ${new Date().toLocaleString('en-IN')} | Date Range: ${appliedStartDate || 'All'} to ${appliedEndDate || 'All'} | Records Count: ${filteredLeads.length}</p>
-          <table>
+          <div className="overflow-x-auto w-full max-w-full">
+<table>
             <thead>
               <tr>
                 <th>Lead ID</th>
@@ -1846,6 +1847,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               ${rowsHtml}
             </tbody>
           </table>
+</div>
           <div class="footer">Confidential Systems Report | ERP Sales Desk</div>
         </body>
       </html>
@@ -6952,7 +6954,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                     {!isCollapsed && (
                       <div className="p-4 bg-slate-900/50 text-xs text-slate-300 space-y-3">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-950/40 p-3 rounded-lg border border-slate-850/60 font-mono">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-slate-950/40 p-3 rounded-lg border border-slate-850/60 font-mono">
                           <div>
                             <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Start Date</span>
                             <span className="text-slate-200 font-semibold">{startDateStr}</span>
@@ -8423,7 +8425,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
 
             {/* Detailed Parameters */}
-            <div className="border-t border-slate-800 pt-3.5 grid grid-cols-2 gap-3 text-[11px]">
+            <div className="border-t border-slate-800 pt-3.5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
               <div>
                 <span className="text-slate-500 block">Event Type</span>
                 <strong className="text-slate-200 font-medium">{selectedLead.event_type === 'Other' ? (selectedLead.custom_event_name || selectedLead.custom_event_type || 'Other') : selectedLead.event_type}</strong>
@@ -9247,7 +9249,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             }
 
                             return customerPayments.map(p => (
-                              <div key={p.payment_id} className="bg-slate-900 border border-slate-800 p-3 rounded-lg text-xs grid grid-cols-2 sm:grid-cols-4 gap-3">
+                              <div key={p.payment_id} className="bg-slate-900 border border-slate-800 p-3 rounded-lg text-xs grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                                 <div>
                                   <span className="text-slate-500 text-[10px] block font-mono">Invoice Code</span>
                                   <span className="font-mono text-indigo-400 font-bold">{p.payment_id} (Ref: {p.order_id})</span>
@@ -10372,7 +10374,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         <div className="space-y-4">
 
           {/* Sales Performance Dashboard Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-5 gap-3 mt-2">
             {[
               { label: 'Create Quote', val: statCreatedQuotation, theme: 'blue' as CameraLensTheme, filterValue: 'Create Quote', chartPoints: [10, 15, 12, 18, 14, 20, 16], trendText: 'Initial Lead' },
               { label: 'Quote Sent', val: statQuotesSent, theme: 'purple' as CameraLensTheme, filterValue: 'Quote Sent', chartPoints: [12, 14, 18, 15, 21, 25, 22], trendText: 'Quotation Saved' },
@@ -10658,7 +10660,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           {/* Table view */}
           <div className="bg-zinc-900/20 rounded-2xl border border-zinc-850 overflow-hidden shadow-2xl">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse min-w-[1220px]">
+              <table className="w-full text-left text-xs border-collapse min-w-max">
                 <thead>
                   <tr className="bg-zinc-950/70 text-zinc-405 font-bold border-b border-zinc-850 text-[10px] uppercase font-mono tracking-wider">
                     <th className="p-3.5 pl-5">Lead ID</th>
@@ -10672,7 +10674,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     <th className="p-3.5">Current Status</th>
                     <th className="p-3.5">Payment Status</th>
                     <th className="p-3.5">Created Date</th>
-                    <th className="p-3.5 text-right pr-5 w-[160px] min-w-[160px]">Action</th>
+                    <th className="p-3.5 text-right pr-5 w-[160px] min-w-max">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900/60">
@@ -10746,7 +10748,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <td className="p-3.5 font-mono text-zinc-400">
                             {lead.created_date ? lead.created_date.split('T')[0] : 'N/A'}
                           </td>
-                          <td className="p-3.5 text-right pr-5 w-[160px] min-w-[160px] overflow-visible relative">
+                          <td className="p-3.5 text-right pr-5 w-[160px] min-w-max overflow-visible relative">
                             {(() => {
                               const isManageCrmOnlyStatus = ['New Lead', 'Follow-up', 'Follow Up', 'Contacted', 'Create Quote', 'Created Quotation'].includes(leadStatus);
                               const isActionsDropdownStatus = ['Quote Sent', 'Quotation Sent', 'Quote Follow-up', 'Negotiation'].includes(leadStatus);
@@ -11132,7 +11134,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </div>
 
               {/* Package cost and advance */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-medium text-slate-400 mb-1">
                     Final Package Amount (₹) *
@@ -11439,7 +11441,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                  <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all cursor-pointer inline-flex items-center justify-center min-w-[200px]"
+                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all cursor-pointer inline-flex items-center justify-center min-w-max"
                 >
                   {isSaving ? 'Saving...' : 'Save Reporting Details'}
                 </button>
@@ -12512,7 +12514,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                     {crmEvents && crmEvents.length > 0 ? (
                                       crmEvents.map((ev: any, idx: number) => (
                                         <div key={ev.id} className="bg-slate-900/50 p-3 rounded-lg border border-slate-800 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-                                          <div className="flex flex-col min-w-[150px]">
+                                          <div className="flex flex-col min-w-max">
                                             <span className="text-[10px] text-amber-500 font-black uppercase tracking-wider mb-0.5">Event {idx + 1}</span>
                                             <span className="text-xs font-bold text-slate-200">{ev.event_name || ev.event_type || 'N/A'}</span>
                                           </div>
@@ -12859,7 +12861,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
 
             <div className="space-y-4 relative z-10 text-slate-300 overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs min-w-[600px]">
+              <table className="w-full text-left border-collapse text-xs min-w-max">
                 <thead>
                   <tr className="bg-slate-900 text-slate-400 font-mono text-[9px] uppercase">
                     <th className="p-2 border border-slate-800">Customer Name</th>
@@ -13259,7 +13261,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   </div>
 
                   {/* Pricing and Category Banner */}
-                  <div className="grid grid-cols-2 gap-4 bg-slate-950/40 p-3 rounded-xl border border-slate-850">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-950/40 p-3 rounded-xl border border-slate-850">
                     <div>
                       <span className="text-slate-550 block font-bold text-[9px] uppercase font-mono mb-0.5">Category Group</span>
                       <span className="text-indigo-400 font-bold text-xs">{normalizeCategory(viewingPkgDetails.category)}</span>
@@ -13333,7 +13335,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         <span className="text-[10px] font-bold text-slate-400 font-mono tracking-wider uppercase block border-b border-slate-850 pb-1.5 flex items-center gap-1.5">
                           👥 Team Members Included
                         </span>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                           <div className="bg-slate-900/40 p-1.5 rounded">
                             <span className="text-slate-500 text-[9px] font-bold uppercase block mb-0.5">Photographer Count</span>
                             <span className="text-slate-250 font-medium">{photographerVal}</span>
@@ -13594,7 +13596,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
             {/* Comparison Grid Table */}
             <div className="overflow-x-auto border border-slate-800/85 rounded-xl bg-slate-950/40">
-              <table className="w-full min-w-[700px] border-collapse text-xs">
+              <table className="w-full min-w-max border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-slate-800 bg-[#0F172A]">
                     <th className="p-3 text-left font-bold text-slate-400 font-mono text-[10px] uppercase w-48 border-r border-slate-800/60">Specification Parameter</th>

@@ -314,7 +314,7 @@ export const Dashboard: React.FC = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse min-w-[1000px]">
+          <table className="w-full text-left text-xs border-collapse min-w-max">
             <thead>
               <tr className="bg-zinc-950/90 text-zinc-400 font-bold border-b border-zinc-800 text-[10px] uppercase font-mono tracking-wider">
                 <th className="p-3.5 pl-5">Order ID</th>
@@ -418,8 +418,8 @@ export const Dashboard: React.FC = () => {
       
       {/* Cinematic Studio Header */}
       <div className="relative overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-4 sm:p-5 rounded-2xl border border-zinc-800/80 shadow-2xl">
-        <div className="absolute top-0 right-0 w-[400px] h-[400px] rounded-full bg-amber-500/[0.04] blur-[80px] pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-[300px] h-[300px] rounded-full bg-violet-600/[0.03] blur-[100px] pointer-events-none" />
+        <div className="absolute top-0 right-0 w-full max-w-[400px] h-[400px] rounded-full bg-amber-500/[0.04] blur-[80px] pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-full max-w-[300px] h-[300px] rounded-full bg-violet-600/[0.03] blur-[100px] pointer-events-none" />
         
         {/* Viewfinder frame decorations around header */}
         <div className="absolute top-4 left-4 viewfinder-corner-tl" />
@@ -469,7 +469,7 @@ export const Dashboard: React.FC = () => {
 
       {/* SECTION: Global Business Analytics */}
       <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 p-5 sm:p-6 rounded-2xl border border-zinc-800 shadow-2xl space-y-6 relative overflow-hidden animate-in fade-in duration-300">
-        <div className="absolute top-0 right-0 w-[300px] h-[300px] rounded-full bg-amber-500/[0.02] blur-[120px] pointer-events-none" />
+        <div className="absolute top-0 right-0 w-full max-w-[300px] h-[300px] rounded-full bg-amber-500/[0.02] blur-[120px] pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[200px] h-[200px] rounded-full bg-indigo-500/[0.02] blur-[100px] pointer-events-none" />
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-850 pb-4 relative z-10">
@@ -498,7 +498,7 @@ export const Dashboard: React.FC = () => {
               <span>Revenue Analytics</span>
             </h3>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               
               {/* Today's Revenue */}
               <div className="bg-[#07070a]/80 border border-zinc-850/60 hover:border-zinc-800 p-4 rounded-xl space-y-2 transition-all">
@@ -566,7 +566,7 @@ export const Dashboard: React.FC = () => {
               <span>Leads Analytics</span>
             </h3>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-3 lg:grid-cols-1 gap-4">
               
               {/* Total Leads */}
               <div className="bg-[#07070a]/80 border border-zinc-850/60 hover:border-zinc-800 p-4 rounded-xl flex items-center justify-between transition-all">
@@ -602,7 +602,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Grid: 11 Primary Metrics in Elegant Bento Style */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {(() => {
           const kpiCards = [
             {
@@ -747,7 +747,7 @@ export const Dashboard: React.FC = () => {
 
         return (
           <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 p-6 rounded-2xl border border-zinc-900 shadow-2xl space-y-6 relative overflow-hidden animate-fade-in">
-            <div className="absolute top-0 right-0 w-[400px] h-[400px] rounded-full bg-violet-600/[0.02] blur-[150px] pointer-events-none" />
+            <div className="absolute top-0 right-0 w-full max-w-[400px] h-[400px] rounded-full bg-violet-600/[0.02] blur-[150px] pointer-events-none" />
             
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-900 pb-4 relative z-10">
               <div>
@@ -768,7 +768,7 @@ export const Dashboard: React.FC = () => {
             </div>
 
             {/* Metric Blocks */}
-            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
               <div className="bg-zinc-950/40 p-4 rounded-xl border border-zinc-900/60 hover:border-zinc-850 transition-all duration-300 space-y-1">
                 <span className="text-[9px] font-mono tracking-widest text-zinc-500 uppercase">New Customers</span>
                 <div className="text-xl font-black text-white">{newCustomers.length}</div>
@@ -800,7 +800,7 @@ export const Dashboard: React.FC = () => {
                 👥 HIGH RETENTION CUSTOMER LEADERBOARD
               </div>
               <div className="overflow-x-auto rounded-xl border border-zinc-900 bg-zinc-950/20">
-                <table className="w-full text-left border-collapse text-xs min-w-[1100px]">
+                <table className="w-full text-left border-collapse text-xs min-w-max">
                   <thead>
                     <tr className="bg-zinc-950/80 border-b border-zinc-850 text-zinc-500 uppercase tracking-widest text-[9px] font-mono">
                       <th className="p-3 pl-4">Customer ID</th>
@@ -947,7 +947,7 @@ export const Dashboard: React.FC = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 my-6">
             {pipelineStages.map((ps) => {
               const count = getStageCount(ps.stages);
               return (
@@ -1019,7 +1019,7 @@ export const Dashboard: React.FC = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse min-w-[1000px]">
+          <table className="w-full text-left text-xs border-collapse min-w-max">
             <thead>
               <tr className="bg-zinc-950/80 text-zinc-400 font-bold border-b border-zinc-900 text-[10px] uppercase font-mono tracking-wider">
                 <th className="p-3 pl-5">Order ID</th>
@@ -1160,7 +1160,7 @@ export const Dashboard: React.FC = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse min-w-[1100px]">
+          <table className="w-full text-left text-xs border-collapse min-w-max">
             <thead>
               <tr className="bg-zinc-950/80 text-zinc-400 font-bold border-b border-zinc-900 text-[10px] uppercase font-mono tracking-wider">
                 <th className="p-3.5 pl-5">Audit ID</th>

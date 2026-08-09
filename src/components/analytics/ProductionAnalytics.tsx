@@ -281,7 +281,7 @@ export const ProductionAnalytics: React.FC = () => {
       </div>
 
       {/* Production 12 Analytics Cards Grid (Responsive, fluid layout with no hidden or clipped content) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-6 gap-4">
         
         <CameraLensStatsCard
           label="Total Production Projects"
@@ -727,7 +727,7 @@ export const ProductionAnalytics: React.FC = () => {
           return (
             <div className="space-y-6">
               {/* EDITORS KPI CARDS SCROLLER */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 lg:grid-cols-8 gap-3">
                 
                 {/* 1. Total Editors */}
                 <div 
@@ -908,7 +908,7 @@ export const ProductionAnalytics: React.FC = () => {
                   </div>
 
                   {/* Speciality Selector */}
-                  <div className="relative min-w-[170px]">
+                  <div className="relative min-w-max">
                     <span className="absolute left-2.5 top-[11px] text-[9px] font-mono uppercase tracking-wider text-zinc-650 font-black">Designation:</span>
                     <select
                       value={editorSpecialityFilter}
@@ -1009,7 +1009,7 @@ export const ProductionAnalytics: React.FC = () => {
               {/* EDITOR DETAILS OVERLAY MODAL */}
               {selectedEditorDetail && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
-                  <div className="bg-zinc-950 border border-zinc-850 w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+                  <div className="bg-zinc-950 border border-zinc-850 w-full w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
                     
                     {/* Header */}
                     <div className="p-5 border-b border-zinc-900 bg-zinc-900/60 flex items-center justify-between">
@@ -1063,7 +1063,7 @@ export const ProductionAnalytics: React.FC = () => {
                       </div>
 
                       {/* STATS MATRIX */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-center">
                         <div className="p-3 rounded-xl bg-[#08080a] border border-zinc-900">
                           <span className="text-[9px] font-mono text-zinc-500 uppercase block">Total Assigned</span>
                           <h5 className="text-lg font-bold text-white mt-1">{selectedEditorDetail.assignedCount} Tasks</h5>

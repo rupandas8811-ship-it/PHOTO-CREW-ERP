@@ -594,7 +594,7 @@ export const OperationsStaffManagement: React.FC = () => {
         </h3>
 
         <div className="overflow-x-auto text-xs flex-1 bg-zinc-950/30 rounded-xl border border-zinc-850">
-          <table className="w-full text-left border-collapse min-w-[700px]">
+          <table className="w-full text-left border-collapse min-w-max">
             <thead>
               <tr className="border-b border-zinc-850 text-[10px] font-mono uppercase text-zinc-400 bg-zinc-950/30">
                 <th className="p-3.5">Code / Roster</th>
@@ -746,7 +746,7 @@ export const OperationsStaffManagement: React.FC = () => {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2 }}
-              className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-7xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+              className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-7xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
             >
               {/* Modal Header */}
               <div className="p-6 border-b border-zinc-850 flex items-center justify-between bg-zinc-950/40">
@@ -825,7 +825,7 @@ export const OperationsStaffManagement: React.FC = () => {
 
                   return (
                     <div className="overflow-x-auto rounded-2xl border border-zinc-850 bg-zinc-950/20">
-                      <table className="w-full text-left border-collapse min-w-[1500px] text-xs">
+                      <table className="w-full text-left border-collapse min-w-max text-xs">
                         <thead>
                           <tr className="border-b border-zinc-850 bg-zinc-950/60 font-mono text-[10px] uppercase text-zinc-400">
                             <th className="p-3.5 font-bold">Event Name</th>

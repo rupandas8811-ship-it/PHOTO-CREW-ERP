@@ -398,7 +398,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <div onClick={() => handleStatClick(staffMetrics.flatMap(s => s.tasksList), 'Total Assigned Tasks')} className="cursor-pointer transition-transform hover:scale-[1.02]">
             <CameraLensStatsCard
             label="Total Assigned"
@@ -531,7 +531,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
         </div>
         
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[1200px]">
+          <table className="w-full text-left border-collapse min-w-max">
             <thead>
               <tr className="bg-zinc-900/30 border-b border-zinc-850">
                 <SortHeader label="Staff Name" sortKey="name" />
@@ -680,7 +680,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
 
       {selectedTasks && !selectedTaskDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between p-6 border-b border-zinc-900">
               <div>
                 <h2 className="text-xl font-bold text-white tracking-tight">{popupTitle}</h2>
@@ -695,7 +695,8 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
             </div>
             <div className="flex-1 overflow-y-auto p-6">
               <div className="border border-zinc-800 rounded-xl overflow-hidden">
-                <table className="w-full text-left border-collapse">
+                <div className="overflow-x-auto w-full max-w-full">
+<table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-zinc-900/50 border-b border-zinc-800">
                       <th className="p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">Order ID</th>
@@ -739,6 +740,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
                     )}
                   </tbody>
                 </table>
+</div>
               </div>
             </div>
           </div>
@@ -747,7 +749,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
 
       {selectedTaskDetails && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between p-6 border-b border-zinc-900">
               <div>
                 <h2 className="text-xl font-bold text-white tracking-tight">Order Task Breakdown</h2>
@@ -775,7 +777,8 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
 
                      {group.assignments && group.assignments.length > 0 ? (
                        <div className="overflow-hidden rounded-lg border border-zinc-800/50">
-                         <table className="w-full text-left border-collapse">
+                         <div className="overflow-x-auto w-full max-w-full">
+<table className="w-full text-left border-collapse">
                            <thead>
                              <tr className="bg-zinc-900/50 border-b border-zinc-800/50">
                                <th className="p-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">Assigned Staff</th>
@@ -801,6 +804,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
                              ))}
                            </tbody>
                          </table>
+</div>
                        </div>
                      ) : (
                        <p className="text-xs text-zinc-600 font-mono italic">No specific assignments found for this event.</p>

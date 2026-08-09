@@ -83,7 +83,7 @@ export const PaymentsModule: React.FC = () => {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse min-w-[650px]">
+            <table className="w-full text-left text-xs border-collapse min-w-max">
               <thead>
                 <tr className="bg-zinc-950/40 text-zinc-400 font-bold border-b border-zinc-850 tracking-wider uppercase text-[10px] font-mono">
                   <th className="p-3 pl-4">Payment ID</th>
@@ -201,7 +201,7 @@ export const PaymentsModule: React.FC = () => {
                   <form onSubmit={handlePaySubmit} className="space-y-4 text-xs font-sans">
                     
                     {/* Quotation summary readout */}
-                    <div className="bg-zinc-950/80 rounded-xl p-4 border border-zinc-850 grid grid-cols-2 gap-3 text-[11px] font-mono">
+                    <div className="bg-zinc-950/80 rounded-xl p-4 border border-zinc-850 grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] font-mono">
                       <div>
                         <span className="text-zinc-500">Contract Value:</span>
                         <p className="font-bold text-zinc-200 mt-0.5">{formatINR(paymentItem.quotation_amount)}</p>
@@ -332,7 +332,7 @@ export const PaymentsModule: React.FC = () => {
       {/* Popup Modal for Details (Centered & Responsive for Desktop, Tablet, and Mobile) */}
       {selectedOrderId && (
         <div id="payments_details_mobile_modal" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div id="payment_update_modal" className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl relative flex flex-col">
+          <div id="payment_update_modal" className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl relative flex flex-col">
             <div className="p-4 border-b border-zinc-850 flex items-center justify-between bg-zinc-900/60 sticky top-0 z-10 backdrop-blur-md">
               <h3 className="text-xs font-black text-white flex items-center gap-1.5 font-mono uppercase tracking-wider">
                 <Landmark className="w-4 h-4 text-rose-500" />
@@ -357,7 +357,7 @@ export const PaymentsModule: React.FC = () => {
                     </p>
                     
                     {/* Quotation summary readout */}
-                    <div className="bg-zinc-900/80 rounded-xl p-4 border border-zinc-850 grid grid-cols-2 gap-3 text-[11px] font-mono">
+                    <div className="bg-zinc-900/80 rounded-xl p-4 border border-zinc-850 grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] font-mono">
                       <div>
                         <span className="text-zinc-550">Contract Value:</span>
                         <p className="font-bold text-zinc-200 mt-0.5">{formatINR(paymentItem.quotation_amount)}</p>

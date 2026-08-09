@@ -84,7 +84,7 @@ export const StudioLoader: React.FC<StudioLoaderProps> = ({
           className="fixed inset-0 z-50 bg-black flex flex-col justify-center items-center px-4 font-sans select-none overflow-hidden"
         >
           {/* Subtle cinematic background spotlight */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full bg-radial from-amber-500/5 to-transparent blur-[160px] pointer-events-none" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[800px] h-[800px] rounded-full bg-radial from-amber-500/5 to-transparent blur-[160px] pointer-events-none" />
 
           {/* Lens & Shutter Container */}
           <div className="relative mb-10 w-64 h-64 flex items-center justify-center">

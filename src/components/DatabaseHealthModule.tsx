@@ -261,7 +261,7 @@ export const DatabaseHealthModule: React.FC = () => {
       </div>
 
       {/* Grid Layout: Indicators */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         
         {/* Connection status card */}
         <div className="bg-zinc-950 border border-zinc-850 p-4 rounded-2xl flex items-center justify-between relative shadow-lg">
@@ -456,7 +456,7 @@ export const DatabaseHealthModule: React.FC = () => {
               <span>SCHEMA PROTECTION POLICIES AUDIT</span>
             </h3>
             
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {rlsTableStatus.map((tbl) => (
                 <div key={tbl.name} className="bg-[#030303] border border-zinc-850/80 p-3 rounded-lg flex flex-col justify-between h-20">
                   <span className="text-[10px] font-mono text-zinc-400 font-bold">{tbl.name}</span>

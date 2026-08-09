@@ -598,6 +598,17 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
       return rf.server_path.trim();
     }
 
+    // 2.5 Check Order table
+    if (order && (order as any).raw_footage_link && ((order as any).raw_footage_link as string).trim() !== '') {
+      return ((order as any).raw_footage_link as string).trim();
+    }
+    if (order && (order as any).raw_footage_drive_link && ((order as any).raw_footage_drive_link as string).trim() !== '') {
+      return ((order as any).raw_footage_drive_link as string).trim();
+    }
+    if (order && (order as any).consolidated_drive_link && ((order as any).consolidated_drive_link as string).trim() !== '') {
+      return ((order as any).consolidated_drive_link as string).trim();
+    }
+
     // 3. Check Production item direct fields
     if (prodItem.raw_footage_location && prodItem.raw_footage_location.trim() !== '' && !prodItem.raw_footage_location.startsWith('s3://')) {
       return prodItem.raw_footage_location.trim();
@@ -703,7 +714,8 @@ ${coordinatorName}`;
       'Client Acceptance', 'Order Closed', 'Closed', 'Completed', 'Project Closed', 'Approved', 'Payment Pending'
     ];
 
-    const operationsOnlyStages = [
+    const preProductionStages = [
+      'New Lead', 'Follow Up', 'Follow-Up', 'Quotation Sent', 'Booking Requested',
       'Order Confirmed', 'Confirm Order', 'New Order', 'Order Created',
       'Operations Assigned', 'Assigned Crew', 'Staff Assigned', 'Crew Assigned',
       'Event Scheduled', 'Event Started', 'Event Completed', 'Event Ended',
@@ -828,15 +840,17 @@ ${coordinatorName}`;
       const hasRawFootage = !!cand.rawFootage;
       const isProdStage = validProductionStages.includes(prodStatus) || validProductionStages.includes(orderStage) || validProductionStages.includes(leadStatus);
 
-      // Exclude Operations-only projects that have NO production record, NO assignments, NO raw footage, and stage not in prod stages
-      if (orderStage && operationsOnlyStages.includes(orderStage)) {
-        if (!hasProductionRecord && !hasAssignments && !hasRawFootage && !isProdStage) {
-          continue;
-        }
-      } else if (!cand.order && leadStatus && operationsOnlyStages.includes(leadStatus)) {
-        if (!hasProductionRecord && !hasAssignments && !hasRawFootage && !isProdStage) {
-          continue;
-        }
+      // STRICT PRODUCTION ENTRY GATE
+      // Projects MUST NOT enter Production until they reach "Verified Footage".
+      // Even if a production record exists accidentally, we hide it if the primary workflow is still pre-production.
+      const currentPrimaryStage = (orderStage || leadStatus || '').trim();
+      if (preProductionStages.includes(currentPrimaryStage)) {
+        continue;
+      }
+
+      // Also ensure it actually IS in a valid production stage or has production artifacts
+      if (!isProdStage && !hasProductionRecord && !hasAssignments && !hasRawFootage) {
+        continue;
       }
 
       // Filter for Production Staff role
@@ -1830,7 +1844,8 @@ Production Team`;
               Report Generated On: ${new Date().toLocaleString()}
             </div>
           </div>
-          <table>
+          <div className="overflow-x-auto w-full max-w-full">
+<table>
             <thead>
               <tr>
                 <th>Order ID</th>
@@ -1847,6 +1862,7 @@ Production Team`;
               ${rowsHtml || '<tr><td colspan="8" style="padding: 20px; text-align: center;">No records found.</td></tr>'}
             </tbody>
           </table>
+</div>
           <div class="footer">
             CINEMATIC PRODUCTION & OPERATIONS ERP SYSTEM ~ PHOTOCREW VAULT © 2026
           </div>
@@ -2772,7 +2788,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         <div className="space-y-6 animate-fade-in text-zinc-100">
           
           {/* Dashboard Widgets specific to Production Leads */}
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <CameraLensStatsCard
               label="New Projects Received"
               val={countNewProjects}
@@ -3063,7 +3079,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 </div>
 
                 <div className="overflow-x-auto border border-zinc-900 rounded-xl">
-                  <table className="w-full border-collapse text-left text-xs text-zinc-300 min-w-[1200px]">
+                  <table className="w-full border-collapse text-left text-xs text-zinc-300 min-w-max">
                     <thead>
                       <tr className="border-b border-zinc-900 bg-zinc-900/40 text-[9px] font-mono uppercase tracking-wider text-zinc-400">
                         <th className="p-3 font-bold">Order ID</th>
@@ -3188,7 +3204,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           {/* TABLE CONTAINER */}
           <div className="bg-zinc-950 border border-zinc-900 rounded-2xl overflow-hidden shadow-2xl">
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-left text-xs text-zinc-300 min-w-[1200px]">
+              <table className="w-full border-collapse text-left text-xs text-zinc-300 min-w-max">
                 <thead>
                   <tr className="border-b border-zinc-900 bg-zinc-950/70 px-4 py-3 font-mono text-[9px] uppercase tracking-wider text-zinc-500">
                     <th className="p-4 font-black">Order ID</th>
@@ -3688,7 +3704,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
       {activeSubTab === 'staff_performance' && (() => {
         if (!productionStaff) {
           return (
-            <div className="bg-zinc-950 border border-zinc-900 p-12 rounded-3xl text-center space-y-4 max-w-xl mx-auto mt-6">
+            <div className="bg-zinc-950 border border-zinc-900 p-12 rounded-3xl text-center space-y-4 w-full max-w-xl mx-auto mt-6">
               <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mx-auto">
                 <AlertCircle className="w-8 h-8 text-rose-500 animate-pulse" />
               </div>
@@ -3741,7 +3757,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         return (
           <div className="space-y-6">
             {/* 7 ANALYTICS CARDS */}
-            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-7 gap-4 animate-in fade-in duration-300">
+            <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-2 lg:grid-cols-7 gap-4 animate-in fade-in duration-300">
               <div className="bg-zinc-950 border border-zinc-900 p-4.5 rounded-2xl flex flex-col justify-between">
                 <span className="text-zinc-500 text-[9px] font-mono uppercase tracking-widest font-black leading-none mb-1 text-left block">Total Editors</span>
                 <span className="text-xl font-bold text-white font-mono mt-1 text-left block leading-none">{totalEditors}</span>
@@ -3933,7 +3949,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           {totalEditors > 0 ? (
             <div className="bg-zinc-950 border border-zinc-900 rounded-3xl overflow-hidden shadow-2xl">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs text-zinc-300 min-w-[1200px]">
+              <table className="w-full text-left border-collapse text-xs text-zinc-300 min-w-max">
                 <thead className="bg-[#0b0c10] text-[9px] font-mono text-zinc-500 uppercase tracking-widest border-b border-zinc-900">
                   <tr>
                     <th className="py-4.5 px-5 font-black">Staff Member</th>
@@ -4173,7 +4189,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             </div>
           </div>
           ) : (
-            <div className="bg-zinc-950 border border-zinc-900 p-12 rounded-3xl text-center space-y-4 max-w-xl mx-auto mt-6">
+            <div className="bg-zinc-950 border border-zinc-900 p-12 rounded-3xl text-center space-y-4 w-full max-w-xl mx-auto mt-6">
               <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto animate-pulse">
                 <Users className="w-8 h-8 text-amber-500" />
               </div>
@@ -4322,7 +4338,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             </div>
 
             {/* KPI Summary Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
                 { title: 'Total Projects', value: totalProjects, sub: 'Lifetime volume', color: 'text-indigo-400' },
                 { title: 'In Progress', value: totalInProgress, sub: 'Editing active', color: 'text-sky-400' },
@@ -4472,7 +4488,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           <div className="space-y-6">
             
             {/* Quick Metrics Subheader */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-4">
                 <div className="text-zinc-500 text-[10px] font-mono uppercase tracking-wider">Ready for Delivery</div>
                 <div className="text-2xl font-black text-teal-400 font-mono mt-1">{readyCount}</div>
@@ -4503,7 +4519,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               </h3>
 
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-xs text-zinc-300 min-w-[1200px]">
+                <table className="w-full border-collapse text-left text-xs text-zinc-300 min-w-max">
                   <thead>
                     <tr className="border-b border-zinc-900 bg-zinc-950/70 py-3 font-mono text-[9px] uppercase tracking-wider text-zinc-500">
                       <th className="p-4 font-black">Order ID</th>
@@ -4636,7 +4652,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
       {activeSubTab === 'pipeline' && (
         <div className="space-y-6">
           {/* Production Team Dashboard KPI Panel */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3.5">
             {[
               { label: 'Total Projects', val: statTotalVideo, color: 'text-indigo-400', bg: 'bg-indigo-500/10 border-indigo-500/20', icon: Layers },
               { label: 'Pending Raw Ingest', val: statPendingVideo, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20', icon: Clock },
@@ -5534,7 +5550,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                 {/* Responsive Table Container */}
                 <div className="overflow-x-auto w-full rounded-xl border border-zinc-900 bg-zinc-950">
-                  <table className="w-full text-left border-collapse min-w-[700px]">
+                  <table className="w-full text-left border-collapse min-w-max">
                     <thead>
                       <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
                         <th className="px-4 py-3 font-bold">Staff Name & Role</th>
@@ -5785,7 +5801,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
             {/* Responsive Table Container */}
             <div className="overflow-x-auto w-full rounded-xl border border-zinc-900 bg-zinc-950">
-              <table className="w-full text-left border-collapse min-w-[600px]">
+              <table className="w-full text-left border-collapse min-w-max">
                 <thead>
                   <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
                     <th className="px-4 py-3 font-bold">Staff Name</th>
@@ -6311,7 +6327,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
       {/* POPUP SELECTION TRIGGER BOARD MODAL (Responsive, fits mobiles flawlessly) */}
       {selectedProdId && (
         <div id="production_details_mobile_modal" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl relative flex flex-col">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl relative flex flex-col">
             
             <div className="p-4 border-b border-zinc-850 flex items-center justify-between bg-zinc-900/60 sticky top-0 z-10 backdrop-blur-md">
               <h3 className="text-xs font-black text-white flex items-center gap-1.5 font-mono uppercase tracking-wider">
@@ -6527,7 +6543,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 <h4 className="text-[10px] font-black uppercase tracking-[0.15em] text-violet-400 font-mono">
                                   Assigned Staff Communication Status
                                 </h4>
-                                <div className="grid grid-cols-2 gap-3.5 text-left text-zinc-300">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-left text-zinc-300">
                                   <div>
                                     <span className="text-[9px] text-zinc-500 font-mono block">STAFF NAME</span>
                                     <span className="text-xs font-bold text-white block mt-0.5">{assignedStaffRecord.name}</span>
@@ -6753,7 +6769,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
         return (
           <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 z-50 animate-fade-in text-zinc-105 select-none md:select-text">
-            <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl p-4.5 space-y-4 relative text-left">
+            <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl p-4.5 space-y-4 relative text-left">
               
               {/* Header */}
               <div className="flex items-center justify-between border-b border-zinc-900 pb-2.5">
@@ -6789,7 +6805,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         <Users className="w-4 h-4 text-violet-400" />
                         <span>CUSTOMER & PACKAGE DOSSIER</span>
                       </h4>
-                      <div className="grid grid-cols-2 gap-3 text-xs text-zinc-400">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-zinc-400">
                         <div>
                           <span className="text-[9px] text-zinc-550 font-mono block">CUSTOMER NAME</span>
                           <span className="text-zinc-205 font-bold block mt-0.5 text-zinc-300">{order?.customer_name}</span>
@@ -7037,7 +7053,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       </div>
 
                       {/* 2-column fields */}
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         
                         {/* Production Status */}
                         <div>
@@ -7078,7 +7094,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       </div>
 
                       {/* Target dates */}
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono font-black">
                             Editing Start Date
@@ -7353,7 +7369,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       {/* Compact Deliverable Assignment Table */}
                       <div className="border border-zinc-900 rounded-xl overflow-hidden bg-zinc-950">
                         <div className="overflow-x-auto w-full">
-                          <table className="w-full text-left border-collapse min-w-[700px]">
+                          <table className="w-full text-left border-collapse min-w-max">
                             <thead>
                               <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[9px] text-zinc-500 uppercase tracking-wider">
                                 <th className="px-3.5 py-2 font-bold w-[35%]">Deliverable</th>
@@ -7423,7 +7439,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                               </div>
 
                                               {/* Custom Staff Dropdown */}
-                                              <div className="flex-1 min-w-[200px]">
+                                              <div className="flex-1 min-w-max">
                                                 <StaffSelectDropdown
                                                   deliverable={deliverable}
                                                   rowId={row.id}
@@ -7519,7 +7535,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       {/* Read-only Production Staff Roster Popup */}
                       {rosterStaffName && (
                         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm animate-fade-in">
-                          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-2xl p-6 shadow-2xl flex flex-col space-y-4">
+                          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-2xl p-6 shadow-2xl flex flex-col space-y-4">
                             <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
                               <h3 className="text-xs font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
                                 <span>📅</span> Production Staff Roster — <span className="text-[#a78bfa]">{rosterStaffName}</span>
@@ -7533,7 +7549,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             </div>
 
                             <div className="overflow-x-auto w-full rounded-xl border border-zinc-900 bg-zinc-950 max-h-[300px]">
-                              <table className="w-full text-left border-collapse min-w-[500px]">
+                              <table className="w-full text-left border-collapse min-w-max">
                                 <thead>
                                   <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
                                     <th className="px-4 py-3 font-bold">Staff Name</th>
@@ -7784,7 +7800,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                     <div className="border border-zinc-900 rounded-xl overflow-hidden bg-zinc-950">
                       <div className="overflow-x-auto w-full">
-                        <table className="w-full text-left border-collapse min-w-[500px]">
+                        <table className="w-full text-left border-collapse min-w-max">
                           <thead>
                             <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[9px] text-zinc-500 uppercase tracking-wider">
                               <th className="px-4 py-2.5 font-bold w-[12%] text-center">Qty</th>
@@ -8180,7 +8196,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           </p>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2 pt-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                           <button
                             type="button"
                             onClick={() => {
@@ -8736,7 +8752,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         <div className="text-amber-400 font-mono text-xs">{activeWorkflowProd.editing_status}</div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1 font-mono">
                             Update Status *
@@ -8813,7 +8829,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
       {/* ASSIGNED EDITORS / TEAM POPUP */}
       {assignedEditorsModalProd && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
-          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all duration-300">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all duration-300">
             {/* Header */}
             <div className="p-5 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
               <div>
@@ -8838,7 +8854,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             </div>
             
             <div className="p-5 overflow-y-auto font-sans flex-1 overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse min-w-[550px]">
+              <table className="w-full text-left text-xs border-collapse min-w-max">
                 <thead>
                   <tr className="border-b border-zinc-900 bg-zinc-950/70 text-zinc-400 font-mono text-[10px] uppercase tracking-wider">
                     <th className="p-3 font-bold">Staff Name</th>
@@ -8946,7 +8962,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
       {/* EDITOR WHATSAPP SHARING POPUP */}
       {editorWhatsappModalOpen && (
         <div className="fixed inset-0 z-[115] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
-          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all duration-300">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all duration-300">
             
             {/* Header */}
             <div className="p-5 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
@@ -9117,7 +9133,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
       {/* WHATSAPP SHARE POPUP */}
       {whatsappShareModalOpen && whatsappShareData && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
-          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all duration-300">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all duration-300">
             
             {/* Header */}
             <div className="p-5 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
@@ -9266,7 +9282,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
       {/* WHATSAPP MESSAGE PREVIEW SUB-POPUP */}
       {previewStaffMessage && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-fade-in">
-          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
             {/* Header */}
             <div className="p-4 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
               <div>
@@ -9334,7 +9350,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl"
+              className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-2xl overflow-hidden shadow-2xl"
             >
               <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d10]">
                 <div>
@@ -9515,7 +9531,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl"
+              className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-md overflow-hidden shadow-2xl"
             >
               <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d10]">
                 <div>
@@ -9580,7 +9596,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl"
+              className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-2xl overflow-hidden shadow-2xl"
             >
               <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d10]">
                 <div>
@@ -9607,7 +9623,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   </div>
                 ) : (
                   <div className="overflow-x-auto w-full">
-                    <table className="w-full text-left border-collapse text-xs text-zinc-300 font-mono min-w-[700px]">
+                    <table className="w-full text-left border-collapse text-xs text-zinc-300 font-mono min-w-max">
                       <thead>
                         <tr className="border-b border-zinc-900 text-zinc-500 uppercase pb-2 text-[9px] tracking-widest bg-zinc-950/40">
                           <th className="py-3 px-3 font-bold">Project ID</th>
@@ -9688,7 +9704,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-zinc-950 border border-zinc-900 rounded-3xl w-full max-w-4xl overflow-hidden shadow-2xl relative"
+                className="bg-zinc-950 border border-zinc-900 rounded-3xl w-full w-full max-w-4xl overflow-hidden shadow-2xl relative"
               >
                 <div className="relative overflow-hidden bg-[#0c0d11] p-6 border-b border-zinc-900 flex justify-between items-start">
                   <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
@@ -9765,7 +9781,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       Editor Performance & Job Metrics
                     </h4>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                       <div className="bg-[#0b0c10] border border-zinc-900 p-3.5 rounded-xl text-center">
                         <span className="text-zinc-550 text-[9px] uppercase tracking-wider font-bold">Total Assigned</span>
                         <div className="text-2xl font-black text-white mt-1">{stats.assigned.length}</div>
@@ -9849,7 +9865,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl relative flex flex-col max-h-[85vh]"
+                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-4xl overflow-hidden shadow-2xl relative flex flex-col max-h-[85vh]"
               >
                 {/* Header */}
                 <div className="p-4 sm:p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d11]">
@@ -9877,7 +9893,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       No assigned tasks found.
                     </div>
                   ) : (
-                    <table className="w-full text-left border-collapse min-w-[600px]">
+                    <div className="overflow-x-auto w-full max-w-full">
+<table className="w-full text-left border-collapse min-w-max">
                       <thead className="bg-zinc-900/40 sticky top-0 border-b border-zinc-900">
                         <tr className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
                           <th className="px-4 py-3 font-bold">Order ID</th>
@@ -9917,6 +9934,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         })}
                       </tbody>
                     </table>
+</div>
                   )}
                 </div>
               </motion.div>
@@ -9937,7 +9955,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]"
+                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-2xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]"
               >
                 {/* Header */}
                 <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d11]">
@@ -10090,7 +10108,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl relative flex flex-col max-h-[92vh]"
+                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-3xl overflow-hidden shadow-2xl relative flex flex-col max-h-[92vh]"
               >
                 {/* Header */}
                 <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d11]">

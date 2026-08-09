@@ -107,7 +107,7 @@ export const NotificationBell: React.FC = () => {
       <button
         id="btn_notification_bell"
         onClick={() => setIsOpen(!isOpen)}
-        className={`p-2 rounded-xl border relative transition-all cursor-pointer flex items-center justify-center select-none touch-manipulation min-w-[38px] min-h-[38px] ${
+        className={`p-2 rounded-xl border relative transition-all cursor-pointer flex items-center justify-center select-none touch-manipulation min-w-max min-h-[38px] ${
           isOpen 
             ? 'bg-amber-500/20 border-amber-500/40 text-amber-400' 
             : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
@@ -120,7 +120,7 @@ export const NotificationBell: React.FC = () => {
         {unreadCount > 0 && (
           <span 
             id="notification_unread_badge" 
-            className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center px-1 text-[9px] font-black font-mono text-black bg-gradient-to-r from-red-500 to-amber-500 rounded-full border border-black animate-pulse"
+            className="absolute -top-1 -right-1 min-w-max h-[18px] flex items-center justify-center px-1 text-[9px] font-black font-mono text-black bg-gradient-to-r from-red-500 to-amber-500 rounded-full border border-black animate-pulse"
           >
             {unreadCount}
           </span>
@@ -313,7 +313,7 @@ export const NotificationBell: React.FC = () => {
 
         return (
           <div id="bell_notification_detail_modal" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-4">
-            <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
+            <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
               
               {/* Header */}
               <div className="p-4 border-b border-zinc-900 bg-zinc-900/40 flex items-center justify-between sticky top-0 z-10 backdrop-blur-md">
@@ -348,7 +348,7 @@ export const NotificationBell: React.FC = () => {
                 </div>
 
                 {/* Metadata Fields */}
-                <div className="grid grid-cols-2 gap-3 font-sans">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-sans">
                   <div className="p-3 bg-zinc-900/20 border border-zinc-900 rounded-lg">
                     <span className="text-[8px] uppercase font-mono tracking-wider text-zinc-500 block">Recipient Role</span>
                     <strong className="text-xs font-bold text-white block mt-0.5">{selectedNotif.recipient_role || 'All'}</strong>
