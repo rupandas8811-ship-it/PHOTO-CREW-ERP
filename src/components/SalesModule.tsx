@@ -8065,11 +8065,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       // Auto-open Confirm Order modal once reporting details are saved
       const today = new Date().toISOString().split('T')[0];
+      const linkedOrder = orders?.find(o => o.lead_id === updatedLead.lead_id);
+      const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
+      const calcAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : (Number(updatedLead.advance_collected) || 0));
+
       setConfirmForm(prev => ({
         ...prev,
         package_name: packages?.find((p) => String(p.package_id) === String(updatedLead.Select_Package_Option))?.package_name || updatedLead.Select_Package_Option || prev.package_name || '',
-        quotation_amount: Number(updatedLead.Final_Quotation_Amount) || Number((updatedLead as any).final_amount) || Number(updatedLead.budget) || prev.quotation_amount || 0,
-        advance_received: prev.advance_received || 0,
+        quotation_amount: Number(updatedLead.Final_Quotation_Amount) || Number((updatedLead as any).final_amount) || Number(updatedLead.budget) || (updatedLead.lead_id === selectedLead?.lead_id ? Number(wizardLeadData.final_amount) : 0) || prev.quotation_amount || 0,
+        advance_received: calcAdvance || prev.advance_received || 0,
         event_date: updatedLead.event_date || prev.event_date || today,
         event_time: updatedLead.event_time || prev.event_time || ''
       }));
@@ -8500,11 +8504,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       return;
                     }
                     const today = new Date().toISOString().split('T')[0];
+                    const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
+                    const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
+                    const calcAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : (Number(selectedLead.advance_collected) || Number(wizardLeadData.advance_received) || 0));
+                    
                     setConfirmForm({
                       ...confirmForm,
                       package_name: packages?.find((p) => String(p.package_id) === String(selectedLead.Select_Package_Option))?.package_name || selectedLead.Select_Package_Option || '',
-                      quotation_amount: Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_amount) || 0,
-                      advance_received: 0,
+                      quotation_amount: Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_amount) || Number(wizardLeadData.final_amount) || 0,
+                      advance_received: calcAdvance,
                       event_date: selectedLead.event_date || today,
                       event_time: selectedLead.event_time || ''
                     });
@@ -10961,11 +10969,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                             }
 
                                             const today = new Date().toISOString().split('T')[0];
+                                            const linkedOrder = orders?.find(o => o.lead_id === lead.lead_id);
+                                            const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
+                                            const calcAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : (Number(lead.advance_collected) || 0));
+
                                             setConfirmForm({
                                               ...confirmForm,
                                               package_name: packages?.find((p) => String(p.package_id) === String(lead.Select_Package_Option))?.package_name || lead.Select_Package_Option || '',
-                                              quotation_amount: Number(lead.Final_Quotation_Amount) || Number((lead as any).final_amount) || Number(lead.budget) || 0,
-                                              advance_received: 0,
+                                              quotation_amount: Number(lead.Final_Quotation_Amount) || Number((lead as any).final_amount) || Number(lead.budget) || (lead.lead_id === selectedLead?.lead_id ? Number(wizardLeadData.final_amount) : 0) || 0,
+                                              advance_received: calcAdvance,
                                               event_date: lead.event_date || today,
                                               event_time: lead.event_time || ''
                                             });
