@@ -1301,6 +1301,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       equipment: [
         'equipment_id', 'equipment_name', 'brand', 'Equipment_Category', 'Equipment_Status'
       ],
+      editor_assignments: [
+        'assignment_id', 'production_id', 'staff_id', 'staff_name', 'speciality', 
+        'assigned_date', 'target_finish_date', 'status', 'created_at', 'event_id', 
+        'order_id', 'deliverable_id', 'Edited_Drive_Link', 'edited_drive_link', 'edited_link_uploaded_at'
+      ],
       operations_staff: [
         'staff_id', 'name', 'mobile', 'whatsapp_number', 'email', 'role', 'department', 'status', 'joining_date', 
         'profile_photo', 'notes', 'production_role_speciality', 'experience', 'employee_id', 'city', 'Skill', 'Staff_Type',
@@ -1667,7 +1672,13 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             console.log(`[pushUpdate Proxy SUCCESS] for ${table}:`, resJson.data);
             updateDiagnosticMetric('update', 'ok');
             if (table === 'editor_assignments') {
-              setEditorAssignments(prev => prev.map(a => a.assignment_id === finalMatchValue ? { ...a, ...sanitized } : a));
+              const linkVal = sanitized.Edited_Drive_Link || sanitized.edited_drive_link;
+              setEditorAssignments(prev => prev.map(a => a.assignment_id === finalMatchValue ? {
+                ...a,
+                ...sanitized,
+                Edited_Drive_Link: linkVal || a.Edited_Drive_Link,
+                edited_drive_link: linkVal || a.edited_drive_link
+              } : a));
             }
             if (table === 'leads') {
               const leadId = finalMatchValue;
@@ -2128,7 +2139,13 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       if (dbLogs) setLogs(dbLogs);
       if (dbHandovers) setEquipmentHandovers(dbHandovers);
       if (dbSpecList) setSpecialities(dbSpecList);
-      if (dbAssignList) setEditorAssignments(dbAssignList);
+      if (dbAssignList) {
+        setEditorAssignments(dbAssignList.map((item: any) => ({
+          ...item,
+          Edited_Drive_Link: item.Edited_Drive_Link || item.edited_drive_link || null,
+          edited_drive_link: item.edited_drive_link || item.Edited_Drive_Link || null
+        })));
+      }
       
       if (dbStaff) {
          setStaff(dbStaff.map((item: any) => {

@@ -14,7 +14,7 @@ import {
 export const OwnerStaffPerformanceDetailed: React.FC = () => {
   const { 
     staff, productionStaff, users, leads, orders, production, 
-    assignments, editorAssignments, isDataLoading 
+    staffAssignments, operations, leadStaffAssignmentHistory, editorAssignments, isDataLoading 
   } = useRole();
 
   // Active Tab State: 'sales' | 'operations' | 'production'
@@ -255,55 +255,219 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
   // DATA CALCULATION: OPERATIONS STAFF PERFORMANCE
   // ----------------------------------------------------
   const opsData = useMemo(() => {
+    // 1. Identify Operations / Field Crew staff members
     const opsStaffList = (staff || []).filter(s => {
-      const dept = (s.department || '').toLowerCase();
-      return dept.includes('operation') || dept.includes('field') || dept.includes('crew') || dept === 'operations';
+      const dept = (s.department || '').toLowerCase().trim();
+      const role = (s.role || '').toLowerCase().trim();
+      return dept.includes('operation') || dept.includes('field') || dept.includes('crew') || dept === 'operations' ||
+             role.includes('photographer') || role.includes('videographer') || role.includes('drone') || role.includes('assistant') || role.includes('crew');
     });
 
-    // If staff list in table is empty, fall back to all staff
     const targetStaff = opsStaffList.length > 0 ? opsStaffList : (staff || []);
 
-    const filteredAssignments = (assignments || []).filter(a => isWithinDateRange(a.assigned_date || a.event_date));
-
     const staffRows = targetStaff.map(member => {
-      const memberAssignments = filteredAssignments.filter(a => 
-        a.staff_id === member.staff_id || 
-        (a.staff_name || '').toLowerCase() === member.name.toLowerCase()
-      );
+      const memberNameLower = (member.name || '').toLowerCase().trim();
+      const memberFullNameLower = ((member as any).full_name || '').toLowerCase().trim();
+      const memberId = member.staff_id;
 
-      let eventsStartedCount = 0;
-      let eventsCompletedCount = 0;
-      let pendingCount = 0;
+      // Collection of all task/event assignment records for this staff member
+      const memberTasks: Array<{
+        orderId: string;
+        customerName: string;
+        eventName: string;
+        taskDeliverable: string;
+        assignedDate: string;
+        targetDate: string;
+        completedDate: string;
+        currentStatus: string;
+        isStarted: boolean;
+        isCompleted: boolean;
+      }> = [];
 
-      const tasksForModal: Array<any> = [];
+      const processedKeys = new Set<string>();
 
-      memberAssignments.forEach(a => {
-        const st = (a.status || '').toLowerCase();
-        const order = (orders || []).find(o => o.order_id === a.order_id);
-        const lead = (leads || []).find(l => l.lead_id === a.order_id || l.lead_id === order?.lead_id);
+      // -------------------------------------------------
+      // SOURCE A: staffAssignments (explicit staff assignment records)
+      // -------------------------------------------------
+      (staffAssignments || []).forEach(sa => {
+        const saNameLower = (sa.staff_name || '').toLowerCase().trim();
+        const matchesStaff = (sa.staff_id && sa.staff_id === memberId) ||
+          (saNameLower && (saNameLower === memberNameLower || saNameLower === memberFullNameLower));
 
-        if (st.includes('completed') || st.includes('delivered') || st.includes('final')) {
-          eventsCompletedCount++;
-        } else if (st.includes('started') || st.includes('progress') || st.includes('ongoing')) {
-          eventsStartedCount++;
-        } else {
-          pendingCount++;
+        if (!matchesStaff) return;
+
+        const order = (orders || []).find(o => o.order_id === sa.order_id);
+        const lead = (leads || []).find(l => l.lead_id === sa.order_id || l.lead_id === order?.lead_id);
+        const op = (operations || []).find(o => o.order_id === sa.order_id);
+
+        const assignedDate = sa.assignment_date || (sa as any).assigned_at || op?.event_date || order?.event_date || (lead as any)?.created_at || 'N/A';
+
+        if (!isWithinDateRange(assignedDate)) return;
+
+        const rawStatus = sa.assignment_status || sa.status || op?.event_status || order?.current_stage || lead?.current_status || lead?.status || 'Assigned';
+        const st = rawStatus.toLowerCase().trim();
+
+        // Check workflow completion
+        const isCompleted = [
+          'completed', 'event completed', 'event ended', 'footage handover',
+          'verified footage', 'footage handover verified', 'raw footage received',
+          'delivered', 'approved', 'final', 'project completed', 'closed'
+        ].some(term => st.includes(term));
+
+        // Check workflow started
+        const isStarted = isCompleted || [
+          'event started', 'started', 'in progress', 'in-progress',
+          'ongoing', 'shooting', 'assigned crew', 'crew assigned'
+        ].some(term => st.includes(term));
+
+        const roleName = sa.staff_role || member.role || 'Crew';
+        const uniqueKey = `sa-${sa.assignment_id || `${sa.order_id}-${roleName}`}`;
+
+        if (!processedKeys.has(uniqueKey)) {
+          processedKeys.add(uniqueKey);
+          memberTasks.push({
+            orderId: sa.order_id || 'N/A',
+            customerName: order?.customer_name || lead?.customer_name || 'N/A',
+            eventName: (sa as any).event_name || order?.package_name || op?.event_type || 'Event Task',
+            taskDeliverable: roleName,
+            assignedDate: assignedDate !== 'N/A' ? assignedDate : (order?.event_date || 'N/A'),
+            targetDate: op?.event_date || order?.event_date || 'N/A',
+            completedDate: isCompleted ? (op?.event_date || order?.event_date || 'Completed') : 'N/A',
+            currentStatus: rawStatus,
+            isStarted,
+            isCompleted
+          });
+        }
+      });
+
+      // -------------------------------------------------
+      // SOURCE B: Sub-events in leads (lead.events)
+      // -------------------------------------------------
+      (leads || []).forEach(lead => {
+        const order = (orders || []).find(o => o.lead_id === lead.lead_id);
+        const op = (operations || []).find(o => o.order_id === (order?.order_id || lead.lead_id));
+
+        if (lead.events && Array.isArray(lead.events) && lead.events.length > 0) {
+          lead.events.forEach(ev => {
+            const assignedNames = ev.assigned_staff_names 
+              ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) 
+              : [];
+            const assignedStaffRaw = (ev.assigned_staff || '').toLowerCase();
+
+            const isAssigned = assignedNames.includes(memberNameLower) ||
+              (memberFullNameLower && assignedNames.includes(memberFullNameLower)) ||
+              assignedStaffRaw.includes(memberNameLower);
+
+            if (!isAssigned) return;
+
+            const assignedDate = ev.reporting_date || ev.event_date || op?.event_date || order?.event_date || (lead as any)?.created_at || 'N/A';
+            if (!isWithinDateRange(assignedDate)) return;
+
+            const rawStatus = ev.status || ev.event_status || op?.event_status || order?.current_stage || lead.current_status || lead.status || 'Assigned';
+            const st = rawStatus.toLowerCase().trim();
+
+            const isCompleted = [
+              'completed', 'event completed', 'event ended', 'footage handover',
+              'verified footage', 'footage handover verified', 'raw footage received',
+              'delivered', 'approved', 'final', 'project completed', 'closed'
+            ].some(term => st.includes(term));
+
+            const isStarted = isCompleted || [
+              'event started', 'started', 'in progress', 'in-progress',
+              'ongoing', 'shooting', 'assigned crew', 'crew assigned'
+            ].some(term => st.includes(term));
+
+            const orderIdVal = order?.order_id || lead.lead_id || 'N/A';
+            const eventNameVal = ev.event_name || ev.event_type || 'Event Shoot';
+            const uniqueKey = `ev-${orderIdVal}-${ev.id || eventNameVal}-${memberNameLower}`;
+
+            if (!processedKeys.has(uniqueKey)) {
+              processedKeys.add(uniqueKey);
+              memberTasks.push({
+                orderId: orderIdVal,
+                customerName: order?.customer_name || lead.customer_name || 'N/A',
+                eventName: eventNameVal,
+                taskDeliverable: member.role || 'Crew',
+                assignedDate: assignedDate !== 'N/A' ? assignedDate : (order?.event_date || 'N/A'),
+                targetDate: ev.event_date || op?.event_date || order?.event_date || 'N/A',
+                completedDate: isCompleted ? (ev.event_date || op?.event_date || order?.event_date || 'Completed') : 'N/A',
+                currentStatus: rawStatus,
+                isStarted,
+                isCompleted
+              });
+            }
+          });
+        }
+      });
+
+      // -------------------------------------------------
+      // SOURCE C: operations table (photographer_assigned, etc.)
+      // -------------------------------------------------
+      (operations || []).forEach(op => {
+        const order = (orders || []).find(o => o.order_id === op.order_id);
+        const lead = (leads || []).find(l => l.lead_id === op.order_id || l.lead_id === order?.lead_id);
+
+        const matchedRoles: string[] = [];
+
+        if (op.photographer_assigned && (op.photographer_assigned.toLowerCase().includes(memberNameLower) || (memberFullNameLower && op.photographer_assigned.toLowerCase().includes(memberFullNameLower)))) {
+          matchedRoles.push('Photographer');
+        }
+        if (op.videographer_assigned && (op.videographer_assigned.toLowerCase().includes(memberNameLower) || (memberFullNameLower && op.videographer_assigned.toLowerCase().includes(memberFullNameLower)))) {
+          matchedRoles.push('Videographer');
+        }
+        if (op.drone_operator_assigned && (op.drone_operator_assigned.toLowerCase().includes(memberNameLower) || (memberFullNameLower && op.drone_operator_assigned.toLowerCase().includes(memberFullNameLower)))) {
+          matchedRoles.push('Drone Operator');
+        }
+        if (op.assistant_assigned && (op.assistant_assigned.toLowerCase().includes(memberNameLower) || (memberFullNameLower && op.assistant_assigned.toLowerCase().includes(memberFullNameLower)))) {
+          matchedRoles.push('Assistant');
         }
 
-        tasksForModal.push({
-          orderId: a.order_id || 'N/A',
-          customerName: order?.customer_name || lead?.customer_name || 'N/A',
-          eventName: a.event_name || 'Event Task',
-          taskDeliverable: `${a.role || 'Crew'} (${a.deliverable || a.speciality || 'Field Execution'})`,
-          assignedDate: a.assigned_date || 'N/A',
-          targetDate: a.event_date || 'N/A',
-          completedDate: st.includes('completed') ? (a.event_date || 'Completed') : 'N/A',
-          currentStatus: a.status || 'Assigned'
+        if (matchedRoles.length === 0) return;
+
+        const assignedDate = op.event_date || order?.event_date || (lead as any)?.created_at || 'N/A';
+        if (!isWithinDateRange(assignedDate)) return;
+
+        const rawStatus = op.event_status || order?.current_stage || lead?.current_status || lead?.status || 'Assigned';
+        const st = rawStatus.toLowerCase().trim();
+
+        const isCompleted = [
+          'completed', 'event completed', 'event ended', 'footage handover',
+          'verified footage', 'footage handover verified', 'raw footage received',
+          'delivered', 'approved', 'final', 'project completed', 'closed'
+        ].some(term => st.includes(term));
+
+        const isStarted = isCompleted || [
+          'event started', 'started', 'in progress', 'in-progress',
+          'ongoing', 'shooting', 'assigned crew', 'crew assigned'
+        ].some(term => st.includes(term));
+
+        matchedRoles.forEach(roleName => {
+          const uniqueKey = `op-${op.operation_id || op.order_id}-${roleName}-${memberNameLower}`;
+          if (!processedKeys.has(uniqueKey)) {
+            processedKeys.add(uniqueKey);
+            memberTasks.push({
+              orderId: op.order_id || 'N/A',
+              customerName: order?.customer_name || lead?.customer_name || 'N/A',
+              eventName: order?.package_name || op.event_type || 'Field Shoot',
+              taskDeliverable: roleName,
+              assignedDate: assignedDate !== 'N/A' ? assignedDate : (order?.event_date || 'N/A'),
+              targetDate: op.event_date || order?.event_date || 'N/A',
+              completedDate: isCompleted ? (op.event_date || order?.event_date || 'Completed') : 'N/A',
+              currentStatus: rawStatus,
+              isStarted,
+              isCompleted
+            });
+          }
         });
       });
 
-      const totalAssigned = memberAssignments.length;
+      // Calculate performance metrics from ALL collected member tasks
+      const totalAssigned = memberTasks.length;
+      const eventsCompletedCount = memberTasks.filter(t => t.isCompleted).length;
+      const eventsStartedCount = memberTasks.filter(t => t.isStarted || t.isCompleted).length;
+      const pendingCount = Math.max(0, totalAssigned - eventsCompletedCount);
       const completionRate = totalAssigned > 0 ? Math.round((eventsCompletedCount / totalAssigned) * 100) : 0;
+
       const sType = (member.staff_type || (member as any).Staff_Type || 'In House').replace('-', ' ');
 
       return {
@@ -317,7 +481,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
         pending: pendingCount,
         completionRate,
         avgCompletionTime: '1.2 Days',
-        tasks: tasksForModal
+        tasks: memberTasks.map(({ isStarted, isCompleted, ...t }) => t)
       };
     });
 
@@ -325,7 +489,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
     const totalEventsAssigned = staffRows.reduce((acc, r) => acc + r.eventsAssigned, 0);
     const totalEventsStarted = staffRows.reduce((acc, r) => acc + r.eventsStarted, 0);
     const totalEventsCompleted = staffRows.reduce((acc, r) => acc + r.eventsCompleted, 0);
-    const totalPending = staffRows.reduce((acc, r) => acc + r.pending, 0);
+    const totalPending = Math.max(0, totalEventsAssigned - totalEventsCompleted);
     const overallCompletionRate = totalEventsAssigned > 0 ? Math.round((totalEventsCompleted / totalEventsAssigned) * 100) : 0;
 
     const rankedOps = [...staffRows].sort((a, b) => {
@@ -346,7 +510,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
       },
       rankings: rankedOps
     };
-  }, [staff, assignments, orders, leads, startDate, endDate]);
+  }, [staff, staffAssignments, operations, orders, leads, startDate, endDate]);
 
   // ----------------------------------------------------
   // DATA CALCULATION: PRODUCTION STAFF PERFORMANCE
@@ -1203,7 +1367,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
                         department: 'Operations',
                         totalAssigned: staffItem.eventsAssigned,
                         completed: staffItem.eventsCompleted,
-                        inProgress: staffItem.eventsStarted,
+                        inProgress: Math.max(0, staffItem.eventsStarted - staffItem.eventsCompleted),
                         pending: staffItem.pending,
                         completionRate: staffItem.completionRate,
                         avgCompletionTime: staffItem.avgCompletionTime,

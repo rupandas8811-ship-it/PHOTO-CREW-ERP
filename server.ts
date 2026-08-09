@@ -185,7 +185,7 @@ async function startServer() {
           nextPayload.remarks = currentRemarks ? `${currentRemarks}\n${annotation}` : annotation;
         } else if (nextPayload.notes !== undefined) {
           nextPayload.notes = currentRemarks ? `${currentRemarks}\n${annotation}` : annotation;
-        } else {
+        } else if (['leads', 'orders', 'operations', 'production'].includes(table)) {
           nextPayload.remarks = annotation;
         }
         healed = true;
@@ -205,7 +205,7 @@ async function startServer() {
           nextPayload.remarks = currentRemarks ? `${currentRemarks}\n${annotation}` : annotation;
         } else if (nextPayload.notes !== undefined) {
           nextPayload.notes = currentRemarks ? `${currentRemarks}\n${annotation}` : annotation;
-        } else {
+        } else if (['leads', 'orders', 'operations', 'production'].includes(table)) {
           nextPayload.remarks = annotation;
         }
         healed = true;
@@ -259,6 +259,16 @@ async function startServer() {
   function sanitizeRecordForDbServer(record: any, table?: string) {
     if (!record || typeof record !== 'object') return record;
     const clone = { ...record };
+
+    if (table === 'editor_assignments') {
+      if ('Edited_Drive_Link' in clone) {
+        if (!clone.edited_drive_link && clone.Edited_Drive_Link) {
+          clone.edited_drive_link = clone.Edited_Drive_Link;
+        }
+        delete clone.Edited_Drive_Link;
+      }
+    }
+
     for (const key of Object.keys(clone)) {
       const val = clone[key];
       const isPhone = key.includes('mobile') || key.includes('whatsapp') || key.includes('phone');
@@ -305,7 +315,15 @@ async function startServer() {
       }
 
       if (!res?.error) {
-        return { success: true, data: res?.data };
+        let returnData = res?.data;
+        if (table === 'editor_assignments' && Array.isArray(returnData)) {
+          returnData = returnData.map((row: any) => ({
+            ...row,
+            Edited_Drive_Link: row.Edited_Drive_Link || row.edited_drive_link || null,
+            edited_drive_link: row.edited_drive_link || row.Edited_Drive_Link || null
+          }));
+        }
+        return { success: true, data: returnData };
       }
 
       lastError = res.error;
@@ -408,7 +426,15 @@ async function startServer() {
         console.error(`[Server DB Select Error] ${table}`, error);
         return res.status(400).json({ success: false, error: error.message });
       }
-      res.json({ success: true, data });
+      let resultData = data;
+      if (table === 'editor_assignments' && Array.isArray(resultData)) {
+        resultData = resultData.map((row: any) => ({
+          ...row,
+          Edited_Drive_Link: row.Edited_Drive_Link || row.edited_drive_link || null,
+          edited_drive_link: row.edited_drive_link || row.Edited_Drive_Link || null
+        }));
+      }
+      res.json({ success: true, data: resultData });
     } catch (err: any) {
       console.error(`[Server DB Select Exception] ${table}`, err);
       res.status(500).json({ success: false, error: err.message || String(err) });
