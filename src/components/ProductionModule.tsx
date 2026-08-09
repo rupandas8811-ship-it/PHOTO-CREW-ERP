@@ -1478,6 +1478,7 @@ Production Team`;
   };
 
   const handleOpenResendReviewPopup = (prod: Production) => {
+    if (prod.production_status === 'Order Closed' || prod.editing_status === 'Order Closed') return;
     const { message, phone } = generateCustomerReviewMessage(prod);
     setCustomerReviewResendProd(prod);
     setCustomerReviewMessage(message);
@@ -1485,6 +1486,7 @@ Production Team`;
   };
 
   const handleOpenClientAcceptance = (prod: Production) => {
+    if (prod.production_status === 'Order Closed' || prod.editing_status === 'Order Closed') return;
     setClientAcceptanceProd(prod);
     setCaCommunicationProof('');
     setCaChecklistCompleted(false);
@@ -1918,6 +1920,7 @@ Production Team`;
   const [wfSuccess, setWfSuccess] = useState('');
 
   const handleOpenAssignEditor = (prod: Production) => {
+    if (prod.production_status === 'Order Closed' || prod.editing_status === 'Order Closed') return;
     setActiveWorkflowProd(prod);
     setWfError('');
     
@@ -3589,7 +3592,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       </div>
                                     )}
                                     
-                                    {(displayStatus === "Order Closed" || displayStatus === "Closed" || displayStatus === "Completed" || displayStatus === "Project Closed") && (
+                                    {isFinished && (
                                       <div className="flex flex-col gap-1 w-full items-center mb-1">
                                         <span className="px-2.5 py-1 bg-zinc-800/90 border border-zinc-700 text-zinc-400 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 font-mono">
                                           🔒 Order Closed
@@ -3603,9 +3606,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       </span>
                                     )}
                                     
+                                    {!isFinished && (
                                     <select
                                       value=""
                                       onChange={(e) => {
+                                        if (isFinished) return;
                                         const val = e.target.value;
                                         if (!val) return;
                                         if (val === "assign" || val === "reassign") {
@@ -3683,6 +3688,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       
                                       <option value="edit_dossier">✎ Edit Full Dossier</option>
                                     </select>
+                                    )}
                                   </>
                                 );
                               })()}
