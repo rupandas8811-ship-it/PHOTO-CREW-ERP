@@ -1302,25 +1302,36 @@ ${coordinatorName}`;
 
   const getAssignedEditorsList = (prod: Production) => {
     const fromAssignments = (editorAssignments || []).filter(a => 
-      a.production_id === prod.production_id ||
+      (a.production_id === prod.production_id ||
       a.production_id === (prod as any).order_id ||
       a.production_id === prod.tracking_id ||
       a.order_id === (prod as any).order_id ||
-      a.order_id === prod.tracking_id
+      a.order_id === prod.tracking_id) &&
+      (!prod.event_id || !a.event_id || a.event_id === prod.event_id)
     );
     if (fromAssignments.length > 0) {
-      return fromAssignments.map(a => {
-        const staffRec = (productionStaff || []).find(s => s.staff_id === a.staff_id || s.name === a.staff_name);
-        return {
-          name: a.staff_name,
-          deliverables: [a.speciality].filter(Boolean),
-          deliverable: a.speciality || 'Assigned',
-          role: staffRec?.role || staffRec?.production_role_speciality || 'Editor',
-          mobile: staffRec?.mobile || 'N/A',
-          type: staffRec?.staff_type || (staffRec as any)?.Staff_Type || 'In-House',
-          status: a.status || 'Editor Assigned'
-        };
+      const grouped = new Map<string, any>();
+      fromAssignments.forEach(a => {
+        const staffName = a.staff_name;
+        if (!grouped.has(staffName)) {
+          const staffRec = (productionStaff || []).find(s => s.staff_id === a.staff_id || s.name === staffName);
+          grouped.set(staffName, {
+            name: staffName,
+            deliverables: [],
+            role: staffRec?.role || staffRec?.production_role_speciality || 'Editor',
+            mobile: staffRec?.mobile || 'N/A',
+            type: staffRec?.staff_type || (staffRec as any)?.Staff_Type || 'In-House',
+            status: a.status || 'Editor Assigned'
+          });
+        }
+        if (a.speciality) {
+          grouped.get(staffName).deliverables.push(a.speciality);
+        }
       });
+      return Array.from(grouped.values()).map(g => ({
+        ...g,
+        deliverable: g.deliverables.join(', ') || 'Assigned'
+      }));
     }
     const staffStr = prod.assigned_staff || prod.editor_assigned;
     if (staffStr && staffStr !== 'Unassigned') {
@@ -1360,7 +1371,7 @@ ${coordinatorName}`;
 
     // Fallback to editorAssignments if list is empty
     if (list.length === 0) {
-      const assignedForThis = (editorAssignments || []).filter(a => a.production_id === prod.production_id || (order?.order_id && a.order_id === order?.order_id));
+      const assignedForThis = (editorAssignments || []).filter(a => (a.production_id === prod.production_id || (order?.order_id && a.order_id === order?.order_id)) && (!prod.event_id || !a.event_id || a.event_id === prod.event_id));
       const map = new Map<string, number>();
       assignedForThis.forEach(a => {
         const spec = a.speciality;
@@ -1381,7 +1392,7 @@ ${coordinatorName}`;
 
   const getAssignedEditorsTableData = (prod: Production): { staff_name: string; deliverable: string; qty: number; status: string }[] => {
     const assignedDeliverables = getAssignedDeliverablesForProd(prod, true);
-    const assignedForThis = (editorAssignments || []).filter(a => a.production_id === prod.production_id);
+    const assignedForThis = (editorAssignments || []).filter(a => a.production_id === prod.production_id && (!prod.event_id || !a.event_id || a.event_id === prod.event_id));
     
     const results: { staff_name: string; deliverable: string; qty: number; status: string }[] = [];
     const usedAssignments = new Set<string>();
@@ -1516,17 +1527,7 @@ Production Team`;
   };
 
   const getAssignedEditorsText = (prod: Production): string => {
-    const assigned_editors = (() => {
-      const fromAssignments = (editorAssignments || []).filter(a => a.production_id === prod.production_id);
-      if (fromAssignments.length > 0) {
-        return fromAssignments.map(a => ({ name: a.staff_name }));
-      }
-      const staffStr = prod.assigned_staff || prod.editor_assigned;
-      if (staffStr && staffStr !== 'Unassigned') {
-        return staffStr.split(',').map(s => ({ name: s.trim() }));
-      }
-      return [];
-    })();
+    const assigned_editors = getAssignedEditorsList(prod);
     return assigned_editors.length > 0
       ? assigned_editors.map(editor => editor.name).join(', ')
       : 'Unassigned';
@@ -2318,11 +2319,17 @@ _Please acknowledge receipt of this task assignment._`;
   ) => {
     if (!activeWorkflowProd) return;
     try {
-      // 1. Delete all existing assignments for this production
-      const { error: deleteError } = await supabaseClient
+      // 1. Delete all existing assignments for this production + event
+      let deleteQuery = supabaseClient
         .from('editor_assignments')
         .delete()
         .eq('production_id', activeWorkflowProd.production_id);
+      
+      if (activeWorkflowProd.event_id) {
+        deleteQuery = deleteQuery.eq('event_id', activeWorkflowProd.event_id);
+      }
+      
+      const { error: deleteError } = await deleteQuery;
 
       if (deleteError) throw deleteError;
 
@@ -2366,8 +2373,8 @@ _Please acknowledge receipt of this task assignment._`;
       }
 
       if (newAssignments.length > 0) {
-        // Map payload for Supabase insert cleanly
-        const dbPayload = newAssignments.map(({ order_id, event_id, ...rest }) => rest);
+        // Do not strip order_id and event_id
+        const dbPayload = newAssignments;
         const { error: insertError } = await supabaseClient
           .from('editor_assignments')
           .insert(dbPayload);
@@ -2459,10 +2466,16 @@ _Please acknowledge receipt of this task assignment._`;
                 refreshData();
               }
               // 1. Fetch current assignments from Supabase
-              const { data: dbAssignments, error } = await supabaseClient
+              let query = supabaseClient
                 .from('editor_assignments')
                 .select('*')
                 .eq('production_id', currentProdId);
+              
+              if (activeWorkflowProd?.event_id) {
+                query = query.eq('event_id', activeWorkflowProd.event_id);
+              }
+
+              const { data: dbAssignments, error } = await query;
 
               if (error) throw error;
               const loadedAssignments = dbAssignments || [];
@@ -6790,7 +6803,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
         parsedDeliverables = parseExactDeliverables(deliverablesText, selectedLeadProd.custom_event_name, selectedLeadProd.event_id);
 
-        const linkedAssignments = (editorAssignments || []).filter(a => a.production_id === selectedLeadProd.production_id);
+        const linkedAssignments = (editorAssignments || []).filter(a => a.production_id === selectedLeadProd.production_id && (!a.event_id || !selectedLeadProd.event_id || a.event_id === selectedLeadProd.event_id));
         const assignedDeliverables = Array.from(new Set(linkedAssignments.map(a => a.speciality).filter(Boolean))) as string[];
         const allLeadDeliverables = Array.from(new Set([...parsedDeliverables, ...assignedDeliverables]));
 
@@ -7312,13 +7325,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
                         
                         const leadId = activeWorkflowProd.tracking_id || '—';
-                        const customerName = order?.customer_name || lead?.customer_name || '—';
-                        const eventName = order?.custom_event_name || lead?.custom_event_name || '—';
-                        const eventType = order?.event_type || lead?.event_type || '—';
-                        const eventShootType = order?.shoot_type || lead?.shoot_type || order?.desired_event_shoot_type || lead?.desired_event_shoot_type || '—';
+                        const customerName = activeWorkflowProd.customer_name || order?.customer_name || lead?.customer_name || '—';
+                        const eventName = activeWorkflowProd.custom_event_name || order?.custom_event_name || lead?.custom_event_name || '—';
+                        const eventType = activeWorkflowProd.event_type || order?.event_type || lead?.event_type || '—';
+                        const eventShootType = activeWorkflowProd.shoot_type || activeWorkflowProd.desired_event_shoot_type || order?.shoot_type || lead?.shoot_type || order?.desired_event_shoot_type || lead?.desired_event_shoot_type || '—';
                         const packageName = order?.package_name || lead?.package_name || '—';
                         const deliverables = order?.deliverables_description || lead?.deliverables_description || '—';
-                        const eventDate = order?.event_date || lead?.event_date || '—';
+                        const eventDate = activeWorkflowProd.event_date || order?.event_date || lead?.event_date || '—';
                         const eventLocation = order?.event_location || lead?.event_location || '—';
                         const currentStatus = activeWorkflowProd.editing_status || '—';
 
@@ -8897,40 +8910,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 </thead>
                 <tbody className="divide-y divide-zinc-900 text-zinc-300 font-sans">
                   {(() => {
-                    const assignments = (editorAssignments || []).filter(a => 
-                      a.production_id === assignedEditorsModalProd.production_id ||
-                      a.production_id === assignedEditorsModalProd.order_id ||
-                      a.production_id === assignedEditorsModalProd.tracking_id ||
-                      a.order_id === assignedEditorsModalProd.order_id ||
-                      a.order_id === assignedEditorsModalProd.tracking_id
-                    );
-                    
-                    let rows: { name: string; deliverable: string; status: string; link: string }[] = [];
+                    const list = getAssignedEditorsList(assignedEditorsModalProd);
 
-                    if (assignments.length > 0) {
-                      rows = assignments.map(a => {
-                        const linkStr = (a.edited_drive_link || (a as any).raw_footage_link || (a as any).upload_link || (assignedEditorsModalProd as any).edited_drive_link || '').trim();
-                        return {
-                          name: a.staff_name || 'Unassigned',
-                          deliverable: a.speciality || 'Deliverable',
-                          status: a.status || 'Assigned Editor',
-                          link: linkStr
-                        };
-                      });
-                    } else {
-                      const list = getAssignedEditorsList(assignedEditorsModalProd);
-                      rows = list.map(ed => {
-                        const linkStr = (ed.edited_drive_link || (assignedEditorsModalProd as any).edited_drive_link || '').trim();
-                        return {
-                          name: ed.name,
-                          deliverable: ed.deliverable || (ed.deliverables ? ed.deliverables.join(', ') : 'Deliverable'),
-                          status: ed.status || 'Assigned Editor',
-                          link: linkStr
-                        };
-                      });
-                    }
-
-                    if (rows.length === 0) {
+                    if (list.length === 0) {
                       return (
                         <tr>
                           <td colSpan={4} className="p-6 text-center text-zinc-500 italic font-mono text-xs">
@@ -8940,38 +8922,54 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       );
                     }
 
-                    return rows.map((row, idx) => {
-                      const hasLink = row.link && (row.link.startsWith('http://') || row.link.startsWith('https://') || row.link.includes('drive.google.com') || row.link.length > 5);
+                    return list.map((ed, idx) => {
+                      const linkStr = (assignedEditorsModalProd.edited_drive_link || '').trim();
+                      const hasLink = linkStr && (linkStr.startsWith('http://') || linkStr.startsWith('https://') || linkStr.includes('drive.google.com') || linkStr.length > 5);
                       return (
                         <tr key={idx} className="hover:bg-zinc-900/40 transition-colors">
-                          <td className="p-3 font-bold text-white font-sans">{row.name}</td>
                           <td className="p-3">
-                            <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded text-xs font-mono font-bold">
-                              {row.deliverable}
-                            </span>
+                            <div className="font-bold text-white mb-0.5">{ed.name}</div>
+                            <div className="text-[10px] text-zinc-500 font-mono flex items-center gap-2">
+                              <span>{ed.role}</span>
+                              <span className="w-1 h-1 rounded-full bg-zinc-700"></span>
+                              <span className={ed.type === 'In-House' ? 'text-blue-400' : 'text-amber-400'}>{ed.type}</span>
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            {ed.deliverables && ed.deliverables.length > 0 ? (
+                              <div className="flex flex-col gap-1.5">
+                                {ed.deliverables.map((d, i) => (
+                                  <span key={i} className="inline-flex w-fit px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded text-[11px] font-mono font-bold">
+                                    {d}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-zinc-500 italic text-xs font-mono">Assigned</span>
+                            )}
                           </td>
                           <td className="p-3">
                             <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
-                              ['Completed', 'Editing Completed', 'Editing Complete'].includes(row.status)
+                              ['Completed', 'Editing Completed', 'Editing Complete'].includes(ed.status)
                                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                : ['Customer Review', 'Client Review'].includes(row.status)
+                                : ['Customer Review', 'Client Review'].includes(ed.status)
                                 ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                : ['Editing Started', 'In Progress', 'Editing In Progress'].includes(row.status)
+                                : ['Editing Started', 'In Progress', 'Editing In Progress'].includes(ed.status)
                                 ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
                                 : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
                             }`}>
-                              {row.status}
+                              {ed.status || 'Assigned Editor'}
                             </span>
                           </td>
                           <td className="p-3">
                             {hasLink ? (
                               <a
-                                href={row.link.startsWith('http') ? row.link : `https://${row.link}`}
+                                href={linkStr.startsWith('http') ? linkStr : `https://${linkStr}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 referrerPolicy="no-referrer"
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:text-indigo-300 font-bold text-xs transition-colors cursor-pointer"
-                                title={row.link}
+                                title={linkStr}
                               >
                                 <span>View Link</span>
                                 <ExternalLink className="w-3.5 h-3.5" />
