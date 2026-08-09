@@ -883,16 +883,17 @@ ${coordinatorName}`;
 
       const events = (l?.events && Array.isArray(l.events) && l.events.length > 0) ? l.events : [null];
 
-      events.forEach((evt: any) => {
-        const evtId = evt ? evt.id : (prod?.event_id || order?.event_type || l?.event_type || 'EVT-01');
-        const evtName = evt ? (evt.event_name || evt.event_type || '') : '';
-        
-        const evtAssignments = cand.assignments?.filter((ea: any) => !evt || !ea.event_id || ea.event_id === evtId) || [];
-        
-        const evtDate = evt ? evt.event_date : (order?.event_date || l?.event_date || '');
-        const defaultTargetDate = evtDate ? new Date(new Date(evtDate).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : '';
-        
-        let computedTargetDate = defaultTargetDate;
+      const evt = events[0];
+      const evtId = evt ? evt.id : (prod?.event_id || order?.event_type || l?.event_type || 'EVT-01');
+      const evtName = events.length > 1 ? `${events.length} Events` : (evt ? (evt.event_name || evt.event_type || '') : '');
+      
+      const evtAssignments = cand.assignments?.filter((ea: any) => !evt || !ea.event_id || ea.event_id === evtId) || [];
+      
+      const evtDate = events.length > 1 ? 'Multiple Dates' : (evt ? evt.event_date : (order?.event_date || l?.event_date || ''));
+      const defaultTargetDate = evtDate && evtDate !== 'Multiple Dates' ? new Date(new Date(evtDate).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : '';
+      
+      let computedTargetDate = events.length > 1 ? 'Multiple Dates' : defaultTargetDate;
+      if (events.length === 1) {
         if (evtAssignments.length > 0 && evtAssignments[0].target_finish_date) {
             computedTargetDate = evtAssignments[0].target_finish_date;
         } else if (prod?.target_delivery_date) {
@@ -900,31 +901,42 @@ ${coordinatorName}`;
         } else if ((l as any)?.delivery_target_date) {
             computedTargetDate = (l as any)?.delivery_target_date;
         }
+      }
 
-        const candidateObj = {
-          ...(prod || {}),
-          production_id: prodId,
-          tracking_id: trackingId,
-          order_id: order?.order_id || prod?.order_id || trackingId,
-          lead_id: l?.lead_id || order?.lead_id || trackingId,
-          event_id: evtId,
-          custom_event_name: evtName,
-          customer_name: order?.customer_name || l?.customer_name || prod?.customer_name || 'Client',
-          customer_mobile: order?.customer_phone || order?.mobile || l?.mobile || prod?.customer_mobile || '',
-          editor_assigned: prod?.editor_assigned || (l as any)?.assigned_editor || 'Unassigned',
-          assigned_staff: prod?.assigned_staff || (l as any)?.assigned_editors || '',
-          raw_footage_location: prod?.raw_footage_location || rf?.server_path || order?.raw_footage_link || '',
-          editing_status: computedStatus,
-          remarks: prod?.remarks || l?.remarks || order?.remarks || '',
-          project_priority: prod?.project_priority || 'Medium',
-          target_delivery_date: computedTargetDate,
-          expected_delivery_date: prod?.expected_delivery_date || computedTargetDate,
-          event_date: evtDate,
-          event_time: evt ? evt.event_time : (order?.event_time || l?.event_time || ''),
-        };
-
-        candidatesList.push(candidateObj);
+      // Build unique team member count for "Assigned Team" column
+      const uniqueEditors = new Set();
+      (cand.assignments || []).forEach(a => {
+        if (a.staff_name && a.staff_name !== 'Unassigned') {
+          uniqueEditors.add(a.staff_name);
+        }
       });
+      const teamCount = uniqueEditors.size;
+
+      const candidateObj = {
+        ...(prod || {}),
+        production_id: prodId,
+        tracking_id: trackingId,
+        order_id: order?.order_id || prod?.order_id || trackingId,
+        lead_id: l?.lead_id || order?.lead_id || trackingId,
+        event_id: evtId,
+        custom_event_name: evtName,
+        customer_name: order?.customer_name || l?.customer_name || prod?.customer_name || 'Client',
+        customer_mobile: order?.customer_phone || order?.mobile || l?.mobile || prod?.customer_mobile || '',
+        editor_assigned: prod?.editor_assigned || (l as any)?.assigned_editor || 'Unassigned',
+        assigned_staff: prod?.assigned_staff || (l as any)?.assigned_editors || '',
+        raw_footage_location: prod?.raw_footage_location || rf?.server_path || order?.raw_footage_link || '',
+        editing_status: computedStatus,
+        remarks: prod?.remarks || l?.remarks || order?.remarks || '',
+        project_priority: prod?.project_priority || 'Medium',
+        target_delivery_date: computedTargetDate,
+        expected_delivery_date: prod?.expected_delivery_date || computedTargetDate,
+        event_date: evtDate,
+        event_time: events.length > 1 ? '—' : (evt ? evt.event_time : (order?.event_time || l?.event_time || '')),
+        all_events: events,
+        team_count: teamCount
+      };
+
+      candidatesList.push(candidateObj);
     }
 
     candidatesList.sort((a, b) => {
@@ -1300,15 +1312,18 @@ ${coordinatorName}`;
     return status;
   };
 
-  const getAssignedEditorsList = (prod: Production) => {
+  const getAssignedEditorsList = (prod: Production & { all_events?: any[] }) => {
+    const isOrderLevel = prod.all_events && prod.all_events.length > 0;
+    
     const fromAssignments = (editorAssignments || []).filter(a => 
       (a.production_id === prod.production_id ||
       a.production_id === (prod as any).order_id ||
       a.production_id === prod.tracking_id ||
       a.order_id === (prod as any).order_id ||
       a.order_id === prod.tracking_id) &&
-      (!prod.event_id || !a.event_id || a.event_id === prod.event_id)
+      (isOrderLevel ? true : (!prod.event_id || !a.event_id || a.event_id === prod.event_id))
     );
+    
     if (fromAssignments.length > 0) {
       const grouped = new Map<string, any>();
       fromAssignments.forEach(a => {
@@ -1324,8 +1339,11 @@ ${coordinatorName}`;
             status: a.status || 'Editor Assigned'
           });
         }
+        
         if (a.speciality) {
-          grouped.get(staffName).deliverables.push(a.speciality);
+          const evtName = prod.all_events?.find(e => e?.id === a.event_id)?.event_name || '';
+          const suffix = evtName ? ` [${evtName}]` : '';
+          grouped.get(staffName).deliverables.push(a.speciality + suffix);
         }
       });
       return Array.from(grouped.values()).map(g => ({
@@ -1371,946 +1389,19 @@ ${coordinatorName}`;
 
     // Fallback to editorAssignments if list is empty
     if (list.length === 0) {
-      const assignedForThis = (editorAssignments || []).filter(a => (a.production_id === prod.production_id || (order?.order_id && a.order_id === order?.order_id)) && (!prod.event_id || !a.event_id || a.event_id === prod.event_id));
-      const map = new Map<string, number>();
-      assignedForThis.forEach(a => {
-        const spec = a.speciality;
-        if (spec) {
-          const { qty, text } = parseQtyAndText(spec);
-          if (text) {
-            map.set(text, (map.get(text) || 0) + (qty || 1));
-          }
-        }
-      });
-      map.forEach((qty, name) => {
-        list.push({ name, qty });
-      });
-    }
-
-    return list;
-  };
-
-  const getAssignedEditorsTableData = (prod: Production): { staff_name: string; deliverable: string; qty: number; status: string }[] => {
-    const assignedDeliverables = getAssignedDeliverablesForProd(prod, true);
-    const assignedForThis = (editorAssignments || []).filter(a => a.production_id === prod.production_id && (!prod.event_id || !a.event_id || a.event_id === prod.event_id));
-    
-    const results: { staff_name: string; deliverable: string; qty: number; status: string }[] = [];
-    const usedAssignments = new Set<string>();
-    
-    assignedDeliverables.forEach(item => {
-      const matchingAssignments = assignedForThis.filter(a => a.speciality === item.name && !usedAssignments.has(a.assignment_id));
-      if (matchingAssignments.length > 0) {
-        matchingAssignments.forEach(a => {
-          results.push({
-            staff_name: a.staff_name || 'Unassigned',
-            deliverable: item.name,
-            qty: item.qty,
-            status: a.status || 'Assigned Editor'
-          });
-          usedAssignments.add(a.assignment_id);
-        });
-      } else {
-        results.push({
-          staff_name: 'Unassigned',
-          deliverable: item.name,
-          qty: item.qty,
-          status: 'Pending Assignment'
-        });
+      const fromAssignments = (editorAssignments || []).filter(a => a.production_id === prod.production_id && (!prod.event_id || !a.event_id || a.event_id === prod.event_id));
+      if (fromAssignments.length > 0) {
+        list = fromAssignments.map(a => ({ name: a.speciality || 'Assigned', qty: 1 }));
       }
+    }
+    
+    // De-duplicate deliverables
+    const unique = new Map<string, number>();
+    list.forEach(item => {
+      unique.set(item.name, (unique.get(item.name) || 0) + item.qty);
     });
     
-    // Add remaining unmatched assignments
-    assignedForThis.forEach(a => {
-      if (!usedAssignments.has(a.assignment_id)) {
-        const { qty, text } = parseQtyAndText(a.speciality);
-        results.push({
-          staff_name: a.staff_name || 'Unassigned',
-          deliverable: text || a.speciality || 'Deliverable',
-          qty: qty || 1,
-          status: a.status || 'Assigned Editor'
-        });
-      }
-    });
-    
-    return results;
-  };
-
-  const getAutomatedProductionStatus = (prod: Production): string => {
-    const baseStatus = (prod.editing_status || 'Pending') as string;
-    
-    // 1. Order Closed (After Business Owner final approval)
-    if (['Order Closed', 'Closed', 'Completed', 'Project Closed'].includes(baseStatus)) {
-      return 'Order Closed';
-    }
-    
-    // 2. Client Acceptance (After Client Acceptance popup submitted)
-    if (baseStatus === 'Client Acceptance') {
-      return 'Client Acceptance';
-    }
-
-    const assignments = (editorAssignments || []).filter(a => 
-      a.production_id === prod.production_id ||
-      a.production_id === (prod as any).order_id ||
-      a.production_id === prod.tracking_id ||
-      a.order_id === (prod as any).order_id ||
-      a.order_id === prod.tracking_id
-    );
-    
-    if (assignments.length > 0) {
-      const getTaskStageRank = (st: string, driveLink?: string) => {
-        const status = st || '';
-        if (['Client Acceptance'].includes(status)) return 5;
-        if (['Completed', 'Editing Completed', 'Editing Complete'].includes(status)) return 4;
-        if (['Customer Review', 'Client Review', 'Client Review Sent'].includes(status) || (driveLink && driveLink.trim() !== '')) return 3;
-        if (['Editing Started', 'In Progress', 'Editing In Progress'].includes(status)) return 2;
-        if (['Assigned Editor', 'Editor Assigned', 'Assigned'].includes(status)) return 1;
-        return 0;
-      };
-
-      const ranks = assignments.map(a => getTaskStageRank(a.status, (a as any).edited_drive_link));
-      const minRank = Math.min(...ranks);
-
-      if (minRank >= 5) return 'Client Acceptance';
-      if (minRank >= 4) return 'Editing Completed';
-      if (minRank >= 3) return 'Customer Review';
-      if (minRank >= 2) return 'Editing Started';
-      if (minRank >= 1) return 'Assigned Editor';
-    }
-
-    // Pre-assignment statuses (e.g. Verified Footage, Footage Handover Verified, Raw Footage Received, Pending)
-    return baseStatus;
-  };
-
-  const generateCustomerReviewMessage = (prod: Production): { message: string; phone: string } => {
-    const { order, lead } = resolveOrderAndLead(prod);
-    const customerName = order?.customer_name || lead?.customer_name || 'Customer';
-    const eventType = order?.event_type || lead?.event_type || 'Event';
-    const eventDate = order?.event_date || lead?.event_date || 'the event';
-    const phone = order?.mobile || lead?.mobile || '';
-
-    const tableData = getAssignedEditorsTableData(prod);
-    const deliverablesList = tableData.map(row => {
-      const assignment = (editorAssignments || []).find(
-        a => a.production_id === prod.production_id && a.speciality === row.deliverable
-      );
-      const link = assignment?.raw_footage_link || assignment?.edited_drive_link || '';
-      return `• ${row.deliverable}: ${link || '(Link Pending)'}`;
-    }).join('\n');
-
-    const msg = `Hello ${customerName},
-Your edited files for ${eventType} on ${eventDate} are ready for review!
-
-Please review the deliverables below:
-
-${deliverablesList}
-
-Best regards,
-Production Team`;
-
-    return { message: msg, phone };
-  };
-
-  const handleOpenResendReviewPopup = (prod: Production) => {
-    if (prod.production_status === 'Order Closed' || prod.editing_status === 'Order Closed') return;
-    const { message, phone } = generateCustomerReviewMessage(prod);
-    setCustomerReviewResendProd(prod);
-    setCustomerReviewMessage(message);
-    setCustomerReviewPhone(phone);
-  };
-
-  const handleOpenClientAcceptance = (prod: Production) => {
-    if (prod.production_status === 'Order Closed' || prod.editing_status === 'Order Closed') return;
-    setClientAcceptanceProd(prod);
-    setCaCommunicationProof('');
-    setCaChecklistCompleted(false);
-    setCaInternalValidation(false);
-  };
-
-  const getAssignedEditorsText = (prod: Production): string => {
-    const assigned_editors = getAssignedEditorsList(prod);
-    return assigned_editors.length > 0
-      ? assigned_editors.map(editor => editor.name).join(', ')
-      : 'Unassigned';
-  };
-
-  const getNextStatuses = (prod: Production): string[] => {
-    const current = getProductionStatus(prod);
-    const valid: string[] = [current]; // Keep current so the select lists it
-    
-    if (current === 'Raw Footage Received') {
-      valid.push('Editor Assigned');
-    } else if (current === 'Editor Assigned') {
-      valid.push('Editing Started', 'Editing In Progress');
-    } else if (current === 'Editing Started') {
-      valid.push('Editing In Progress');
-    } else if (current === 'Editing In Progress') {
-      valid.push('Client Review Sent');
-    } else if (current === 'Client Review Sent') {
-      valid.push('Revision Required', 'Final Approval');
-    } else if (current === 'Revision Required') {
-      valid.push('Revision In Progress', 'Final Approval');
-    } else if (current === 'Revision In Progress') {
-      valid.push('Client Review Sent', 'Final Approval');
-    } else if (current === 'Final Approval') {
-      valid.push('Project Delivered');
-    } else if (current === 'Project Delivered') {
-      valid.push('Completed');
-    }
-    
-    return Array.from(new Set(valid));
-  };
-
-  const getDropdownOptions = (currentStatus: string): string[] => {
-    if (currentStatus === 'Editor Assigned') {
-      return ['Editing Started', 'Editing In Progress'];
-    }
-    if (currentStatus === 'Editing Started') {
-      return ['Editing In Progress', 'Client Review Sent'];
-    }
-    if (currentStatus === 'Editing In Progress') {
-      return ['Client Review Sent'];
-    }
-    if (currentStatus === 'Client Review Sent') {
-      return ['Revision Required', 'Final Approval'];
-    }
-    if (currentStatus === 'Revision Required') {
-      return ['Revision In Progress', 'Final Approval'];
-    }
-    if (currentStatus === 'Revision In Progress') {
-      return ['Client Review Sent', 'Final Approval'];
-    }
-    if (currentStatus === 'Final Approval') {
-      return ['Project Delivered'];
-    }
-    if (currentStatus === 'Project Delivered') {
-      return ['Completed'];
-    }
-    return [];
-  };
-
-  const getStatusDisplayName = (status: string): string => {
-    if (status === 'Client Review Sent' || status === 'Customer Review') return 'Client Review';
-    if (status === 'Completed' || status === 'Project Closed' || status === 'Closed') return 'Project Closed';
-    return status;
-  };
-
-  // Matching helper functions for custom analytics card groupings (matching raw & standardized)
-  const isNewProject = (prod: Production) => {
-    const s = getProductionStatus(prod);
-    const autoS = getAutomatedProductionStatus(prod);
-    const raw = prod.editing_status as string;
-    return s === 'Raw Footage Received' || s === 'Assigned Editor' || s === 'Editor Assigned' ||
-           autoS === 'Raw Footage Received' || autoS === 'Assigned Editor' || autoS === 'Editor Assigned' || autoS === 'Verified Footage' ||
-           ['Raw Footage Received', 'Verified Footage', 'Footage Handover Verified', 'Editor Assigned', 'Assigned Editor', 'Pending'].includes(raw);
-  };
-
-  const isInProgressEdit = (prod: Production) => {
-    const s = getProductionStatus(prod);
-    const autoS = getAutomatedProductionStatus(prod);
-    const raw = prod.editing_status as string;
-    return s === 'Editing Started' || s === 'Editing In Progress' || s === 'Internal QC Review' || s === 'Assigned Editor' || s === 'Editor Assigned' ||
-           autoS === 'Editing Started' || autoS === 'Customer Review' || autoS === 'Editing Completed' || autoS === 'Assigned Editor' ||
-           ['Editing Started', 'Editing', 'Editing In Progress', 'Internal QC Review', 'Assigned Editor', 'Editor Assigned'].includes(raw);
-  };
-
-  const isClientApproved = (prod: Production) => {
-    const s = getProductionStatus(prod);
-    const raw = prod.editing_status as string;
-    return s === 'Final Approval' || s === 'Project Delivered' || s === 'Completed' || raw === 'Approved' || raw === 'Final Approval' || raw === 'Delivered' || raw === 'Project Delivered' || raw === 'Closed' || raw === 'Project Closed' || raw === 'Completed' || raw === 'Payment Pending' || raw === 'Client Acceptance' || raw === 'Order Closed' || s === 'Order Closed';
-  };
-
-  const isClientNotApproved = (prod: Production) => {
-    const s = getProductionStatus(prod);
-    const raw = prod.editing_status as string;
-    return s === 'Client Review Sent' || s === 'Revision Required' || s === 'Revision In Progress' || raw === 'Ready For Review' || raw === 'Client Review Sent' || raw === 'Customer Review' || raw === 'Revision Required' || raw === 'Revision In Progress';
-  };
-
-  const isTotalProjectsCompleted = (prod: Production) => {
-    const s = getProductionStatus(prod);
-    const raw = prod.editing_status as string;
-    return s === 'Project Delivered' || s === 'Completed' || raw === 'Delivered' || raw === 'Project Delivered' || raw === 'Closed' || raw === 'Project Closed' || raw === 'Completed' || raw === 'Project Completed' || s === 'Project Completed' || raw === 'Project Cancelled' || s === 'Project Cancelled' || raw === 'Order Closed' || s === 'Order Closed';
-  };
-
-  // Base list filtered by applied date range, customer name, and order ID
-  const filteredLeadsList = useMemo(() => {
-    return (leads || []).filter(prod => {
-      const { order: foundOrder, lead } = resolveOrderAndLead(prod);
-      const order = { ...foundOrder, mobile: foundOrder?.mobile || lead?.mobile || 'No contact phone',
-        order_id: foundOrder?.order_id || prod.order_id || prod.tracking_id || prod.production_id,
-        customer_name: prod.customer_name || lead?.customer_name || 'Client',
-        event_type: lead?.event_type || 'Event',
-        event_date: prod.event_date || lead?.event_date || '',
-        current_stage: prod.editing_status || 'Verified Footage'
-      };
-
-      // Event date matching (format is YYYY-MM-DD)
-      const eventDate = order?.event_date || '';
-      if (appliedStartDate && eventDate && eventDate < appliedStartDate) return false;
-      if (appliedEndDate && eventDate && eventDate > appliedEndDate) return false;
-
-      // Search matching
-      if (appliedCustName) {
-        const cName = order?.customer_name || '';
-        if (!cName.toLowerCase().includes(appliedCustName.toLowerCase())) return false;
-      }
-      if (appliedOrdId) {
-        if (!order?.order_id.toLowerCase().includes(appliedOrdId.toLowerCase())) return false;
-      }
-
-      return true;
-    });
-  }, [leads, orders, rawFootage, leadsData, appliedStartDate, appliedEndDate, appliedCustName, appliedOrdId]);
-
-  // Computed counts for the five distinct analytics cards
-  const countNewProjects = useMemo(() => filteredLeadsList.filter(isNewProject).length, [filteredLeadsList]);
-  const countInProgressEdit = useMemo(() => filteredLeadsList.filter(isInProgressEdit).length, [filteredLeadsList]);
-  const countClientApproved = useMemo(() => filteredLeadsList.filter(isClientApproved).length, [filteredLeadsList]);
-  const countClientNotApproved = useMemo(() => filteredLeadsList.filter(isClientNotApproved).length, [filteredLeadsList]);
-  const countTotalCompleted = useMemo(() => filteredLeadsList.filter(isTotalProjectsCompleted).length, [filteredLeadsList]);
-
-  // Report download utilities
-  const downloadCSVReport = () => {
-    const data = (filteredLeadsList || []).map(prod => {
-      const { order } = resolveOrderAndLead(prod);
-      return {
-        'ORDER_ID': order?.order_id || '',
-        'CUSTOMER_NAME': order?.customer_name || '',
-        'EVENT_TYPE': order?.event_type || '',
-        'EVENT_DATE': order?.event_date || '',
-        'ASSIGNED_EDITOR': prod.editor_assigned || 'Unassigned',
-        'CURRENT_STATUS': getProductionStatus(prod),
-        'EXPECTED_DEL_DATE': prod.expected_delivery_date || '',
-        'PRIORITY': prod.project_priority || 'Medium'
-      };
-    });
-
-    const headers = ['ORDER_ID', 'CUSTOMER_NAME', 'EVENT_TYPE', 'EVENT_DATE', 'ASSIGNED_EDITOR', 'CURRENT_STATUS', 'EXPECTED_DEL_DATE', 'PRIORITY'];
-    const csvRows = [
-      headers.join(','),
-      ...data.map(row => 
-        headers.map(h => {
-          const val = row[h as keyof typeof row];
-          return `"${String(val ?? '').replace(/"/g, '""')}"`;
-        }).join(',')
-      )
-    ];
-    
-    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + csvRows.join('\r\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Photocrew_Production_Leads_Report_${appliedStartDate || 'all'}_to_${appliedEndDate || 'all'}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const downloadExcelReport = () => {
-    try {
-      const data = (filteredLeadsList || []).map(prod => {
-        const { order } = resolveOrderAndLead(prod);
-        return {
-          'ORDER ID': order?.order_id || '',
-          'CUSTOMER NAME': order?.customer_name || '',
-          'EVENT TYPE': order?.event_type || '',
-          'EVENT DATE': order?.event_date || '',
-          'ASSIGNED TEAM': getAssignedEditorsText(prod),
-          'CURRENT STATUS': getProductionStatus(prod),
-          'EXPECTED DELIVERY DATE': prod.expected_delivery_date || '',
-          'PRIORITY': prod.project_priority || 'Medium'
-        };
-      });
-
-      const worksheet = XLSX.utils.json_to_sheet(data);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Production Leads");
-      
-      const keys = ['ORDER ID', 'CUSTOMER NAME', 'EVENT TYPE', 'EVENT DATE', 'ASSIGNED TEAM', 'CURRENT STATUS', 'EXPECTED DELIVERY DATE', 'PRIORITY'];
-      const maxColLengths = keys.map(k => {
-        const kLen = k.length;
-        const vals = data.map(item => String(item[k as keyof typeof item] ?? '').length);
-        return Math.max(kLen, ...vals, 10);
-      });
-      worksheet['!cols'] = maxColLengths.map(l => ({ wch: l + 2 }));
-
-      XLSX.writeFile(workbook, `Photocrew_Production_Leads_Report_${appliedStartDate || 'all'}_to_${appliedEndDate || 'all'}.xlsx`);
-    } catch (err) {
-      console.error("XLSX export error", err);
-    }
-  };
-
-  const downloadPDFReport = () => {
-    const doc = new jsPDF();
-    
-    doc.setFillColor(15, 23, 42);
-    doc.rect(0, 0, 210, 42, 'F');
-    
-    doc.setTextColor(245, 158, 11);
-    doc.setFont("Helvetica", "bold");
-    doc.setFontSize(22);
-    doc.text("PHOTOCREW PICTURES", 14, 18);
-    
-    doc.setTextColor(156, 163, 175);
-    doc.setFont("Helvetica", "normal");
-    doc.setFontSize(9);
-    doc.text("PRODUCTION LEADS MODULE REPORT", 14, 25);
-    doc.text(`FILTER DATE RANGE: ${appliedStartDate || 'ALL'} TO ${appliedEndDate || 'ALL'}`, 14, 30);
-    doc.text(`GENERATED: ${new Date().toLocaleDateString()}`, 14, 35);
-    
-    doc.setFillColor(245, 158, 11);
-    doc.rect(0, 42, 210, 2, 'F');
-
-    doc.setTextColor(55, 65, 81);
-    doc.setFont("Helvetica", "bold");
-    doc.setFontSize(10);
-    
-    const colX = [14, 45, 90, 115, 150, 185];
-    doc.text("Order ID", colX[0], 55);
-    doc.text("Customer Name", colX[1], 55);
-    doc.text("Event Date", colX[2], 55);
-    doc.text("Assigned Team", colX[3], 55);
-    doc.text("Current Status", colX[4], 55);
-    doc.text("Priority", colX[5], 55);
-    
-    doc.setDrawColor(209, 213, 219);
-    doc.line(14, 57, 196, 57);
-    
-    doc.setFont("Helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.setTextColor(31, 41, 55);
-
-    let y = 64;
-    filteredLeadsList.forEach((prod) => {
-      if (y > 275) {
-        doc.addPage();
-        y = 20;
-        doc.setFont("Helvetica", "bold");
-        doc.setFontSize(10);
-        doc.setTextColor(55, 65, 81);
-        doc.text("Order ID", colX[0], y);
-        doc.text("Customer Name", colX[1], y);
-        doc.text("Event Date", colX[2], y);
-        doc.text("Assigned Team", colX[3], y);
-        doc.text("Current Status", colX[4], y);
-        doc.text("Priority", colX[5], y);
-        doc.line(14, y + 2, 196, y + 2);
-        y += 8;
-        doc.setFont("Helvetica", "normal");
-        doc.setFontSize(8.5);
-        doc.setTextColor(31, 41, 55);
-      }
-      
-      const { order } = resolveOrderAndLead(prod);
-      
-      const ordId = order?.order_id || 'N/A';
-      const custName = order?.customer_name || 'N/A';
-      const evDate = order?.event_date || 'N/A';
-      const edName = getAssignedEditorsText(prod);
-      const pStatus = getProductionStatus(prod);
-      const pPriority = prod.project_priority || 'Medium';
-      
-      doc.text(ordId, colX[0], y);
-      const truncatedName = custName.length > 25 ? custName.substring(0, 23) + "..." : custName;
-      doc.text(truncatedName, colX[1], y);
-      doc.text(evDate, colX[2], y);
-      doc.text(edName, colX[3], y);
-      doc.text(pStatus, colX[4], y);
-      doc.text(pPriority, colX[5], y);
-      
-      doc.setDrawColor(243, 244, 246);
-      doc.line(14, y + 2, 196, y + 2);
-      
-      y += 7;
-    });
-
-    doc.save(`Photocrew_Production_Leads_Report_${appliedStartDate || 'all'}_to_${appliedEndDate || 'all'}.pdf`);
-  };
-
-  const printReport = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    
-    const rowsHtml = (filteredLeadsList || []).map(prod => {
-      const { order } = resolveOrderAndLead(prod);
-      return `
-        <tr>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; font-family: monospace;">${order?.order_id || ''}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${order?.customer_name || ''}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${order?.event_type || ''}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${order?.event_date || ''}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${getAssignedEditorsText(prod)}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${getProductionStatus(prod)}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${prod.expected_delivery_date || ''}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; font-weight: bold;">${prod.project_priority || 'Medium'}</td>
-        </tr>
-      `;
-    }).join('');
-
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>PhotoCrew Pictures - Production Leads Report</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
-            h2 { color: #f59e0b; margin-bottom: 5px; }
-            .header { border-bottom: 2px solid #f59e0b; padding-bottom: 15px; margin-bottom: 20px; }
-            table { width: 100%; border-collapse: collapse; text-align: left; font-size: 11px; }
-            th { background-color: #f3f4f6; padding: 10px; border-bottom: 2px solid #ddd; font-weight: bold; }
-            tr:nth-child(even) { background-color: #f9fafb; }
-            .footer { margin-top: 30px; font-size: 10px; color: #777; text-align: center; border-top: 1px solid #ddd; padding-top: 10px; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h2>PHOTOCREW PICTURES</h2>
-            <div style="font-size: 12px; font-weight: bold; text-transform: uppercase; color: #555;">Production Leads Module Report</div>
-            <div style="font-size: 10px; color: #777; margin-top: 5px;">
-              Filter Date Range: ${appliedStartDate || 'ALL'} To ${appliedEndDate || 'ALL'}<br/>
-              Report Generated On: ${new Date().toLocaleString()}
-            </div>
-          </div>
-          <div className="overflow-x-auto w-full max-w-full">
-<table>
-            <thead>
-              <tr>
-                <th>Order ID</th>
-                <th>Customer Name</th>
-                <th>Event Type</th>
-                <th>Event Date</th>
-                <th>Assigned Team</th>
-                <th>Current Status</th>
-                <th>Target Delivery</th>
-                <th>Priority</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rowsHtml || '<tr><td colspan="8" style="padding: 20px; text-align: center;">No records found.</td></tr>'}
-            </tbody>
-          </table>
-</div>
-          <div class="footer">
-            CINEMATIC PRODUCTION & OPERATIONS ERP SYSTEM ~ PHOTOCREW VAULT © 2026
-          </div>
-          <script>
-            window.onload = function() {
-              window.print();
-              window.close();
-            };
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-  };
-
-  // Selected Lead for Custom Detailed Popup
-  const [selectedLeadProd, setSelectedLeadProd] = useState<Production | null>(null);
-
-  // Step-by-step action popup modal states
-  const [activeWorkflowProd, setActiveWorkflowProd] = useState<Production | null>(null);
-  useEffect(() => {
-    const handler = (e: any) => {
-      if (e.detail.role === 'production') {
-        const p = (production || []).find(prod => {
-          const rf = (rawFootage || []).find(x => x.tracking_id === prod.tracking_id);
-          return rf?.order_id === e.detail.orderId;
-        });
-        if (p) {
-          setActiveSubTab('production_workflow');
-          setSelectedLeadProd(p);
-        }
-      }
-    };
-    window.addEventListener('calendar-action-click-deferred', handler);
-    return () => window.removeEventListener('calendar-action-click-deferred', handler);
-  }, [production, rawFootage]);
-  
-  const [workflowActionType, setWorkflowActionType] = useState<'assign_editor' | 'reassign_staff' | 'delivery_checklist' | 'send_review' | 'request_revision' | 'deliver_project' | 'manage_payment_close' | 'manage_status' | 'close_project' | null>(null);
-
-  // Form states for each step popup
-  // Step 1: Assign Editor Form
-  const [wfEditor, setWfEditor] = useState('Unassigned');
-  const [wfTargetDeliveryDate, setWfTargetDeliveryDate] = useState('');
-  const [wfTargetDeliveryTime, setWfTargetDeliveryTime] = useState('');
-  const [wfPriority, setWfPriority] = useState<'Low' | 'Medium' | 'High' | 'Critical'>('Medium');
-  const [wfProjectNotes, setWfProjectNotes] = useState('');
-  const [wfInternalComments, setWfInternalComments] = useState('');
-  const [assignmentRows, setAssignmentRows] = useState<{ speciality: string; staffId: string; staffName: string }[]>([
-    { speciality: '', staffId: '', staffName: '' }
-  ]);
-  const [wfDeliverableAssignments, setWfDeliverableAssignments] = useState<{ qty: number; text: string; editor: string }[]>([]);
-  const [wfError, setWfError] = useState('');
-  const [wfSuccess, setWfSuccess] = useState('');
-
-  const handleOpenAssignEditor = (prod: Production) => {
-    if (prod.production_status === 'Order Closed' || prod.editing_status === 'Order Closed') return;
-    setActiveWorkflowProd(prod);
-    setWfError('');
-    
-    // Parse target delivery date
-    const expected = prod.expected_delivery_date ? new Date(prod.expected_delivery_date) : null;
-    const existingDate = prod.target_delivery_date || (expected ? expected.toISOString().split('T')[0] : '');
-    setWfTargetDeliveryDate(existingDate);
-    
-    // Build deliverables from lead/order
-    const { order, lead } = resolveOrderAndLead(prod);
-    let deliverablesText = order?.deliverables_description || lead?.deliverables_description || '';
-    if (!deliverablesText && lead) {
-      const targetLeadQuotations = quotations?.filter((q: any) => q.lead_id === lead.lead_id) || [];
-      targetLeadQuotations.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      const targetLatestQuote = targetLeadQuotations[0];
-      if (targetLatestQuote) {
-        deliverablesText = targetLatestQuote.deliverables_description || '';
-      }
-    }
-    const parsedDeliverables = parseExactDeliverables(deliverablesText, prod.custom_event_name, prod.event_id);
-    
-    const assignedForThis = (editorAssignments || []).filter(a => a.production_id === prod.production_id && (!a.event_id || a.event_id === prod.event_id));
-    
-    const tempMap = new Map<string, { qty: number; text: string; editor: string; assignment_id?: string; status?: string }>();
-    const usedAssignments = new Set<string>();
-    
-    for (const d of parsedDeliverables) {
-      const { qty, text } = parseQtyAndText(d);
-      if (text) {
-        const existing = tempMap.get(text);
-        if (existing) {
-          existing.qty += qty;
-        } else {
-          // Find existing assignment for this text
-          const existingAssignment = assignedForThis.find(a => a.speciality === text && !usedAssignments.has(a.assignment_id));
-          const editor = existingAssignment ? (existingAssignment.staff_name || 'Unassigned') : 'Unassigned';
-          if (existingAssignment) {
-            usedAssignments.add(existingAssignment.assignment_id);
-          }
-          tempMap.set(text, { 
-            qty, 
-            text, 
-            editor,
-            assignment_id: existingAssignment?.assignment_id,
-            status: existingAssignment?.status
-          });
-        }
-      }
-    }
-    
-    const assignments = Array.from(tempMap.values());
-    
-    setWfDeliverableAssignments(assignments);
-    setWfProjectNotes(prod.project_notes || prod.remarks || '');
-    setWorkflowActionType('assign_editor');
-  };
-
-  const handleEditorChange = (index: number, editorName: string) => {
-    setWfDeliverableAssignments(prev => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], editor: editorName };
-      return updated;
-    });
-  };
-
-
-  // Step 4: Send For Review Form
-  const [wfReviewLink, setWfReviewLink] = useState('');
-  const [wfPreviewLink, setWfPreviewLink] = useState('');
-  const [wfReviewNotes, setWfReviewNotes] = useState('');
-
-  // Step 5: Request Revision Form
-  const [wfRevisionNotes, setWfRevisionNotes] = useState('');
-  const [wfRevisionDeadline, setWfRevisionDeadline] = useState('');
-
-  // Step 8: Deliver Project Form
-  const [wfDeliveryLink, setWfDeliveryLink] = useState('');
-  const [wfGoogleDriveLink, setWfGoogleDriveLink] = useState('');
-  const [wfDownloadLink, setWfDownloadLink] = useState('');
-  const [wfDeliveryNotes, setWfDeliveryNotes] = useState('');
-
-  // CRM Status Management Popup States
-  const [selectedStage, setSelectedStage] = useState<EditingStatus>('Editing In Progress');
-  const [qcNotes, setQcNotes] = useState('');
-  const [reviewLink, setReviewLink] = useState('');
-  const [reviewNotes, setReviewNotes] = useState('');
-  const [revisionNotes, setRevisionNotes] = useState('');
-  const [revisionDeadline, setRevisionDeadline] = useState('');
-  const [revisionComments, setRevisionComments] = useState('');
-  const [approvalNotes, setApprovalNotes] = useState('');
-  const [deliveryLink, setDeliveryLink] = useState('');
-  const [deliveryDate, setDeliveryDate] = useState('');
-  const [closingNotes, setClosingNotes] = useState('');
-
-  // Workloads selector edit fields
-  const [leadEditor, setLeadEditor] = useState('');
-  const [leadStaff, setLeadStaff] = useState<string[]>([]);
-  const [assignRoleFilter, setAssignRoleFilter] = useState('');
-  const [leadPriority, setLeadPriority] = useState<'Low' | 'Medium' | 'High' | 'Critical'>('Medium');
-  const [leadFootageStatus, setLeadFootageStatus] = useState('Footage Received');
-  const [leadProdStatus, setLeadProdStatus] = useState<any>('New Project');
-  const [leadProgressPercent, setLeadProgressPercent] = useState<number>(0);
-  const [leadRemarks, setLeadRemarks] = useState('');
-
-  // Crew Roster Filter state
-  const [crewSearch, setCrewSearch] = useState('');
-  const [crewSpecialityFilter, setCrewSpecialityFilter] = useState('All');
-  const [crewStatusFilter, setCrewStatusFilter] = useState('All');
-
-  // Staff Roster Filter state
-  const [rosterSearch, setRosterSearch] = useState('');
-  const [rosterStatusFilter, setRosterStatusFilter] = useState('All');
-
-  // Assign Editor Popup states
-  const [selectedEditors, setSelectedEditors] = useState<Staff[]>([]);
-  const [editorSearchQuery, setEditorSearchQuery] = useState('');
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [lastModalProdId, setLastModalProdId] = useState<string | null>(null);
-  const [selectedWfEditor, setSelectedWfEditor] = useState<any | null>(null);
-
-  // New Deliverable-wise assignment states
-  const [deliverablesTargetDates, setDeliverablesTargetDates] = useState<Record<string, string>>({});
-  const [selectedWfStaffByDeliverable, setSelectedWfStaffByDeliverable] = useState<Record<string, string[]>>({});
-  const [wfStaffTypeByDeliverable, setWfStaffTypeByDeliverable] = useState<Record<string, 'In-House' | 'Freelancer'>>({});
-  const [deliverableStaffRows, setDeliverableStaffRows] = useState<Record<string, Array<{ id: string; staffType: 'In-House' | 'Freelancer'; staffId: string }>>>({});
-  const [validationAttempted, setValidationAttempted] = useState(false);
-  const [whatsappShareModalOpen, setWhatsappShareModalOpen] = useState(false);
-  const [whatsappShareData, setWhatsappShareData] = useState<any | null>(null);
-  const [previewStaffMessage, setPreviewStaffMessage] = useState<{ staffName: string; message: string } | null>(null);
-  const [editedStaffMobiles, setEditedStaffMobiles] = useState<Record<string, string>>({});
-  const [customDeliverables, setCustomDeliverables] = useState<string[]>([]);
-  const [newDeliverableInput, setNewDeliverableInput] = useState('');
-  const [openDropdownDeliverable, setOpenDropdownDeliverable] = useState<string | null>(null);
-  const [assignedEditorsModalProd, setAssignedEditorsModalProd] = useState<Production | null>(null);
-  const [rosterStaffName, setRosterStaffName] = useState<string | null>(null);
-
-  // Client Acceptance states
-  const [clientAcceptanceProd, setClientAcceptanceProd] = useState<Production | null>(null);
-  const [caCommunicationProof, setCaCommunicationProof] = useState<string>('');
-  const [caInternalValidation, setCaInternalValidation] = useState<boolean>(false);
-  const [caChecklistCompleted, setCaChecklistCompleted] = useState<boolean>(false);
-  const [caUploadingProof, setCaUploadingProof] = useState<boolean>(false);
-  const [caChecklist, setCaChecklist] = useState<Record<string, boolean>>({});
-  const [caValidation, setCaValidation] = useState<Record<string, boolean>>({});
-  const [caProofs, setCaProofs] = useState<Record<string, string>>({});
-
-  // Re-send Review / Customer Review Popup states
-  const [customerReviewResendProd, setCustomerReviewResendProd] = useState<Production | null>(null);
-  const [customerReviewMessage, setCustomerReviewMessage] = useState<string>('');
-  const [customerReviewPhone, setCustomerReviewPhone] = useState<string>('');
-
-  // New States for Editor WhatsApp Share Feature
-  const [editorWhatsappModalOpen, setEditorWhatsappModalOpen] = useState(false);
-  const [editorWhatsappProdId, setEditorWhatsappProdId] = useState<string | null>(null);
-  const [editorWhatsappData, setEditorWhatsappData] = useState<{
-    prod: any;
-    order: any;
-    lead: any;
-    assignments: any[];
-    rf: any;
-    editors: { name: string; phone: string; message: string; }[];
-    selectedEventIndex: number;
-  } | null>(null);
-  const [isGeneratingEditorWhatsapp, setIsGeneratingEditorWhatsapp] = useState(false);
-  const [editorWhatsappError, setEditorWhatsappError] = useState<string | null>(null);
-
-  const prepareEditorWhatsappData = async (productionId: string, eventIndex: number = 0) => {
-    setEditorWhatsappProdId(productionId);
-    setIsGeneratingEditorWhatsapp(true);
-    setEditorWhatsappError(null);
-    setEditorWhatsappModalOpen(true);
-    try {
-      // 1. Fetch latest data from database
-      const { data: prodData, error: prodErr } = await supabaseClient
-        .from('production')
-        .select('*')
-        .eq('production_id', productionId)
-        .single();
-      if (prodErr) throw prodErr;
-
-      const { data: assignmentsData, error: assignmentsErr } = await supabaseClient
-        .from('editor_assignments')
-        .select('*')
-        .eq('production_id', productionId);
-      if (assignmentsErr) throw assignmentsErr;
-
-      // Find resolved order & lead
-      const trackingId = prodData.tracking_id;
-      const rfItem = (rawFootage || []).find(f => f.tracking_id === trackingId || f.order_id === trackingId);
-      let orderData = (orders || []).find(o => o.order_id === trackingId || o.lead_id === trackingId);
-      if (!orderData && rfItem) {
-        orderData = (orders || []).find(o => o.order_id === rfItem.order_id);
-      }
-
-      const leadId = orderData?.lead_id || trackingId;
-      const leadData = leadsData?.find(l => l.lead_id === leadId);
-
-      const activeStaffList = productionStaff || [];
-
-      // Events list
-      const eventsList = leadData?.events || [];
-      const selectedEvent = eventsList[eventIndex] || null;
-
-      // Build fields for WhatsApp prefilled message
-      const customerName = orderData?.customer_name || leadData?.customer_name || '—';
-      const customerMobile = orderData?.customer_mobile || leadData?.mobile || '—';
-      const customerWhatsapp = orderData?.whatsapp_number || leadData?.whatsapp_number || '—';
-      const eventName = selectedEvent?.event_name || orderData?.event_type || 'Event';
-      const eventType = selectedEvent?.event_type || selectedEvent?.event_shoot_type || orderData?.event_type || 'Shoot Type';
-
-      // Raw footage drive link
-      const driveLink = getRawFootageDriveLink(prodData) || '—';
-
-      // Target Delivery date
-      const targetDate = prodData?.target_delivery_date || prodData?.expected_delivery_date || '—';
-
-      // Get unique editors assigned to this project
-      const assignedEditors = Array.from(new Set((assignmentsData || []).map((a: any) => a.staff_name).filter(Boolean)));
-      
-      const editors = assignedEditors.map((editorName: any) => {
-        const staff = activeStaffList.find(s => s.name === editorName);
-        const editorPhone = staff ? (staff.whatsapp_number || staff.mobile || '') : '';
-        
-        const displayDeliverables = (assignmentsData || [])
-          .filter((a: any) => a.staff_name && a.staff_name.trim().toLowerCase() === editorName.trim().toLowerCase())
-          .map((a: any) => a.speciality)
-          .filter(Boolean);
-
-        const deliverableListText = displayDeliverables.length > 0
-          ? displayDeliverables.map((d: any) => `• ${d}`).join('\n')
-          : 'None Assigned';
-
-        const msg = `*PHOTOCREW STUDIO TASK ASSIGNMENT*
-
-*Customer Details:*
-• Name: ${customerName}
-• Mobile: ${customerMobile}
-• WhatsApp: ${customerWhatsapp}
-
-*Project Details:*
-• Event Type: ${eventType}
-• Event Name: ${eventName}
-• Raw Footage Drive Link: ${driveLink}
-• Target Delivery Date: ${targetDate}
-
-*Assignment Details:*
-${deliverableListText}
-
-_Please acknowledge receipt of this task assignment._`;
-
-        return { name: editorName, phone: editorPhone, message: msg };
-      });
-
-      setEditorWhatsappData({
-        prod: prodData,
-        order: orderData,
-        lead: leadData,
-        assignments: assignmentsData || [],
-        rf: rfItem,
-        editors: editors,
-        selectedEventIndex: eventIndex,
-      });
-    } catch (err: any) {
-      console.error("Error preparing Editor WhatsApp data:", err);
-      setEditorWhatsappError(err.message || "Failed to load database values.");
-    } finally {
-      setIsGeneratingEditorWhatsapp(false);
-    }
-  };
-
-  const staffActiveAssignments = useMemo(() => {
-    if (!rosterStaffName) return [];
-    const memberNameLower = rosterStaffName.toLowerCase();
-    
-    const staffProjects = (production || []).filter(p => {
-      const isPrimary = p.editor_assigned?.toLowerCase() === memberNameLower;
-      const isAssignedCrew = editorAssignments.some(a => 
-        a.production_id === p.production_id && a.staff_name?.toLowerCase() === memberNameLower
-      );
-      return isPrimary || isAssignedCrew;
-    });
-
-    const activeProjects = staffProjects.filter(p => 
-      !['Approved', 'Delivered', 'Final Approval', 'Project Delivered', 'Project Closed', 'Closed'].includes(p.editing_status)
-    );
-
-    return (activeProjects || []).map(p => {
-      const trackingIdClean = p.tracking_id?.replace('PRD-', '');
-      const linkedOrder = (orders || []).find(o => o.order_id === p.tracking_id || o.lead_id === trackingIdClean);
-      const linkedLead = (leads || []).find(l => l.lead_id === p.tracking_id || l.lead_id === trackingIdClean);
-      const orderId = linkedOrder?.order_id || p.tracking_id || 'N/A';
-      
-      const assignmentRecord = (editorAssignments || []).find(a => 
-        a.production_id === p.production_id && a.staff_name?.toLowerCase() === memberNameLower
-      );
-      
-      return {
-        staffName: rosterStaffName,
-        orderId: orderId,
-        assignedDate: assignmentRecord?.assigned_date || p.created_at?.split('T')[0] || '—',
-        targetDeliveryDate: p.target_delivery_date || '—',
-      };
-    }).sort((a, b) => {
-      if (a.assignedDate === '—') return 1;
-      if (b.assignedDate === '—') return -1;
-      return new Date(a.assignedDate).getTime() - new Date(b.assignedDate).getTime();
-    });
-  }, [rosterStaffName, editorAssignments, production, orders, leads]);
-
-  // Simplified Add Staff Form states
-  const [newStaffName, setNewStaffName] = useState('');
-  const [newStaffType, setNewStaffType] = useState('');
-  const [newStaffMobile, setNewStaffMobile] = useState('');
-  const [newStaffWhatsapp, setNewStaffWhatsapp] = useState('');
-  const [newStaffEmail, setNewStaffEmail] = useState('');
-  const [newStaffPassword, setNewStaffPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [newStaffSkills, setNewStaffSkills] = useState<string[]>([]);
-  const [newSkillText, setNewSkillText] = useState('');
-  const [addStaffError, setAddStaffError] = useState('');
-  const [addStaffSuccess, setAddStaffSuccess] = useState('');
-  const [isSubmittingStaff, setIsSubmittingStaff] = useState(false);
-  const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
-
-  // Editing timeline dates inside detailed modal
-  const [dateFootageReceived, setDateFootageReceived] = useState('');
-  const [dateEditingStarted, setDateEditingStarted] = useState('');
-  const [dateReview, setDateReview] = useState('');
-  const [dateApproval, setDateApproval] = useState('');
-  const [dateDelivery, setDateDelivery] = useState('');
-
-  const [leadStartDate, setLeadStartDate] = useState('');
-  const [leadTargetDeliveryDate, setLeadTargetDeliveryDate] = useState('');
-  const [leadExpectedDeliveryDate, setLeadExpectedDeliveryDate] = useState('');
-  const [leadActualDeliveryDate, setLeadActualDeliveryDate] = useState('');
-  const [leadRawFootageDate, setLeadRawFootageDate] = useState('');
-  const [leadClientReviewDate, setLeadClientReviewDate] = useState('');
-  const [leadClientApprovalDate, setLeadClientApprovalDate] = useState('');
-  const [isSavingDossier, setIsSavingDossier] = useState(false);
-  const [dossierSuccessMessage, setDossierSuccessMessage] = useState('');
-  const [dossierError, setDossierError] = useState('');
-
-  // Helper calculations for Production Leads workflows
-  const calculateDaysRemaining = (dueDateStr?: string) => {
-    if (!dueDateStr) return null;
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    const dueDate = new Date(dueDateStr);
-    dueDate.setHours(0,0,0,0);
-    const diffTime = dueDate.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
-  };
-
-  const calculateOverdueDays = (dueDateStr?: string) => {
-    if (!dueDateStr) return 0;
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    const dueDate = new Date(dueDateStr);
-    dueDate.setHours(0,0,0,0);
-    const diffTime = today.getTime() - dueDate.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays > 0 ? diffDays : 0;
-  };
-
-  const getProductionPriority = (prod: Production) => {
-    return prod.project_priority || 'Medium';
+    return Array.from(unique.entries()).map(([name, qty]) => ({ name, qty }));
   };
 
   const autoSaveAssignments = async (
@@ -2334,8 +1425,7 @@ _Please acknowledge receipt of this task assignment._`;
       if (deleteError) throw deleteError;
 
       // 2. Prepare and insert new assignments
-      const newAssignments = [];
-      const activeStaffList = (productionStaff || []).filter(s => s.status === 'Active');
+      const newAssignments: any[] = [];
       const currentDeliverablesList = Object.keys(currentRowsMap);
       const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
       const orderId = order?.order_id || activeWorkflowProd?.tracking_id || activeWorkflowProd?.production_id;
@@ -7701,13 +6791,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const isReassignment = assignedForThis.length > 0;
 
                       // 1. Delete all existing editor assignments for this production + event
+                      const targetEventId = wfSelectedEventId || activeWorkflowProd.event_id || activeWorkflowProd.all_events?.[0]?.id || 'EVT-01';
                       let deleteQuery = supabaseClient
                         .from('editor_assignments')
                         .delete()
-                        .eq('production_id', activeWorkflowProd.production_id);
-                      if (activeWorkflowProd.event_id) {
-                        deleteQuery = deleteQuery.eq('event_id', activeWorkflowProd.event_id);
-                      }
+                        .eq('production_id', activeWorkflowProd.production_id)
+                        .eq('event_id', targetEventId);
+                        
                       const { error: deleteError } = await deleteQuery;
                         
                       if (deleteError) throw deleteError;
@@ -7715,7 +6805,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       // 2. Prepare and insert new assignments
                       const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
                       const orderId = order?.order_id || activeWorkflowProd?.tracking_id || activeWorkflowProd?.production_id;
-                      const eventId = activeWorkflowProd?.event_id || lead?.events?.[0]?.id || 'EVT-01';
+                      const eventId = targetEventId;
                       
                       const newAssignments = [];
                       for (const item of wfDeliverableAssignments) {
@@ -7830,6 +6920,28 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       </div>
                     )}
                     
+                    {activeWorkflowProd.all_events && activeWorkflowProd.all_events.length > 1 && (
+                      <div className="p-4 bg-zinc-900/20 border border-zinc-900 rounded-xl space-y-2 mb-4">
+                        <label className="block text-[10px] font-mono text-[#a78bfa] uppercase font-bold tracking-widest">
+                          Select Event to Assign *
+                        </label>
+                        <select
+                          value={wfSelectedEventId || ''}
+                          onChange={(e) => {
+                            setWfSelectedEventId(e.target.value);
+                            loadAssignmentsForEvent(activeWorkflowProd, e.target.value);
+                          }}
+                          className="w-full bg-zinc-950 border border-zinc-900 text-xs rounded-xl px-3 py-2.5 text-white font-sans focus:outline-none focus:border-purple-500 cursor-pointer"
+                        >
+                          {activeWorkflowProd.all_events.map((evt: any) => (
+                            <option key={evt.id} value={evt.id}>
+                              {evt.event_name || evt.event_type} — {evt.event_date || 'No Date'}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
                     <div className="p-4 bg-zinc-900/20 border border-zinc-900 rounded-xl space-y-2">
                       <label className="block text-[10px] font-mono text-[#a78bfa] uppercase font-bold tracking-widest">
                         Target Delivery Date *

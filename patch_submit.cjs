@@ -1,0 +1,44 @@
+const fs = require('fs');
+let content = fs.readFileSync('src/components/ProductionModule.tsx', 'utf8');
+
+const targetStr = `                      // 1. Delete all existing editor assignments for this production + event
+                      let deleteQuery = supabaseClient
+                        .from('editor_assignments')
+                        .delete()
+                        .eq('production_id', activeWorkflowProd.production_id);
+                      if (activeWorkflowProd.event_id) {
+                        deleteQuery = deleteQuery.eq('event_id', activeWorkflowProd.event_id);
+                      }
+                      const { error: deleteError } = await deleteQuery;
+                          
+                      if (deleteError) throw deleteError;
+                        
+                      // 2. Prepare and insert new assignments
+                      const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
+                      const orderId = order?.order_id || activeWorkflowProd?.tracking_id || activeWorkflowProd?.production_id;
+                      const eventId = activeWorkflowProd?.event_id || lead?.events?.[0]?.id || 'EVT-01';`;
+
+const replacementStr = `                      // 1. Delete all existing editor assignments for this production + event
+                      const targetEventId = wfSelectedEventId || activeWorkflowProd.event_id || activeWorkflowProd.all_events?.[0]?.id || 'EVT-01';
+                      
+                      let deleteQuery = supabaseClient
+                        .from('editor_assignments')
+                        .delete()
+                        .eq('production_id', activeWorkflowProd.production_id)
+                        .eq('event_id', targetEventId);
+                        
+                      const { error: deleteError } = await deleteQuery;
+                          
+                      if (deleteError) throw deleteError;
+                        
+                      // 2. Prepare and insert new assignments
+                      const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
+                      const orderId = order?.order_id || activeWorkflowProd?.tracking_id || activeWorkflowProd?.production_id;
+                      const eventId = targetEventId;`;
+
+if (content.includes(targetStr)) {
+  fs.writeFileSync('src/components/ProductionModule.tsx', content.replace(targetStr, replacementStr));
+  console.log("Successfully patched submit logic!");
+} else {
+  console.log("Target not found!");
+}
