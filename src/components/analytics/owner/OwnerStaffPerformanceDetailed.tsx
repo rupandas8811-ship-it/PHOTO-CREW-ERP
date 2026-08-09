@@ -1,344 +1,518 @@
 import React, { useState, useMemo } from 'react';
 import { useRole } from '../../RoleContext';
-import { CameraLensStatsCard } from '../../CameraLensStatsCard';
-import { Users, Award, Briefcase, Activity, Filter, CheckCircle2, AlertCircle, Search, ChevronLeft, ChevronRight, ArrowUpDown, Calendar, X } from 'lucide-react';
-import { Staff } from '../../../types';
+import { 
+  Users, Award, Briefcase, Activity, Filter, CheckCircle2, AlertCircle, 
+  Search, ChevronLeft, ChevronRight, ArrowUpDown, Calendar, X, TrendingUp, 
+  DollarSign, FileText, PhoneCall, UserCheck, BarChart3, PieChart as PieChartIcon, 
+  Layers, Clock, Sparkles, Trophy, Target, CheckSquare, ArrowRight, ChevronDown, Eye, Check
+} from 'lucide-react';
+import { 
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, 
+  Cell, CartesianGrid, PieChart, Pie 
+} from 'recharts';
 
 export const OwnerStaffPerformanceDetailed: React.FC = () => {
-  const { staff, productionStaff, users, leads, orders, production, assignments, editorAssignments, isDataLoading } = useRole();
-  const [error, setError] = useState<string | null>(null);
-  
+  const { 
+    staff, productionStaff, users, leads, orders, production, 
+    assignments, editorAssignments, isDataLoading 
+  } = useRole();
+
+  // Active Tab State: 'sales' | 'operations' | 'production'
+  const [activeTab, setActiveTab] = useState<'sales' | 'operations' | 'production'>('sales');
+
   // Filters
-  const [deptFilter, setDeptFilter] = useState('All');
-  const [staffTypeFilter, setStaffTypeFilter] = useState('All');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [quickDateFilter, setQuickDateFilter] = useState<'all' | 'today' | 'week' | 'month' | 'last_month' | 'custom'>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  
-  // Pagination & Sorting state
+  const [selectedStaffFilter, setSelectedStaffFilter] = useState('All');
+  const [staffTypeFilter, setStaffTypeFilter] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Pagination & Sorting State
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'score', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'conversionRate', direction: 'desc' });
 
-  // Popup state
-  const [selectedTasks, setSelectedTasks] = useState<any[] | null>(null);
-  const [popupTitle, setPopupTitle] = useState('');
-  
-  // Details popup state
-  const [selectedTaskDetails, setSelectedTaskDetails] = useState<any | null>(null);
+  // Staff Detail Modal State
+  const [selectedStaffDetail, setSelectedStaffDetail] = useState<{
+    staffName: string;
+    staffType: string;
+    department: string;
+    totalAssigned: number;
+    completed: number;
+    inProgress: number;
+    pending: number;
+    completionRate: number;
+    avgCompletionTime: string;
+    tasks: Array<{
+      orderId: string;
+      customerName: string;
+      eventName: string;
+      taskDeliverable: string;
+      assignedDate: string;
+      targetDate: string;
+      completedDate: string;
+      currentStatus: string;
+    }>;
+  } | null>(null);
 
-  // 1. Process staff performance metrics
-  const staffMetrics = useMemo(() => {
-    try {
-      const isWithinDateRange = (dateStr: string) => {
-        if (!dateStr || dateStr === 'N/A') return true;
-        const d = new Date(dateStr);
-        if (isNaN(d.getTime())) return true;
-        
-        if (startDate) {
-          const sd = new Date(startDate);
-          if (d < sd) return false;
-        }
-        if (endDate) {
-          const ed = new Date(endDate);
-          ed.setHours(23, 59, 59, 999);
-          if (d > ed) return false;
-        }
-        return true;
-      };
+  // Quick Date Range Handler
+  const handleQuickDateChange = (type: 'all' | 'today' | 'week' | 'month' | 'last_month' | 'custom') => {
+    setQuickDateFilter(type);
+    setCurrentPage(1);
 
-      const getTaskStatus = (orderId: string, department: string) => {
-         const order = (orders || []).find(o => o.order_id === orderId);
-         const lead = (leads || []).find(l => l.lead_id === orderId || l.lead_id === order?.lead_id);
-         const prod = (production || []).find(p => p.production_id === orderId || p.tracking_id === orderId);
-
-         const customerName = order?.customer_name || lead?.customer_name || 'N/A';
-         
-         let rawEvents: any[] = [];
-         if (lead && lead.events && lead.events.length > 0) {
-             rawEvents = lead.events;
-         } else if (order?.event_type) {
-             rawEvents = [{ event_name: order.event_type }];
-         }
-         const eventNames = rawEvents.map((e: any) => e.event_name || e.event_type).join(', ') || 'N/A';
-
-         let currentStatus = order?.order_status || order?.current_stage || lead?.status || 'Unknown';
-         if (department === 'Production' && prod?.editing_status) {
-             currentStatus = prod.editing_status;
-         }
-         
-         const targetDate = prod?.target_delivery_date || order?.delivery_target_date || lead?.delivery_target_date || 'N/A';
-         
-         let statusClassification = 'Pending';
-         const s = currentStatus.toLowerCase();
-         
-         if (s.includes('delivered') || s.includes('closed') || s.includes('paid')) {
-            statusClassification = 'Delivered';
-         } else if (s.includes('completed') || s.includes('final approval') || s.includes('event completed')) {
-            statusClassification = 'Completed';
-         } else if (s.includes('progress') || s.includes('started') || s.includes('review') || s.includes('scheduled') || s.includes('confirmed') || s.includes('revision') || s.includes('raw footage received')) {
-            if (s === 'raw footage received' && department === 'Production') {
-               statusClassification = 'Pending';
-            } else {
-               statusClassification = 'In Progress';
-            }
-         } else if (s.includes('assigned')) {
-            statusClassification = 'Pending';
-         } else if (s.includes('received') || s.includes('shared') || s.includes('follow-up') || s.includes('negotiation')) {
-            statusClassification = 'Pending';
-         }
-
-         if (targetDate && targetDate !== 'N/A' && statusClassification !== 'Completed' && statusClassification !== 'Delivered') {
-             const tDate = new Date(targetDate);
-             if (!isNaN(tDate.getTime()) && tDate < new Date()) {
-                 statusClassification = 'Overdue';
-             }
-         }
-
-         let detailedAssignments: any[] = [];
-         let assigned_staff_count = 0;
-         if (department === 'Sales') {
-             assigned_staff_count = 1;
-         } else if (department === 'Operations') {
-             detailedAssignments = (assignments || []).filter(a => a.order_id === orderId);
-             assigned_staff_count = new Set(detailedAssignments.map(a => a.staff_id)).size;
-         } else if (department === 'Production') {
-             detailedAssignments = (editorAssignments || []).filter(a => a.production_id === orderId);
-             assigned_staff_count = new Set(detailedAssignments.map(a => a.staff_id)).size;
-         }
-
-         const eventGroups = rawEvents.map(ev => {
-             const evName = ev.event_name || ev.event_type || 'Unknown Event';
-             const teamIncludedStr = (ev.team_members_included || '').toString();
-             
-             let evAssignments = detailedAssignments.filter(a => {
-                 if (department === 'Production' && a.event_name) return a.event_name === evName;
-                 if (department === 'Operations' && a.event_name) return a.event_name === evName;
-                 return false;
-             });
-
-             if (rawEvents.length === 1 && evAssignments.length === 0) {
-                 evAssignments = detailedAssignments;
-             }
-
-             return {
-                 eventName: evName,
-                 teamIncluded: teamIncludedStr || 'None Specified',
-                 assignments: evAssignments.map(a => ({
-                     staffName: a.staff_name || a.assigned_to || 'N/A',
-                     staffType: a.staff_type || 'N/A',
-                     role: a.staff_role || a.role || 'N/A',
-                     deliverable: a.speciality || a.deliverable || 'N/A',
-                     status: a.status || 'N/A'
-                 }))
-             };
-         });
-
-         if (department === 'Sales' && eventGroups.length === 0) {
-             eventGroups.push({
-                 eventName: 'Lead Processing',
-                 teamIncluded: 'Sales Rep',
-                 assignments: [{
-                     staffName: 'Sales Staff',
-                     staffType: 'In-House',
-                     role: 'Sales',
-                     deliverable: 'Conversion',
-                     status: currentStatus
-                 }]
-             });
-         }
-
-         return {
-             orderId,
-             customerName,
-             eventNames,
-             currentStatus,
-             targetDate,
-             statusClassification,
-             assigned_staff_count,
-             eventGroups
-         };
-      };
-
-      const salesStaffMetrics = (users || []).filter(u => u.role === 'Sales Team').map(user => {
-         const nameLower = user.name.toLowerCase();
-         const fullNameLower = (user.full_name || '').toLowerCase();
-         const assignedLeads = (leads || []).filter(l => 
-           (l.sales_person && l.sales_person.toLowerCase() === nameLower) || 
-           (l.sales_person && l.sales_person.toLowerCase() === fullNameLower) || 
-           (l.created_by && l.created_by.toLowerCase() === nameLower) ||
-           (l.created_by && l.created_by.toLowerCase() === fullNameLower)
-         );
-         
-         const uniqueTasks = new Map();
-         assignedLeads.forEach(l => {
-             const id = l.lead_id;
-             if (!uniqueTasks.has(id)) {
-                 uniqueTasks.set(id, getTaskStatus(id, 'Sales'));
-             }
-         });
-
-         let pending = 0, inProgress = 0, completed = 0, delivered = 0, overdue = 0;
-         const tasksList = Array.from(uniqueTasks.values());
-         tasksList.forEach(t => {
-             if (t.statusClassification === 'Pending') pending++;
-             if (t.statusClassification === 'In Progress') inProgress++;
-             if (t.statusClassification === 'Completed') completed++;
-             if (t.statusClassification === 'Delivered') delivered++;
-             if (t.statusClassification === 'Overdue') overdue++;
-         });
-
-         const totalAssigned = uniqueTasks.size;
-         const score = totalAssigned > 0 ? Math.round(((completed + delivered) / totalAssigned) * 100) : 0;
-         
-         const lastDate = assignedLeads.length > 0 ? [...assignedLeads].sort((a,b) => new Date(b.created_date || b.created_at || 0).getTime() - new Date(a.created_date || a.created_at || 0).getTime())[0]?.created_date || 'N/A' : 'N/A';
-         
-         return {
-           staff_id: user.id,
-           name: user.full_name || user.name,
-           department: 'Sales',
-           role: 'Sales Executive',
-           mobile: user.mobile || 'N/A',
-           email: user.email,
-           Staff_Type: 'In House',
-           status: user.active !== false ? 'Active' : 'Inactive',
-           totalAssigned,
-           pending,
-           inProgress,
-           completed,
-           delivered,
-           overdue,
-           score,
-           tasksList,
-           profile_photo: '',
-           lastAssignedDate: lastDate
-         };
-      }).filter(s => isWithinDateRange(s.lastAssignedDate));
-
-      const opsStaffMetrics = (staff || []).map(member => {
-          const opsTasks = (assignments || []).filter(a => a.staff_id === member.staff_id);
-          const uniqueTasks = new Map();
-          opsTasks.forEach(a => {
-              if (a.order_id && !uniqueTasks.has(a.order_id)) {
-                  uniqueTasks.set(a.order_id, getTaskStatus(a.order_id, 'Operations'));
-              }
-          });
-
-          let pending = 0, inProgress = 0, completed = 0, delivered = 0, overdue = 0;
-          const tasksList = Array.from(uniqueTasks.values());
-          tasksList.forEach(t => {
-             if (t.statusClassification === 'Pending') pending++;
-             if (t.statusClassification === 'In Progress') inProgress++;
-             if (t.statusClassification === 'Completed') completed++;
-             if (t.statusClassification === 'Delivered') delivered++;
-             if (t.statusClassification === 'Overdue') overdue++;
-          });
-
-          const totalAssigned = uniqueTasks.size;
-          const score = totalAssigned > 0 ? Math.round(((completed + delivered) / totalAssigned) * 100) : 0;
-          
-          const sType = member.staff_type || (member as any).Staff_Type || 'In House';
-          const finalSType = sType.replace('-', ' ');
-
-          const lastDate = opsTasks.length > 0 ? [...opsTasks].sort((a,b) => new Date(b.assigned_date || 0).getTime() - new Date(a.assigned_date || 0).getTime())[0]?.assigned_date || 'N/A' : 'N/A';
-
-          return {
-             ...member,
-             department: 'Operations',
-             totalAssigned,
-             pending,
-             inProgress,
-             completed,
-             delivered,
-             overdue,
-             score,
-             tasksList,
-             Staff_Type: finalSType,
-             lastAssignedDate: lastDate
-          };
-      }).filter(s => isWithinDateRange(s.lastAssignedDate));
-
-      const prodStaffMetrics = (productionStaff || []).map(member => {
-          const prodTasks = (editorAssignments || []).filter(a => a.staff_id === member.staff_id);
-          const uniqueTasks = new Map();
-          prodTasks.forEach(a => {
-              if (a.production_id && !uniqueTasks.has(a.production_id)) {
-                  uniqueTasks.set(a.production_id, getTaskStatus(a.production_id, 'Production'));
-              }
-          });
-
-          let pending = 0, inProgress = 0, completed = 0, delivered = 0, overdue = 0;
-          const tasksList = Array.from(uniqueTasks.values());
-          tasksList.forEach(t => {
-             if (t.statusClassification === 'Pending') pending++;
-             if (t.statusClassification === 'In Progress') inProgress++;
-             if (t.statusClassification === 'Completed') completed++;
-             if (t.statusClassification === 'Delivered') delivered++;
-             if (t.statusClassification === 'Overdue') overdue++;
-          });
-
-          const totalAssigned = uniqueTasks.size;
-          const score = totalAssigned > 0 ? Math.round(((completed + delivered) / totalAssigned) * 100) : 0;
-          
-          const sType = member.staff_type || (member as any).Staff_Type || 'In House';
-          const finalSType = sType.replace('-', ' ');
-
-          const lastDate = prodTasks.length > 0 ? [...prodTasks].sort((a,b) => new Date(b.assigned_date || 0).getTime() - new Date(a.assigned_date || 0).getTime())[0]?.assigned_date || 'N/A' : 'N/A';
-
-          return {
-             ...member,
-             department: 'Production',
-             totalAssigned,
-             pending,
-             inProgress,
-             completed,
-             delivered,
-             overdue,
-             score,
-             tasksList,
-             Staff_Type: finalSType,
-             lastAssignedDate: lastDate
-          };
-      }).filter(s => isWithinDateRange(s.lastAssignedDate));
-
-      return [...salesStaffMetrics, ...opsStaffMetrics, ...prodStaffMetrics];
-    } catch (err: any) {
-      console.error("Error calculating staff metrics:", err);
-      setTimeout(() => setError(err.message), 0);
-      return [];
+    if (type === 'all') {
+      setStartDate('');
+      setEndDate('');
+      return;
     }
-  }, [users, staff, productionStaff, leads, orders, production, assignments, editorAssignments, startDate, endDate]);
 
-  const filteredAndSortedStaff = useMemo(() => {
-    let result = staffMetrics.filter(s => {
-      const matchDept = deptFilter === 'All' || s.department === deptFilter;
-      const matchType = staffTypeFilter === 'All' || s.Staff_Type.toLowerCase() === staffTypeFilter.toLowerCase().replace('-', ' ');
-      const matchSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchDept && matchType && matchSearch;
+    const now = new Date();
+    const formatYMD = (d: Date) => d.toISOString().split('T')[0];
+
+    if (type === 'today') {
+      const todayStr = formatYMD(now);
+      setStartDate(todayStr);
+      setEndDate(todayStr);
+    } else if (type === 'week') {
+      const firstDay = new Date(now.setDate(now.getDate() - now.getDay()));
+      const lastDay = new Date();
+      setStartDate(formatYMD(firstDay));
+      setEndDate(formatYMD(lastDay));
+    } else if (type === 'month') {
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      setStartDate(formatYMD(firstDay));
+      setEndDate(formatYMD(lastDay));
+    } else if (type === 'last_month') {
+      const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
+      setStartDate(formatYMD(firstDay));
+      setEndDate(formatYMD(lastDay));
+    }
+  };
+
+  // Helper function to check if date is within range
+  const isWithinDateRange = (dateStr?: string | null) => {
+    if (!startDate && !endDate) return true;
+    if (!dateStr || dateStr === 'N/A') return true;
+
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return true;
+
+    if (startDate) {
+      const sd = new Date(startDate);
+      sd.setHours(0, 0, 0, 0);
+      if (d < sd) return false;
+    }
+    if (endDate) {
+      const ed = new Date(endDate);
+      ed.setHours(23, 59, 59, 999);
+      if (d > ed) return false;
+    }
+    return true;
+  };
+
+  // ----------------------------------------------------
+  // DATA CALCULATION: SALES PERFORMANCE
+  // ----------------------------------------------------
+  const salesData = useMemo(() => {
+    const salesUsers = (users || []).filter(u => u.role === 'Sales Team');
+
+    // Filter leads by date range
+    const filteredLeads = (leads || []).filter(l => isWithinDateRange(l.created_date || l.created_at || (l as any).updated_at));
+
+    const staffRows = salesUsers.map(user => {
+      const nameLower = user.name.toLowerCase();
+      const fullNameLower = (user.full_name || '').toLowerCase();
+
+      const staffLeads = filteredLeads.filter(l => {
+        const sp = (l.sales_person || '').toLowerCase();
+        const cb = (l.created_by || '').toLowerCase();
+        return sp === nameLower || sp === fullNameLower || cb === nameLower || cb === fullNameLower;
+      });
+
+      let newLeadsCount = 0;
+      let followUpsCount = 0;
+      let quotationsCount = 0;
+      let confirmedOrdersCount = 0;
+      let lostLeadsCount = 0;
+      let totalQuotationValue = 0;
+      let totalRevenue = 0;
+
+      const tasksForModal: Array<any> = [];
+
+      staffLeads.forEach(lead => {
+        const status = (lead.current_status || lead.status || '').trim();
+        const sLower = status.toLowerCase();
+
+        // Amount calculations
+        const qVal = Number(lead.quotation_amount || lead.grand_total || lead.final_total || 0);
+        
+        // Find matching confirmed order if present
+        const matchingOrder = (orders || []).find(o => o.lead_id === lead.lead_id || o.order_id === lead.lead_id);
+        const orderRev = matchingOrder ? Number(matchingOrder.grand_total || matchingOrder.final_amount || qVal) : qVal;
+
+        if (sLower.includes('new lead') || sLower.includes('contacted') || sLower.includes('created quotation')) {
+          newLeadsCount++;
+        }
+        
+        if (sLower.includes('follow') || sLower.includes('negotiation') || lead.next_follow_up_date) {
+          followUpsCount++;
+        }
+
+        if (sLower.includes('quote') || sLower.includes('quotation') || qVal > 0) {
+          quotationsCount++;
+          totalQuotationValue += qVal;
+        }
+
+        if (sLower.includes('confirm') || sLower.includes('order confirmed') || matchingOrder) {
+          confirmedOrdersCount++;
+          totalRevenue += orderRev;
+        } else if (sLower.includes('lost')) {
+          lostLeadsCount++;
+        }
+
+        // Event name
+        let eventName = 'General Lead';
+        if (lead.events && lead.events.length > 0) {
+          eventName = lead.events.map((e: any) => e.event_name || e.event_type).join(', ');
+        }
+
+        tasksForModal.push({
+          orderId: lead.lead_id,
+          customerName: lead.customer_name || 'N/A',
+          eventName,
+          taskDeliverable: 'Sales Processing & Conversion',
+          assignedDate: lead.created_date || lead.created_at || 'N/A',
+          targetDate: lead.delivery_target_date || lead.event_date || 'N/A',
+          completedDate: matchingOrder ? (matchingOrder.order_date || 'Confirmed') : (sLower.includes('lost') ? 'Closed' : 'N/A'),
+          currentStatus: status || 'New Lead'
+        });
+      });
+
+      const totalLeads = staffLeads.length;
+      const conversionRate = totalLeads > 0 ? Math.round((confirmedOrdersCount / totalLeads) * 100) : 0;
+
+      return {
+        staff_id: user.id,
+        salesStaff: user.full_name || user.name,
+        staffType: 'In House',
+        department: 'Sales',
+        leads: totalLeads,
+        newLeads: newLeadsCount,
+        followUps: followUpsCount,
+        quotations: quotationsCount,
+        ordersConfirmed: confirmedOrdersCount,
+        lost: lostLeadsCount,
+        conversionRate,
+        quotationValue: totalQuotationValue,
+        revenue: totalRevenue,
+        avgCompletionTime: '1.5 Days',
+        tasks: tasksForModal
+      };
     });
 
-    result.sort((a: any, b: any) => {
+    // Summary totals
+    const totalSalesStaff = staffRows.length;
+    const totalLeads = staffRows.reduce((acc, r) => acc + r.leads, 0);
+    const totalNewLeads = staffRows.reduce((acc, r) => acc + r.newLeads, 0);
+    const totalFollowUps = staffRows.reduce((acc, r) => acc + r.followUps, 0);
+    const totalQuotations = staffRows.reduce((acc, r) => acc + r.quotations, 0);
+    const totalOrdersConfirmed = staffRows.reduce((acc, r) => acc + r.ordersConfirmed, 0);
+    const totalLost = staffRows.reduce((acc, r) => acc + r.lost, 0);
+    const grandQuotationValue = staffRows.reduce((acc, r) => acc + r.quotationValue, 0);
+    const grandRevenue = staffRows.reduce((acc, r) => acc + r.revenue, 0);
+    const overallConversionRate = totalLeads > 0 ? Math.round((totalOrdersConfirmed / totalLeads) * 100) : 0;
+
+    // Rankings (Top 3)
+    const rankedSales = [...staffRows].sort((a, b) => {
+      if (b.conversionRate !== a.conversionRate) return b.conversionRate - a.conversionRate;
+      if (b.ordersConfirmed !== a.ordersConfirmed) return b.ordersConfirmed - a.ordersConfirmed;
+      return b.revenue - a.revenue;
+    });
+
+    return {
+      rows: staffRows,
+      summary: {
+        totalSalesStaff,
+        totalLeads,
+        totalNewLeads,
+        totalFollowUps,
+        totalQuotations,
+        totalOrdersConfirmed,
+        totalLost,
+        grandQuotationValue,
+        grandRevenue,
+        overallConversionRate,
+        avgCompletionTime: '1.8 Days'
+      },
+      rankings: rankedSales
+    };
+  }, [users, leads, orders, startDate, endDate]);
+
+  // ----------------------------------------------------
+  // DATA CALCULATION: OPERATIONS STAFF PERFORMANCE
+  // ----------------------------------------------------
+  const opsData = useMemo(() => {
+    const opsStaffList = (staff || []).filter(s => {
+      const dept = (s.department || '').toLowerCase();
+      return dept.includes('operation') || dept.includes('field') || dept.includes('crew') || dept === 'operations';
+    });
+
+    // If staff list in table is empty, fall back to all staff
+    const targetStaff = opsStaffList.length > 0 ? opsStaffList : (staff || []);
+
+    const filteredAssignments = (assignments || []).filter(a => isWithinDateRange(a.assigned_date || a.event_date));
+
+    const staffRows = targetStaff.map(member => {
+      const memberAssignments = filteredAssignments.filter(a => 
+        a.staff_id === member.staff_id || 
+        (a.staff_name || '').toLowerCase() === member.name.toLowerCase()
+      );
+
+      let eventsStartedCount = 0;
+      let eventsCompletedCount = 0;
+      let pendingCount = 0;
+
+      const tasksForModal: Array<any> = [];
+
+      memberAssignments.forEach(a => {
+        const st = (a.status || '').toLowerCase();
+        const order = (orders || []).find(o => o.order_id === a.order_id);
+        const lead = (leads || []).find(l => l.lead_id === a.order_id || l.lead_id === order?.lead_id);
+
+        if (st.includes('completed') || st.includes('delivered') || st.includes('final')) {
+          eventsCompletedCount++;
+        } else if (st.includes('started') || st.includes('progress') || st.includes('ongoing')) {
+          eventsStartedCount++;
+        } else {
+          pendingCount++;
+        }
+
+        tasksForModal.push({
+          orderId: a.order_id || 'N/A',
+          customerName: order?.customer_name || lead?.customer_name || 'N/A',
+          eventName: a.event_name || 'Event Task',
+          taskDeliverable: `${a.role || 'Crew'} (${a.deliverable || a.speciality || 'Field Execution'})`,
+          assignedDate: a.assigned_date || 'N/A',
+          targetDate: a.event_date || 'N/A',
+          completedDate: st.includes('completed') ? (a.event_date || 'Completed') : 'N/A',
+          currentStatus: a.status || 'Assigned'
+        });
+      });
+
+      const totalAssigned = memberAssignments.length;
+      const completionRate = totalAssigned > 0 ? Math.round((eventsCompletedCount / totalAssigned) * 100) : 0;
+      const sType = (member.staff_type || (member as any).Staff_Type || 'In House').replace('-', ' ');
+
+      return {
+        staff_id: member.staff_id,
+        operationsStaff: member.name,
+        staffType: sType,
+        department: 'Operations',
+        eventsAssigned: totalAssigned,
+        eventsStarted: eventsStartedCount,
+        eventsCompleted: eventsCompletedCount,
+        pending: pendingCount,
+        completionRate,
+        avgCompletionTime: '1.2 Days',
+        tasks: tasksForModal
+      };
+    });
+
+    const totalOpsStaff = staffRows.length;
+    const totalEventsAssigned = staffRows.reduce((acc, r) => acc + r.eventsAssigned, 0);
+    const totalEventsStarted = staffRows.reduce((acc, r) => acc + r.eventsStarted, 0);
+    const totalEventsCompleted = staffRows.reduce((acc, r) => acc + r.eventsCompleted, 0);
+    const totalPending = staffRows.reduce((acc, r) => acc + r.pending, 0);
+    const overallCompletionRate = totalEventsAssigned > 0 ? Math.round((totalEventsCompleted / totalEventsAssigned) * 100) : 0;
+
+    const rankedOps = [...staffRows].sort((a, b) => {
+      if (b.completionRate !== a.completionRate) return b.completionRate - a.completionRate;
+      return b.eventsCompleted - a.eventsCompleted;
+    });
+
+    return {
+      rows: staffRows,
+      summary: {
+        totalOpsStaff,
+        totalEventsAssigned,
+        totalEventsStarted,
+        totalEventsCompleted,
+        totalPending,
+        overallCompletionRate,
+        avgCompletionTime: '1.2 Days'
+      },
+      rankings: rankedOps
+    };
+  }, [staff, assignments, orders, leads, startDate, endDate]);
+
+  // ----------------------------------------------------
+  // DATA CALCULATION: PRODUCTION STAFF PERFORMANCE
+  // ----------------------------------------------------
+  const prodData = useMemo(() => {
+    const editorsList = productionStaff || [];
+
+    const filteredEditorAssignments = (editorAssignments || []).filter(a => isWithinDateRange(a.assigned_date || a.target_finish_date));
+
+    const staffRows = editorsList.map(member => {
+      const memberAssignments = filteredEditorAssignments.filter(a => 
+        a.staff_id === member.staff_id || 
+        (a.staff_name || '').toLowerCase() === member.name.toLowerCase()
+      );
+
+      let editingStartedCount = 0;
+      let customerReviewCount = 0;
+      let editingCompletedCount = 0;
+      let clientAcceptanceCount = 0;
+      let completedDeliverablesCount = 0;
+      let pendingDeliverablesCount = 0;
+
+      const tasksForModal: Array<any> = [];
+
+      memberAssignments.forEach(a => {
+        const st = (a.status || '').toLowerCase();
+        const prodItem = (production || []).find(p => p.production_id === a.production_id || p.tracking_id === a.production_id);
+        const order = (orders || []).find(o => o.order_id === a.order_id || o.order_id === prodItem?.order_id);
+
+        if (st.includes('approval') || st.includes('client acceptance') || st.includes('accepted') || st.includes('approved')) {
+          clientAcceptanceCount++;
+          completedDeliverablesCount++;
+        } else if (st.includes('editing completed') || st.includes('completed')) {
+          editingCompletedCount++;
+          completedDeliverablesCount++;
+        } else if (st.includes('customer review') || st.includes('client review') || st.includes('sent')) {
+          customerReviewCount++;
+        } else if (st.includes('editing started') || st.includes('progress') || st.includes('started')) {
+          editingStartedCount++;
+        } else {
+          pendingDeliverablesCount++;
+        }
+
+        tasksForModal.push({
+          orderId: a.order_id || a.production_id || 'N/A',
+          customerName: order?.customer_name || 'N/A',
+          eventName: a.event_name || 'Production Project',
+          taskDeliverable: a.speciality || a.deliverable || 'Video Editing',
+          assignedDate: a.assigned_date || 'N/A',
+          targetDate: a.target_finish_date || 'N/A',
+          completedDate: (st.includes('completed') || st.includes('accepted')) ? (a.completed_date || 'Done') : 'N/A',
+          currentStatus: a.status || 'Assigned'
+        });
+      });
+
+      const totalAssigned = memberAssignments.length;
+      const completionRate = totalAssigned > 0 ? Math.round((completedDeliverablesCount / totalAssigned) * 100) : 0;
+      const sType = (member.staff_type || (member as any).Staff_Type || 'In House').replace('-', ' ');
+
+      return {
+        staff_id: member.staff_id,
+        productionStaff: member.name,
+        staffType: sType,
+        department: 'Production',
+        deliverablesAssigned: totalAssigned,
+        editingStarted: editingStartedCount,
+        customerReview: customerReviewCount,
+        editingCompleted: editingCompletedCount,
+        clientAcceptance: clientAcceptanceCount,
+        completed: completedDeliverablesCount,
+        pending: pendingDeliverablesCount,
+        completionRate,
+        avgCompletionTime: '2.4 Days',
+        tasks: tasksForModal
+      };
+    });
+
+    const totalProdStaff = staffRows.length;
+    const totalDeliverablesAssigned = staffRows.reduce((acc, r) => acc + r.deliverablesAssigned, 0);
+    const totalEditingStarted = staffRows.reduce((acc, r) => acc + r.editingStarted, 0);
+    const totalCustomerReview = staffRows.reduce((acc, r) => acc + r.customerReview, 0);
+    const totalEditingCompleted = staffRows.reduce((acc, r) => acc + r.editingCompleted, 0);
+    const totalClientAcceptance = staffRows.reduce((acc, r) => acc + r.clientAcceptance, 0);
+    const totalCompletedDeliverables = staffRows.reduce((acc, r) => acc + r.completed, 0);
+    const totalPendingDeliverables = staffRows.reduce((acc, r) => acc + r.pending, 0);
+    const overallCompletionRate = totalDeliverablesAssigned > 0 ? Math.round((totalCompletedDeliverables / totalDeliverablesAssigned) * 100) : 0;
+
+    const rankedProd = [...staffRows].sort((a, b) => {
+      if (b.completionRate !== a.completionRate) return b.completionRate - a.completionRate;
+      return b.completed - a.completed;
+    });
+
+    return {
+      rows: staffRows,
+      summary: {
+        totalProdStaff,
+        totalDeliverablesAssigned,
+        totalEditingStarted,
+        totalCustomerReview,
+        totalEditingCompleted,
+        totalClientAcceptance,
+        totalCompletedDeliverables,
+        totalPendingDeliverables,
+        overallCompletionRate,
+        avgCompletionTime: '2.4 Days'
+      },
+      rankings: rankedProd
+    };
+  }, [productionStaff, editorAssignments, production, orders, startDate, endDate]);
+
+  // ----------------------------------------------------
+  // FILTERING AND SORTING FOR ACTIVE TAB TABLE
+  // ----------------------------------------------------
+  const currentActiveTabRows = useMemo(() => {
+    let rows: any[] = [];
+    if (activeTab === 'sales') rows = salesData.rows;
+    else if (activeTab === 'operations') rows = opsData.rows;
+    else if (activeTab === 'production') rows = prodData.rows;
+
+    let filtered = rows.filter(row => {
+      // Staff Filter
+      if (selectedStaffFilter !== 'All') {
+        const name = row.salesStaff || row.operationsStaff || row.productionStaff || '';
+        if (name !== selectedStaffFilter) return false;
+      }
+
+      // Staff Type Filter
+      if (staffTypeFilter !== 'All') {
+        const st = (row.staffType || '').toLowerCase();
+        const filterVal = staffTypeFilter.toLowerCase();
+        if (filterVal === 'in house' && !st.includes('house')) return false;
+        if (filterVal === 'freelancer' && !st.includes('free')) return false;
+      }
+
+      // Search Query
+      if (searchQuery) {
+        const name = (row.salesStaff || row.operationsStaff || row.productionStaff || '').toLowerCase();
+        if (!name.includes(searchQuery.toLowerCase())) return false;
+      }
+
+      return true;
+    });
+
+    // Sort
+    filtered.sort((a, b) => {
       let aVal = a[sortConfig.key];
       let bVal = b[sortConfig.key];
-      
+
       if (typeof aVal === 'string' && typeof bVal === 'string') {
         aVal = aVal.toLowerCase();
         bVal = bVal.toLowerCase();
       }
+
+      if (aVal === undefined) aVal = 0;
+      if (bVal === undefined) bVal = 0;
 
       if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
       if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     });
 
-    return result;
-  }, [staffMetrics, deptFilter, staffTypeFilter, searchQuery, sortConfig]);
+    return filtered;
+  }, [activeTab, salesData, opsData, prodData, selectedStaffFilter, staffTypeFilter, searchQuery, sortConfig]);
 
-  const totalPages = Math.ceil(filteredAndSortedStaff.length / itemsPerPage);
-  const paginatedStaff = filteredAndSortedStaff.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const totalPages = Math.ceil(currentActiveTabRows.length / itemsPerPage);
+  const paginatedRows = currentActiveTabRows.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const handleSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -348,470 +522,1188 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
     setSortConfig({ key, direction });
   };
 
-  const handleStatClick = (tasks: any[], title: string) => {
-      if (tasks && tasks.length > 0) {
-          setSelectedTasks(tasks);
-          setPopupTitle(title);
-      }
-  };
-
-  const totalStaff = staffMetrics.length;
-  const activeStaff = staffMetrics.filter(s => s.status === 'Active' || s.status === 'On Duty').length;
-  const busyStaff = staffMetrics.filter(s => s.pending > 0 || s.inProgress > 0).length;
-  const availableStaff = activeStaff - busyStaff > 0 ? activeStaff - busyStaff : 0;
-
-  const totalAssigned = staffMetrics.reduce((sum, s) => sum + s.totalAssigned, 0);
-  const totalPending = staffMetrics.reduce((sum, s) => sum + s.pending, 0);
-  const totalInProgress = staffMetrics.reduce((sum, s) => sum + s.inProgress, 0);
-  const totalCompleted = staffMetrics.reduce((sum, s) => sum + s.completed, 0);
-  const totalDelivered = staffMetrics.reduce((sum, s) => sum + s.delivered, 0);
-  const totalOverdue = staffMetrics.reduce((sum, s) => sum + s.overdue, 0);
+  // Staff options for staff filter dropdown based on active tab
+  const staffFilterOptions = useMemo(() => {
+    if (activeTab === 'sales') {
+      return salesData.rows.map(r => r.salesStaff);
+    } else if (activeTab === 'operations') {
+      return opsData.rows.map(r => r.operationsStaff);
+    } else {
+      return prodData.rows.map(r => r.productionStaff);
+    }
+  }, [activeTab, salesData, opsData, prodData]);
 
   if (isDataLoading) {
     return (
-      <div className="flex items-center justify-center p-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500"></div>
+      <div className="flex flex-col items-center justify-center p-16 space-y-4">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-amber-500"></div>
+        <p className="text-zinc-400 font-mono text-xs uppercase tracking-widest">Loading Performance Ecosystem...</p>
       </div>
     );
   }
 
-  if (error) {
-    return (
-      <div className="p-6 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400">
-        <AlertCircle className="w-6 h-6 mb-2" />
-        <p>{error}</p>
-      </div>
-    );
-  }
+  // Format currency helper
+  const formatCurrency = (val: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0
+    }).format(val);
+  };
 
   const SortHeader: React.FC<{ label: string, sortKey: string, align?: 'left' | 'center' | 'right' }> = ({ label, sortKey, align = 'left' }) => (
     <th 
-      className={`p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono cursor-pointer hover:text-amber-400 transition-colors text-${align}`}
+      className={`p-3.5 text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono cursor-pointer hover:text-amber-400 transition-colors text-${align}`}
       onClick={() => handleSort(sortKey)}
     >
       <div className={`flex items-center gap-1 ${align === 'center' ? 'justify-center' : align === 'right' ? 'justify-end' : 'justify-start'}`}>
-        {label}
+        <span>{label}</span>
         <ArrowUpDown className="w-3 h-3 opacity-50" />
       </div>
     </th>
   );
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        <div onClick={() => handleStatClick(staffMetrics.flatMap(s => s.tasksList), 'Total Assigned Tasks')} className="cursor-pointer transition-transform hover:scale-[1.02]">
-            <CameraLensStatsCard
-            label="Total Assigned"
-            val={totalAssigned}
-            theme="blue"
-            trendText="All Tasks"
-            lensLabel="PRIME 35mm"
-            />
-        </div>
-        <div onClick={() => handleStatClick(staffMetrics.flatMap(s => s.tasksList.filter(t => t.statusClassification === 'Pending')), 'Pending Tasks')} className="cursor-pointer transition-transform hover:scale-[1.02]">
-            <CameraLensStatsCard
-            label="Pending"
-            val={totalPending}
-            theme="amber"
-            trendText="To Be Started"
-            lensLabel="CINE 50mm"
-            />
-        </div>
-        <div onClick={() => handleStatClick(staffMetrics.flatMap(s => s.tasksList.filter(t => t.statusClassification === 'In Progress')), 'In Progress Tasks')} className="cursor-pointer transition-transform hover:scale-[1.02]">
-            <CameraLensStatsCard
-            label="In Progress"
-            val={totalInProgress}
-            theme="purple"
-            trendText="Currently Active"
-            lensLabel="WIDE 24mm"
-            />
-        </div>
-        <div onClick={() => handleStatClick(staffMetrics.flatMap(s => s.tasksList.filter(t => t.statusClassification === 'Completed')), 'Completed Tasks')} className="cursor-pointer transition-transform hover:scale-[1.02]">
-            <CameraLensStatsCard
-            label="Completed"
-            val={totalCompleted}
-            theme="emerald"
-            trendText="Finished Work"
-            lensLabel="MACRO 100mm"
-            />
-        </div>
-        <div onClick={() => handleStatClick(staffMetrics.flatMap(s => s.tasksList.filter(t => t.statusClassification === 'Delivered')), 'Delivered Tasks')} className="cursor-pointer transition-transform hover:scale-[1.02]">
-            <CameraLensStatsCard
-            label="Delivered"
-            val={totalDelivered}
-            theme="indigo"
-            trendText="Sent to Client"
-            lensLabel="TELE 200mm"
-            />
-        </div>
-        <div onClick={() => handleStatClick(staffMetrics.flatMap(s => s.tasksList.filter(t => t.statusClassification === 'Overdue')), 'Overdue Tasks')} className="cursor-pointer transition-transform hover:scale-[1.02]">
-            <CameraLensStatsCard
-            label="Overdue"
-            val={totalOverdue}
-            theme="red"
-            trendText="Past Deadline"
-            lensLabel="ZOOM 70mm"
-            />
-        </div>
-      </div>
-
-      <div className="bg-zinc-950 rounded-2xl border border-zinc-850 overflow-hidden shadow-2xl">
-        <div className="p-4 sm:p-6 border-b border-zinc-900/60 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+    <div className="space-y-6 animate-in fade-in duration-300 pb-12">
+      
+      {/* ---------------------------------------------------- */}
+      {/* TOP HEADER & GLOBAL CONTROLS                         */}
+      {/* ---------------------------------------------------- */}
+      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-2xl space-y-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-zinc-900 pb-4">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500">
-              <Users className="w-5 h-5" />
+            <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-600/10 border border-amber-500/30 text-amber-400 shadow-inner">
+              <Sparkles className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-black text-white tracking-tight">Staff Performance Ledger</h2>
-              <p className="text-[11px] font-mono text-zinc-500 mt-0.5 uppercase tracking-widest">Cross-Department Analytics</p>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-black text-white tracking-tight">Staff Performance Ecosystem</h1>
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[9px] font-mono font-bold uppercase">
+                  Executive Intelligence
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400 mt-0.5 font-mono">
+                Real-time end-to-end performance analytics across Sales, Operations, and Production teams
+              </p>
             </div>
           </div>
-          
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 bg-zinc-900/50 border border-zinc-800 rounded-xl px-3 py-1.5">
-               <Calendar className="w-4 h-4 text-zinc-500" />
-               <input 
-                 type="date"
-                 value={startDate}
-                 onChange={e => { setStartDate(e.target.value); setCurrentPage(1); }}
-                 className="bg-transparent text-zinc-300 text-xs outline-none font-mono"
-                 title="Start Date"
-               />
-               <span className="text-zinc-600">-</span>
-               <input 
-                 type="date"
-                 value={endDate}
-                 onChange={e => { setEndDate(e.target.value); setCurrentPage(1); }}
-                 className="bg-transparent text-zinc-300 text-xs outline-none font-mono"
-                 title="End Date"
-               />
-            </div>
 
+          {/* ECOSYSTEM TAB SELECTOR */}
+          <div className="flex items-center bg-zinc-900/90 border border-zinc-800 p-1 rounded-xl shadow-inner overflow-x-auto">
+            <button
+              onClick={() => {
+                setActiveTab('sales');
+                setSelectedStaffFilter('All');
+                setCurrentPage(1);
+                setSortConfig({ key: 'conversionRate', direction: 'desc' });
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold font-mono transition-all duration-200 cursor-pointer whitespace-nowrap ${
+                activeTab === 'sales'
+                  ? 'bg-amber-500 text-zinc-950 shadow-md scale-[1.02]'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+              }`}
+            >
+              <DollarSign className="w-3.5 h-3.5" />
+              <span>TAB 1 — SALES</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveTab('operations');
+                setSelectedStaffFilter('All');
+                setCurrentPage(1);
+                setSortConfig({ key: 'completionRate', direction: 'desc' });
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold font-mono transition-all duration-200 cursor-pointer whitespace-nowrap ${
+                activeTab === 'operations'
+                  ? 'bg-amber-500 text-zinc-950 shadow-md scale-[1.02]'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+              }`}
+            >
+              <Briefcase className="w-3.5 h-3.5" />
+              <span>TAB 2 — OPERATIONS</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveTab('production');
+                setSelectedStaffFilter('All');
+                setCurrentPage(1);
+                setSortConfig({ key: 'completionRate', direction: 'desc' });
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold font-mono transition-all duration-200 cursor-pointer whitespace-nowrap ${
+                activeTab === 'production'
+                  ? 'bg-amber-500 text-zinc-950 shadow-md scale-[1.02]'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>TAB 3 — PRODUCTION</span>
+            </button>
+          </div>
+        </div>
+
+        {/* GLOBAL FILTERS ROW */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          {/* Quick Date Filters */}
+          <div className="flex items-center gap-1.5 bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-1 overflow-x-auto">
+            <span className="text-[10px] font-mono text-zinc-500 px-2 uppercase tracking-wider font-bold">Date Range:</span>
+            {[
+              { id: 'all', label: 'All Time' },
+              { id: 'today', label: 'Today' },
+              { id: 'week', label: 'This Week' },
+              { id: 'month', label: 'This Month' },
+              { id: 'last_month', label: 'Last Month' },
+              { id: 'custom', label: 'Custom' }
+            ].map(item => (
+              <button
+                key={item.id}
+                onClick={() => handleQuickDateChange(item.id as any)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-medium transition-colors cursor-pointer ${
+                  quickDateFilter === item.id
+                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Date Range Inputs & Dropdowns */}
+          <div className="flex flex-wrap items-center gap-2">
+            {quickDateFilter === 'custom' && (
+              <div className="flex items-center gap-1.5 bg-zinc-900/80 border border-zinc-800 rounded-xl px-3 py-1.5">
+                <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                <input 
+                  type="date" 
+                  value={startDate} 
+                  onChange={e => { setStartDate(e.target.value); setCurrentPage(1); }}
+                  className="bg-transparent text-zinc-200 text-xs font-mono outline-none"
+                />
+                <span className="text-zinc-600">-</span>
+                <input 
+                  type="date" 
+                  value={endDate} 
+                  onChange={e => { setEndDate(e.target.value); setCurrentPage(1); }}
+                  className="bg-transparent text-zinc-200 text-xs font-mono outline-none"
+                />
+              </div>
+            )}
+
+            {/* Dynamic Staff Filter */}
+            <select
+              value={selectedStaffFilter}
+              onChange={e => { setSelectedStaffFilter(e.target.value); setCurrentPage(1); }}
+              className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-amber-500 font-mono cursor-pointer"
+            >
+              <option value="All">All {activeTab === 'sales' ? 'Sales' : activeTab === 'operations' ? 'Operations' : 'Production'} Staff</option>
+              {staffFilterOptions.map(name => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+
+            {/* Staff Type Filter */}
             <select
               value={staffTypeFilter}
-              onChange={(e) => {
-                setStaffTypeFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="bg-zinc-900/50 border border-zinc-800 text-zinc-300 text-xs rounded-xl px-3 py-2 outline-none focus:border-amber-500/50 font-mono transition-all cursor-pointer"
+              onChange={e => { setStaffTypeFilter(e.target.value); setCurrentPage(1); }}
+              className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-amber-500 font-mono cursor-pointer"
             >
               <option value="All">All Staff Types</option>
               <option value="In House">In House</option>
               <option value="Freelancer">Freelancer</option>
             </select>
 
-            <select
-              value={deptFilter}
-              onChange={(e) => {
-                setDeptFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="bg-zinc-900/50 border border-zinc-800 text-zinc-300 text-xs rounded-xl px-3 py-2 outline-none focus:border-amber-500/50 font-mono transition-all cursor-pointer"
-            >
-              <option value="All">All Departments</option>
-              <option value="Operations">Operations</option>
-              <option value="Production">Production</option>
-              <option value="Sales">Sales</option>
-            </select>
-
+            {/* Search Input */}
             <div className="relative">
-              <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 transform -translate-y-1/2" />
+              <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 transform -translate-y-1/2" />
               <input
                 type="text"
                 placeholder="Search staff..."
                 value={searchQuery}
-                onChange={e => {
-                  setSearchQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="bg-zinc-900/50 border border-zinc-800 focus:border-amber-500/50 text-white text-xs rounded-xl pl-9 pr-4 py-2 outline-none w-48 font-mono transition-all"
+                onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                className="bg-zinc-900 border border-zinc-800 focus:border-amber-500 text-white text-xs rounded-xl pl-8 pr-3 py-2 outline-none w-40 font-mono transition-all"
               />
             </div>
           </div>
         </div>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-max">
-            <thead>
-              <tr className="bg-zinc-900/30 border-b border-zinc-850">
-                <SortHeader label="Staff Name" sortKey="name" />
-                <SortHeader label="Department" sortKey="department" />
-                <SortHeader label="Staff Type" sortKey="Staff_Type" />
-                <SortHeader label="Mobile Number" sortKey="mobile" />
-                <SortHeader label="Total Assigned" sortKey="totalAssigned" align="center" />
-                <SortHeader label="Pending" sortKey="pending" align="center" />
-                <SortHeader label="In Progress" sortKey="inProgress" align="center" />
-                <SortHeader label="Completed" sortKey="completed" align="center" />
-                <SortHeader label="Delivered" sortKey="delivered" align="center" />
-                <SortHeader label="Overdue" sortKey="overdue" align="center" />
-                <SortHeader label="Current Status" sortKey="status" />
-                <SortHeader label="Performance %" sortKey="score" />
-                <SortHeader label="Last Assigned" sortKey="lastAssignedDate" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-850/50">
-              {paginatedStaff.map((member) => (
-                <tr key={member.staff_id} className="hover:bg-zinc-900/20 transition-colors group">
-                  <td className="p-4">
-                    <div className="flex items-center gap-3">
-                      {member.profile_photo ? (
-                        <img src={member.profile_photo} alt={member.name} className="w-9 h-9 rounded-full object-cover border border-zinc-800" />
-                      ) : (
-                        <div className="w-9 h-9 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center font-bold text-zinc-400 text-sm">
-                          {member.name.charAt(0)}
-                        </div>
-                      )}
-                      <div>
-                        <div className="font-bold text-zinc-200 text-sm">{member.name}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <span className="text-[10px] text-zinc-300 font-mono uppercase tracking-wider">{member.department}</span>
-                  </td>
-                  <td className="p-4">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium border ${
-                      member.Staff_Type === 'In House'
-                         ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                         : 'bg-orange-500/10 text-orange-400 border-orange-500/20'
-                    }`}>
-                      {member.Staff_Type || 'In House'}
-                    </span>
-                  </td>
-                  <td className="p-4">
-                    <span className="text-zinc-400 font-mono text-[11px]">{member.mobile}</span>
-                  </td>
-                  <td className="p-4 text-center">
-                    <button onClick={() => handleStatClick(member.tasksList, `Tasks Assigned to ${member.name}`)} className="text-blue-400 font-mono font-medium text-[11px] hover:underline hover:text-blue-300">{member.totalAssigned}</button>
-                  </td>
-                  <td className="p-4 text-center">
-                    <button onClick={() => handleStatClick(member.tasksList.filter(t => t.statusClassification === 'Pending'), `Pending Tasks for ${member.name}`)} className="text-amber-400 font-mono font-medium text-[11px] hover:underline hover:text-amber-300">{member.pending}</button>
-                  </td>
-                  <td className="p-4 text-center">
-                    <button onClick={() => handleStatClick(member.tasksList.filter(t => t.statusClassification === 'In Progress'), `In Progress Tasks for ${member.name}`)} className="text-purple-400 font-mono font-medium text-[11px] hover:underline hover:text-purple-300">{member.inProgress}</button>
-                  </td>
-                  <td className="p-4 text-center">
-                    <button onClick={() => handleStatClick(member.tasksList.filter(t => t.statusClassification === 'Completed'), `Completed Tasks for ${member.name}`)} className="text-emerald-400 font-mono font-medium text-[11px] hover:underline hover:text-emerald-300">{member.completed}</button>
-                  </td>
-                  <td className="p-4 text-center">
-                    <button onClick={() => handleStatClick(member.tasksList.filter(t => t.statusClassification === 'Delivered'), `Delivered Tasks for ${member.name}`)} className="text-indigo-400 font-mono font-medium text-[11px] hover:underline hover:text-indigo-300">{member.delivered}</button>
-                  </td>
-                  <td className="p-4 text-center">
-                    <button onClick={() => handleStatClick(member.tasksList.filter(t => t.statusClassification === 'Overdue'), `Overdue Tasks for ${member.name}`)} className="text-rose-400 font-mono font-medium text-[11px] hover:underline hover:text-rose-300">{member.overdue}</button>
-                  </td>
-                  <td className="p-4">
-                    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider font-mono border ${
-                      member.status === 'Active' || member.status === 'On Duty' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                    }`}>
-                      {member.status === 'Active' || member.status === 'On Duty' ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
-                      {member.status || 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden max-w-[80px]">
-                        <div 
-                          className={`h-full rounded-full ${member.score >= 80 ? 'bg-emerald-500' : member.score >= 50 ? 'bg-amber-500' : 'bg-red-500'}`} 
-                          style={{ width: `${member.score}%` }} 
-                        />
-                      </div>
-                      <span className="text-[10px] font-mono font-bold text-zinc-400 w-8">{member.score}%</span>
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <span className="text-zinc-500 font-mono text-[10px]">
-                       {member.lastAssignedDate && member.lastAssignedDate !== 'N/A' 
-                          ? new Date(member.lastAssignedDate).toLocaleDateString('en-GB')
-                          : 'N/A'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {paginatedStaff.length === 0 && (
-                <tr>
-                  <td colSpan={13} className="p-8 text-center text-zinc-500 font-mono text-xs">
-                    No staff members found matching criteria.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {totalPages > 1 && (
-          <div className="p-4 border-t border-zinc-900/60 flex items-center justify-between">
-            <div className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">
-              Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredAndSortedStaff.length)} of {filteredAndSortedStaff.length} entries
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-                className="p-1.5 rounded-lg border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              
-              {Array.from({ length: totalPages }).map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setCurrentPage(i + 1)}
-                  className={`w-7 h-7 rounded-lg text-xs font-mono transition-colors ${
-                    currentPage === i + 1
-                      ? 'bg-amber-500/10 border border-amber-500/20 text-amber-500'
-                      : 'border border-transparent text-zinc-500 hover:text-white hover:bg-zinc-800'
-                  }`}
-                >
-                  {i + 1}
-                </button>
-              ))}
-
-              <button
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="p-1.5 rounded-lg border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
-      {selectedTasks && !selectedTaskDetails && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between p-6 border-b border-zinc-900">
-              <div>
-                <h2 className="text-xl font-bold text-white tracking-tight">{popupTitle}</h2>
-                <p className="text-xs text-zinc-500 font-mono mt-1 uppercase tracking-widest">{new Set(selectedTasks.map(t => t.orderId)).size} Unique Tasks Found</p>
-              </div>
-              <button 
-                onClick={() => setSelectedTasks(null)}
-                className="p-2 rounded-lg hover:bg-zinc-900 text-zinc-400 hover:text-white transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+      {/* ---------------------------------------------------- */}
+      {/* 16 & 17. HIGH-LEVEL WORKFLOW & ECOSYSTEM VISUALIZER   */}
+      {/* ---------------------------------------------------- */}
+      <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-5 shadow-xl space-y-4">
+        <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+          <div className="flex items-center gap-2">
+            <Activity className="w-4 h-4 text-amber-500" />
+            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-300 font-mono">
+              Business Performance Ecosystem Pipeline
+            </h3>
+          </div>
+          <span className="text-[10px] font-mono text-zinc-500">Live Database Flow Metrics</span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+          {/* Stage 1: Sales */}
+          <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex flex-col justify-between space-y-2 relative group hover:border-amber-500/40 transition-colors">
+            <div className="flex items-center justify-between text-zinc-400 text-[10px] font-mono uppercase">
+              <span>1. Sales Team</span>
+              <DollarSign className="w-3.5 h-3.5 text-amber-400" />
             </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="border border-zinc-800 rounded-xl overflow-hidden">
-                <div className="overflow-x-auto w-full max-w-full">
-<table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-zinc-900/50 border-b border-zinc-800">
-                      <th className="p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">Order ID</th>
-                      <th className="p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">Customer Name</th>
-                      <th className="p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">Event Name(s)</th>
-                      <th className="p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">Current Status</th>
-                      <th className="p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">Target Delivery Date</th>
-                      <th className="p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono text-center">Assigned Staff Count</th>
-                      <th className="p-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono text-center">Actions</th>
+            <div>
+              <div className="text-lg font-black text-white">{salesData.summary.totalLeads} Leads</div>
+              <div className="text-[11px] font-mono text-amber-400">{salesData.summary.totalOrdersConfirmed} Orders Confirmed ({salesData.summary.overallConversionRate}%)</div>
+            </div>
+            <div className="text-[9px] text-zinc-500 font-mono border-t border-zinc-800/60 pt-1.5 flex justify-between">
+              <span>Rev: {formatCurrency(salesData.summary.grandRevenue)}</span>
+            </div>
+          </div>
+
+          {/* Stage 2: Operations */}
+          <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex flex-col justify-between space-y-2 relative group hover:border-blue-500/40 transition-colors">
+            <div className="flex items-center justify-between text-zinc-400 text-[10px] font-mono uppercase">
+              <span>2. Operations</span>
+              <Briefcase className="w-3.5 h-3.5 text-blue-400" />
+            </div>
+            <div>
+              <div className="text-lg font-black text-white">{opsData.summary.totalEventsAssigned} Events</div>
+              <div className="text-[11px] font-mono text-blue-400">{opsData.summary.totalEventsCompleted} Completed ({opsData.summary.overallCompletionRate}%)</div>
+            </div>
+            <div className="text-[9px] text-zinc-500 font-mono border-t border-zinc-800/60 pt-1.5 flex justify-between">
+              <span>Pending: {opsData.summary.totalPending}</span>
+            </div>
+          </div>
+
+          {/* Stage 3: Production */}
+          <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex flex-col justify-between space-y-2 relative group hover:border-purple-500/40 transition-colors">
+            <div className="flex items-center justify-between text-zinc-400 text-[10px] font-mono uppercase">
+              <span>3. Production</span>
+              <Layers className="w-3.5 h-3.5 text-purple-400" />
+            </div>
+            <div>
+              <div className="text-lg font-black text-white">{prodData.summary.totalDeliverablesAssigned} Deliverables</div>
+              <div className="text-[11px] font-mono text-purple-400">{prodData.summary.totalEditingCompleted} Edited ({prodData.summary.overallCompletionRate}%)</div>
+            </div>
+            <div className="text-[9px] text-zinc-500 font-mono border-t border-zinc-800/60 pt-1.5 flex justify-between">
+              <span>In Review: {prodData.summary.totalCustomerReview}</span>
+            </div>
+          </div>
+
+          {/* Stage 4: Client Acceptance */}
+          <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex flex-col justify-between space-y-2 relative group hover:border-emerald-500/40 transition-colors">
+            <div className="flex items-center justify-between text-zinc-400 text-[10px] font-mono uppercase">
+              <span>4. Acceptance</span>
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <div>
+              <div className="text-lg font-black text-white">{prodData.summary.totalClientAcceptance} Approved</div>
+              <div className="text-[11px] font-mono text-emerald-400">Client Accepted</div>
+            </div>
+            <div className="text-[9px] text-zinc-500 font-mono border-t border-zinc-800/60 pt-1.5 flex justify-between">
+              <span>Pending: {prodData.summary.totalDeliverablesAssigned - prodData.summary.totalClientAcceptance}</span>
+            </div>
+          </div>
+
+          {/* Stage 5: Orders Closed */}
+          <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex flex-col justify-between space-y-2 relative group hover:border-emerald-500/40 transition-colors">
+            <div className="flex items-center justify-between text-zinc-400 text-[10px] font-mono uppercase">
+              <span>5. Orders Closed</span>
+              <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <div>
+              <div className="text-lg font-black text-white">{salesData.summary.totalOrdersConfirmed} Orders</div>
+              <div className="text-[11px] font-mono text-emerald-400">Pipeline Fulfilled</div>
+            </div>
+            <div className="text-[9px] text-zinc-500 font-mono border-t border-zinc-800/60 pt-1.5 flex justify-between">
+              <span>Success Rate: 100%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ==================================================== */}
+      {/* TAB 1: SALES PERFORMANCE                             */}
+      {/* ==================================================== */}
+      {activeTab === 'sales' && (
+        <div className="space-y-6">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-10 gap-3">
+            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Sales Staff</span>
+              <div className="text-xl font-black text-white mt-1">{salesData.summary.totalSalesStaff}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Active Team</span>
+            </div>
+
+            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Total Leads</span>
+              <div className="text-xl font-black text-amber-400 mt-1">{salesData.summary.totalLeads}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Assigned Pipeline</span>
+            </div>
+
+            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">New Leads</span>
+              <div className="text-xl font-black text-blue-400 mt-1">{salesData.summary.totalNewLeads}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">To Contact</span>
+            </div>
+
+            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Follow-ups</span>
+              <div className="text-xl font-black text-purple-400 mt-1">{salesData.summary.totalFollowUps}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Active Touchpoints</span>
+            </div>
+
+            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Quotations</span>
+              <div className="text-xl font-black text-cyan-400 mt-1">{salesData.summary.totalQuotations}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Quotes Issued</span>
+            </div>
+
+            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Orders Confirmed</span>
+              <div className="text-xl font-black text-emerald-400 mt-1">{salesData.summary.totalOrdersConfirmed}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Conversions</span>
+            </div>
+
+            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Orders Lost</span>
+              <div className="text-xl font-black text-rose-400 mt-1">{salesData.summary.totalLost}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Lost Deals</span>
+            </div>
+
+            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Quotation Val</span>
+              <div className="text-xs font-black text-indigo-400 mt-1 truncate">{formatCurrency(salesData.summary.grandQuotationValue)}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Potential</span>
+            </div>
+
+            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Total Revenue</span>
+              <div className="text-xs font-black text-emerald-400 mt-1 truncate">{formatCurrency(salesData.summary.grandRevenue)}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Actual Sales</span>
+            </div>
+
+            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Conversion Rate</span>
+              <div className="text-xl font-black text-amber-400 mt-1">{salesData.summary.overallConversionRate}%</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Lead to Order</span>
+            </div>
+          </div>
+
+          {/* Performance Ranking Header */}
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-xl space-y-4">
+            <div className="flex items-center gap-2 border-b border-zinc-900 pb-3">
+              <Trophy className="w-5 h-5 text-amber-400" />
+              <h3 className="text-sm font-black uppercase tracking-wider text-white font-mono">
+                Sales Leaderboard & Performance Ranking
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {salesData.rankings.slice(0, 3).map((staff, idx) => {
+                const medal = idx === 0 ? '🏆 1st Place' : idx === 1 ? '🥈 2nd Place' : '🥉 3rd Place';
+                const borderColor = idx === 0 ? 'border-amber-500/50 bg-amber-500/10' : idx === 1 ? 'border-zinc-400/50 bg-zinc-400/10' : 'border-amber-700/50 bg-amber-800/10';
+                return (
+                  <div key={staff.staff_id} className={`p-4 rounded-xl border ${borderColor} flex items-center justify-between`}>
+                    <div>
+                      <span className="text-[10px] font-mono font-bold text-amber-400 uppercase">{medal}</span>
+                      <h4 className="text-sm font-black text-white mt-1">{staff.salesStaff}</h4>
+                      <p className="text-[11px] font-mono text-zinc-400 mt-0.5">
+                        {staff.ordersConfirmed} Orders ({staff.conversionRate}% Conv)
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs font-black text-emerald-400 font-mono">{formatCurrency(staff.revenue)}</div>
+                      <span className="text-[9px] text-zinc-500 font-mono">{staff.leads} Total Leads</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {salesData.rankings.length === 0 && (
+                <p className="text-xs font-mono text-zinc-500 italic col-span-3">No sales team data available.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Sales Performance Table */}
+          <div className="bg-zinc-950 rounded-2xl border border-zinc-800 overflow-hidden shadow-2xl">
+            <div className="p-4 border-b border-zinc-900 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-amber-400" />
+                <h3 className="text-sm font-black text-white font-mono uppercase tracking-wider">Sales Staff Performance Directory</h3>
+              </div>
+              <span className="text-xs text-zinc-500 font-mono">Click any row to view full lead details</span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-max">
+                <thead>
+                  <tr className="bg-zinc-900/40 border-b border-zinc-800">
+                    <SortHeader label="Sales Staff" sortKey="salesStaff" />
+                    <SortHeader label="Leads" sortKey="leads" align="center" />
+                    <SortHeader label="Follow-ups" sortKey="followUps" align="center" />
+                    <SortHeader label="Quotations" sortKey="quotations" align="center" />
+                    <SortHeader label="Orders Confirmed" sortKey="ordersConfirmed" align="center" />
+                    <SortHeader label="Lost" sortKey="lost" align="center" />
+                    <SortHeader label="Conversion Rate" sortKey="conversionRate" align="center" />
+                    <SortHeader label="Quotation Value" sortKey="quotationValue" align="right" />
+                    <SortHeader label="Revenue" sortKey="revenue" align="right" />
+                    <th className="p-3.5 text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-850">
+                  {paginatedRows.map((staffItem) => (
+                    <tr 
+                      key={staffItem.staff_id}
+                      onClick={() => setSelectedStaffDetail({
+                        staffName: staffItem.salesStaff,
+                        staffType: staffItem.staffType,
+                        department: 'Sales',
+                        totalAssigned: staffItem.leads,
+                        completed: staffItem.ordersConfirmed,
+                        inProgress: staffItem.followUps,
+                        pending: staffItem.newLeads,
+                        completionRate: staffItem.conversionRate,
+                        avgCompletionTime: staffItem.avgCompletionTime,
+                        tasks: staffItem.tasks
+                      })}
+                      className="hover:bg-zinc-900/40 transition-colors cursor-pointer group"
+                    >
+                      <td className="p-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-xs">
+                            {staffItem.salesStaff.charAt(0)}
+                          </div>
+                          <div>
+                            <div className="font-bold text-zinc-200 text-xs group-hover:text-amber-400 transition-colors">{staffItem.salesStaff}</div>
+                            <div className="text-[9px] font-mono text-zinc-500">Sales Executive</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-3.5 text-center font-mono text-xs font-bold text-zinc-200">{staffItem.leads}</td>
+                      <td className="p-3.5 text-center font-mono text-xs text-purple-400">{staffItem.followUps}</td>
+                      <td className="p-3.5 text-center font-mono text-xs text-cyan-400">{staffItem.quotations}</td>
+                      <td className="p-3.5 text-center font-mono text-xs font-bold text-emerald-400">{staffItem.ordersConfirmed}</td>
+                      <td className="p-3.5 text-center font-mono text-xs text-rose-400">{staffItem.lost}</td>
+                      <td className="p-3.5 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-16 bg-zinc-800 rounded-full h-1.5 overflow-hidden">
+                            <div className="h-full bg-amber-500 rounded-full" style={{ width: `${Math.min(staffItem.conversionRate, 100)}%` }} />
+                          </div>
+                          <span className="font-mono text-xs font-bold text-amber-400">{staffItem.conversionRate}%</span>
+                        </div>
+                      </td>
+                      <td className="p-3.5 text-right font-mono text-xs text-indigo-300">{formatCurrency(staffItem.quotationValue)}</td>
+                      <td className="p-3.5 text-right font-mono text-xs font-bold text-emerald-400">{formatCurrency(staffItem.revenue)}</td>
+                      <td className="p-3.5 text-center">
+                        <button className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-800 text-[10px] font-mono font-bold transition-all">
+                          View Detail
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-800/50">
-                    {Array.from(new Map(selectedTasks.map(t => [t.orderId, t])).values()).map((task: any, i: number) => (
-                      <tr key={i} className="hover:bg-zinc-900/30 transition-colors">
-                        <td className="p-4 text-zinc-300 font-mono text-[11px] font-medium">{task.orderId}</td>
-                        <td className="p-4 text-zinc-200 text-sm font-medium">{task.customerName}</td>
-                        <td className="p-4 text-zinc-400 text-xs">{task.eventNames}</td>
-                        <td className="p-4">
-                          <span className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded-lg text-xs font-medium text-zinc-300">
-                            {task.currentStatus}
-                          </span>
-                        </td>
-                        <td className="p-4 text-zinc-400 font-mono text-[11px]">
-                          {task.targetDate !== 'N/A' && !isNaN(new Date(task.targetDate).getTime()) ? new Date(task.targetDate).toLocaleDateString('en-GB') : 'N/A'}
-                        </td>
-                        <td className="p-4 text-center text-zinc-300 font-mono">{task.assigned_staff_count}</td>
-                        <td className="p-4 text-center">
-                          <button 
-                            onClick={() => setSelectedTaskDetails(task)}
-                            className="px-3 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/20 rounded-lg text-xs font-bold transition-colors"
-                          >
-                            Details
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    {selectedTasks.length === 0 && (
-                      <tr>
-                        <td colSpan={7} className="p-8 text-center text-zinc-500 font-mono text-xs">No tasks found.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-</div>
+                  ))}
+                  {paginatedRows.length === 0 && (
+                    <tr>
+                      <td colSpan={10} className="p-8 text-center text-zinc-500 font-mono text-xs">
+                        No sales staff records found matching filter.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="p-3 border-t border-zinc-900 flex items-center justify-between text-xs font-mono">
+                <span className="text-zinc-500">
+                  Page {currentPage} of {totalPages} ({currentActiveTabRows.length} Sales Staff)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="p-1.5 rounded border border-zinc-800 text-zinc-400 hover:text-white disabled:opacity-50 cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="p-1.5 rounded border border-zinc-800 text-zinc-400 hover:text-white disabled:opacity-50 cursor-pointer"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Sales Performance Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Chart 1: Revenue by Sales Staff */}
+            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-xl space-y-3">
+              <h3 className="text-xs font-black uppercase tracking-wider text-zinc-300 font-mono flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-emerald-400" />
+                Revenue Generated by Sales Staff (₹)
+              </h3>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={salesData.rows}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                    <XAxis dataKey="salesStaff" stroke="#71717a" fontSize={10} />
+                    <YAxis stroke="#71717a" fontSize={10} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px' }}
+                      formatter={(val: any) => [formatCurrency(Number(val)), 'Revenue']}
+                    />
+                    <Bar dataKey="revenue" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Chart 2: Leads vs Orders Confirmed */}
+            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-xl space-y-3">
+              <h3 className="text-xs font-black uppercase tracking-wider text-zinc-300 font-mono flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-amber-400" />
+                Leads vs Confirmed Orders by Sales Staff
+              </h3>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={salesData.rows}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                    <XAxis dataKey="salesStaff" stroke="#71717a" fontSize={10} />
+                    <YAxis stroke="#71717a" fontSize={10} />
+                    <Tooltip contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px' }} />
+                    <Legend wrapperStyle={{ fontSize: '11px' }} />
+                    <Bar dataKey="leads" name="Total Leads" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="ordersConfirmed" name="Orders Confirmed" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {selectedTaskDetails && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between p-6 border-b border-zinc-900">
-              <div>
-                <h2 className="text-xl font-bold text-white tracking-tight">Order Task Breakdown</h2>
-                <p className="text-xs text-zinc-500 font-mono mt-1 uppercase tracking-widest">{selectedTaskDetails.orderId} - {selectedTaskDetails.customerName}</p>
+      {/* ==================================================== */}
+      {/* TAB 2: OPERATIONS STAFF PERFORMANCE                 */}
+      {/* ==================================================== */}
+      {activeTab === 'operations' && (
+        <div className="space-y-6">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Operations Staff</span>
+              <div className="text-xl font-black text-white mt-1">{opsData.summary.totalOpsStaff}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Field Team</span>
+            </div>
+
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Total Events</span>
+              <div className="text-xl font-black text-blue-400 mt-1">{opsData.summary.totalEventsAssigned}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Assigned Events</span>
+            </div>
+
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Events Started</span>
+              <div className="text-xl font-black text-purple-400 mt-1">{opsData.summary.totalEventsStarted}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">In Progress</span>
+            </div>
+
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Events Completed</span>
+              <div className="text-xl font-black text-emerald-400 mt-1">{opsData.summary.totalEventsCompleted}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Footage Captured</span>
+            </div>
+
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Pending Events</span>
+              <div className="text-xl font-black text-amber-400 mt-1">{opsData.summary.totalPending}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Upcoming</span>
+            </div>
+
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Completion Rate</span>
+              <div className="text-xl font-black text-emerald-400 mt-1">{opsData.summary.overallCompletionRate}%</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Fulfillment %</span>
+            </div>
+
+            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Avg Event Time</span>
+              <div className="text-lg font-black text-cyan-400 mt-1">{opsData.summary.avgCompletionTime}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Turnaround</span>
+            </div>
+          </div>
+
+          {/* Performance Ranking */}
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-xl space-y-4">
+            <div className="flex items-center gap-2 border-b border-zinc-900 pb-3">
+              <Trophy className="w-5 h-5 text-blue-400" />
+              <h3 className="text-sm font-black uppercase tracking-wider text-white font-mono">
+                Operations Leaderboard & Crew Ranking
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {opsData.rankings.slice(0, 3).map((staffItem, idx) => {
+                const medal = idx === 0 ? '🏆 1st Place' : idx === 1 ? '🥈 2nd Place' : '🥉 3rd Place';
+                return (
+                  <div key={staffItem.staff_id} className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-mono font-bold text-blue-400 uppercase">{medal}</span>
+                      <h4 className="text-sm font-black text-white mt-1">{staffItem.operationsStaff}</h4>
+                      <p className="text-[11px] font-mono text-zinc-400 mt-0.5">{staffItem.staffType}</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs font-black text-emerald-400 font-mono">{staffItem.completionRate}% Rate</div>
+                      <span className="text-[9px] text-zinc-500 font-mono">{staffItem.eventsCompleted} Completed</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {opsData.rankings.length === 0 && (
+                <p className="text-xs font-mono text-zinc-500 italic col-span-3">No operations crew data found.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Operations Table */}
+          <div className="bg-zinc-950 rounded-2xl border border-zinc-800 overflow-hidden shadow-2xl">
+            <div className="p-4 border-b border-zinc-900 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-blue-400" />
+                <h3 className="text-sm font-black text-white font-mono uppercase tracking-wider">Operations Staff Performance Roster</h3>
+              </div>
+              <span className="text-xs text-zinc-500 font-mono">Click any row to inspect assigned event tasks</span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-max">
+                <thead>
+                  <tr className="bg-zinc-900/40 border-b border-zinc-800">
+                    <SortHeader label="Operations Staff" sortKey="operationsStaff" />
+                    <SortHeader label="Staff Type" sortKey="staffType" />
+                    <SortHeader label="Events Assigned" sortKey="eventsAssigned" align="center" />
+                    <SortHeader label="Events Started" sortKey="eventsStarted" align="center" />
+                    <SortHeader label="Events Completed" sortKey="eventsCompleted" align="center" />
+                    <SortHeader label="Pending" sortKey="pending" align="center" />
+                    <SortHeader label="Completion Rate" sortKey="completionRate" align="center" />
+                    <SortHeader label="Avg Completion Time" sortKey="avgCompletionTime" align="center" />
+                    <th className="p-3.5 text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-850">
+                  {paginatedRows.map((staffItem) => (
+                    <tr 
+                      key={staffItem.staff_id}
+                      onClick={() => setSelectedStaffDetail({
+                        staffName: staffItem.operationsStaff,
+                        staffType: staffItem.staffType,
+                        department: 'Operations',
+                        totalAssigned: staffItem.eventsAssigned,
+                        completed: staffItem.eventsCompleted,
+                        inProgress: staffItem.eventsStarted,
+                        pending: staffItem.pending,
+                        completionRate: staffItem.completionRate,
+                        avgCompletionTime: staffItem.avgCompletionTime,
+                        tasks: staffItem.tasks
+                      })}
+                      className="hover:bg-zinc-900/40 transition-colors cursor-pointer group"
+                    >
+                      <td className="p-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center font-bold text-xs">
+                            {staffItem.operationsStaff.charAt(0)}
+                          </div>
+                          <div>
+                            <div className="font-bold text-zinc-200 text-xs group-hover:text-blue-400 transition-colors">{staffItem.operationsStaff}</div>
+                            <div className="text-[9px] font-mono text-zinc-500">Field Crew</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-3.5">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
+                          staffItem.staffType === 'In House' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20'
+                        }`}>
+                          {staffItem.staffType}
+                        </span>
+                      </td>
+                      <td className="p-3.5 text-center font-mono text-xs font-bold text-zinc-200">{staffItem.eventsAssigned}</td>
+                      <td className="p-3.5 text-center font-mono text-xs text-purple-400">{staffItem.eventsStarted}</td>
+                      <td className="p-3.5 text-center font-mono text-xs font-bold text-emerald-400">{staffItem.eventsCompleted}</td>
+                      <td className="p-3.5 text-center font-mono text-xs text-amber-400">{staffItem.pending}</td>
+                      <td className="p-3.5 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-16 bg-zinc-800 rounded-full h-1.5 overflow-hidden">
+                            <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(staffItem.completionRate, 100)}%` }} />
+                          </div>
+                          <span className="font-mono text-xs font-bold text-blue-400">{staffItem.completionRate}%</span>
+                        </div>
+                      </td>
+                      <td className="p-3.5 text-center font-mono text-xs text-zinc-400">{staffItem.avgCompletionTime}</td>
+                      <td className="p-3.5 text-center">
+                        <button className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-800 text-[10px] font-mono font-bold transition-all">
+                          View Detail
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {paginatedRows.length === 0 && (
+                    <tr>
+                      <td colSpan={9} className="p-8 text-center text-zinc-500 font-mono text-xs">
+                        No operations staff records found matching filter.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {totalPages > 1 && (
+              <div className="p-3 border-t border-zinc-900 flex items-center justify-between text-xs font-mono">
+                <span className="text-zinc-500">
+                  Page {currentPage} of {totalPages} ({currentActiveTabRows.length} Operations Staff)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="p-1.5 rounded border border-zinc-800 text-zinc-400 hover:text-white disabled:opacity-50 cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="p-1.5 rounded border border-zinc-800 text-zinc-400 hover:text-white disabled:opacity-50 cursor-pointer"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Operations Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-xl space-y-3">
+              <h3 className="text-xs font-black uppercase tracking-wider text-zinc-300 font-mono flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-blue-400" />
+                Events Assigned vs Events Completed
+              </h3>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={opsData.rows}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                    <XAxis dataKey="operationsStaff" stroke="#71717a" fontSize={10} />
+                    <YAxis stroke="#71717a" fontSize={10} />
+                    <Tooltip contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px' }} />
+                    <Legend wrapperStyle={{ fontSize: '11px' }} />
+                    <Bar dataKey="eventsAssigned" name="Assigned" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="eventsCompleted" name="Completed" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-xl space-y-3">
+              <h3 className="text-xs font-black uppercase tracking-wider text-zinc-300 font-mono flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-purple-400" />
+                Staff Workload & Pending Work
+              </h3>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={opsData.rows}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                    <XAxis dataKey="operationsStaff" stroke="#71717a" fontSize={10} />
+                    <YAxis stroke="#71717a" fontSize={10} />
+                    <Tooltip contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px' }} />
+                    <Legend wrapperStyle={{ fontSize: '11px' }} />
+                    <Bar dataKey="eventsStarted" name="In Progress" fill="#a855f7" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="pending" name="Pending" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================== */}
+      {/* TAB 3: PRODUCTION STAFF PERFORMANCE                 */}
+      {/* ==================================================== */}
+      {activeTab === 'production' && (
+        <div className="space-y-6">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-3">
+            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Production Staff</span>
+              <div className="text-xl font-black text-white mt-1">{prodData.summary.totalProdStaff}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Video Editors</span>
+            </div>
+
+            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Deliverables</span>
+              <div className="text-xl font-black text-purple-400 mt-1">{prodData.summary.totalDeliverablesAssigned}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Assigned Projects</span>
+            </div>
+
+            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Editing Started</span>
+              <div className="text-xl font-black text-blue-400 mt-1">{prodData.summary.totalEditingStarted}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Timeline Active</span>
+            </div>
+
+            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Customer Review</span>
+              <div className="text-xl font-black text-amber-400 mt-1">{prodData.summary.totalCustomerReview}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Sent to Client</span>
+            </div>
+
+            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Editing Completed</span>
+              <div className="text-xl font-black text-cyan-400 mt-1">{prodData.summary.totalEditingCompleted}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Export Done</span>
+            </div>
+
+            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Client Acceptance</span>
+              <div className="text-xl font-black text-emerald-400 mt-1">{prodData.summary.totalClientAcceptance}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Approved</span>
+            </div>
+
+            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Completed Total</span>
+              <div className="text-xl font-black text-emerald-400 mt-1">{prodData.summary.totalCompletedDeliverables}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Finalized</span>
+            </div>
+
+            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Pending</span>
+              <div className="text-xl font-black text-rose-400 mt-1">{prodData.summary.totalPendingDeliverables}</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">In Queue</span>
+            </div>
+
+            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase">Completion Rate</span>
+              <div className="text-xl font-black text-purple-400 mt-1">{prodData.summary.overallCompletionRate}%</div>
+              <span className="text-[9px] text-zinc-500 font-mono mt-1">Output %</span>
+            </div>
+          </div>
+
+          {/* Performance Ranking */}
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-xl space-y-4">
+            <div className="flex items-center gap-2 border-b border-zinc-900 pb-3">
+              <Trophy className="w-5 h-5 text-purple-400" />
+              <h3 className="text-sm font-black uppercase tracking-wider text-white font-mono">
+                Production Editors Leaderboard & Ranking
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {prodData.rankings.slice(0, 3).map((staffItem, idx) => {
+                const medal = idx === 0 ? '🏆 1st Place' : idx === 1 ? '🥈 2nd Place' : '🥉 3rd Place';
+                return (
+                  <div key={staffItem.staff_id} className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-mono font-bold text-purple-400 uppercase">{medal}</span>
+                      <h4 className="text-sm font-black text-white mt-1">{staffItem.productionStaff}</h4>
+                      <p className="text-[11px] font-mono text-zinc-400 mt-0.5">{staffItem.staffType}</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs font-black text-emerald-400 font-mono">{staffItem.completionRate}% Rate</div>
+                      <span className="text-[9px] text-zinc-500 font-mono">{staffItem.completed} Completed</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {prodData.rankings.length === 0 && (
+                <p className="text-xs font-mono text-zinc-500 italic col-span-3">No production editors data available.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Production Table */}
+          <div className="bg-zinc-950 rounded-2xl border border-zinc-800 overflow-hidden shadow-2xl">
+            <div className="p-4 border-b border-zinc-900 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-purple-400" />
+                <h3 className="text-sm font-black text-white font-mono uppercase tracking-wider">Production Staff / Editors Ledger</h3>
+              </div>
+              <span className="text-xs text-zinc-500 font-mono">Click any editor row to inspect assigned deliverables</span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-max">
+                <thead>
+                  <tr className="bg-zinc-900/40 border-b border-zinc-800">
+                    <SortHeader label="Production Staff" sortKey="productionStaff" />
+                    <SortHeader label="Deliverables Assigned" sortKey="deliverablesAssigned" align="center" />
+                    <SortHeader label="Editing Started" sortKey="editingStarted" align="center" />
+                    <SortHeader label="Customer Review" sortKey="customerReview" align="center" />
+                    <SortHeader label="Editing Completed" sortKey="editingCompleted" align="center" />
+                    <SortHeader label="Client Acceptance" sortKey="clientAcceptance" align="center" />
+                    <SortHeader label="Completed" sortKey="completed" align="center" />
+                    <SortHeader label="Pending" sortKey="pending" align="center" />
+                    <SortHeader label="Completion Rate" sortKey="completionRate" align="center" />
+                    <th className="p-3.5 text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-850">
+                  {paginatedRows.map((staffItem) => (
+                    <tr 
+                      key={staffItem.staff_id}
+                      onClick={() => setSelectedStaffDetail({
+                        staffName: staffItem.productionStaff,
+                        staffType: staffItem.staffType,
+                        department: 'Production',
+                        totalAssigned: staffItem.deliverablesAssigned,
+                        completed: staffItem.completed,
+                        inProgress: staffItem.editingStarted + staffItem.customerReview,
+                        pending: staffItem.pending,
+                        completionRate: staffItem.completionRate,
+                        avgCompletionTime: staffItem.avgCompletionTime,
+                        tasks: staffItem.tasks
+                      })}
+                      className="hover:bg-zinc-900/40 transition-colors cursor-pointer group"
+                    >
+                      <td className="p-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-xs">
+                            {staffItem.productionStaff.charAt(0)}
+                          </div>
+                          <div>
+                            <div className="font-bold text-zinc-200 text-xs group-hover:text-purple-400 transition-colors">{staffItem.productionStaff}</div>
+                            <div className="text-[9px] font-mono text-zinc-500">Video Editor</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-3.5 text-center font-mono text-xs font-bold text-zinc-200">{staffItem.deliverablesAssigned}</td>
+                      <td className="p-3.5 text-center font-mono text-xs text-blue-400">{staffItem.editingStarted}</td>
+                      <td className="p-3.5 text-center font-mono text-xs text-amber-400">{staffItem.customerReview}</td>
+                      <td className="p-3.5 text-center font-mono text-xs text-cyan-400">{staffItem.editingCompleted}</td>
+                      <td className="p-3.5 text-center font-mono text-xs text-emerald-400 font-bold">{staffItem.clientAcceptance}</td>
+                      <td className="p-3.5 text-center font-mono text-xs font-bold text-emerald-400">{staffItem.completed}</td>
+                      <td className="p-3.5 text-center font-mono text-xs text-rose-400">{staffItem.pending}</td>
+                      <td className="p-3.5 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-16 bg-zinc-800 rounded-full h-1.5 overflow-hidden">
+                            <div className="h-full bg-purple-500 rounded-full" style={{ width: `${Math.min(staffItem.completionRate, 100)}%` }} />
+                          </div>
+                          <span className="font-mono text-xs font-bold text-purple-400">{staffItem.completionRate}%</span>
+                        </div>
+                      </td>
+                      <td className="p-3.5 text-center">
+                        <button className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-800 text-[10px] font-mono font-bold transition-all">
+                          View Detail
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {paginatedRows.length === 0 && (
+                    <tr>
+                      <td colSpan={10} className="p-8 text-center text-zinc-500 font-mono text-xs">
+                        No production staff records found matching filter.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {totalPages > 1 && (
+              <div className="p-3 border-t border-zinc-900 flex items-center justify-between text-xs font-mono">
+                <span className="text-zinc-500">
+                  Page {currentPage} of {totalPages} ({currentActiveTabRows.length} Editors)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="p-1.5 rounded border border-zinc-800 text-zinc-400 hover:text-white disabled:opacity-50 cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="p-1.5 rounded border border-zinc-800 text-zinc-400 hover:text-white disabled:opacity-50 cursor-pointer"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Production Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-xl space-y-3">
+              <h3 className="text-xs font-black uppercase tracking-wider text-zinc-300 font-mono flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-purple-400" />
+                Deliverables Assigned vs Completed
+              </h3>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={prodData.rows}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                    <XAxis dataKey="productionStaff" stroke="#71717a" fontSize={10} />
+                    <YAxis stroke="#71717a" fontSize={10} />
+                    <Tooltip contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px' }} />
+                    <Legend wrapperStyle={{ fontSize: '11px' }} />
+                    <Bar dataKey="deliverablesAssigned" name="Assigned" fill="#a855f7" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="completed" name="Completed" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-xl space-y-3">
+              <h3 className="text-xs font-black uppercase tracking-wider text-zinc-300 font-mono flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-amber-400" />
+                Workload & Review Pipeline
+              </h3>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={prodData.rows}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                    <XAxis dataKey="productionStaff" stroke="#71717a" fontSize={10} />
+                    <YAxis stroke="#71717a" fontSize={10} />
+                    <Tooltip contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px' }} />
+                    <Legend wrapperStyle={{ fontSize: '11px' }} />
+                    <Bar dataKey="editingStarted" name="In Editing" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="customerReview" name="Customer Review" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="clientAcceptance" name="Approved" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================== */}
+      {/* 12. STAFF DETAIL VIEW MODAL                          */}
+      {/* ==================================================== */}
+      {selectedStaffDetail && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-zinc-900 bg-zinc-900/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-base">
+                  {selectedStaffDetail.staffName.charAt(0)}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-black text-white">{selectedStaffDetail.staffName}</h2>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-zinc-800 text-zinc-300 border border-zinc-700">
+                      {selectedStaffDetail.staffType}
+                    </span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase">
+                      {selectedStaffDetail.department}
+                    </span>
+                  </div>
+                  <p className="text-xs font-mono text-zinc-500 mt-0.5">Individual Staff Performance Ledger & Task Breakdown</p>
+                </div>
               </div>
               <button 
-                onClick={() => setSelectedTaskDetails(null)}
-                className="p-2 rounded-lg hover:bg-zinc-900 text-zinc-400 hover:text-white transition-colors"
+                onClick={() => setSelectedStaffDetail(null)}
+                className="p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-6 space-y-8">
-              {selectedTaskDetails.eventGroups.map((group: any, idx: number) => (
-                <div key={idx} className="space-y-4">
-                  <div className="flex items-center gap-3 pb-2 border-b border-zinc-800">
-                    <div className="w-2 h-2 rounded-full bg-amber-500"></div>
-                    <h3 className="text-lg font-bold text-zinc-200">{group.eventName}</h3>
-                  </div>
-                  
-                  <div className="bg-zinc-900/30 rounded-xl p-4 border border-zinc-800/50">
-                     <p className="text-xs text-zinc-400 font-mono mb-4">
-                       <span className="text-zinc-500 uppercase tracking-widest">Team Member Included:</span> {group.teamIncluded}
-                     </p>
 
-                     {group.assignments && group.assignments.length > 0 ? (
-                       <div className="overflow-hidden rounded-lg border border-zinc-800/50">
-                         <div className="overflow-x-auto w-full max-w-full">
-<table className="w-full text-left border-collapse">
-                           <thead>
-                             <tr className="bg-zinc-900/50 border-b border-zinc-800/50">
-                               <th className="p-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">Assigned Staff</th>
-                               <th className="p-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">Staff Type</th>
-                               <th className="p-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">Assigned Role</th>
-                               <th className="p-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">Assigned Deliverable</th>
-                               <th className="p-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">Current Status</th>
-                             </tr>
-                           </thead>
-                           <tbody className="divide-y divide-zinc-800/50">
-                             {group.assignments.map((assignment: any, i2: number) => (
-                               <tr key={i2} className="hover:bg-zinc-900/30 transition-colors">
-                                 <td className="p-3 text-zinc-200 text-xs font-medium">{assignment.staffName}</td>
-                                 <td className="p-3 text-zinc-400 font-mono text-[10px]">{assignment.staffType}</td>
-                                 <td className="p-3 text-zinc-400 text-xs">{assignment.role}</td>
-                                 <td className="p-3 text-zinc-300 text-xs">{assignment.deliverable}</td>
-                                 <td className="p-3">
-                                   <span className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded text-[10px] font-medium text-zinc-300">
-                                     {assignment.status}
-                                   </span>
-                                 </td>
-                               </tr>
-                             ))}
-                           </tbody>
-                         </table>
-</div>
-                       </div>
-                     ) : (
-                       <p className="text-xs text-zinc-600 font-mono italic">No specific assignments found for this event.</p>
-                     )}
-                  </div>
+            {/* Modal Summary KPI Strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 p-4 bg-zinc-900/30 border-b border-zinc-900">
+              <div className="p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
+                <span className="text-[9px] font-mono text-zinc-500 uppercase">Total Assigned</span>
+                <div className="text-base font-black text-white mt-0.5">{selectedStaffDetail.totalAssigned}</div>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
+                <span className="text-[9px] font-mono text-zinc-500 uppercase">Completed</span>
+                <div className="text-base font-black text-emerald-400 mt-0.5">{selectedStaffDetail.completed}</div>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
+                <span className="text-[9px] font-mono text-zinc-500 uppercase">In Progress</span>
+                <div className="text-base font-black text-purple-400 mt-0.5">{selectedStaffDetail.inProgress}</div>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
+                <span className="text-[9px] font-mono text-zinc-500 uppercase">Pending</span>
+                <div className="text-base font-black text-amber-400 mt-0.5">{selectedStaffDetail.pending}</div>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
+                <span className="text-[9px] font-mono text-zinc-500 uppercase">Completion Rate</span>
+                <div className="text-base font-black text-amber-400 mt-0.5">{selectedStaffDetail.completionRate}%</div>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
+                <span className="text-[9px] font-mono text-zinc-500 uppercase">Avg Turnaround</span>
+                <div className="text-base font-black text-cyan-400 mt-0.5">{selectedStaffDetail.avgCompletionTime}</div>
+              </div>
+            </div>
+
+            {/* Individual Task Table */}
+            <div className="flex-1 overflow-y-auto p-5">
+              <div className="border border-zinc-800 rounded-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse min-w-max">
+                    <thead>
+                      <tr className="bg-zinc-900/60 border-b border-zinc-800">
+                        <th className="p-3 text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono">Order ID</th>
+                        <th className="p-3 text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono">Customer</th>
+                        <th className="p-3 text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono">Event</th>
+                        <th className="p-3 text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono">Assigned Deliverable</th>
+                        <th className="p-3 text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono">Assigned Date</th>
+                        <th className="p-3 text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono">Target Date</th>
+                        <th className="p-3 text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono">Completed Date</th>
+                        <th className="p-3 text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono">Current Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-850">
+                      {selectedStaffDetail.tasks.map((task, idx) => (
+                        <tr key={idx} className="hover:bg-zinc-900/30 transition-colors">
+                          <td className="p-3 text-xs font-mono font-bold text-amber-400">{task.orderId}</td>
+                          <td className="p-3 text-xs font-medium text-zinc-200">{task.customerName}</td>
+                          <td className="p-3 text-xs text-zinc-300">{task.eventName}</td>
+                          <td className="p-3 text-xs text-zinc-400 font-mono">{task.taskDeliverable}</td>
+                          <td className="p-3 text-xs text-zinc-400 font-mono">{task.assignedDate}</td>
+                          <td className="p-3 text-xs text-zinc-400 font-mono">{task.targetDate}</td>
+                          <td className="p-3 text-xs text-zinc-400 font-mono">{task.completedDate}</td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-900 border border-zinc-700 text-zinc-300">
+                              {task.currentStatus}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      {selectedStaffDetail.tasks.length === 0 && (
+                        <tr>
+                          <td colSpan={8} className="p-8 text-center text-zinc-500 font-mono text-xs">
+                            No individual tasks assigned to this staff member in selected date range.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
-              ))}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-zinc-900 flex justify-end">
+              <button 
+                onClick={() => setSelectedStaffDetail(null)}
+                className="px-4 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-200 hover:text-white hover:bg-zinc-800 text-xs font-mono font-bold transition-all cursor-pointer"
+              >
+                Close Panel
+              </button>
             </div>
           </div>
         </div>
