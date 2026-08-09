@@ -1626,7 +1626,7 @@ ${coordinatorName}`;
     }
     
     // 2. Client Acceptance (After Client Acceptance popup submitted)
-    if (baseStatus === 'Client Acceptance') {
+    if (baseStatus === 'Client Acceptance' || (prod as any).production_status === 'Client Acceptance' || (prod as any).current_status === 'Client Acceptance') {
       return 'Client Acceptance';
     }
 

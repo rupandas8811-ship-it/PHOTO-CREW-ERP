@@ -1083,10 +1083,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       let updatedP = { ...p };
 
-      if (leadStatus) {
-        updatedP.editing_status = leadStatus as any;
-      } else if (ord) {
-        updatedP.editing_status = ord.current_stage as any;
+      if (!p.editing_status || p.editing_status === 'Pending') {
+        if (leadStatus) {
+          updatedP.editing_status = leadStatus as any;
+        } else if (ord) {
+          updatedP.editing_status = ord.current_stage as any;
+        }
       }
 
       if (leadEditor && leadEditor !== 'Unassigned') {
@@ -4359,11 +4361,15 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     // Set production state in Supabase
     try {
+      if (updates.editing_status) {
+        updates.production_status = updates.editing_status;
+        updates.current_status = updates.editing_status;
+      }
+
       if (targetProd) {
-        
         const rProd = await pushUpdate('production', 'production_id', targetProd.production_id, updates);
         if (!rProd?.success) {
-          console.warn("[updateProduction] DB operation failed for production table update, will fallback to Leads:", rProd?.error);
+          console.warn("[updateProduction] DB operation failed for production table update:", rProd?.error);
           throw new Error(rProd?.error || "DB operation failed for production table update");
         } else {
           setProduction(prev => prev.map(p => p.production_id === targetProd.production_id ? { ...p, ...updates } : p));
@@ -4384,7 +4390,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         };
         const rProd = await pushInsert('production', newProd);
         if (!rProd?.success) {
-          console.warn("[updateProduction] DB operation failed for production table insert, will fallback to Leads:", rProd?.error);
+          console.warn("[updateProduction] DB operation failed for production table insert:", rProd?.error);
           throw new Error(rProd?.error || "DB operation failed for production table insert");
         } else {
           setProduction(prev => [newProd, ...prev]);
@@ -4397,14 +4403,32 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     const actualTrackingId = targetProd ? targetProd.tracking_id : inferredTrackingId;
 
-    // Find linked order using all possible connections
-    let tgtOrder = augmentedOrders.find(o => o.order_id === actualTrackingId || o.lead_id === actualTrackingId);
+    // Find linked order using all possible connections (including order_id, lead_id on targetProd)
+    let tgtOrder = augmentedOrders.find(o => 
+      (targetProd && (o.order_id === (targetProd as any).order_id || o.lead_id === (targetProd as any).lead_id || o.order_id === targetProd.tracking_id || o.lead_id === targetProd.tracking_id)) ||
+      o.order_id === actualTrackingId || 
+      o.lead_id === actualTrackingId ||
+      o.order_id === inferredTrackingId ||
+      o.lead_id === inferredTrackingId ||
+      o.order_id === productionId ||
+      o.lead_id === productionId
+    );
     if (!tgtOrder) {
-      const rf = rawFootage.find(f => f.tracking_id === actualTrackingId || f.order_id === actualTrackingId);
+      const rf = rawFootage.find(f => f.tracking_id === actualTrackingId || f.order_id === actualTrackingId || (targetProd && f.tracking_id === targetProd.tracking_id));
       if (rf) {
         tgtOrder = augmentedOrders.find(o => o.order_id === rf.order_id);
       }
     }
+
+    // Find linked lead using all possible connections
+    let tgtLead = leads.find(l => 
+      (tgtOrder && l.lead_id === tgtOrder.lead_id) ||
+      (targetProd && (l.lead_id === (targetProd as any).lead_id || l.lead_id === targetProd.tracking_id)) ||
+      l.lead_id === actualTrackingId ||
+      l.lead_id === inferredTrackingId ||
+      l.lead_id === inferredTrackingId.replace('PRD-', '') ||
+      l.lead_id === productionId
+    );
 
     // Determine Stage to update on Order and Lead
     let nextStage: CurrentStage | null = null;
@@ -4418,7 +4442,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     // Map strings & enforce Business Owner Review before closure
     if (['Closed', 'Order Closed', 'Project Closed', 'Completed', 'Project Completed'].includes(nextStage as string)) {
-      const tgtLead = leads.find(l => l.lead_id === (tgtOrder?.lead_id || actualTrackingId));
       const tgtPayment = payments.find(p => p.order_id === (tgtOrder?.order_id || actualTrackingId) || p.lead_id === (tgtLead?.lead_id));
       
       const validation = performBusinessOwnerReview(tgtOrder, tgtLead, targetProd, tgtPayment);
@@ -4445,7 +4468,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       nextStage = 'Delivered';
     }
 
-    const leadIdToUpdate = tgtOrder?.lead_id || actualTrackingId;
+    const leadIdToUpdate = tgtLead?.lead_id || tgtOrder?.lead_id || (actualTrackingId.startsWith('PRD-') ? actualTrackingId.replace('PRD-', '') : actualTrackingId);
 
     if (nextStage && leadIdToUpdate) {
       const leadUpdates: any = {
@@ -4473,8 +4496,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       
       console.log("Updating lead:", leadIdToUpdate, leadUpdates);
       const rLead = await pushUpdate('leads', 'lead_id', leadIdToUpdate, leadUpdates);
-      if (!rLead?.success) {
-        throw new Error("Failed to update lead: " + rLead?.error);
+      if (rLead?.success) {
+        setLeads(prev => prev.map(l => l.lead_id === leadIdToUpdate ? { ...l, ...leadUpdates } : l));
+      } else {
+        console.warn("Lead update warning:", rLead?.error);
       }
     }
 
@@ -4491,9 +4516,36 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           updated_at: timestamp
         };
         const rOrd = await pushUpdate('orders', 'order_id', tgtOrder.order_id, ordUpdates);
-        if (!rOrd?.success) {
-          throw new Error("Failed to update order: " + rOrd?.error);
+        if (rOrd?.success) {
+          setOrders(prev => prev.map(o => o.order_id === tgtOrder!.order_id ? { ...o, ...ordUpdates } : o));
+        } else {
+          console.warn("Order stage update warning:", rOrd?.error);
         }
+      }
+    }
+
+    // Sync editor_assignments status if Client Acceptance
+    if (nextStage === 'Client Acceptance' || updates.editing_status === 'Client Acceptance') {
+      const pId = targetProd?.production_id || productionId;
+      const trkId = targetProd?.tracking_id || inferredTrackingId;
+      const oId = tgtOrder?.order_id;
+
+      const matchingAssignments = (editorAssignments || []).filter(a => 
+        a.production_id === pId || 
+        a.production_id === trkId || 
+        (oId && a.order_id === oId)
+      );
+
+      for (const assign of matchingAssignments) {
+        await pushUpdate('editor_assignments', 'assignment_id', assign.assignment_id, { status: 'Client Acceptance' });
+      }
+
+      if (matchingAssignments.length > 0) {
+        setEditorAssignments(prev => prev.map(a => 
+          (a.production_id === pId || a.production_id === trkId || (oId && a.order_id === oId))
+            ? { ...a, status: 'Client Acceptance' }
+            : a
+        ));
       }
     }
 
