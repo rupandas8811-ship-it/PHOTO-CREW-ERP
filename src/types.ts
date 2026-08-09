@@ -514,8 +514,13 @@ export interface EditorAssignment {
   speciality: string;
   assigned_date: string;
   target_finish_date: string;
-  status: 'Assigned' | 'Editing Started' | 'Client Review' | 'Editing Complete' | 'In Progress' | 'Review Pending' | 'Revision' | 'Completed' | 'Project Completed';
+  status: 'Assigned' | 'Editing Started' | 'Customer Review' | 'Client Review' | 'Editing Complete' | 'Editing Completed' | 'In Progress' | 'Review Pending' | 'Revision' | 'Completed' | 'Project Completed';
   created_at?: string;
+  Edited_Drive_Link?: string;
+  edited_drive_link?: string;
+  order_id?: string;
+  event_id?: string;
+  deliverable_id?: string;
 }
 
 export interface StaffAssignment {

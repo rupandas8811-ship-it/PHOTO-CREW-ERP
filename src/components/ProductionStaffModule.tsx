@@ -275,7 +275,7 @@ export const ProductionStaffModule: React.FC = () => {
         const eventDate = (lead?.events?.[0]?.event_date || lead?.event_date || order?.event_date || prod?.event_date || '').trim();
 
         // Edited Drive Link resolution
-        const editedDriveLink = (assignment.edited_drive_link || prod?.edited_drive_link || '').trim();
+        const editedDriveLink = (assignment.Edited_Drive_Link || assignment.edited_drive_link || prod?.edited_drive_link || '').trim();
 
         individualDeliverables.push({
             assignmentId: assignment.assignment_id,
@@ -485,13 +485,17 @@ export const ProductionStaffModule: React.FC = () => {
       for (const deliv of deliverablesToUpdate) {
         await updateEditorAssignmentStatus(deliv.assignmentId, 'Customer Review' as any);
 
-        // Save Edited Drive Link
-        await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, {
-          raw_footage_link: editedLink,
+        // Save Edited Drive Link directly into editor_assignments.Edited_Drive_Link
+        const saveRes = await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, {
+          Edited_Drive_Link: editedLink,
           edited_drive_link: editedLink,
           edited_link_uploaded_at: timestamp,
           status: 'Customer Review'
         });
+
+        if (saveRes && saveRes.success === false) {
+          throw new Error(saveRes.error || 'Failed to save Edited Drive Link to editor_assignments table');
+        }
       }
 
       const uniqueProdIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.prodObj?.production_id).filter(Boolean)));

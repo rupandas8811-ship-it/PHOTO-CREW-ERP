@@ -1666,6 +1666,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           if (resJson && resJson.success) {
             console.log(`[pushUpdate Proxy SUCCESS] for ${table}:`, resJson.data);
             updateDiagnosticMetric('update', 'ok');
+            if (table === 'editor_assignments') {
+              setEditorAssignments(prev => prev.map(a => a.assignment_id === finalMatchValue ? { ...a, ...sanitized } : a));
+            }
             if (table === 'leads') {
               const leadId = finalMatchValue;
               const prevLead = leads.find(l => l.lead_id === leadId);

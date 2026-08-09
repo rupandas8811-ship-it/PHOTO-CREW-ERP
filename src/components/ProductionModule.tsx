@@ -9069,8 +9069,34 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       
                       const statusText = (assignment.status === 'Assigned' || !assignment.status) ? 'Assigned Editor' : assignment.status;
 
-                      const linkStr = (assignment.edited_drive_link || prod.edited_drive_link || '').trim();
-                      const hasLink = linkStr && (linkStr.startsWith('http://') || linkStr.startsWith('https://') || linkStr.includes('drive.google.com') || linkStr.length > 5);
+                      // Extract specific link for this exact assignment/deliverable record
+                      const getSpecificAssignmentLink = (a: any): string => {
+                        if (!a) return '';
+                        const candidates = [
+                          a.Edited_Drive_Link,
+                          a.edited_drive_link,
+                          a.edited_link,
+                          a.upload_link,
+                          a.drive_link,
+                          a.edited_drive_url,
+                          a.customer_review_link,
+                          a.link,
+                          a.url,
+                          a.raw_footage_link
+                        ];
+                        for (const cand of candidates) {
+                          if (cand && typeof cand === 'string') {
+                            const trimmed = cand.trim();
+                            if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.includes('drive.google.com') || trimmed.includes('dropbox.com') || trimmed.includes('mega.nz') || trimmed.length > 10) {
+                              return trimmed;
+                            }
+                          }
+                        }
+                        return '';
+                      };
+
+                      const linkStr = getSpecificAssignmentLink(assignment);
+                      const hasLink = Boolean(linkStr);
 
                       return (
                         <tr key={assignment.assignment_id || idx} className="hover:bg-zinc-900/40 transition-colors">
@@ -9113,11 +9139,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:text-indigo-300 font-bold text-xs transition-colors cursor-pointer"
                                 title={linkStr}
                               >
-                                <span>View Link</span>
+                                <span>Open Link</span>
                                 <ExternalLink className="w-3.5 h-3.5" />
                               </a>
                             ) : (
-                              <span className="text-zinc-500 italic text-xs font-mono">Not Uploaded</span>
+                              <span className="text-zinc-500 italic text-xs font-mono">Pending Upload</span>
                             )}
                           </td>
                         </tr>
