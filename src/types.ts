@@ -425,11 +425,15 @@ export interface Production {
   raw_footage_status?: string;
   target_delivery_date?: string;
   actual_delivery_date?: string;
-  production_status?: 'New Project' | 'Footage Received' | 'Editor Assigned' | 'Editing Started' | 'In Progress' | 'Customer Review' | 'Revision Required' | 'Approved' | 'Delivered' | 'Closed' | 'Project Completed' | 'Project Cancelled';
+  production_status?: 'New Project' | 'Footage Received' | 'Editor Assigned' | 'Editing Started' | 'In Progress' | 'Customer Review' | 'Revision Required' | 'Approved' | 'Delivered' | 'Closed' | 'Project Completed' | 'Project Cancelled' | 'Order Closed';
   approval_status?: string;
   editing_progress?: string;
   delivery_link?: string;
   client_communication_proof?: string;
+  event_id?: string;
+  custom_event_name?: string;
+  event_date?: string;
+  event_time?: string;
 }
 
 export interface Payment {

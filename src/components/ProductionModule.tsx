@@ -876,33 +876,55 @@ ${coordinatorName}`;
       const prod = cand.prod;
       const rf = cand.rawFootage;
 
-      const defaultTargetDate = (order?.event_date || l?.event_date) ? 
-        new Date(new Date(order?.event_date || l?.event_date).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : '';
-
       const trackingId = order?.order_id || rf?.tracking_id || prod?.tracking_id || l?.lead_id || cand.key;
       const prodId = prod?.production_id || `PRD-${trackingId}`;
 
       const computedStatus = prod?.editing_status || prod?.production_status || order?.current_stage || (l as any)?.current_status || l?.status || 'Verified Footage';
 
-      const candidateObj = {
-        ...(prod || {}),
-        production_id: prodId,
-        tracking_id: trackingId,
-        order_id: order?.order_id || prod?.order_id || trackingId,
-        lead_id: l?.lead_id || order?.lead_id || trackingId,
-        customer_name: order?.customer_name || l?.customer_name || prod?.customer_name || 'Client',
-        customer_mobile: order?.customer_phone || order?.mobile || l?.mobile || prod?.customer_mobile || '',
-        editor_assigned: prod?.editor_assigned || (l as any)?.assigned_editor || 'Unassigned',
-        assigned_staff: prod?.assigned_staff || (l as any)?.assigned_editors || '',
-        raw_footage_location: prod?.raw_footage_location || rf?.server_path || order?.raw_footage_link || '',
-        editing_status: computedStatus,
-        remarks: prod?.remarks || l?.remarks || order?.remarks || '',
-        project_priority: prod?.project_priority || 'Medium',
-        target_delivery_date: prod?.target_delivery_date || (l as any)?.delivery_target_date || defaultTargetDate,
-        expected_delivery_date: prod?.expected_delivery_date || prod?.target_delivery_date || (l as any)?.delivery_target_date || defaultTargetDate
-      };
+      const events = (l?.events && Array.isArray(l.events) && l.events.length > 0) ? l.events : [null];
 
-      candidatesList.push(candidateObj);
+      events.forEach((evt: any) => {
+        const evtId = evt ? evt.id : (prod?.event_id || order?.event_type || l?.event_type || 'EVT-01');
+        const evtName = evt ? (evt.event_name || evt.event_type || '') : '';
+        
+        const evtAssignments = cand.assignments?.filter((ea: any) => !evt || !ea.event_id || ea.event_id === evtId) || [];
+        
+        const evtDate = evt ? evt.event_date : (order?.event_date || l?.event_date || '');
+        const defaultTargetDate = evtDate ? new Date(new Date(evtDate).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : '';
+        
+        let computedTargetDate = defaultTargetDate;
+        if (evtAssignments.length > 0 && evtAssignments[0].target_finish_date) {
+            computedTargetDate = evtAssignments[0].target_finish_date;
+        } else if (prod?.target_delivery_date) {
+            computedTargetDate = prod.target_delivery_date;
+        } else if ((l as any)?.delivery_target_date) {
+            computedTargetDate = (l as any)?.delivery_target_date;
+        }
+
+        const candidateObj = {
+          ...(prod || {}),
+          production_id: prodId,
+          tracking_id: trackingId,
+          order_id: order?.order_id || prod?.order_id || trackingId,
+          lead_id: l?.lead_id || order?.lead_id || trackingId,
+          event_id: evtId,
+          custom_event_name: evtName,
+          customer_name: order?.customer_name || l?.customer_name || prod?.customer_name || 'Client',
+          customer_mobile: order?.customer_phone || order?.mobile || l?.mobile || prod?.customer_mobile || '',
+          editor_assigned: prod?.editor_assigned || (l as any)?.assigned_editor || 'Unassigned',
+          assigned_staff: prod?.assigned_staff || (l as any)?.assigned_editors || '',
+          raw_footage_location: prod?.raw_footage_location || rf?.server_path || order?.raw_footage_link || '',
+          editing_status: computedStatus,
+          remarks: prod?.remarks || l?.remarks || order?.remarks || '',
+          project_priority: prod?.project_priority || 'Medium',
+          target_delivery_date: computedTargetDate,
+          expected_delivery_date: prod?.expected_delivery_date || computedTargetDate,
+          event_date: evtDate,
+          event_time: evt ? evt.event_time : (order?.event_time || l?.event_time || ''),
+        };
+
+        candidatesList.push(candidateObj);
+      });
     }
 
     candidatesList.sort((a, b) => {
@@ -1940,9 +1962,9 @@ Production Team`;
         deliverablesText = targetLatestQuote.deliverables_description || '';
       }
     }
-    const parsedDeliverables = parseExactDeliverables(deliverablesText);
+    const parsedDeliverables = parseExactDeliverables(deliverablesText, prod.custom_event_name || prod.event_id);
     
-    const assignedForThis = (editorAssignments || []).filter(a => a.production_id === prod.production_id);
+    const assignedForThis = (editorAssignments || []).filter(a => a.production_id === prod.production_id && (!a.event_id || a.event_id === prod.event_id));
     
     const tempMap = new Map<string, { qty: number; text: string; editor: string; assignment_id?: string; status?: string }>();
     const usedAssignments = new Set<string>();
@@ -3313,7 +3335,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       );
                     }
 
-                    return (filteredLeads || []).map((prod) => {
+                    return (filteredLeads || []).map((prod, idx) => {
                       const { order: foundOrder, lead: foundLead } = resolveOrderAndLead(prod);
                       const order = { ...foundOrder, mobile: foundOrder?.mobile || foundLead?.mobile || 'No contact phone',
                         order_id: prod.order_id || prod.tracking_id || prod.production_id,
@@ -3397,7 +3419,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       else if (payStatus === 'Partially Paid') payBadge = 'bg-blue-500/10 text-blue-400 border border-blue-500/15';
 
                       return (
-                        <tr key={prod.production_id} className="hover:bg-zinc-900/30 transition-all font-mono text-xs">
+                        <tr key={`${prod.production_id}_${prod.event_id || idx}`} className="hover:bg-zinc-900/30 transition-all font-mono text-xs">
                           {/* Order ID */}
                           <td className="px-3 py-2 align-middle">
                             <span 
@@ -3463,8 +3485,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           <td className="p-4 text-left font-sans text-zinc-300">
                             <EventDropdownCell 
                               type="name" 
-                              items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || ev.event_type || 'Other') : [order?.event_type || 'Other']} 
-                              events={lead?.events}
+                              items={[prod.custom_event_name || 'Other']} 
                             />
                           </td>
 
@@ -3472,14 +3493,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           <td className="p-4 text-left font-sans text-zinc-350">
                             <EventDropdownCell 
                               type="date" 
-                              items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_date || '—') : []} 
+                              items={[prod.event_date || '—']} 
                             />
                           </td>
                           {/* Event Time */}
                           <td className="p-4 text-left font-sans text-zinc-350">
                             <EventDropdownCell 
                               type="time" 
-                              items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—') : []} 
+                              items={[prod.event_time ? convertTo12Hour(prod.event_time) : '—']} 
                             />
                           </td>
 
@@ -7663,14 +7684,18 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     try {
                       setIsSaving(true);
                       
-                      const assignedForThis = (editorAssignments || []).filter(a => a.production_id === activeWorkflowProd.production_id);
+                      const assignedForThis = (editorAssignments || []).filter(a => a.production_id === activeWorkflowProd.production_id && (!a.event_id || a.event_id === activeWorkflowProd.event_id));
                       const isReassignment = assignedForThis.length > 0;
 
-                      // 1. Delete all existing editor assignments for this production
-                      const { error: deleteError } = await supabaseClient
+                      // 1. Delete all existing editor assignments for this production + event
+                      let deleteQuery = supabaseClient
                         .from('editor_assignments')
                         .delete()
                         .eq('production_id', activeWorkflowProd.production_id);
+                      if (activeWorkflowProd.event_id) {
+                        deleteQuery = deleteQuery.eq('event_id', activeWorkflowProd.event_id);
+                      }
+                      const { error: deleteError } = await deleteQuery;
                         
                       if (deleteError) throw deleteError;
                       
@@ -7699,6 +7724,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             production_id: activeWorkflowProd.production_id,
                             order_id: orderId,
                             event_id: eventId,
+                            deliverable_id: item.text,
                             staff_id: st.staff_id,
                             staff_name: item.editor,
                             speciality: item.text,
