@@ -1325,6 +1325,7 @@ ${coordinatorName}`;
     if (['Revision In Progress'].includes(status)) return 'Revision In Progress';
     if (['Approved', 'Final Approval'].includes(status)) return 'Final Approval';
     if (['Delivered', 'Project Delivered', 'Payment Pending'].includes(status)) return 'Project Delivered';
+    if (['Order Closed'].includes(status)) return 'Order Closed';
     if (['Closed', 'Project Closed', 'Completed', 'Project Completed'].includes(status)) return 'Completed';
     if (['Project Cancelled', 'Cancelled', 'Canceled'].includes(status)) return 'Project Cancelled';
     return status;

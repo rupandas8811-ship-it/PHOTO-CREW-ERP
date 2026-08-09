@@ -536,46 +536,92 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
 
   // Handle Approve & Close Order Action
   const handleApproveAndCloseOrder = async (order: Order) => {
-    const lead = leads.find(l => l.lead_id === order.lead_id || l.lead_id === order.order_id);
-    const prod = production.find(p => 
-      p.tracking_id === order.lead_id || 
-      p.order_id === order.lead_id || 
-      p.tracking_id === order.order_id ||
-      p.order_id === order.order_id ||
-      p.production_id === order.order_id ||
-      p.production_id === order.lead_id ||
-      p.lead_id === order.lead_id ||
-      p.production_id === `PRD-${order.lead_id}` ||
-      p.production_id === `PRD-${order.order_id}`
-    );
-    const payment = payments.find(p => p.order_id === order.order_id || p.lead_id === order.lead_id);
-
-    if (updateOrderStage) {
-      await updateOrderStage(order.order_id, 'Order Closed');
+    if (currentRole !== 'Business Owner') {
+      alert("Only the Business Owner role can close orders.");
+      return;
     }
 
-    if (prod && updateProduction) {
-      await updateProduction(prod.production_id, {
-        editing_status: 'Order Closed',
-        production_status: 'Completed',
-        remarks: `Final Approval granted & Order Closed by Business Owner (${currentUserName || 'Business Owner'}) on ${new Date().toLocaleString('en-IN')}`
-      });
-    }
-
-    if (logActivity) {
-      logActivity(
-        `Order ${order.order_id} approved & closed by Business Owner (${currentUserName || 'Business Owner'}). Status updated to Order Closed.`,
-        'Business Owner',
-        order.order_id,
-        'Business Owner Review',
-        'Order Closed'
+    try {
+      const lead = leads.find(l => l.lead_id === order.lead_id || l.lead_id === order.order_id);
+      const prod = production.find(p => 
+        p.tracking_id === order.lead_id || 
+        p.order_id === order.lead_id || 
+        p.tracking_id === order.order_id ||
+        p.order_id === order.order_id ||
+        p.production_id === order.order_id ||
+        p.production_id === order.lead_id ||
+        p.lead_id === order.lead_id ||
+        p.production_id === `PRD-${order.lead_id}` ||
+        p.production_id === `PRD-${order.order_id}`
       );
-    }
 
-    setApprovalFeedback(`Order ${order.order_id} (${order.customer_name}) has been successfully approved and closed.`);
-    setReviewModalOrder(null);
-    setCalendarEventModal(null);
-    setTimeout(() => setApprovalFeedback(null), 5000);
+      const targetProdId = prod ? prod.production_id : (`PRD-${order.lead_id || order.order_id}`);
+
+      // 1. Call context update function
+      if (updateOrderStage) {
+        await updateOrderStage(order.order_id, 'Order Closed');
+      }
+
+      if (updateProduction) {
+        await updateProduction(targetProdId, {
+          editing_status: 'Order Closed',
+          production_status: 'Order Closed',
+          current_status: 'Order Closed',
+          remarks: `Final Approval granted & Order Closed by Business Owner (${currentUserName || 'Business Owner'}) on ${new Date().toLocaleString('en-IN')}`
+        } as any);
+      }
+
+      // 2. Direct Supabase update to ensure database persistence
+      if (supabaseClient) {
+        const timestamp = new Date().toISOString();
+        const userName = currentUserName || 'Business Owner';
+
+        const { error: errOrd } = await supabaseClient
+          .from('orders')
+          .update({ current_stage: 'Order Closed', updated_by: userName, updated_at: timestamp })
+          .or(`order_id.eq.${order.order_id},lead_id.eq.${order.lead_id || order.order_id}`);
+        if (errOrd) throw new Error("Orders update error: " + errOrd.message);
+
+        const { error: errLead } = await supabaseClient
+          .from('leads')
+          .update({ status: 'Order Closed', current_status: 'Order Closed', updated_by: userName, updated_at: timestamp })
+          .or(`lead_id.eq.${order.lead_id || order.order_id},lead_id.eq.${order.order_id}`);
+        if (errLead) throw new Error("Leads update error: " + errLead.message);
+
+        const { error: errProd } = await supabaseClient
+          .from('production')
+          .update({ editing_status: 'Order Closed', production_status: 'Order Closed', current_status: 'Order Closed' })
+          .or(`production_id.eq.${targetProdId},order_id.eq.${order.order_id},lead_id.eq.${order.lead_id || order.order_id},tracking_id.eq.${order.lead_id || order.order_id}`);
+        if (errProd) console.warn("[handleApproveAndCloseOrder] production update warning:", errProd);
+
+        await supabaseClient
+          .from('editor_assignments')
+          .update({ status: 'Order Closed' })
+          .or(`production_id.eq.${targetProdId},order_id.eq.${order.order_id}`);
+      }
+
+      if (logActivity) {
+        logActivity(
+          `Order ${order.order_id} approved & closed by Business Owner (${currentUserName || 'Business Owner'}). Status updated to Order Closed.`,
+          'Business Owner',
+          order.order_id,
+          'Business Owner Review',
+          'Order Closed'
+        );
+      }
+
+      if (refreshData) {
+        await refreshData();
+      }
+
+      setApprovalFeedback(`Order ${order.order_id} (${order.customer_name}) has been successfully approved and closed.`);
+      setReviewModalOrder(null);
+      setCalendarEventModal(null);
+      setTimeout(() => setApprovalFeedback(null), 5000);
+    } catch (err: any) {
+      console.error("[handleApproveAndCloseOrder] Error approving order:", err);
+      alert("Failed to close order: " + (err?.message || "Database update failed"));
+    }
   };
 
   // Handle Reject Back to Production

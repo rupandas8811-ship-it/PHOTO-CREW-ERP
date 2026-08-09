@@ -4442,22 +4442,33 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     // Map strings & enforce Business Owner Review before closure
     if (['Closed', 'Order Closed', 'Project Closed', 'Completed', 'Project Completed'].includes(nextStage as string)) {
-      const tgtPayment = payments.find(p => p.order_id === (tgtOrder?.order_id || actualTrackingId) || p.lead_id === (tgtLead?.lead_id));
-      
-      const validation = performBusinessOwnerReview(tgtOrder, tgtLead, targetProd, tgtPayment);
-      if (!validation.isValid) {
-        nextStage = 'Business Owner Review';
-        logActivity(
-          `Business Owner Review Pending for Order ${tgtOrder?.order_id || actualTrackingId}. Pending items: ${validation.pendingItems.join('; ')}`,
-          'Business Owner',
-          tgtOrder?.order_id || actualTrackingId,
-          previousStage,
-          'Business Owner Review'
-        );
+      if (currentRole !== 'Business Owner' && updates.editing_status !== 'Order Closed') {
+        const tgtPayment = payments.find(p => p.order_id === (tgtOrder?.order_id || actualTrackingId) || p.lead_id === (tgtLead?.lead_id));
+        
+        const validation = performBusinessOwnerReview(tgtOrder, tgtLead, targetProd, tgtPayment);
+        if (!validation.isValid) {
+          nextStage = 'Business Owner Review';
+          logActivity(
+            `Business Owner Review Pending for Order ${tgtOrder?.order_id || actualTrackingId}. Pending items: ${validation.pendingItems.join('; ')}`,
+            'Business Owner',
+            tgtOrder?.order_id || actualTrackingId,
+            previousStage,
+            'Business Owner Review'
+          );
+        } else {
+          nextStage = 'Order Closed';
+          logActivity(
+            `Business Owner Review Completed & Validated. Reviewed By: ${currentUserName || 'Business Owner'}, Review Date & Time: ${new Date().toISOString()}, Final Status: Order Closed. Notes: ${updates.remarks || 'None'}`,
+            'Business Owner',
+            tgtOrder?.order_id || actualTrackingId,
+            'Business Owner Review',
+            'Order Closed'
+          );
+        }
       } else {
         nextStage = 'Order Closed';
         logActivity(
-          `Business Owner Review Completed & Validated. Reviewed By: ${currentUserName || 'Business Owner'}, Review Date & Time: ${new Date().toISOString()}, Final Status: Order Closed. Notes: ${updates.remarks || 'None'}`,
+          `Business Owner Review Completed & Order Closed. Reviewed By: ${currentUserName || 'Business Owner'}, Review Date & Time: ${new Date().toISOString()}, Final Status: Order Closed. Notes: ${updates.remarks || 'None'}`,
           'Business Owner',
           tgtOrder?.order_id || actualTrackingId,
           'Business Owner Review',
