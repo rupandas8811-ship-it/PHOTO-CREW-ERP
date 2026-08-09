@@ -2778,6 +2778,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             ? updatedDeliverables[eventKey] 
             : (updatedDeliverables[nameKey] !== undefined ? updatedDeliverables[nameKey] : deliverablesList);
           return {
+            event_id: event.id,
             event_name: event.event_name || event.event_type || 'Unnamed Event',
             deliverables: list.filter(Boolean)
           };
@@ -5182,6 +5183,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               ? editableDeliverables[eventKey] 
               : (editableDeliverables[nameKey] !== undefined ? editableDeliverables[nameKey] : deliverablesList);
             return {
+              event_id: event.id,
               event_name: event.event_name || event.event_type || 'Unnamed Event',
               deliverables: list.filter(Boolean)
             };
@@ -5488,6 +5490,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 ? editableDeliverables[eventKey] 
                 : (editableDeliverables[nameKey] !== undefined ? editableDeliverables[nameKey] : deliverablesList);
               return {
+                event_id: event.id,
                 event_name: event.event_name || event.event_type || 'Unnamed Event',
                 deliverables: list.filter(Boolean)
               };

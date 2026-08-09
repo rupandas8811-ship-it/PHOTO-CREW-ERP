@@ -466,11 +466,13 @@ export function parseQtyAndText(raw: any): { qty: number; text: string } {
 
 export function parseDeliverablesWithQty(
   description: string | undefined | null,
-  targetEventName?: string
+  targetEventName?: string,
+  targetEventId?: string
 ): { name: string; qty: number }[] {
   if (!description) return [];
 
   let itemsRaw: any[] = [];
+  let isFilteredButNoMatch = false;
 
   // 1. Try parsing JSON
   if (typeof description === 'string' && (description.trim().startsWith('[') || description.trim().startsWith('{'))) {
@@ -480,12 +482,19 @@ export function parseDeliverablesWithQty(
         // Case A: Array of event objects: [{ event_name: "...", deliverables: [...] }]
         if (parsed[0] && typeof parsed[0] === 'object' && ('event_name' in parsed[0] || 'event_type' in parsed[0] || 'deliverables' in parsed[0])) {
           let targetEvents = parsed;
-          if (targetEventName) {
+          if (targetEventId || targetEventName) {
             const matched = parsed.filter((ev: any) => {
+              const evIdMatch = targetEventId && ev.event_id && ev.event_id === targetEventId;
               const evName = (ev.event_name || ev.event_type || ev.name || '').toLowerCase();
-              return evName.includes(targetEventName.toLowerCase()) || targetEventName.toLowerCase().includes(evName);
+              const nameMatch = targetEventName && (evName === targetEventName.toLowerCase() || evName.includes(targetEventName.toLowerCase()) || targetEventName.toLowerCase().includes(evName));
+              return evIdMatch || nameMatch;
             });
-            if (matched.length > 0) targetEvents = matched;
+            if (matched.length > 0) {
+              targetEvents = matched;
+            } else {
+              targetEvents = [];
+              isFilteredButNoMatch = true;
+            }
           }
           targetEvents.forEach((ev: any) => {
             if (Array.isArray(ev.deliverables)) {
@@ -510,7 +519,7 @@ export function parseDeliverablesWithQty(
   }
 
   // 2. If no JSON items extracted, treat description as plain text
-  if (itemsRaw.length === 0 && typeof description === 'string') {
+  if (itemsRaw.length === 0 && typeof description === 'string' && !isFilteredButNoMatch) {
     itemsRaw = description.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
   }
 

@@ -71,8 +71,8 @@ function toInputDateFormat(dateStr?: string | null): string {
   }
 }
 
-function parseExactDeliverables(description: string, targetEventName?: string): string[] {
-  const list = parseDeliverablesWithQty(description, targetEventName);
+function parseExactDeliverables(description: string, targetEventName?: string, targetEventId?: string): string[] {
+  const list = parseDeliverablesWithQty(description, targetEventName, targetEventId);
   return list.map(item => `${item.qty} × ${item.name}`);
 }
 
@@ -1962,7 +1962,7 @@ Production Team`;
         deliverablesText = targetLatestQuote.deliverables_description || '';
       }
     }
-    const parsedDeliverables = parseExactDeliverables(deliverablesText, prod.custom_event_name || prod.event_id);
+    const parsedDeliverables = parseExactDeliverables(deliverablesText, prod.custom_event_name, prod.event_id);
     
     const assignedForThis = (editorAssignments || []).filter(a => a.production_id === prod.production_id && (!a.event_id || a.event_id === prod.event_id));
     
@@ -2484,7 +2484,7 @@ _Please acknowledge receipt of this task assignment._`;
                 }
               }
 
-              parsedDeliverables = parseExactDeliverables(deliverablesText);
+              parsedDeliverables = parseExactDeliverables(deliverablesText, activeWorkflowProd.custom_event_name, activeWorkflowProd.event_id);
 
               const assignedDeliverables = Array.from(new Set(loadedAssignments.map(a => a.speciality))) as string[];
               const allDeliverables: string[] = Array.from(new Set([...parsedDeliverables, ...assignedDeliverables]));
@@ -6788,7 +6788,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           }
         }
 
-        parsedDeliverables = parseExactDeliverables(deliverablesText);
+        parsedDeliverables = parseExactDeliverables(deliverablesText, selectedLeadProd.custom_event_name, selectedLeadProd.event_id);
 
         const linkedAssignments = (editorAssignments || []).filter(a => a.production_id === selectedLeadProd.production_id);
         const assignedDeliverables = Array.from(new Set(linkedAssignments.map(a => a.speciality).filter(Boolean))) as string[];
