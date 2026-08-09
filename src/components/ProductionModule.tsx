@@ -1307,12 +1307,11 @@ ${coordinatorName}`;
 
   const getAssignedEditorsList = (prod: Production) => {
     const fromAssignments = (editorAssignments || []).filter(a => 
-      (a.production_id === prod.production_id ||
+      a.production_id === prod.production_id ||
       a.production_id === (prod as any).order_id ||
       a.production_id === prod.tracking_id ||
       a.order_id === (prod as any).order_id ||
-      a.order_id === prod.tracking_id) &&
-      (!prod.event_id || !a.event_id || a.event_id === prod.event_id)
+      a.order_id === prod.tracking_id
     );
     if (fromAssignments.length > 0) {
       const grouped = new Map<string, any>();
@@ -9002,6 +9001,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 <thead>
                   <tr className="border-b border-zinc-900 bg-zinc-950/70 text-zinc-400 font-mono text-[10px] uppercase tracking-wider">
                     <th className="p-3 font-bold">Staff Name</th>
+                    <th className="p-3 font-bold">Event</th>
                     <th className="p-3 font-bold">Assigned Deliverable</th>
                     <th className="p-3 font-bold">Current Status</th>
                     <th className="p-3 font-bold">Upload Link</th>
@@ -9009,55 +9009,98 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 </thead>
                 <tbody className="divide-y divide-zinc-900 text-zinc-300 font-sans">
                   {(() => {
-                    const list = getAssignedEditorsList(assignedEditorsModalProd);
+                    const prod = assignedEditorsModalProd;
+                    const orderId = (prod as any).order_id || prod.tracking_id || prod.production_id;
+                    const { order, lead } = resolveOrderAndLead(prod);
 
-                    if (list.length === 0) {
+                    const eventsList = ((prod as any).events && Array.isArray((prod as any).events) && (prod as any).events.length > 0)
+                      ? (prod as any).events
+                      : (lead?.events && Array.isArray(lead.events) && lead.events.length > 0)
+                        ? lead.events
+                        : (order?.events && Array.isArray(order.events) && order.events.length > 0)
+                          ? order.events
+                          : [];
+
+                    const getEventName = (eventId?: string, fallbackIdx: number = 0) => {
+                      if (eventId) {
+                        const found = eventsList.find((e: any) => e.id === eventId || e.event_id === eventId);
+                        if (found) return found.event_name || found.event_type || `Event ${fallbackIdx + 1}`;
+                        const match = eventId.match(/EVT-0*(\d+)/i);
+                        if (match) {
+                          const idx = parseInt(match[1], 10) - 1;
+                          if (eventsList[idx]) {
+                            return eventsList[idx].event_name || eventsList[idx].event_type || `Event ${idx + 1}`;
+                          }
+                          return `Event ${idx + 1}`;
+                        }
+                      }
+                      if (eventsList[fallbackIdx]) {
+                        return eventsList[fallbackIdx].event_name || eventsList[fallbackIdx].event_type || `Event ${fallbackIdx + 1}`;
+                      }
+                      return prod.custom_event_name || order?.event_type || `Event 1`;
+                    };
+
+                    const rawAssignments = (editorAssignments || []).filter(a => 
+                      a.production_id === prod.production_id ||
+                      a.production_id === orderId ||
+                      a.order_id === orderId ||
+                      a.order_id === prod.tracking_id ||
+                      a.order_id === prod.production_id
+                    );
+
+                    if (rawAssignments.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={4} className="p-6 text-center text-zinc-500 italic font-mono text-xs">
+                          <td colSpan={5} className="p-6 text-center text-zinc-500 italic font-mono text-xs">
                             No assigned staff or deliverables found for this order.
                           </td>
                         </tr>
                       );
                     }
 
-                    return list.map((ed, idx) => {
-                      const linkStr = (assignedEditorsModalProd.edited_drive_link || '').trim();
+                    return rawAssignments.map((assignment, idx) => {
+                      const staffRec = (productionStaff || []).find(s => s.staff_id === assignment.staff_id || s.name === assignment.staff_name);
+                      const staffName = assignment.staff_name || staffRec?.name || 'Unassigned';
+                      const staffRole = staffRec?.role || staffRec?.production_role_speciality || 'Editor';
+                      const staffType = staffRec?.staff_type || (staffRec as any)?.Staff_Type || 'In-House';
+
+                      const eventName = getEventName(assignment.event_id, 0);
+                      const deliverableName = assignment.speciality || assignment.deliverable_id || 'Deliverable';
+                      
+                      const statusText = (assignment.status === 'Assigned' || !assignment.status) ? 'Assigned Editor' : assignment.status;
+
+                      const linkStr = (assignment.edited_drive_link || prod.edited_drive_link || '').trim();
                       const hasLink = linkStr && (linkStr.startsWith('http://') || linkStr.startsWith('https://') || linkStr.includes('drive.google.com') || linkStr.length > 5);
+
                       return (
-                        <tr key={idx} className="hover:bg-zinc-900/40 transition-colors">
+                        <tr key={assignment.assignment_id || idx} className="hover:bg-zinc-900/40 transition-colors">
                           <td className="p-3">
-                            <div className="font-bold text-white mb-0.5">{ed.name}</div>
+                            <div className="font-bold text-white mb-0.5">{staffName}</div>
                             <div className="text-[10px] text-zinc-500 font-mono flex items-center gap-2">
-                              <span>{ed.role}</span>
+                              <span>{staffRole}</span>
                               <span className="w-1 h-1 rounded-full bg-zinc-700"></span>
-                              <span className={ed.type === 'In-House' ? 'text-blue-400' : 'text-amber-400'}>{ed.type}</span>
+                              <span className={staffType === 'In-House' ? 'text-blue-400' : 'text-amber-400'}>{staffType}</span>
                             </div>
                           </td>
+                          <td className="p-3 font-mono text-xs text-zinc-300 font-bold">
+                            {eventName}
+                          </td>
                           <td className="p-3">
-                            {ed.deliverables && ed.deliverables.length > 0 ? (
-                              <div className="flex flex-col gap-1.5">
-                                {ed.deliverables.map((d, i) => (
-                                  <span key={i} className="inline-flex w-fit px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded text-[11px] font-mono font-bold">
-                                    {d}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-zinc-500 italic text-xs font-mono">Assigned</span>
-                            )}
+                            <span className="inline-flex w-fit px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded text-[11px] font-mono font-bold">
+                              {deliverableName}
+                            </span>
                           </td>
                           <td className="p-3">
                             <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
-                              ['Completed', 'Editing Completed', 'Editing Complete'].includes(ed.status)
+                              ['Completed', 'Editing Completed', 'Editing Complete'].includes(statusText)
                                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                : ['Customer Review', 'Client Review'].includes(ed.status)
+                                : ['Customer Review', 'Client Review'].includes(statusText)
                                 ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                : ['Editing Started', 'In Progress', 'Editing In Progress'].includes(ed.status)
+                                : ['Editing Started', 'In Progress', 'Editing In Progress'].includes(statusText)
                                 ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
                                 : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
                             }`}>
-                              {ed.status || 'Assigned Editor'}
+                              {statusText}
                             </span>
                           </td>
                           <td className="p-3">
