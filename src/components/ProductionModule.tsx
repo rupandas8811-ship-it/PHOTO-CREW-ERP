@@ -1943,23 +1943,34 @@ Production Team`;
   const [assignmentRows, setAssignmentRows] = useState<{ speciality: string; staffId: string; staffName: string }[]>([
     { speciality: '', staffId: '', staffName: '' }
   ]);
-  const [wfDeliverableAssignments, setWfDeliverableAssignments] = useState<{ qty: number; text: string; editor: string }[]>([]);
-  const [selectedWfEventIndex, setSelectedWfEventIndex] = useState<number>(0);
+  interface EventSectionItem {
+    qty: number;
+    text: string;
+    editor: string;
+    assignment_id?: string;
+    status?: string;
+  }
+
+  interface EventSection {
+    eventId: string;
+    eventName: string;
+    items: EventSectionItem[];
+  }
+
+  const [wfEventSections, setWfEventSections] = useState<EventSection[]>([]);
   const [wfError, setWfError] = useState('');
   const [wfSuccess, setWfSuccess] = useState('');
 
-  const handleOpenAssignEditor = (prod: Production, targetEventIdx: number = 0) => {
+  const handleOpenAssignEditor = (prod: Production) => {
     if (prod.production_status === 'Order Closed' || prod.editing_status === 'Order Closed') return;
     setActiveWorkflowProd(prod);
     setWfError('');
-    setSelectedWfEventIndex(targetEventIdx);
     
     // Parse target delivery date
     const expected = prod.expected_delivery_date ? new Date(prod.expected_delivery_date) : null;
     const existingDate = prod.target_delivery_date || (expected ? expected.toISOString().split('T')[0] : '');
     setWfTargetDeliveryDate(existingDate);
     
-    // Build deliverables from lead/order for the selected event
     const { order, lead } = resolveOrderAndLead(prod);
     const eventsList = ((prod as any).events && Array.isArray((prod as any).events) && (prod as any).events.length > 0)
       ? (prod as any).events
@@ -1969,8 +1980,6 @@ Production Team`;
           ? order.events
           : [];
 
-    const currentEvent = eventsList[targetEventIdx] || null;
-    
     let deliverablesText = order?.deliverables_description || lead?.deliverables_description || '';
     if (!deliverablesText && lead) {
       const targetLeadQuotations = quotations?.filter((q: any) => q.lead_id === lead.lead_id) || [];
@@ -1981,68 +1990,80 @@ Production Team`;
       }
     }
 
-    const currentEventName = currentEvent ? (currentEvent.event_name || currentEvent.event_type) : prod.custom_event_name;
-    const currentEventId = currentEvent ? (currentEvent.id || currentEvent.event_id) : prod.event_id;
-
-    // Direct check if currentEvent has event-specific deliverables
-    let parsedDeliverablesList: { name: string; qty: number }[] = [];
-    if (currentEvent && currentEvent.deliverables) {
-      if (Array.isArray(currentEvent.deliverables)) {
-        parsedDeliverablesList = parseDeliverablesWithQty(JSON.stringify(currentEvent.deliverables));
-      } else if (typeof currentEvent.deliverables === 'string') {
-        parsedDeliverablesList = parseDeliverablesWithQty(currentEvent.deliverables);
-      }
-    }
-
-    if (parsedDeliverablesList.length === 0) {
-      parsedDeliverablesList = parseDeliverablesWithQty(deliverablesText, currentEventName, currentEventId);
-    }
-
     const orderId = order?.order_id || (prod as any).order_id || prod.tracking_id;
-    const assignedForThis = (editorAssignments || []).filter(a => 
-      (a.production_id === prod.production_id || a.order_id === orderId) && 
-      (!currentEventId || !a.event_id || a.event_id === currentEventId)
-    );
-    
-    const tempMap = new Map<string, { qty: number; text: string; editor: string; assignment_id?: string; status?: string }>();
-    const usedAssignments = new Set<string>();
-    
-    for (const d of parsedDeliverablesList) {
-      const qty = d.qty || 1;
-      const text = d.name;
-      if (text) {
-        const existing = tempMap.get(text);
-        if (existing) {
-          existing.qty += qty;
-        } else {
-          // Find existing assignment for this text
-          const existingAssignment = assignedForThis.find(a => (a.speciality === text || a.deliverable_id === text) && !usedAssignments.has(a.assignment_id));
-          const editor = existingAssignment ? (existingAssignment.staff_name || 'Unassigned') : 'Unassigned';
-          if (existingAssignment) {
-            usedAssignments.add(existingAssignment.assignment_id);
-          }
-          tempMap.set(text, { 
-            qty, 
-            text, 
-            editor,
-            assignment_id: existingAssignment?.assignment_id,
-            status: existingAssignment?.status
-          });
+    const listToProcess = eventsList.length > 0 ? eventsList : [null];
+    const sections: EventSection[] = [];
+
+    for (let idx = 0; idx < listToProcess.length; idx++) {
+      const currentEvent = listToProcess[idx];
+      const currentEventName = currentEvent ? (currentEvent.event_name || currentEvent.event_type || `Event ${idx + 1}`) : (prod.custom_event_name || `Event ${idx + 1}`);
+      const currentEventId = currentEvent ? (currentEvent.id || currentEvent.event_id) : prod.event_id;
+
+      let parsedDeliverablesList: { name: string; qty: number }[] = [];
+      if (currentEvent && currentEvent.deliverables) {
+        if (Array.isArray(currentEvent.deliverables)) {
+          parsedDeliverablesList = parseDeliverablesWithQty(JSON.stringify(currentEvent.deliverables));
+        } else if (typeof currentEvent.deliverables === 'string') {
+          parsedDeliverablesList = parseDeliverablesWithQty(currentEvent.deliverables);
         }
       }
+
+      if (parsedDeliverablesList.length === 0) {
+        parsedDeliverablesList = parseDeliverablesWithQty(deliverablesText, currentEventName, currentEventId);
+      }
+
+      const assignedForThis = (editorAssignments || []).filter(a => 
+        (a.production_id === prod.production_id || a.order_id === orderId) && 
+        (!currentEventId || !a.event_id || a.event_id === currentEventId)
+      );
+
+      const tempMap = new Map<string, { qty: number; text: string; editor: string; assignment_id?: string; status?: string }>();
+      const usedAssignments = new Set<string>();
+
+      for (const d of parsedDeliverablesList) {
+        const qty = d.qty || 1;
+        const text = d.name;
+        if (text) {
+          const existing = tempMap.get(text);
+          if (existing) {
+            existing.qty += qty;
+          } else {
+            const existingAssignment = assignedForThis.find(a => (a.speciality === text || a.deliverable_id === text) && !usedAssignments.has(a.assignment_id));
+            const editor = existingAssignment ? (existingAssignment.staff_name || 'Unassigned') : 'Unassigned';
+            if (existingAssignment) {
+              usedAssignments.add(existingAssignment.assignment_id);
+            }
+            tempMap.set(text, {
+              qty,
+              text,
+              editor,
+              assignment_id: existingAssignment?.assignment_id,
+              status: existingAssignment?.status
+            });
+          }
+        }
+      }
+
+      sections.push({
+        eventId: currentEventId || `EVT-0${idx + 1}`,
+        eventName: currentEventName,
+        items: Array.from(tempMap.values())
+      });
     }
-    
-    const assignments = Array.from(tempMap.values());
-    
-    setWfDeliverableAssignments(assignments);
+
+    setWfEventSections(sections);
     setWfProjectNotes(prod.project_notes || prod.remarks || '');
     setWorkflowActionType('assign_editor');
   };
 
-  const handleEditorChange = (index: number, editorName: string) => {
-    setWfDeliverableAssignments(prev => {
+  const handleSectionEditorChange = (sectionIndex: number, itemIndex: number, editorName: string) => {
+    setWfEventSections(prev => {
       const updated = [...prev];
-      updated[index] = { ...updated[index], editor: editorName };
+      const section = { ...updated[sectionIndex] };
+      const items = [...section.items];
+      items[itemIndex] = { ...items[itemIndex], editor: editorName };
+      section.items = items;
+      updated[sectionIndex] = section;
       return updated;
     });
   };
@@ -7751,15 +7772,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 {/* FORM: Assign Editor */}
                 {workflowActionType === 'assign_editor' && activeWorkflowProd && (() => {
                   const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
-                  const eventsList = ((activeWorkflowProd as any).events && Array.isArray((activeWorkflowProd as any).events) && (activeWorkflowProd as any).events.length > 0)
-                    ? (activeWorkflowProd as any).events
-                    : (lead?.events && Array.isArray(lead.events) && lead.events.length > 0)
-                      ? lead.events
-                      : (order?.events && Array.isArray(order.events) && order.events.length > 0)
-                        ? order.events
-                        : [];
-
-                  const selectedEvent = eventsList[selectedWfEventIndex] || null;
+                  const orderIdDisplay = order?.order_id || (activeWorkflowProd as any).order_id || activeWorkflowProd.tracking_id;
+                  const customerNameDisplay = order?.customer_name || lead?.customer_name || activeWorkflowProd.customer_name || 'Client';
 
                   return (
                     <form onSubmit={async (e) => {
@@ -7771,59 +7785,53 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       
                       try {
                         setIsSaving(true);
-                        
-                        const targetEventId = selectedEvent ? (selectedEvent.id || selectedEvent.event_id || 'EVT-01') : (activeWorkflowProd.event_id || 'EVT-01');
+                        const orderId = order?.order_id || activeWorkflowProd?.tracking_id || activeWorkflowProd?.production_id;
 
-                        const assignedForThis = (editorAssignments || []).filter(a => 
-                          (a.production_id === activeWorkflowProd.production_id || a.order_id === order?.order_id) && 
-                          (!a.event_id || a.event_id === targetEventId)
+                        const assignedForOrder = (editorAssignments || []).filter(a => 
+                          a.production_id === activeWorkflowProd.production_id || a.order_id === orderId
                         );
-                        const isReassignment = assignedForThis.length > 0;
 
-                        // 1. Delete all existing editor assignments for this production + target event
-                        let deleteQuery = supabaseClient
+                        // 1. Delete all existing editor assignments for this production
+                        const { error: deleteError } = await supabaseClient
                           .from('editor_assignments')
                           .delete()
                           .eq('production_id', activeWorkflowProd.production_id);
-                        if (targetEventId && targetEventId !== 'MULTIPLE') {
-                          deleteQuery = deleteQuery.eq('event_id', targetEventId);
-                        }
-                        const { error: deleteError } = await deleteQuery;
                           
                         if (deleteError) throw deleteError;
                         
-                        // 2. Prepare and insert new assignments
-                        const orderId = order?.order_id || activeWorkflowProd?.tracking_id || activeWorkflowProd?.production_id;
-                        
+                        // 2. Prepare new assignments across all sections
                         const newAssignments = [];
-                        for (const item of wfDeliverableAssignments) {
-                          if (!item.editor || item.editor === 'Unassigned') continue;
-                          const st = (productionStaff || []).find(s => s.name === item.editor);
-                          if (st) {
-                            const originalAssignment = assignedForThis.find(a => a.speciality === item.text || a.deliverable_id === item.text);
-                            const hasChanged = originalAssignment ? originalAssignment.staff_name !== item.editor : true;
-                            const finalStatus = hasChanged ? 'Assigned' : (originalAssignment?.status || 'Assigned');
-                            
-                            const id = item.assignment_id || `EDR-${Math.floor(100000 + Math.random() * 900000)}`;
-                            
-                            // Preserve all fields from original assignment if it hasn't changed
-                            const preservedFields = !hasChanged && originalAssignment ? { ...originalAssignment } : {};
-                            
-                            newAssignments.push({
-                              ...preservedFields,
-                              assignment_id: id,
-                              production_id: activeWorkflowProd.production_id,
-                              order_id: orderId,
-                              event_id: targetEventId,
-                              deliverable_id: item.text,
-                              staff_id: st.staff_id,
-                              staff_name: item.editor,
-                              speciality: item.text,
-                              assigned_date: originalAssignment?.assigned_date || new Date().toISOString().split('T')[0],
-                              target_finish_date: wfTargetDeliveryDate,
-                              status: finalStatus,
-                              created_at: originalAssignment?.created_at || new Date().toISOString()
-                            });
+                        for (const section of wfEventSections) {
+                          for (const item of section.items) {
+                            if (!item.editor || item.editor === 'Unassigned') continue;
+                            const st = (productionStaff || []).find(s => s.name === item.editor);
+                            if (st) {
+                              const originalAssignment = assignedForOrder.find(a => 
+                                (a.event_id === section.eventId || !a.event_id) && 
+                                (a.speciality === item.text || a.deliverable_id === item.text)
+                              );
+                              const hasChanged = originalAssignment ? originalAssignment.staff_name !== item.editor : true;
+                              const finalStatus = hasChanged ? 'Assigned' : (originalAssignment?.status || 'Assigned');
+                              
+                              const id = item.assignment_id || `EDR-${Math.floor(100000 + Math.random() * 900000)}`;
+                              const preservedFields = !hasChanged && originalAssignment ? { ...originalAssignment } : {};
+                              
+                              newAssignments.push({
+                                ...preservedFields,
+                                assignment_id: id,
+                                production_id: activeWorkflowProd.production_id,
+                                order_id: orderId,
+                                event_id: section.eventId,
+                                deliverable_id: item.text,
+                                staff_id: st.staff_id,
+                                staff_name: item.editor,
+                                speciality: item.text,
+                                assigned_date: originalAssignment?.assigned_date || new Date().toISOString().split('T')[0],
+                                target_finish_date: wfTargetDeliveryDate,
+                                status: finalStatus,
+                                created_at: originalAssignment?.created_at || new Date().toISOString()
+                              });
+                            }
                           }
                         }
                         
@@ -7835,22 +7843,19 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         }
                         
                         // 3. Update the production record
-                        const allOrderAssignments = (editorAssignments || [])
-                          .filter(a => a.production_id === activeWorkflowProd.production_id || a.order_id === orderId)
-                          .concat(newAssignments);
-                        const uniqueEditors = Array.from(new Set(allOrderAssignments.map(a => a.staff_name).filter(Boolean)));
+                        const uniqueEditors = Array.from(new Set(newAssignments.map(a => a.staff_name).filter(Boolean)));
                         const primaryEditor = uniqueEditors[0] || 'Unassigned';
                         const assignedStaffJoined = uniqueEditors.join(', ');
                         
                         const activeStaffList = (productionStaff || []).filter(s => s.status === 'Active');
-                        const assignedRoles = Array.from(new Set(allOrderAssignments.map(a => {
+                        const assignedRoles = Array.from(new Set(newAssignments.map(a => {
                           const staffMem = activeStaffList.find(s => s.staff_name === a.staff_name);
                           return staffMem?.role || 'Editor';
                         })));
                         const rolesJoined = assignedRoles.join(', ') || 'Editor';
                         
                         let newEditingStatus = 'Assigned Editor';
-                        if (allOrderAssignments.length > 0) {
+                        if (newAssignments.length > 0) {
                           const getTaskStageRank = (st: string, driveLink?: string) => {
                             const status = st || '';
                             if (['Client Acceptance'].includes(status)) return 5;
@@ -7861,7 +7866,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             return 0;
                           };
 
-                          const ranks = allOrderAssignments.map(a => getTaskStageRank(a.status, (a as any).edited_drive_link));
+                          const ranks = newAssignments.map(a => getTaskStageRank(a.status, (a as any).edited_drive_link));
                           const minRank = Math.min(...ranks);
 
                           if (minRank >= 5) newEditingStatus = 'Client Acceptance';
@@ -7887,7 +7892,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           refreshData();
                         }
                         
-                        alert("Editor assignments saved successfully for " + (selectedEvent?.event_name || selectedEvent?.event_type || 'Event') + "!");
+                        alert("Editor assignments saved successfully!");
                         
                         setActiveWorkflowProd(null);
                         setWorkflowActionType(null);
@@ -7897,44 +7902,79 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         setIsSaving(false);
                       }
                     }} className="space-y-5 font-sans text-left">
-                      <p className="text-[11px] text-zinc-400 mb-2">
-                        Assign one editor for each deliverable and specify the target delivery date.
-                      </p>
+                      <div className="mb-2 text-xs text-zinc-400 font-mono flex flex-wrap items-center gap-4 border-b border-zinc-900 pb-3">
+                        <div><span className="text-zinc-500 font-bold uppercase">Order ID:</span> <strong className="text-purple-300 font-bold">{orderIdDisplay}</strong></div>
+                        <div><span className="text-zinc-500 font-bold uppercase">Customer:</span> <strong className="text-zinc-200 font-bold">{customerNameDisplay}</strong></div>
+                      </div>
+
                       {wfError && (
                         <div className="bg-rose-950/20 border border-rose-900/30 text-rose-400 text-xs p-3 rounded-xl font-mono">
                           ⚠️ {wfError}
                         </div>
                       )}
 
-                      {/* EVENT SELECTION DROPDOWN */}
-                      {eventsList.length > 0 && (
-                        <div className="p-3.5 bg-purple-950/20 border border-purple-900/40 rounded-xl space-y-1.5">
-                          <label className="block text-[10px] font-mono text-purple-300 uppercase font-black tracking-widest flex items-center gap-1.5">
-                            <span>📅</span> Event Selector
-                          </label>
-                          <select
-                            value={selectedWfEventIndex}
-                            onChange={(e) => {
-                              const idx = Number(e.target.value);
-                              handleOpenAssignEditor(activeWorkflowProd, idx);
-                            }}
-                            className="w-full bg-zinc-950 border border-purple-900/50 hover:border-purple-500 text-xs text-white rounded-xl px-3 py-2 font-mono focus:outline-none focus:border-purple-400 cursor-pointer font-bold"
-                          >
-                            {eventsList.map((ev: any, idx: number) => (
-                              <option key={idx} value={idx}>
-                                {ev.event_name || ev.event_type || `Event ${idx + 1}`} ({ev.event_date || 'No Date'})
-                              </option>
-                            ))}
-                          </select>
-                          {selectedEvent && (
-                            <p className="text-[10px] text-zinc-400 font-mono mt-1">
-                              Showing deliverables configured specifically for: <strong className="text-purple-300">{selectedEvent.event_name || selectedEvent.event_type}</strong>
-                            </p>
-                          )}
-                        </div>
-                      )}
-                      
-                      <div className="p-4 bg-zinc-900/20 border border-zinc-900 rounded-xl space-y-2">
+                      {/* EVENT SECTIONS */}
+                      <div className="space-y-6">
+                        {wfEventSections.map((section, sIdx) => (
+                          <div key={sIdx} className="space-y-2">
+                            {/* Section Header: ONLY Event Name */}
+                            <div className="pb-1 border-b border-zinc-800">
+                              <span className="text-purple-400 font-extrabold text-xs uppercase tracking-wider font-mono">
+                                {section.eventName}
+                              </span>
+                            </div>
+
+                            <div className="border border-zinc-900 rounded-xl overflow-hidden bg-zinc-950">
+                              <div className="overflow-x-auto w-full">
+                                <table className="w-full text-left border-collapse min-w-max">
+                                  <thead>
+                                    <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[9px] text-zinc-500 uppercase tracking-wider">
+                                      <th className="px-4 py-2.5 font-bold w-[12%] text-center">QTY</th>
+                                      <th className="px-4 py-2.5 font-bold w-[53%]">DELIVERABLE NAME</th>
+                                      <th className="px-4 py-2.5 font-bold w-[35%]">ASSIGN EDITOR</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-zinc-900 font-sans text-xs text-zinc-300">
+                                    {section.items.length === 0 ? (
+                                      <tr>
+                                        <td colSpan={3} className="px-4 py-6 text-center text-zinc-500 font-mono text-xs">
+                                          No deliverables found for this event.
+                                        </td>
+                                      </tr>
+                                    ) : (
+                                      section.items.map((row, itemIdx) => (
+                                        <tr key={itemIdx} className="hover:bg-zinc-900/10 transition-colors">
+                                          <td className="px-4 py-3 font-mono text-xs text-center font-bold text-zinc-400">
+                                            {row.qty}
+                                          </td>
+                                          <td className="px-4 py-3 font-semibold text-zinc-200">
+                                            {row.text}
+                                          </td>
+                                          <td className="px-4 py-2">
+                                            <select
+                                              value={row.editor}
+                                              onChange={(e) => handleSectionEditorChange(sIdx, itemIdx, e.target.value)}
+                                              className="w-full bg-zinc-905 border border-zinc-900 hover:border-zinc-800 text-xs text-zinc-300 rounded-xl px-2.5 py-1.5 font-mono focus:outline-none focus:border-purple-500 cursor-pointer h-9"
+                                            >
+                                              <option value="Unassigned">Select Editor</option>
+                                              {(productionStaff || []).map(s => (
+                                                <option key={s.staff_id} value={s.name}>{s.name}</option>
+                                              ))}
+                                            </select>
+                                          </td>
+                                        </tr>
+                                      ))
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* SHARED TARGET DELIVERY DATE */}
+                      <div className="p-4 bg-zinc-900/20 border border-zinc-900 rounded-xl space-y-2 mt-4">
                         <label className="block text-[10px] font-mono text-[#a78bfa] uppercase font-bold tracking-widest">
                           Target Delivery Date *
                         </label>
@@ -7945,52 +7985,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           onChange={(e) => setWfTargetDeliveryDate(e.target.value)}
                           className="w-full sm:w-64 bg-zinc-950 border border-zinc-900 text-xs rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-purple-500"
                         />
-                      </div>
-
-                      <div className="border border-zinc-900 rounded-xl overflow-hidden bg-zinc-950">
-                        <div className="overflow-x-auto w-full">
-                          <table className="w-full text-left border-collapse min-w-max">
-                            <thead>
-                              <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[9px] text-zinc-500 uppercase tracking-wider">
-                                <th className="px-4 py-2.5 font-bold w-[12%] text-center">Qty</th>
-                                <th className="px-4 py-2.5 font-bold w-[53%]">Deliverable Name</th>
-                                <th className="px-4 py-2.5 font-bold w-[35%]">Assign Editor</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-zinc-900 font-sans text-xs text-zinc-300">
-                              {wfDeliverableAssignments.length === 0 ? (
-                                <tr>
-                                  <td colSpan={3} className="px-4 py-8 text-center text-zinc-500 font-mono text-xs">
-                                    No deliverables found for this event.
-                                  </td>
-                                </tr>
-                              ) : (
-                                wfDeliverableAssignments.map((row, index) => (
-                                  <tr key={index} className="hover:bg-zinc-900/10 transition-colors">
-                                    <td className="px-4 py-3 font-mono text-xs text-center font-bold text-zinc-400">
-                                      {row.qty}
-                                    </td>
-                                    <td className="px-4 py-3 font-semibold text-zinc-200">
-                                      {row.text}
-                                    </td>
-                                    <td className="px-4 py-2">
-                                      <select
-                                        value={row.editor}
-                                        onChange={(e) => handleEditorChange(index, e.target.value)}
-                                        className="w-full bg-zinc-905 border border-zinc-900 hover:border-zinc-800 text-xs text-zinc-300 rounded-xl px-2.5 py-1.5 font-mono focus:outline-none focus:border-purple-500 cursor-pointer h-9"
-                                      >
-                                        <option value="Unassigned">-- Select Editor --</option>
-                                        {(productionStaff || []).map(s => (
-                                          <option key={s.staff_id} value={s.name}>{s.name}</option>
-                                        ))}
-                                      </select>
-                                    </td>
-                                  </tr>
-                                ))
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
                       </div>
 
                       <div>
@@ -8007,16 +8001,16 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         <button
                           type="button"
                           onClick={() => { setActiveWorkflowProd(null); setWorkflowActionType(null); }}
-                          className="flex-1 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                          className="flex-1 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer uppercase font-mono tracking-wider"
                         >
                           Cancel
                         </button>
                         <button
                           type="submit"
                           disabled={isSaving}
-                          className="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+                          className="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50 cursor-pointer uppercase font-mono tracking-wider"
                         >
-                          {isSaving ? 'Assigning...' : 'Assign Editors'}
+                          {isSaving ? 'Assigning...' : 'Assign Editor'}
                         </button>
                       </div>
                     </form>
