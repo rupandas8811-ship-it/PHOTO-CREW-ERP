@@ -418,9 +418,6 @@ export const ProductionStaffModule: React.FC = () => {
         // Save estimated completion info & expected delivery date
         await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, {
           target_finish_date: editingStartedForm.estimated_completion_date,
-          estimated_completion_time: editingStartedForm.estimated_completion_time,
-          started_at: timestamp,
-          started_by: staffName,
           status: 'Editing Started'
         });
       }
@@ -489,7 +486,6 @@ export const ProductionStaffModule: React.FC = () => {
         const saveRes = await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, {
           Edited_Drive_Link: editedLink,
           edited_drive_link: editedLink,
-          edited_link_uploaded_at: timestamp,
           status: 'Customer Review'
         });
 

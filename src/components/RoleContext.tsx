@@ -1304,7 +1304,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       editor_assignments: [
         'assignment_id', 'production_id', 'staff_id', 'staff_name', 'speciality', 
         'assigned_date', 'target_finish_date', 'status', 'created_at', 'event_id', 
-        'order_id', 'deliverable_id', 'Edited_Drive_Link', 'edited_drive_link', 'edited_link_uploaded_at'
+        'order_id', 'deliverable_id', 'Edited_Drive_Link', 'edited_drive_link'
       ],
       operations_staff: [
         'staff_id', 'name', 'mobile', 'whatsapp_number', 'email', 'role', 'department', 'status', 'joining_date', 

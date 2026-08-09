@@ -265,7 +265,16 @@ async function startServer() {
         if (!clone.edited_drive_link && clone.Edited_Drive_Link) {
           clone.edited_drive_link = clone.Edited_Drive_Link;
         }
-        delete clone.Edited_Drive_Link;
+      }
+      const validCols = new Set([
+        'assignment_id', 'production_id', 'staff_id', 'staff_name', 'speciality',
+        'assigned_date', 'target_finish_date', 'status', 'created_at', 'event_id',
+        'order_id', 'deliverable_id', 'edited_drive_link'
+      ]);
+      for (const k of Object.keys(clone)) {
+        if (!validCols.has(k)) {
+          delete clone[k];
+        }
       }
     }
 
