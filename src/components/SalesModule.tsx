@@ -9374,10 +9374,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
             {/* In-place Add / Edit Package Modal */}
             {(isAddFormOpen || editingPackage) && (
-              <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto animate-fade-in text-left text-xs bg-black/70">
-                <div id="add_edit_package_modal" className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl my-auto p-4 sm:p-6 space-y-4 shadow-2xl relative text-slate-350 max-h-[90vh] flex flex-col overflow-hidden">
+              <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 text-left text-xs bg-black/70 animate-fade-in">
+                <div id="add_edit_package_modal" className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl flex flex-col shadow-2xl relative text-slate-350 overflow-hidden" style={{ maxHeight: 'calc(100vh - 40px)' }}>
                   {/* Modal Header */}
-                  <div className="border-b border-slate-800 pb-3 flex items-center justify-between shrink-0">
+                  <div className="border-b border-slate-800 p-4 sm:p-6 flex items-center justify-between shrink-0">
                     <h4 className="text-sm sm:text-base font-bold text-slate-100 font-mono tracking-wide flex items-center gap-2">
                       <span>{editingPackage ? '✏️ Edit Service Package' : '✨ Define New Service Package'}</span>
                     </h4>
@@ -9412,7 +9412,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   </div>
 
                   {/* Scrollable Form Body */}
-                  <div className="overflow-y-auto overflow-x-hidden pr-1 pb-6 space-y-5 text-xs text-slate-300 flex-1 min-h-0 w-full max-w-full">
+                  <div className="overflow-y-auto overflow-x-hidden p-4 sm:p-6 space-y-5 text-xs text-slate-300 flex-1 min-h-0 w-full max-w-full">
                     {/* SECTION 1: PACKAGE DETAILS */}
                     <div className="space-y-3 w-full max-w-full">
                       <label className="block text-slate-300 font-bold uppercase tracking-wider text-[11px] font-mono text-emerald-400">
@@ -9646,7 +9646,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   </div>
 
                   {/* Modal Footer */}
-                  <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800 shrink-0 bg-slate-900 z-10">
+                  <div className="flex items-center justify-end gap-3 p-4 sm:p-6 border-t border-slate-800 shrink-0 bg-slate-900 z-10">
                     <button
                       type="button"
                       onClick={() => {
