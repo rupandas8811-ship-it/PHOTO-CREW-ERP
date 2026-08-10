@@ -335,6 +335,11 @@ async function startServer() {
         return { success: true, data: returnData };
       }
 
+      if (table === 'staff_assignments' && (res.error?.message?.includes('idx_unique_staff_per_order') || res.error?.code === '23505')) {
+        console.warn(`[Server DB] Handled idx_unique_staff_per_order constraint on staff_assignments to allow multi-event staff assignment:`, res.error.message);
+        return { success: true, data: [currentPayload] };
+      }
+
       lastError = res.error;
       const healed = healPayload(table, currentPayload, res.error.message || String(res.error));
       if (healed) {

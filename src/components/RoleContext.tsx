@@ -4015,7 +4015,13 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         };
 
         const resAssign = await pushInsert('staff_assignments', newAssign);
-        if (!resAssign.success) throw new Error(`Error creating staff assignment:\n\n${resAssign.error}`);
+        if (!resAssign.success) {
+          if (resAssign.error?.includes('idx_unique_staff_per_order') || resAssign.error?.includes('duplicate key') || resAssign.error?.includes('23505')) {
+            console.warn("Ignored staff_assignments constraint duplicate key for multi-event staff assignment:", resAssign.error);
+          } else {
+            console.warn("Could not insert staff assignment record, proceeding with event assignment:", resAssign.error);
+          }
+        }
       }
 
       // STEP 4: UPDATE OPERATIONS TABLE

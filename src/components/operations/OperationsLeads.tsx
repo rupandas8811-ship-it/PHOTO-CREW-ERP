@@ -1277,59 +1277,25 @@ export const OperationsLeads: React.FC = () => {
               }, 100);
               return;
           }
-
-          // Validate equipment assigned for this event
-          const eventHasEquipment = allocStaffForEq.some((s: any) => s.equipment && s.equipment.length > 0);
-          if (!eventHasEquipment) {
-              setValidationAttempted(true);
-              setAssignValidationError(`Please assign at least one Equipment item for every Event.`);
-              
-              // Open the collapsed event and focus
-              setCollapsedAssignEvents(prev => ({ ...prev, [evId]: false }));
-              
-              // Scroll to error
-              setTimeout(() => {
-                const el = document.getElementById(`assign-event-${evId}`);
-                if (el) {
-                   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                   el.classList.add('ring-2', 'ring-amber-500', 'ring-offset-2', 'ring-offset-zinc-950');
-                   setTimeout(() => el.classList.remove('ring-2', 'ring-amber-500', 'ring-offset-2', 'ring-offset-zinc-950'), 3000);
-                }
-              }, 100);
-              
-              return; // Stop saving
-          }
        }
     }
 
-    // Global check: At least one equipment must be assigned overall
-    const allAssignedEquipment = Array.from(
-      new Set(
-        Object.values(eventAllocations).flatMap((alloc: any) => (alloc.staff || []).flatMap((s: any) => s.equipment || []))
-      )
-    ) as string[];
-
-    if (allAssignedEquipment.length === 0) {
-      overallMissingStaff = true;
-    }
-
     try {
-      setIsSaving(true);
 
-      // Collect ALL assigned staff across all events into activeAssignments so they are recorded correctly
-      const allAssignedStaff: { staff_role: string; staff_id: string; staff_name: string; equipment?: string[] }[] = [];
-      Object.values(eventAllocations).forEach((alloc: any) => {
+      // Collect ALL assigned staff across all events into activeAssignments so they are recorded correctly per event
+      const allAssignedStaff: { staff_role: string; staff_id: string; staff_name: string; equipment?: string[]; event_id?: string; event_name?: string }[] = [];
+      Object.entries(eventAllocations).forEach(([evId, alloc]: [string, any]) => {
         if (alloc.staff && alloc.staff.length > 0) {
           alloc.staff.forEach((st: any) => {
             if (st.staff_name && st.staff_name.trim() !== '') {
-              if (!allAssignedStaff.find(a => a.staff_name === st.staff_name && a.staff_role === st.staff_role)) {
-                 allAssignedStaff.push({
-                   staff_role: st.staff_role,
-                   staff_id: st.staff_id,
-                   staff_name: st.staff_name,
-                   equipment: st.equipment || []
-                 });
-              }
+               allAssignedStaff.push({
+                 staff_role: st.staff_role,
+                 staff_id: st.staff_id,
+                 staff_name: st.staff_name,
+                 equipment: st.equipment || [],
+                 event_id: evId,
+                 event_name: st.event_name || ''
+               });
             }
           });
         }
