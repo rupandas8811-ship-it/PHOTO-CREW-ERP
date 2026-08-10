@@ -57,20 +57,61 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
   const address = lead?.address || lead?.client_residence_address || order?.address || (lead?.city ? `${lead.city}${lead.state ? `, ${lead.state}` : ''}` : null) || booking?.customerAddress || 'N/A';
   const googleMapsLocation = lead?.google_maps_link || primaryEvent?.google_maps_link || booking?.googleMapsLink || null;
 
-  // Event Details
+  // Event Details Resolution
   const finalOrderId = order?.order_id || booking?.orderId || targetOrderId || 'N/A';
-  const eventName = events.length > 0 
-    ? events.map(e => e.event_name || e.event_type).filter(Boolean).join(', ')
-    : (lead?.event_name || lead?.event_type || order?.event_type || booking?.eventName || 'N/A');
-  const eventType = lead?.event_type || lead?.shoot_type || order?.event_type || booking?.shootType || 'N/A';
-  const eventDate = primaryEvent?.event_date || lead?.event_date || order?.event_date || booking?.eventDate || 'N/A';
-  const eventStartTime = primaryEvent?.event_start_time || lead?.event_time || order?.event_time || booking?.eventStartTime || 'N/A';
-  
-  const eventEndDate = primaryEvent?.event_end_date || primaryEvent?.Event_End_Date || lead?.event_end_date || lead?.Event_End_Date || booking?.eventEndDate || 'N/A';
-  const eventEndTime = primaryEvent?.event_end_time || booking?.eventEndTime || 'N/A';
 
-  const venueAddress = primaryEvent?.event_location || lead?.event_location || order?.event_location || booking?.venue || 'N/A';
-  const guestPax = primaryEvent?.guest_pax || (lead as any)?.guest_pax || order?.guest_pax || booking?.guestPax || 'N/A';
+  const rawEvents = (events && events.length > 0) 
+    ? events 
+    : (lead?.events && Array.isArray(lead.events) && lead.events.length > 0 ? lead.events : []);
+
+  const resolvedEvents = rawEvents.length > 0 
+    ? rawEvents.map((ev: any, idx: number) => {
+        const eType = ev.event_type === 'Other' 
+          ? (ev.custom_event_type || ev.event_type || 'Other') 
+          : (ev.event_type || 'N/A');
+
+        const eName = ev.event_name === 'Other' 
+          ? (ev.custom_event_name || ev.event_name || eType) 
+          : (ev.event_name || eType || 'N/A');
+
+        return {
+          id: ev.id || `ev_${idx}`,
+          eventType: eType,
+          eventName: eName,
+          eventDate: ev.event_date || 'N/A',
+          eventStartTime: ev.event_start_time || 'N/A',
+          eventEndDate: ev.event_end_date || ev.Event_End_Date || 'N/A',
+          eventEndTime: ev.event_end_time || 'N/A',
+          eventLocation: ev.event_location || 'N/A',
+          googleMapsLink: ev.google_maps_link || null,
+          guestPax: ev.guest_pax || 'N/A',
+          reportingDate: ev.reporting_date || ev.Reporting_date || ev.event_date || 'N/A',
+          reportingTime: ev.reporting_time || 'N/A'
+        };
+      })
+    : [{
+        id: 'default_event',
+        eventType: lead?.event_type === 'Other' ? (lead?.custom_event_type || 'Other') : (lead?.event_type || order?.event_type || booking?.shootType || 'N/A'),
+        eventName: lead?.event_name === 'Other' ? (lead?.custom_event_name || 'Other') : (lead?.event_name || order?.event_name || booking?.eventName || 'N/A'),
+        eventDate: primaryEvent?.event_date || lead?.event_date || order?.event_date || booking?.eventDate || 'N/A',
+        eventStartTime: primaryEvent?.event_start_time || lead?.event_time || order?.event_time || booking?.eventStartTime || 'N/A',
+        eventEndDate: primaryEvent?.event_end_date || primaryEvent?.Event_End_Date || lead?.event_end_date || booking?.eventEndDate || 'N/A',
+        eventEndTime: primaryEvent?.event_end_time || booking?.eventEndTime || 'N/A',
+        eventLocation: primaryEvent?.event_location || lead?.event_location || order?.event_location || booking?.venue || 'N/A',
+        googleMapsLink: primaryEvent?.google_maps_link || lead?.google_maps_link || booking?.googleMapsLink || null,
+        guestPax: primaryEvent?.guest_pax || (lead as any)?.guest_pax || order?.guest_pax || booking?.guestPax || 'N/A',
+        reportingDate: primaryEvent?.reporting_date || lead?.Reporting_date || booking?.reportingDate || 'N/A',
+        reportingTime: primaryEvent?.reporting_time || operation?.reporting_time || booking?.reportingTime || 'N/A'
+      }];
+
+  const eventName = resolvedEvents.map(e => e.eventName).filter(Boolean).join(', ');
+  const eventType = resolvedEvents.map(e => e.eventType).filter(Boolean).join(', ');
+  const eventDate = resolvedEvents[0]?.eventDate || 'N/A';
+  const eventStartTime = resolvedEvents[0]?.eventStartTime || 'N/A';
+  const eventEndDate = resolvedEvents[0]?.eventEndDate || 'N/A';
+  const eventEndTime = resolvedEvents[0]?.eventEndTime || 'N/A';
+  const venueAddress = resolvedEvents[0]?.eventLocation || 'N/A';
+  const guestPax = resolvedEvents[0]?.guestPax || 'N/A';
 
   // Reporting Details
   const reportingDate = primaryEvent?.reporting_date || lead?.Reporting_date || lead?.reporting_date || booking?.reportingDate || eventDate || 'N/A';
@@ -170,61 +211,69 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
 
           {/* Section 2: Event Details */}
           <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4 sm:p-5 space-y-4">
-            <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2 border-b border-zinc-800 pb-2">
-              <Calendar className="w-4 h-4 text-amber-400" /> Event Details
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              <div className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60">
-                <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-1">Order ID</span>
-                <span className="text-xs font-bold font-mono text-indigo-300">{finalOrderId}</span>
-              </div>
-              <div className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60">
-                <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-1">Event Name</span>
-                <span className="text-xs font-bold text-white">{eventName}</span>
-              </div>
-              <div className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60">
-                <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-1">Event Type</span>
-                <span className="text-xs font-semibold text-zinc-200">{eventType}</span>
-              </div>
-              <div className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60">
-                <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-1">Event Date</span>
-                <span className="text-xs font-semibold font-mono text-zinc-200">{eventDate}</span>
-              </div>
-              <div className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60">
-                <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-1">Event Start Time</span>
-                <span className="text-xs font-semibold font-mono text-emerald-400">{eventStartTime}</span>
-              </div>
-              <div className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60">
-                <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-1">Event End Date</span>
-                <span className="text-xs font-semibold font-mono text-zinc-200">{eventEndDate}</span>
-              </div>
-              <div className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60">
-                <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-1">Event End Time</span>
-                <span className="text-xs font-semibold font-mono text-rose-400">{eventEndTime}</span>
-              </div>
-              <div className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60">
-                <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-1">Guest Pax</span>
-                <span className="text-xs font-semibold text-zinc-200">{guestPax}</span>
-              </div>
-              <div className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60 lg:col-span-3">
-                <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-1">Event Location</span>
-                <span className="text-xs font-semibold text-zinc-200 break-words">{venueAddress}</span>
-              </div>
-              <div className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60 lg:col-span-3">
-                <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-1">Google Maps Link</span>
-                {googleMapsLocation && googleMapsLocation !== 'N/A' ? (
-                  <a 
-                    href={googleMapsLocation.startsWith('http') ? googleMapsLocation : `https://${googleMapsLocation}`} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    className="text-xs text-indigo-400 hover:underline font-mono break-all inline-flex items-center gap-1"
-                  >
-                    <MapPin className="w-3.5 h-3.5 inline shrink-0" /> {googleMapsLocation}
-                  </a>
-                ) : (
-                  <span className="text-xs text-zinc-500 italic">Not available</span>
-                )}
-              </div>
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+              <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-amber-400" /> Event Details ({resolvedEvents.length} Event{resolvedEvents.length > 1 ? 's' : ''})
+              </h4>
+              <span className="text-xs font-mono text-indigo-300 font-bold">Order ID: {finalOrderId}</span>
+            </div>
+
+            <div className="space-y-4">
+              {resolvedEvents.map((ev, idx) => (
+                <div key={ev.id || idx} className="bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/60 pb-2">
+                    <span className="text-xs font-bold font-mono text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded">
+                      Event Type: {ev.eventType}
+                    </span>
+                    <span className="text-sm font-black text-white font-mono">
+                      Event Name: {ev.eventName}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                    <div className="bg-zinc-900/50 p-2.5 rounded-lg border border-zinc-800/40">
+                      <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Event Date</span>
+                      <span className="font-bold text-zinc-200 font-mono">{ev.eventDate}</span>
+                    </div>
+                    <div className="bg-zinc-900/50 p-2.5 rounded-lg border border-zinc-800/40">
+                      <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Event Start Time</span>
+                      <span className="font-bold text-emerald-400 font-mono">{ev.eventStartTime}</span>
+                    </div>
+                    <div className="bg-zinc-900/50 p-2.5 rounded-lg border border-zinc-800/40">
+                      <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Event End Date</span>
+                      <span className="font-semibold text-zinc-300 font-mono">{ev.eventEndDate}</span>
+                    </div>
+                    <div className="bg-zinc-900/50 p-2.5 rounded-lg border border-zinc-800/40">
+                      <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Event End Time</span>
+                      <span className="font-semibold text-rose-400 font-mono">{ev.eventEndTime}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                    <div className="bg-zinc-900/50 p-2.5 rounded-lg border border-zinc-800/40 md:col-span-2">
+                      <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Event Location / Venue</span>
+                      <span className="font-semibold text-zinc-200">{ev.eventLocation}</span>
+                    </div>
+                    <div className="bg-zinc-900/50 p-2.5 rounded-lg border border-zinc-800/40">
+                      <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Guest Pax</span>
+                      <span className="font-semibold text-zinc-200">{ev.guestPax}</span>
+                    </div>
+                  </div>
+
+                  {ev.googleMapsLink && ev.googleMapsLink !== 'N/A' && (
+                    <div className="pt-1">
+                      <a 
+                        href={ev.googleMapsLink.startsWith('http') ? ev.googleMapsLink : `https://${ev.googleMapsLink}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-indigo-400 hover:underline font-mono inline-flex items-center gap-1"
+                      >
+                        <MapPin className="w-3.5 h-3.5 text-indigo-400" /> Google Maps Link
+                      </a>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
 

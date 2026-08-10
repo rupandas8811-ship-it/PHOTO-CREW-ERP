@@ -81,6 +81,49 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
   const projectLogs = logs.filter((log) => log.record_id === orderId || log.record_id === order.lead_id);
   const orderHandovers = equipmentHandovers ? equipmentHandovers.filter((eh) => eh.order_id === orderId) : [];
 
+  // Extract exact Event Information from Step 2 (Sales Quotation / Lead)
+  const rawEvents = lead?.events && Array.isArray(lead.events) && lead.events.length > 0 ? lead.events : [];
+  
+  const resolvedEvents = rawEvents.length > 0 
+    ? rawEvents.map((ev: any, idx: number) => {
+        const eType = ev.event_type === 'Other' 
+          ? (ev.custom_event_type || ev.event_type || 'Other') 
+          : (ev.event_type || 'N/A');
+
+        const eName = ev.event_name === 'Other' 
+          ? (ev.custom_event_name || ev.event_name || eType) 
+          : (ev.event_name || eType || 'N/A');
+
+        return {
+          id: ev.id || `ev_${idx}`,
+          eventType: eType,
+          eventName: eName,
+          eventDate: ev.event_date || 'N/A',
+          eventStartTime: ev.event_start_time || 'N/A',
+          eventEndDate: ev.event_end_date || ev.Event_End_Date || 'N/A',
+          eventEndTime: ev.event_end_time || 'N/A',
+          eventLocation: ev.event_location || 'N/A',
+          googleMapsLink: ev.google_maps_link || null,
+          guestPax: ev.guest_pax || 'N/A',
+          reportingDate: ev.reporting_date || ev.Reporting_date || ev.event_date || 'N/A',
+          reportingTime: ev.reporting_time || 'N/A'
+        };
+      })
+    : [{
+        id: 'default_event',
+        eventType: lead?.event_type === 'Other' ? (lead?.custom_event_type || 'Other') : (lead?.event_type || order?.event_type || 'N/A'),
+        eventName: lead?.event_name === 'Other' ? (lead?.custom_event_name || 'Other') : (lead?.event_name || order?.event_name || 'N/A'),
+        eventDate: lead?.event_date || order?.event_date || 'N/A',
+        eventStartTime: lead?.event_time || order?.event_time || 'N/A',
+        eventEndDate: lead?.event_end_date || 'N/A',
+        eventEndTime: 'N/A',
+        eventLocation: lead?.event_location || order?.event_location || 'N/A',
+        googleMapsLink: lead?.google_maps_link || null,
+        guestPax: (lead as any)?.guest_pax || order?.guest_pax || 'N/A',
+        reportingDate: lead?.reporting_date || lead?.Reporting_date || 'N/A',
+        reportingTime: lead?.reporting_time || 'N/A'
+      }];
+
   // Stage sequence mapping helper
   const currentIndex = STAGES_ORDER.indexOf(order.current_stage);
   const previousStage = currentIndex > 0 ? STAGES_ORDER[currentIndex - 1] : 'N/A';
@@ -212,6 +255,72 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
                         <div className={`flex-1 h-0.5 min-w-max max-w-[50px] transition-all -mt-3 ${step.active && sArr[sIdx+1].active ? 'bg-amber-500' : 'bg-zinc-900'}`} />
                       )}
                     </React.Fragment>
+                  ))}
+                </div>
+              </div>
+
+              {/* Exact Event Information from Sales Quotation Step 2 */}
+              <div className="space-y-3">
+                <h4 className="text-[10px] font-black tracking-widest font-mono text-amber-400 uppercase flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-amber-500" />
+                  <span>EVENT DETAILS & SCHEDULES (SALES STEP 2 RECORD)</span>
+                </h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {resolvedEvents.map((ev, idx) => (
+                    <div key={ev.id || idx} className="bg-[#030303] border border-zinc-850 rounded-xl p-3.5 space-y-2.5 font-sans">
+                      <div className="flex items-center justify-between border-b border-zinc-850 pb-2">
+                        <span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded text-[10px] font-mono font-bold uppercase">
+                          Type: {ev.eventType}
+                        </span>
+                        <span className="text-xs font-black text-white font-mono">
+                          {ev.eventName}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                        <div>
+                          <span className="text-[9.5px] text-zinc-500 uppercase block">Event Date</span>
+                          <span className="text-zinc-200 font-bold">{ev.eventDate}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9.5px] text-zinc-500 uppercase block">Start Time</span>
+                          <span className="text-emerald-400 font-bold">{ev.eventStartTime}</span>
+                        </div>
+                        {ev.eventEndDate && ev.eventEndDate !== 'N/A' && (
+                          <div>
+                            <span className="text-[9.5px] text-zinc-500 uppercase block">End Date</span>
+                            <span className="text-zinc-300 font-medium">{ev.eventEndDate}</span>
+                          </div>
+                        )}
+                        {ev.eventEndTime && ev.eventEndTime !== 'N/A' && (
+                          <div>
+                            <span className="text-[9.5px] text-zinc-500 uppercase block">End Time</span>
+                            <span className="text-rose-400 font-medium">{ev.eventEndTime}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {ev.eventLocation && ev.eventLocation !== 'N/A' && (
+                        <div className="border-t border-zinc-900 pt-2 text-xs">
+                          <span className="text-[9.5px] text-zinc-500 font-mono uppercase block">Venue / Location</span>
+                          <span className="text-zinc-300 text-[11px] leading-tight block mt-0.5">{ev.eventLocation}</span>
+                        </div>
+                      )}
+
+                      {ev.googleMapsLink && ev.googleMapsLink !== 'N/A' && (
+                        <div className="pt-0.5">
+                          <a 
+                            href={ev.googleMapsLink.startsWith('http') ? ev.googleMapsLink : `https://${ev.googleMapsLink}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10.5px] text-indigo-400 hover:underline font-mono inline-flex items-center gap-1"
+                          >
+                            <MapPin className="w-3 h-3 text-indigo-400" /> Google Maps Link
+                          </a>
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
@@ -364,23 +473,40 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
                       <span>SHOOT DATES & LOCATION LOCK</span>
                     </h4>
                     
-                    <div className="space-y-3.5 text-xs text-zinc-300">
+                    <div className="space-y-3 text-xs text-zinc-300">
+                      {resolvedEvents.map((ev, idx) => (
+                        <div key={ev.id || idx} className="p-3 bg-zinc-950 border border-zinc-900 rounded-xl space-y-2">
+                          <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5 font-mono">
+                            <span className="text-[10px] text-amber-400 font-bold uppercase">Type: {ev.eventType}</span>
+                            <span className="text-xs text-white font-bold">{ev.eventName}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                            <div>
+                              <span className="text-[9px] text-zinc-500 block uppercase">Event Date</span>
+                              <span className="text-zinc-100 font-extrabold flex items-center gap-1">
+                                <Calendar className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                                {ev.eventDate}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-zinc-500 block uppercase">Start Time</span>
+                              <span className="text-zinc-100 font-extrabold flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                {ev.eventStartTime}
+                              </span>
+                            </div>
+                          </div>
+                          {ev.eventLocation && ev.eventLocation !== 'N/A' && (
+                            <div className="text-[10px] text-zinc-400 border-t border-zinc-900/80 pt-1.5 font-sans">
+                              <span className="text-zinc-500 font-mono block uppercase text-[9px]">Location</span>
+                              <span className="text-zinc-300">{ev.eventLocation}</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+
                       <div>
-                        <span className="text-[10px] text-zinc-500 uppercase tracking-widest block">Event Date</span>
-                        <p className="text-zinc-100 font-extrabold mt-1 flex items-center gap-1.5 text-sm">
-                          <Calendar className="w-4 h-4 text-rose-500" />
-                          <span>{order.event_date}</span>
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-zinc-500 uppercase tracking-widest block">Reporting Time Gate</span>
-                        <p className="text-zinc-100 font-extrabold mt-1 flex items-center gap-1.5 text-sm">
-                          <Clock className="w-4 h-4 text-emerald-500" />
-                          <span>{operation.reporting_time || order.event_time}</span>
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-zinc-500 uppercase tracking-widest block">Event Stage Status</span>
+                        <span className="text-[10px] text-zinc-500 uppercase tracking-widest block font-mono">Event Stage Status</span>
                         <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-black uppercase mt-1 tracking-wider ${
                           operation.event_status === 'Completed' 
                             ? 'bg-emerald-500/10 text-emerald-450 border border-emerald-500/25' 

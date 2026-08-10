@@ -95,18 +95,16 @@ const getRawFootageDriveLink = (assignment: any, prod: any, order: any, lead: an
 // Helper to extract resolved Event Name without generic 'Project' fallback unless genuinely empty
 const getResolvedEventName = (lead: any, order: any, prod: any): string => {
   const leadEventFirstName = lead?.events && lead.events.length > 0 
-    ? (lead.events[0]?.event_name || lead.events[0]?.event_type) 
+    ? (lead.events[0]?.event_name === 'Other' ? lead.events[0]?.custom_event_name : (lead.events[0]?.event_name || lead.events[0]?.event_type)) 
     : null;
 
   const candidate = (
     leadEventFirstName ||
-    lead?.event_name ||
-    lead?.custom_event_name ||
+    (lead?.event_name === 'Other' ? lead?.custom_event_name : lead?.event_name) ||
     order?.event_name ||
     order?.custom_event_name ||
     prod?.event_name ||
-    lead?.custom_event_type ||
-    lead?.event_type ||
+    (lead?.event_type === 'Other' ? lead?.custom_event_type : lead?.event_type) ||
     order?.event_type ||
     prod?.event_type ||
     order?.project_name ||
@@ -129,6 +127,23 @@ const getResolvedEventName = (lead: any, order: any, prod: any): string => {
   ).toString().trim();
 
   return (secondary && secondary !== 'Other') ? secondary : 'Event';
+};
+
+// Helper to extract resolved Event Type from Sales Step 2 records
+const getResolvedEventType = (lead: any, order: any, prod: any): string => {
+  const leadEventFirstType = lead?.events && lead.events.length > 0 
+    ? (lead.events[0]?.event_type === 'Other' ? (lead.events[0]?.custom_event_type || 'Other') : lead.events[0]?.event_type) 
+    : null;
+
+  const candidate = (
+    leadEventFirstType ||
+    (lead?.event_type === 'Other' ? lead?.custom_event_type : lead?.event_type) ||
+    order?.event_type ||
+    prod?.event_type ||
+    ''
+  ).toString().trim();
+
+  return candidate || 'N/A';
 };
 
 export const ProductionStaffModule: React.FC = () => {
@@ -334,8 +349,9 @@ export const ProductionStaffModule: React.FC = () => {
         // Raw Footage Drive Link resolution across Operations / Raw Footage / Production / Assignment sources
         const rawFootageLink = getRawFootageDriveLink(assignment, prod, order, lead, operations);
 
-        // Event Name resolution across Lead / Order / Production sources
+        // Event Name & Type resolution across Lead / Order / Production sources
         const eventName = getResolvedEventName(lead, order, prod);
+        const eventType = getResolvedEventType(lead, order, prod);
 
         // Customer details resolution
         const customerName = (lead?.customer_name || order?.customer_name || prod?.customer_name || 'Client').trim();
@@ -353,6 +369,7 @@ export const ProductionStaffModule: React.FC = () => {
             customerMobile,
             eventDate,
             eventName,
+            eventType,
             deliverable: assignment.speciality,
             targetFinishDate: prod?.target_delivery_date || prod?.expected_delivery_date || assignment.target_finish_date || '',
             status: currentStatus,
@@ -377,6 +394,7 @@ export const ProductionStaffModule: React.FC = () => {
           customerName: item.customerName,
           customerMobile: item.customerMobile,
           eventName: item.eventName,
+          eventType: item.eventType,
           eventDate: item.eventDate,
           targetFinishDate: item.targetFinishDate,
           rawFootageLink: item.rawFootageLink,
@@ -852,12 +870,17 @@ Thank you.`;
                           )}
                         </div>
 
-                        {/* Event Name */}
+                        {/* Event Details */}
                         <div className="space-y-0.5">
-                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Event Name</div>
+                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Event Details</div>
                           <div className="font-bold text-purple-300 text-sm truncate" title={grp.eventName}>
                             {grp.eventName}
                           </div>
+                          {grp.eventType && grp.eventType !== grp.eventName && grp.eventType !== 'N/A' && (
+                            <div className="text-[10px] font-mono font-bold text-amber-400/90 truncate">
+                              Type: {grp.eventType}
+                            </div>
+                          )}
                           <div className="text-[11px] text-zinc-400 font-mono flex items-center gap-1 mt-0.5">
                             <Calendar className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                             <span>{grp.eventDate || '—'}</span>
