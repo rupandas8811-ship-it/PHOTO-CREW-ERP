@@ -768,11 +768,13 @@ const MainAppContent: React.FC = () => {
       <div className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-3 md:p-4 lg:p-4 flex flex-col lg:flex-row gap-4 relative">
         
         {/* DESKTOP SIDEBAR PANEL */}
-        <div className={`hidden lg:block flex-shrink-0 transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-20'}`}>
-          <div className={`sticky top-20 ${!sidebarOpen ? 'sidebar-collapsed' : ' '}`}>
-            {renderSidebarContent()}
+        {sidebarOpen && (
+          <div className="hidden lg:block flex-shrink-0 w-64 transition-all duration-300">
+            <div className="sticky top-20">
+              {renderSidebarContent()}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* MOBILE & TABLET SLIDE-OUT DRAWER */}
         <div 

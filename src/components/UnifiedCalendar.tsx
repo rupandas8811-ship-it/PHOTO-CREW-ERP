@@ -742,6 +742,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
     <div id="unified_calendar_container" className="space-y-6 text-zinc-100 pb-10">
       
       {/* 1. Header Navigation Bar (Controls only) */}
+      {role !== 'operations' && (
       <div className="flex flex-wrap items-center justify-between gap-3 bg-zinc-950/40 border border-zinc-900 p-4 rounded-2xl shadow-xl">
         {calendarError && (
           <div className="w-full p-2.5 bg-red-950/60 border border-red-500/30 rounded-lg text-xs text-red-200 flex items-center justify-between gap-2">
@@ -800,6 +801,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
         </div>
       </div>
 
+      )}
       {/* 3. Filtering and Custom Parameters Console */}
       <div className="bg-zinc-900/20 border border-zinc-900 p-4 rounded-2xl flex flex-col lg:flex-row items-center justify-between gap-4">
         {/* Search Input */}

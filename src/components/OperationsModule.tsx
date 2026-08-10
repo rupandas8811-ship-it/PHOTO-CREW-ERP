@@ -221,6 +221,7 @@ export const OperationsModule: React.FC<OperationsModuleProps> = ({
   return (
     <div id="operations_module" className="space-y-6">
       {/* Universal Module Header Banner & Core Top Tabs Switcher */}
+      {activeSubTab !== 'operations_calendar' && (
       <div className="flex flex-col gap-4 border-b border-zinc-900 pb-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -239,6 +240,7 @@ export const OperationsModule: React.FC<OperationsModuleProps> = ({
         {/* Top level sub-tabs removed as functionality exists elsewhere */}
       </div>
 
+      )}
       {/* Render sub-modules based on selection state */}
       <div className="w-full">
         {activeSubTab === 'operations_leads' && <OperationsLeads />}

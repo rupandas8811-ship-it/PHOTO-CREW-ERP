@@ -3333,7 +3333,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   React.useEffect(() => {
     const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
     if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD' && pkgId && supabaseClient) {
-      if (lastLoadedLeadIdRef.current === selectedLead.lead_id) {
+      const currentKey = `${selectedLead.lead_id}_${pkgId}_${crmEvents?.length || 0}_${crmWizardStep}_${wizardStep}`;
+      if (lastLoadedLeadIdRef.current === currentKey) {
         return;
       }
       const fetchSupabasePackageData = async () => {
@@ -3345,7 +3346,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             .maybeSingle();
           
           if (!error && data) {
-            lastLoadedLeadIdRef.current = selectedLead.lead_id;
+            lastLoadedLeadIdRef.current = currentKey;
             const newInclusions: Record<string, string[]> = {};
             const newDeliverables: Record<string, string[]> = {};
 
@@ -3456,7 +3457,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         lastLoadedLeadIdRef.current = null;
       }
     }
-  }, [selectedLead?.lead_id, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, supabaseClient, crmEvents]);
+  }, [selectedLead?.lead_id, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, supabaseClient, crmEvents, crmWizardStep, wizardStep]);
 
   // Save to Supabase directly for the JSON columns
   const isFirstRender = React.useRef(true);
