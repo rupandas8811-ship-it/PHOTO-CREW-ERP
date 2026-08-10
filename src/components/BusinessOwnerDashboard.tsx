@@ -1678,6 +1678,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
 
   // Clickable summary card state
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   // Combined detailed records
   const records = useMemo(() => {
@@ -1948,34 +1949,22 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
           </p>
         </div>
 
-        {/* Download Buttons */}
+        {/* Filter / Download Button */}
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={downloadPDF}
-            className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-zinc-200 hover:bg-zinc-800 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 border rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              showFilters ? 'border-amber-500/40 text-amber-400 bg-amber-500/5' : 'border-zinc-800 text-zinc-400'
+            }`}
           >
-            <Download className="w-3.5 h-3.5 text-rose-400" />
-            <span>PDF</span>
-          </button>
-          <button
-            onClick={downloadExcel}
-            className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-zinc-200 hover:bg-zinc-800 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Excel (.xlsx)</span>
-          </button>
-          <button
-            onClick={downloadCSV}
-            className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-zinc-200 hover:bg-zinc-800 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5 text-blue-400" />
-            <span>CSV</span>
+            <Filter className="w-3.5 h-3.5" />
+            <span>Filter / Download</span>
           </button>
         </div>
       </div>
 
       {/* Summary KPI Highlights Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <div 
           onClick={() => setSelectedCard('summary_revenue')}
           className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5 hover:bg-zinc-900 hover:border-zinc-700 hover:scale-[1.02] cursor-pointer transition-all duration-200"
@@ -2032,38 +2021,68 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         </div>
       </div>
 
-      {/* Filter & Search Bar */}
-      <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-        {/* Search */}
-        <div className="relative w-full sm:w-72">
-          <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5" />
-          <input
-            type="text"
-            placeholder="Search Order ID, Customer..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 font-mono"
-          />
-        </div>
+      {showFilters && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          {/* Download Buttons Bar */}
+          <div className="flex flex-wrap items-center justify-end gap-2 bg-zinc-950/20 border border-zinc-900 p-3 rounded-xl">
+            <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-wider mr-2">Download:</span>
+            <button
+              onClick={downloadPDF}
+              className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-zinc-200 hover:bg-zinc-800 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 text-rose-400" />
+              <span>PDF</span>
+            </button>
+            <button
+              onClick={downloadExcel}
+              className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-zinc-200 hover:bg-zinc-800 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Excel (.xlsx)</span>
+            </button>
+            <button
+              onClick={downloadCSV}
+              className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-zinc-200 hover:bg-zinc-800 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 text-blue-400" />
+              <span>CSV</span>
+            </button>
+          </div>
 
-        {/* Dates */}
-        <div className="flex items-center gap-2 text-xs font-mono w-full sm:w-auto">
-          <span className="text-zinc-500 uppercase text-[10px] font-bold">Dates:</span>
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1 text-zinc-200 text-xs"
-          />
-          <span className="text-zinc-600">to</span>
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1 text-zinc-200 text-xs"
-          />
+          {/* Filter & Search Bar */}
+          <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            {/* Search */}
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="Search Order ID, Customer..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 font-mono"
+              />
+            </div>
+
+            {/* Dates */}
+            <div className="flex items-center gap-2 text-xs font-mono w-full sm:w-auto">
+              <span className="text-zinc-500 uppercase text-[10px] font-bold">Dates:</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1 text-zinc-200 text-xs"
+              />
+              <span className="text-zinc-600">to</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1 text-zinc-200 text-xs"
+              />
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Table */}
       <div className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden shadow-2xl">

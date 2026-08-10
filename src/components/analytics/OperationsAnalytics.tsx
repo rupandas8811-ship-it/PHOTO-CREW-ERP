@@ -21,6 +21,7 @@ export const OperationsAnalytics: React.FC = () => {
 
   // Selected Card for Report Popup
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   // Staff Performance local states
   const [staffNameFilter, setStaffNameFilter] = useState('');
@@ -99,11 +100,13 @@ export const OperationsAnalytics: React.FC = () => {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <button
-            onClick={() => setSelectedCard('Complete Operations Digest')}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 hover:bg-amber-500/20 hover:border-amber-500/40 transition-all font-mono text-[10px] uppercase font-bold tracking-wider cursor-pointer h-9 shadow-md shadow-black/10"
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 border rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              showFilters ? 'border-amber-500/40 text-amber-400 bg-amber-500/5' : 'border-zinc-800 text-zinc-400'
+            }`}
           >
-            <FileText className="w-4 h-4" />
-            <span>Download Report</span>
+            <Filter className="w-3.5 h-3.5" />
+            <span>Filter / Download</span>
           </button>
           <div className="p-2 py-1.5 rounded-xl bg-zinc-900 border border-zinc-850/80 flex items-center gap-2.5 h-9">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -114,8 +117,20 @@ export const OperationsAnalytics: React.FC = () => {
         </div>
       </div>
 
+      {showFilters && (
+        <div className="flex justify-end bg-zinc-950/20 border border-zinc-900 p-3 rounded-xl animate-in fade-in duration-200">
+          <button
+            onClick={() => setSelectedCard('Complete Operations Digest')}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 hover:bg-amber-500/20 hover:border-amber-500/40 transition-all font-mono text-[10px] uppercase font-bold tracking-wider cursor-pointer h-9 shadow-md shadow-black/10"
+          >
+            <FileText className="w-4 h-4" />
+            <span>Download Report</span>
+          </button>
+        </div>
+      )}
+
       {/* Operational 8 Analytics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         
         <CameraLensStatsCard
           label="Orders Received"

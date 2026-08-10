@@ -96,6 +96,7 @@ export const PendingPaymentsReport: React.FC = () => {
 
   const [startDate, setStartDate] = useState(defaultStartDate);
   const [endDate, setEndDate] = useState(defaultEndDate);
+  const [showFilters, setShowFilters] = useState(false);
 
   // Card click active selector
   const [activeCardFilter, setActiveCardFilter] = useState<'All' | 'Pending' | 'Partial' | 'Overdue' | 'Upcoming' | 'Average'>('All');
@@ -550,7 +551,7 @@ export const PendingPaymentsReport: React.FC = () => {
       )}
 
       {/* Pending Payment Analytics Cards (Photocrew Lens-Inspired layout) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         
         {/* Card 1: Total Pending Orders */}
         <div 
@@ -636,8 +637,20 @@ export const PendingPaymentsReport: React.FC = () => {
 
       </div>
 
-      {/* Control Filters & Downloads bar */}
-      <div className="bg-zinc-900 border border-zinc-850 p-4 rounded-2xl space-y-4 shadow-xl">
+      <div className="flex justify-end mb-4">
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 border rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            showFilters ? 'border-amber-500/40 text-amber-400 bg-amber-500/5' : 'border-zinc-800 text-zinc-400'
+          }`}
+        >
+          <Filter className="w-3.5 h-3.5" />
+          <span>Filter / Download</span>
+        </button>
+      </div>
+
+      {showFilters && (
+        <div className="bg-zinc-900 border border-zinc-850 p-4 rounded-2xl space-y-4 shadow-xl">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           
           <div className="flex items-center gap-2 text-white font-mono text-[10px] uppercase font-black tracking-wider border-b border-zinc-800 md:border-none pb-2 md:pb-0">
@@ -785,6 +798,7 @@ export const PendingPaymentsReport: React.FC = () => {
         )}
 
       </div>
+      )}
 
       {/* Main Datatable */}
       <div className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden shadow-2xl">

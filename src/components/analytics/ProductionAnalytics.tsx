@@ -20,6 +20,7 @@ export const ProductionAnalytics: React.FC = () => {
 
   // Selected Card for Report Popup
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   // Production Editor local states
   const [editorNameFilter, setEditorNameFilter] = useState('');
@@ -208,11 +209,13 @@ export const ProductionAnalytics: React.FC = () => {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <button
-            onClick={() => setSelectedCard('Complete Production Digest')}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 hover:bg-amber-500/20 hover:border-amber-500/40 transition-all font-mono text-[10px] uppercase font-bold tracking-wider cursor-pointer h-9 shadow-md shadow-black/10"
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 border rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              showFilters ? 'border-amber-500/40 text-amber-400 bg-amber-500/5' : 'border-zinc-800 text-zinc-400'
+            }`}
           >
-            <FileText className="w-4 h-4" />
-            <span>Download Report</span>
+            <Filter className="w-3.5 h-3.5" />
+            <span>Filter / Download</span>
           </button>
           <div className="p-2 py-1.5 rounded-xl bg-zinc-900 border border-zinc-850/80 flex items-center gap-2.5 h-9">
             <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
@@ -223,65 +226,80 @@ export const ProductionAnalytics: React.FC = () => {
         </div>
       </div>
 
-      {/* CRM Status-management Analytics Local Filters */}
-      <div className="p-4 rounded-xl bg-zinc-950/40 border border-zinc-900 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 flex-1">
-          {/* Search Box */}
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
-            <input 
-              type="text"
-              placeholder="Search by customer, or order ID..."
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              className="w-full bg-[#08080a] border border-zinc-900 rounded-xl py-2 pl-9 pr-4 text-xs text-white placeholder-zinc-550 outline-none focus:border-indigo-500 transition-all font-sans"
-            />
+      {showFilters && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          {/* Download Report Bar */}
+          <div className="flex justify-end bg-zinc-950/20 border border-zinc-900 p-3 rounded-xl">
+            <button
+              onClick={() => setSelectedCard('Complete Production Digest')}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 hover:bg-amber-500/20 hover:border-amber-500/40 transition-all font-mono text-[10px] uppercase font-bold tracking-wider cursor-pointer h-9 shadow-md shadow-black/10"
+            >
+              <FileText className="w-4 h-4" />
+              <span>Download Report</span>
+            </button>
           </div>
 
-          {/* Start Date */}
-          <div className="relative flex items-center">
-            <span className="absolute left-3 text-[9px] font-mono uppercase tracking-wider text-zinc-500 pr-2 border-r border-zinc-800 font-extrabold">START:</span>
-            <input 
-              type="date"
-              value={startDateStr}
-              onChange={(e) => setStartDateStr(e.target.value)}
-              className="w-full bg-[#08080a] border border-zinc-900 rounded-xl py-2 pl-16 pr-3 text-xs text-zinc-300 outline-none focus:border-indigo-500 transition-all font-mono"
-            />
-          </div>
+          {/* CRM Status-management Analytics Local Filters */}
+          <div className="p-4 rounded-xl bg-zinc-950/40 border border-zinc-900 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 flex-1">
+              {/* Search Box */}
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+                <input 
+                  type="text"
+                  placeholder="Search by customer, or order ID..."
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  className="w-full bg-[#08080a] border border-zinc-900 rounded-xl py-2 pl-9 pr-4 text-xs text-white placeholder-zinc-550 outline-none focus:border-indigo-500 transition-all font-sans"
+                />
+              </div>
 
-          {/* End Date */}
-          <div className="relative flex items-center">
-            <span className="absolute left-3 text-[9px] font-mono uppercase tracking-wider text-zinc-500 pr-2 border-r border-zinc-800 font-extrabold">END:</span>
-            <input 
-              type="date"
-              value={endDateStr}
-              onChange={(e) => setEndDateStr(e.target.value)}
-              className="w-full bg-[#08080a] border border-zinc-900 rounded-xl py-2 pl-14 pr-3 text-xs text-zinc-300 outline-none focus:border-indigo-500 transition-all font-mono"
-            />
+              {/* Start Date */}
+              <div className="relative flex items-center">
+                <span className="absolute left-3 text-[9px] font-mono uppercase tracking-wider text-zinc-500 pr-2 border-r border-zinc-800 font-extrabold">START:</span>
+                <input 
+                  type="date"
+                  value={startDateStr}
+                  onChange={(e) => setStartDateStr(e.target.value)}
+                  className="w-full bg-[#08080a] border border-zinc-900 rounded-xl py-2 pl-16 pr-3 text-xs text-zinc-300 outline-none focus:border-indigo-500 transition-all font-mono"
+                />
+              </div>
+
+              {/* End Date */}
+              <div className="relative flex items-center">
+                <span className="absolute left-3 text-[9px] font-mono uppercase tracking-wider text-zinc-500 pr-2 border-r border-zinc-800 font-extrabold">END:</span>
+                <input 
+                  type="date"
+                  value={endDateStr}
+                  onChange={(e) => setEndDateStr(e.target.value)}
+                  className="w-full bg-[#08080a] border border-zinc-900 rounded-xl py-2 pl-14 pr-3 text-xs text-zinc-300 outline-none focus:border-indigo-500 transition-all font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Apply & Reset Buttons */}
+            <div className="flex items-center gap-2 lg:self-stretch">
+              <button
+                onClick={handleApplyFilter}
+                className="flex-1 lg:flex-none px-4 py-2 bg-[#4F46E5] hover:bg-opacity-95 text-white rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-colors shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Filter className="w-3.5 h-3.5" />
+                <span>Apply Filter</span>
+              </button>
+              <button
+                onClick={handleResetFilter}
+                className="flex-1 lg:flex-none px-4 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-400 hover:text-white rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Reset Filter</span>
+              </button>
+            </div>
           </div>
         </div>
-
-        {/* Apply & Reset Buttons */}
-        <div className="flex items-center gap-2 lg:self-stretch">
-          <button
-            onClick={handleApplyFilter}
-            className="flex-1 lg:flex-none px-4 py-2 bg-[#4F46E5] hover:bg-opacity-95 text-white rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-colors shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            <Filter className="w-3.5 h-3.5" />
-            <span>Apply Filter</span>
-          </button>
-          <button
-            onClick={handleResetFilter}
-            className="flex-1 lg:flex-none px-4 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-400 hover:text-white rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Reset Filter</span>
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* Production 12 Analytics Cards Grid (Responsive, fluid layout with no hidden or clipped content) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-6 gap-4">
         
         <CameraLensStatsCard
           label="Total Production Projects"
@@ -727,7 +745,7 @@ export const ProductionAnalytics: React.FC = () => {
           return (
             <div className="space-y-6">
               {/* EDITORS KPI CARDS SCROLLER */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 lg:grid-cols-8 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-8 gap-3">
                 
                 {/* 1. Total Editors */}
                 <div 
