@@ -4777,12 +4777,17 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
        eventTypes = targetOrder?.event_type || '';
     }
 
+    const prodEditingStatus = (existingProd?.editing_status && !['Footage Handover', 'Raw Footage Received', 'Pending'].includes(existingProd.editing_status))
+      ? existingProd.editing_status
+      : 'Verified Footage';
+
     const newProd: any = {
       production_id: pId,
       tracking_id: trackingId,
       editor_assigned: existingProd?.editor_assigned || 'Unassigned',
       raw_footage_location: resolvedLink,
-      editing_status: existingProd?.editing_status || 'Raw Footage Received',
+      editing_status: prodEditingStatus,
+      production_status: prodEditingStatus,
       remarks: `Raw footage received via ${storageType || 'Google Drive'}. ${uploadNotes || ''}`,
       order_id: orderId,
       lead_id: targetOrder?.lead_id || '',
@@ -4801,7 +4806,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       operations_staff: currentUserName,
       created_date: timestamp.split('T')[0],
       created_time: timestamp.split('T')[1].split('.')[0],
-      current_status: 'Raw Footage Received',
+      current_status: prodEditingStatus,
       created_at: timestamp
     };
 

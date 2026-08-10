@@ -1313,8 +1313,18 @@ ${coordinatorName}`;
   }, [openActionDropdown]);
 
   const getProductionStatus = (prod: Production): string => {
-    const status = (prod.editing_status || 'Raw Footage Received') as string;
-    if (['Pending', 'Raw Footage Received', 'Verified Footage', 'Footage Handover Verified', 'Raw Footage Uploaded'].includes(status)) return 'Raw Footage Received';
+    const status = (prod.editing_status || 'Verified Footage') as string;
+    if (['Pending', 'Raw Footage Received', 'Verified Footage', 'Footage Handover Verified', 'Raw Footage Uploaded', 'Footage Handover'].includes(status)) {
+      const assignments = (editorAssignments || []).filter(a => 
+        a.production_id === prod.production_id ||
+        a.production_id === (prod as any).order_id ||
+        a.production_id === prod.tracking_id ||
+        a.order_id === (prod as any).order_id ||
+        a.order_id === prod.tracking_id
+      );
+      if (assignments && assignments.length > 0) return 'Assigned Editor';
+      return 'Verified Footage';
+    }
     if (['Editor Assigned', 'Assigned Editor', 'Assigned'].includes(status)) return 'Assigned Editor';
     if (['Editing Started', 'Editing', 'Editing In Progress'].includes(status)) return 'Editing Started';
     if (['Internal QC Review'].includes(status)) return 'Internal QC Review';
@@ -1661,6 +1671,10 @@ ${coordinatorName}`;
     }
 
     // Pre-assignment statuses (e.g. Verified Footage, Footage Handover Verified, Raw Footage Received, Pending)
+    if (['Pending', 'Raw Footage Received', 'Verified Footage', 'Footage Handover Verified', 'Raw Footage Uploaded', 'Footage Handover'].includes(baseStatus)) {
+      return 'Verified Footage';
+    }
+
     return baseStatus;
   };
 
@@ -1782,9 +1796,9 @@ Production Team`;
     const s = getProductionStatus(prod);
     const autoS = getAutomatedProductionStatus(prod);
     const raw = prod.editing_status as string;
-    return s === 'Raw Footage Received' || s === 'Assigned Editor' || s === 'Editor Assigned' ||
+    return s === 'Raw Footage Received' || s === 'Verified Footage' || s === 'Assigned Editor' || s === 'Editor Assigned' ||
            autoS === 'Raw Footage Received' || autoS === 'Assigned Editor' || autoS === 'Editor Assigned' || autoS === 'Verified Footage' ||
-           ['Raw Footage Received', 'Verified Footage', 'Footage Handover Verified', 'Editor Assigned', 'Assigned Editor', 'Pending'].includes(raw);
+           ['Raw Footage Received', 'Verified Footage', 'Footage Handover Verified', 'Editor Assigned', 'Assigned Editor', 'Pending', 'Footage Handover'].includes(raw);
   };
 
   const isInProgressEdit = (prod: Production) => {
