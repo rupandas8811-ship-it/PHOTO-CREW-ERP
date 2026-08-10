@@ -2329,6 +2329,13 @@ Production Team`;
   const [newDeliverableInput, setNewDeliverableInput] = useState('');
   const [openDropdownDeliverable, setOpenDropdownDeliverable] = useState<string | null>(null);
   const [assignedEditorsModalProd, setAssignedEditorsModalProd] = useState<Production | null>(null);
+  const [previewProofModal, setPreviewProofModal] = useState<{
+    imageUrl: string;
+    staffName: string;
+    deliverableName: string;
+    eventName: string;
+    orderId: string;
+  } | null>(null);
   const [rosterStaffName, setRosterStaffName] = useState<string | null>(null);
 
   // Client Acceptance states
@@ -9321,6 +9328,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     <th className="p-3 font-bold">Assigned Deliverable</th>
                     <th className="p-3 font-bold">Current Status</th>
                     <th className="p-3 font-bold">Upload Link</th>
+                    <th className="p-3 font-bold whitespace-nowrap">PROOF / UPLOADED IMAGE</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900 text-zinc-300 font-sans">
@@ -9367,7 +9375,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     if (rawAssignments.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={5} className="p-6 text-center text-zinc-500 italic font-mono text-xs">
+                          <td colSpan={6} className="p-6 text-center text-zinc-500 italic font-mono text-xs">
                             No assigned staff or deliverables found for this order.
                           </td>
                         </tr>
@@ -9413,6 +9421,77 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                       const linkStr = getSpecificAssignmentLink(assignment);
                       const hasLink = Boolean(linkStr);
+
+                      // Extract specific proof/uploaded image for this exact assignment/deliverable record
+                      const getSpecificAssignmentProof = (a: any, prodRec: any): string | null => {
+                        if (!a) return null;
+                        const candidates = [
+                          a.customer_communication_proof,
+                          a.client_communication_proof,
+                          a.confirmation_proof,
+                          a.proof_url,
+                          a.proof,
+                          a.uploaded_proof,
+                          a.image_proof,
+                          a.proof_image,
+                          a.image_url,
+                          a.upload_proof,
+                          a.image
+                        ];
+                        for (const cand of candidates) {
+                          if (cand && typeof cand === 'string') {
+                            const trimmed = cand.trim();
+                            if (
+                              trimmed.startsWith('data:image/') ||
+                              trimmed.startsWith('http://') ||
+                              trimmed.startsWith('https://') ||
+                              trimmed.startsWith('blob:') ||
+                              trimmed.endsWith('.jpg') ||
+                              trimmed.endsWith('.jpeg') ||
+                              trimmed.endsWith('.png') ||
+                              trimmed.endsWith('.webp')
+                            ) {
+                              return trimmed;
+                            }
+                          }
+                        }
+
+                        // Check prodRec fallback if single assignment or staff matches
+                        if (prodRec) {
+                          const isOnlyAssignment = rawAssignments.length === 1;
+                          const isMatchingStaff = (a.staff_name && prodRec.editor_assigned && a.staff_name.toLowerCase().trim() === prodRec.editor_assigned.toLowerCase().trim());
+                          if (isOnlyAssignment || isMatchingStaff) {
+                            const prodCandidates = [
+                              prodRec.client_communication_proof,
+                              prodRec.customer_communication_proof,
+                              prodRec.proof_url,
+                              prodRec.communication_proof,
+                              prodRec.proof_image
+                            ];
+                            for (const cand of prodCandidates) {
+                              if (cand && typeof cand === 'string') {
+                                const trimmed = cand.trim();
+                                if (
+                                  trimmed.startsWith('data:image/') ||
+                                  trimmed.startsWith('http://') ||
+                                  trimmed.startsWith('https://') ||
+                                  trimmed.startsWith('blob:') ||
+                                  trimmed.endsWith('.jpg') ||
+                                  trimmed.endsWith('.jpeg') ||
+                                  trimmed.endsWith('.png') ||
+                                  trimmed.endsWith('.webp')
+                                ) {
+                                  return trimmed;
+                                }
+                              }
+                            }
+                          }
+                        }
+
+                        return null;
+                      };
+
+                      const proofImgUrl = getSpecificAssignmentProof(assignment, prod);
 
                       return (
                         <tr key={assignment.assignment_id || idx} className="hover:bg-zinc-900/40 transition-colors">
@@ -9462,12 +9541,94 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               <span className="text-zinc-500 italic text-xs font-mono">Pending Upload</span>
                             )}
                           </td>
+                          <td className="p-3">
+                            {proofImgUrl ? (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewProofModal({
+                                  imageUrl: proofImgUrl,
+                                  staffName,
+                                  deliverableName,
+                                  eventName,
+                                  orderId: prod.production_id || orderId
+                                })}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 font-bold text-xs transition-colors cursor-pointer"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>View Image</span>
+                              </button>
+                            ) : (
+                              <span className="text-zinc-500 italic text-xs font-mono">No Image Uploaded</span>
+                            )}
+                          </td>
                         </tr>
                       );
                     });
                   })()}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* UPLOADED PROOF / IMAGE PREVIEW POPUP */}
+      {previewProofModal && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all">
+            {/* Header */}
+            <div className="p-4 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400 block mb-0.5">
+                  Uploaded Proof / Image
+                </span>
+                <h4 className="text-xs font-mono font-black text-white uppercase tracking-wider flex items-center gap-2">
+                  <span>{previewProofModal.staffName}</span>
+                  <span className="text-zinc-500">•</span>
+                  <span className="text-purple-300">{previewProofModal.deliverableName}</span>
+                  <span className="text-zinc-500">•</span>
+                  <span className="text-amber-300">{previewProofModal.eventName}</span>
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewProofModal(null)}
+                className="text-zinc-400 hover:text-white p-1.5 rounded-xl bg-zinc-900/50 hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Image Content */}
+            <div className="p-6 overflow-y-auto flex-1 flex flex-col items-center justify-center bg-zinc-950/80">
+              <div className="relative max-w-full max-h-[65vh] rounded-xl overflow-hidden border border-zinc-800 shadow-2xl bg-black">
+                <img
+                  src={previewProofModal.imageUrl}
+                  alt={`Uploaded Proof - ${previewProofModal.staffName} - ${previewProofModal.deliverableName}`}
+                  className="max-h-[65vh] w-auto object-contain mx-auto rounded-lg"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 border-t border-zinc-900 bg-zinc-950 flex items-center justify-between gap-3">
+              <a
+                href={previewProofModal.imageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                referrerPolicy="no-referrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white font-mono text-xs font-bold transition-colors cursor-pointer"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open Full Image</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => setPreviewProofModal(null)}
+                className="px-4 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white font-mono text-xs font-bold transition-colors cursor-pointer"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
