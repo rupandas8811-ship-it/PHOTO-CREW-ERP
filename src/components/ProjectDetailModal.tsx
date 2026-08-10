@@ -11,6 +11,7 @@ interface ProjectDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   orderId: string | null;
+  eventId?: string | null;
 }
 
 const STAGES_ORDER: CurrentStage[] = [
@@ -33,7 +34,7 @@ const STAGES_ORDER: CurrentStage[] = [
   'Closed'
 ];
 
-export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, onClose, orderId }) => {
+export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, onClose, orderId, eventId }) => {
   const { orders, leads, operations, rawFootage, production, payments, logs, currentRole, equipmentHandovers } = useRole();
   const [activeTab, setActiveTab] = useState<'overview' | 'sales' | 'operations' | 'production' | 'billing'>('overview');
 
@@ -84,7 +85,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
   // Extract exact Event Information from Step 2 (Sales Quotation / Lead)
   const rawEvents = lead?.events && Array.isArray(lead.events) && lead.events.length > 0 ? lead.events : [];
   
-  const resolvedEvents = rawEvents.length > 0 
+  const allResolvedEvents = rawEvents.length > 0 
     ? rawEvents.map((ev: any, idx: number) => {
         const eType = ev.event_type === 'Other' 
           ? (ev.custom_event_type || ev.event_type || 'Other') 
@@ -92,10 +93,10 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
 
         const eName = ev.event_name === 'Other' 
           ? (ev.custom_event_name || ev.event_name || eType) 
-          : (ev.event_name || eType || 'N/A');
+          : (ev.event_name || ev.custom_event_name || eType || 'N/A');
 
         return {
-          id: ev.id || `ev_${idx}`,
+          id: ev.id || ev.event_id || `ev_${idx}`,
           eventType: eType,
           eventName: eName,
           eventDate: ev.event_date || 'N/A',
@@ -105,6 +106,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
           eventLocation: ev.event_location || 'N/A',
           googleMapsLink: ev.google_maps_link || null,
           guestPax: ev.guest_pax || 'N/A',
+          staffPax: ev.staff_pax || 'N/A',
           reportingDate: ev.reporting_date || ev.Reporting_date || ev.event_date || 'N/A',
           reportingTime: ev.reporting_time || 'N/A'
         };
@@ -112,7 +114,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
     : [{
         id: 'default_event',
         eventType: lead?.event_type === 'Other' ? (lead?.custom_event_type || 'Other') : (lead?.event_type || order?.event_type || 'N/A'),
-        eventName: lead?.event_name === 'Other' ? (lead?.custom_event_name || 'Other') : (lead?.event_name || order?.event_name || 'N/A'),
+        eventName: lead?.event_name === 'Other' ? (lead?.custom_event_name || 'Other') : (lead?.event_name || lead?.custom_event_name || order?.event_name || 'N/A'),
         eventDate: lead?.event_date || order?.event_date || 'N/A',
         eventStartTime: lead?.event_time || order?.event_time || 'N/A',
         eventEndDate: lead?.event_end_date || 'N/A',
@@ -120,9 +122,20 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
         eventLocation: lead?.event_location || order?.event_location || 'N/A',
         googleMapsLink: lead?.google_maps_link || null,
         guestPax: (lead as any)?.guest_pax || order?.guest_pax || 'N/A',
+        staffPax: (lead as any)?.staff_pax || order?.staff_pax || 'N/A',
         reportingDate: lead?.reporting_date || lead?.Reporting_date || 'N/A',
         reportingTime: lead?.reporting_time || 'N/A'
       }];
+
+  const targetEvent = eventId 
+    ? allResolvedEvents.find((ev) => 
+        (ev.id && String(ev.id) === String(eventId)) ||
+        (ev.eventName && String(ev.eventName).trim().toLowerCase() === String(eventId).trim().toLowerCase()) ||
+        (ev.eventType && String(ev.eventType).trim().toLowerCase() === String(eventId).trim().toLowerCase())
+      )
+    : null;
+
+  const resolvedEvents = targetEvent ? [targetEvent] : allResolvedEvents;
 
   // Stage sequence mapping helper
   const currentIndex = STAGES_ORDER.indexOf(order.current_stage);

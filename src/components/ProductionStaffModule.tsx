@@ -92,14 +92,62 @@ const getRawFootageDriveLink = (assignment: any, prod: any, order: any, lead: an
   return '';
 };
 
+// Helper to identify the exact event record in lead.events for an assignment / prod / order
+const getTargetEventForAssignment = (lead: any, order: any, prod: any, assignment?: any) => {
+  const targetEventId = assignment?.event_id || prod?.event_id;
+  const rawEvents = lead?.events && Array.isArray(lead.events) && lead.events.length > 0 ? lead.events : [];
+
+  if (rawEvents.length > 0) {
+    // 1. Try matching by exact event_id / id
+    if (targetEventId) {
+      const matchById = rawEvents.find((ev: any) => 
+        (ev.id && String(ev.id) === String(targetEventId)) ||
+        (ev.event_id && String(ev.event_id) === String(targetEventId)) ||
+        (ev.event_name && String(ev.event_name) === String(targetEventId)) ||
+        (ev.event_type && String(ev.event_type) === String(targetEventId))
+      );
+      if (matchById) return matchById;
+    }
+
+    // 2. Try matching by event_name or custom_event_name or event_type on prod / order / assignment
+    const searchName = prod?.custom_event_name || prod?.event_name || order?.custom_event_name || order?.event_name;
+    if (searchName) {
+      const matchByName = rawEvents.find((ev: any) => 
+        (ev.event_name && ev.event_name.trim().toLowerCase() === searchName.trim().toLowerCase()) ||
+        (ev.custom_event_name && ev.custom_event_name.trim().toLowerCase() === searchName.trim().toLowerCase()) ||
+        (ev.event_type && ev.event_type.trim().toLowerCase() === searchName.trim().toLowerCase())
+      );
+      if (matchByName) return matchByName;
+    }
+
+    // 3. Fallback: if only 1 event exists, return that single event
+    if (rawEvents.length === 1) {
+      return rawEvents[0];
+    }
+  }
+
+  return null;
+};
+
 // Helper to extract resolved Event Name without generic 'Project' fallback unless genuinely empty
-const getResolvedEventName = (lead: any, order: any, prod: any): string => {
-  const leadEventFirstName = lead?.events && lead.events.length > 0 
-    ? (lead.events[0]?.event_name === 'Other' ? lead.events[0]?.custom_event_name : (lead.events[0]?.event_name || lead.events[0]?.event_type)) 
-    : null;
+const getResolvedEventName = (lead: any, order: any, prod: any, assignment?: any): string => {
+  const targetEv = getTargetEventForAssignment(lead, order, prod, assignment);
+  if (targetEv) {
+    if (targetEv.event_name && targetEv.event_name !== 'Other' && targetEv.event_name.trim() !== '') {
+      return targetEv.event_name;
+    }
+    if (targetEv.custom_event_name && targetEv.custom_event_name.trim() !== '') {
+      return targetEv.custom_event_name;
+    }
+    if (targetEv.event_type && targetEv.event_type !== 'Other' && targetEv.event_type.trim() !== '') {
+      return targetEv.event_type;
+    }
+    if (targetEv.custom_event_type && targetEv.custom_event_type.trim() !== '') {
+      return targetEv.custom_event_type;
+    }
+  }
 
   const candidate = (
-    leadEventFirstName ||
     (lead?.event_name === 'Other' ? lead?.custom_event_name : lead?.event_name) ||
     order?.event_name ||
     order?.custom_event_name ||
@@ -130,13 +178,18 @@ const getResolvedEventName = (lead: any, order: any, prod: any): string => {
 };
 
 // Helper to extract resolved Event Type from Sales Step 2 records
-const getResolvedEventType = (lead: any, order: any, prod: any): string => {
-  const leadEventFirstType = lead?.events && lead.events.length > 0 
-    ? (lead.events[0]?.event_type === 'Other' ? (lead.events[0]?.custom_event_type || 'Other') : lead.events[0]?.event_type) 
-    : null;
+const getResolvedEventType = (lead: any, order: any, prod: any, assignment?: any): string => {
+  const targetEv = getTargetEventForAssignment(lead, order, prod, assignment);
+  if (targetEv) {
+    if (targetEv.event_type === 'Other') {
+      return targetEv.custom_event_type || 'Other';
+    }
+    if (targetEv.event_type && targetEv.event_type.trim() !== '') {
+      return targetEv.event_type;
+    }
+  }
 
   const candidate = (
-    leadEventFirstType ||
     (lead?.event_type === 'Other' ? lead?.custom_event_type : lead?.event_type) ||
     order?.event_type ||
     prod?.event_type ||
@@ -189,7 +242,7 @@ export const ProductionStaffModule: React.FC = () => {
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
 
   // Selected project for ProjectDetailModal
-  const [selectedProjectForDetail, setSelectedProjectForDetail] = useState<string | null>(null);
+  const [selectedProjectForDetail, setSelectedProjectForDetail] = useState<{ orderId: string; eventId?: string } | string | null>(null);
 
   // Modal States for Production Workflow
   // 1. Editing Started Modal
@@ -349,14 +402,16 @@ export const ProductionStaffModule: React.FC = () => {
         // Raw Footage Drive Link resolution across Operations / Raw Footage / Production / Assignment sources
         const rawFootageLink = getRawFootageDriveLink(assignment, prod, order, lead, operations);
 
-        // Event Name & Type resolution across Lead / Order / Production sources
-        const eventName = getResolvedEventName(lead, order, prod);
-        const eventType = getResolvedEventType(lead, order, prod);
+        // Event Name, Type & Date resolution across Lead / Order / Production sources
+        const targetEvent = getTargetEventForAssignment(lead, order, prod, assignment);
+        const eventName = getResolvedEventName(lead, order, prod, assignment);
+        const eventType = getResolvedEventType(lead, order, prod, assignment);
+        const eventDate = (targetEvent?.event_date || lead?.events?.[0]?.event_date || lead?.event_date || order?.event_date || prod?.event_date || '').trim();
+        const eventId = targetEvent?.id || targetEvent?.event_id || assignment.event_id || prod?.event_id || null;
 
         // Customer details resolution
         const customerName = (lead?.customer_name || order?.customer_name || prod?.customer_name || 'Client').trim();
         const customerMobile = (lead?.mobile || order?.customer_phone || prod?.customer_mobile || '').trim();
-        const eventDate = (lead?.events?.[0]?.event_date || lead?.event_date || order?.event_date || prod?.event_date || '').trim();
 
         // Edited Drive Link resolution
         const editedDriveLink = (assignment.Edited_Drive_Link || assignment.edited_drive_link || prod?.edited_drive_link || '').trim();
@@ -364,6 +419,7 @@ export const ProductionStaffModule: React.FC = () => {
         individualDeliverables.push({
             assignmentId: assignment.assignment_id,
             orderId: order?.order_id || prod?.order_id || prod?.tracking_id || assignment.order_id || assignment.production_id || 'ORD-ASSIGNED',
+            eventId,
             leadId: lead?.lead_id || order?.lead_id || prod?.lead_id,
             customerName,
             customerMobile,
@@ -378,18 +434,20 @@ export const ProductionStaffModule: React.FC = () => {
             assignmentObj: assignment,
             orderObj: order,
             leadObj: lead,
-            prodObj: prod
+            prodObj: prod,
+            targetEventObj: targetEvent
         });
     });
 
-    // Group deliverables by Order ID + Event Name for this staff member
+    // Group deliverables by Order ID + Event ID/Name for this staff member
     const groupsMap = new Map<string, any>();
     individualDeliverables.forEach(item => {
-      const groupKey = `${item.orderId}_${item.eventName}`;
+      const groupKey = `${item.orderId}_${item.eventId || item.eventName}`;
       if (!groupsMap.has(groupKey)) {
         groupsMap.set(groupKey, {
           groupId: groupKey,
           orderId: item.orderId,
+          eventId: item.eventId,
           leadId: item.leadId,
           customerName: item.customerName,
           customerMobile: item.customerMobile,
@@ -401,6 +459,7 @@ export const ProductionStaffModule: React.FC = () => {
           orderObj: item.orderObj,
           leadObj: item.leadObj,
           prodObj: item.prodObj,
+          targetEventObj: item.targetEventObj,
           deliverables: []
         });
       }
@@ -891,7 +950,7 @@ Thank you.`;
                         <div className="space-y-0.5">
                           <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Order ID</div>
                           <span 
-                            onClick={() => setSelectedProjectForDetail(grp.orderId)}
+                            onClick={() => setSelectedProjectForDetail({ orderId: grp.orderId, eventId: grp.eventId })}
                             className="font-mono font-bold text-violet-400 hover:text-violet-300 hover:underline cursor-pointer text-sm block truncate"
                             title="Click to view full dossier"
                           >
@@ -1035,7 +1094,7 @@ Thank you.`;
                                             type="button"
                                             onClick={() => {
                                               setActiveDropdownId(null);
-                                              setSelectedProjectForDetail(grp.orderId);
+                                              setSelectedProjectForDetail({ orderId: grp.orderId, eventId: grp.eventId });
                                             }}
                                             className="w-full text-left px-4 py-2.5 text-xs text-zinc-200 hover:bg-purple-600/20 hover:text-purple-300 font-bold flex items-center gap-2 transition-colors cursor-pointer"
                                           >
@@ -1487,7 +1546,8 @@ Thank you.`;
         <ProjectDetailModal
           isOpen={!!selectedProjectForDetail}
           onClose={() => setSelectedProjectForDetail(null)}
-          orderId={selectedProjectForDetail}
+          orderId={typeof selectedProjectForDetail === 'string' ? selectedProjectForDetail : selectedProjectForDetail.orderId}
+          eventId={typeof selectedProjectForDetail === 'object' && selectedProjectForDetail ? selectedProjectForDetail.eventId : undefined}
         />
       )}
 
