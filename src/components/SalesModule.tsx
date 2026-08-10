@@ -1976,8 +1976,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [crmWizardStep, setCrmWizardStep] = useState<number>(1);
   const [crmHighestStep, setCrmHighestStep] = useState<number>(1);
-  const [isPackageSelectedAndSaved, setIsPackageSelectedAndSaved] = useState(false);
-  const [isPackageDetailsSaved, setIsPackageDetailsSaved] = useState(false);
   const [saveErrorPopup, setSaveErrorPopup] = useState<{ title: string; message: string } | null>(null);
 
   const appendCompletedStep = (existingRemarks: string | undefined, step: number) => {
@@ -2512,8 +2510,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     // Reset wizard fields
     setWizardStep(1);
     setCrmWizardStep(1);
-    setIsPackageSelectedAndSaved(false);
-    setIsPackageDetailsSaved(false);
     setCreatedLeadId(null);
     setPkgPrices({});
     setPkgDeliverables({});
@@ -4475,6 +4471,511 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     );
   };
 
+  const renderStep3Workspace = (isEdit: boolean) => {
+    const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
+    const currentPkgId = isEdit ? (wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || '') : (selectedPkgIds[0] || '');
+    let selectedPkg = availablePkgs.find(p => String(p.package_id) === String(currentPkgId));
+    if (!selectedPkg && currentPkgId) {
+      selectedPkg = {
+        package_id: currentPkgId,
+        package_name: (currentPkgId === 'custom_package' || currentPkgId === 'Custom Package') ? 'Custom Package' : `Package ${currentPkgId} (Legacy)`,
+        price: wizardLeadData.package_cost || 0,
+        deliverables: wizardLeadData.deliverables || "",
+        status: "Active"
+      } as any;
+    }
+    const selectedPkgId = selectedPkg?.package_id || '';
+    const inclusionsList = editableInclusions[selectedPkgId] || [];
+    const deliverablesList = editableDeliverables[selectedPkgId] || [];
+    const currentEvents = isEdit ? crmEvents : createEvents;
+
+    return (
+      <div className="space-y-4 animate-fade-in text-left">
+        <div className="space-y-3.5 text-left">
+          <div>
+            <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Select Package Option *</label>
+            <select
+              id={isEdit ? "select_package_option" : "wizard_step3_first_field"}
+              value={currentPkgId}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (!isEdit) {
+                  setSelectedPkgIds(val ? [val] : []);
+                }
+                handlePackageDropdownChange(val);
+              }}
+              className={`w-full bg-slate-955 border focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer ${
+                !currentPkgId
+                  ? 'border-rose-500/40 focus:border-rose-500 text-rose-200'
+                  : 'border-slate-800 focus:border-indigo-500 text-white'
+              }`}
+            >
+              <option value="">── Choose configuration package ──</option>
+              {(() => {
+                const activePkgs = availablePkgs.filter(p => (!p.status || p.status.toLowerCase() === 'active') && String(p.package_id) !== 'Custom Package' && String(p.package_id) !== 'custom_package' && String(p.package_name) !== 'Custom Package');
+                if (currentPkgId && !activePkgs.some(p => String(p.package_id) === String(currentPkgId))) {
+                  const matched = availablePkgs.find(p => String(p.package_id) === String(currentPkgId));
+                  if (matched) {
+                    activePkgs.unshift(matched);
+                  } else {
+                    activePkgs.unshift({
+                      package_id: currentPkgId,
+                      package_name: `Package ${currentPkgId} (Legacy)`,
+                      price: wizardLeadData.package_cost || selectedLead?.Final_Quotation_Amount || 0,
+                      status: 'Active'
+                    } as any);
+                  }
+                }
+                return (
+                  <>
+                    {activePkgs.map((pkg) => (
+                      <option key={pkg.package_id} value={pkg.package_id}>
+                        {pkg.package_name} (₹{Number(pkg.price).toLocaleString('en-IN')})
+                      </option>
+                    ))}
+                    <option value="Custom Package">Custom Package</option>
+                  </>
+                );
+              })()}
+            </select>
+            {!currentPkgId && (
+              <p className="text-rose-450 font-bold text-xs mt-1 font-mono animate-pulse flex items-center gap-1.5">
+                ⚠️ Please select a package before continuing.
+              </p>
+            )}
+          </div>
+
+          {/* Sales Executive Details */}
+          <div className="bg-slate-900/50 border border-slate-805/40 rounded-lg p-3 space-y-2.5 shadow-sm mt-3">
+            <h4 className="text-[11px] font-bold text-indigo-400 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-1">
+              <span>👤</span> Sales Executive Details
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 mb-1">
+                  Sales Staff Name *
+                </label>
+                <input
+                  id={isEdit ? "input_sales_staff_name" : "wizard_sales_staff_name"}
+                  type="text"
+                  required
+                  value={salesStaffName}
+                  onChange={(e) => setSalesStaffName(e.target.value)}
+                  placeholder="E.g., Jane Doe"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 font-sans transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 mb-1">
+                  Sales Staff Mobile Number *
+                </label>
+                <input
+                  id={isEdit ? "input_sales_staff_mobile" : "wizard_sales_staff_mobile"}
+                  type="text"
+                  required
+                  value={salesStaffMobile}
+                  onChange={(e) => setSalesStaffMobile(e.target.value)}
+                  placeholder="E.g., 9876543210"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 font-mono transition-all"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Single Package Base Price (₹) Field */}
+          <div className="bg-slate-900/50 border border-slate-800/80 rounded-lg p-3 space-y-2 shadow-sm">
+            <label className="block text-[11px] font-bold text-amber-400 uppercase tracking-wide font-mono flex items-center gap-1.5">
+              <span>💰</span> Package Base Price (₹) *
+            </label>
+            <input
+              type="number"
+              value={wizardLeadData.package_cost !== undefined && wizardLeadData.package_cost !== null ? wizardLeadData.package_cost : (selectedPkg?.price || '')}
+              onChange={(e) => {
+                const val = e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0);
+                const numVal = val === '' ? 0 : Number(val);
+                setWizardLeadData(prev => ({
+                  ...prev,
+                  package_cost: val === '' ? 0 : val,
+                  package_price: val === '' ? 0 : val,
+                  budget: numVal,
+                  final_quoted_amount: numVal
+                }));
+              }}
+              placeholder="Enter package base price..."
+              className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-amber-300 font-mono font-bold"
+              required
+            />
+          </div>
+
+          {/* Event-Wise Configuration or Single Configuration */}
+          <div>
+            {currentEvents && currentEvents.length > 0 ? (
+              currentEvents.map((event, eventIdx) => {
+                const eventKey = `${selectedPkgId}_${event.id}`;
+                const nameKey = `${selectedPkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
+
+                const eventInclusions = editableInclusions[eventKey] !== undefined
+                  ? editableInclusions[eventKey]
+                  : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList);
+
+                const eventDeliverables = editableDeliverables[eventKey] !== undefined
+                  ? editableDeliverables[eventKey]
+                  : (editableDeliverables[nameKey] !== undefined ? editableDeliverables[nameKey] : deliverablesList);
+
+                return (
+                  <div key={event.id || eventIdx} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-4 mt-3 mb-4">
+                    <div className="border-b border-slate-800/40 pb-2">
+                      <div className="text-xs sm:text-sm font-bold text-indigo-300 uppercase tracking-wider font-mono flex items-center justify-between">
+                        <span>Event {eventIdx + 1}: {event.event_name || event.event_type || 'Unnamed Event'}</span>
+                      </div>
+                    </div>
+
+                    {/* Team Members Included */}
+                    <div>
+                      <div className="mb-2">
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Team Members Included</label>
+                      </div>
+                      {eventInclusions.length === 0 ? (
+                        <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
+                          <p className="text-xs text-zinc-500 italic">No team members added yet.</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const currentList = [...eventInclusions];
+                              currentList.push("");
+                              const updated = {
+                                ...editableInclusions,
+                                [eventKey]: currentList,
+                                [nameKey]: currentList
+                              };
+                              setEditableInclusions(updated);
+                              if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
+                            }}
+                            className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
+                          >
+                            + Add Member
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {eventInclusions.map((item, idx) => (
+                            <CompactQtyItemRow
+                              key={idx}
+                              value={item}
+                              options={activeMasterRoles}
+                              placeholder="Type or select Role / Team Member..."
+                              accentColor="indigo"
+                              onChange={(newVal) => {
+                                const currentList = [...eventInclusions];
+                                currentList[idx] = newVal;
+                                const updated = {
+                                  ...editableInclusions,
+                                  [eventKey]: currentList,
+                                  [nameKey]: currentList
+                                };
+                                setEditableInclusions(updated);
+                                if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
+                              }}
+                              onDelete={() => {
+                                const currentList = [...eventInclusions];
+                                currentList.splice(idx, 1);
+                                const updated = {
+                                  ...editableInclusions,
+                                  [eventKey]: currentList,
+                                  [nameKey]: currentList
+                                };
+                                setEditableInclusions(updated);
+                                if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
+                              }}
+                            />
+                          ))}
+                          <div className="flex justify-end pt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentList = [...eventInclusions];
+                                currentList.push("");
+                                const updated = {
+                                  ...editableInclusions,
+                                  [eventKey]: currentList,
+                                  [nameKey]: currentList
+                                };
+                                setEditableInclusions(updated);
+                                if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
+                              }}
+                              className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
+                            >
+                              + Add Member
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Deliverables Description / Base Package Deliverables */}
+                    <div>
+                      <div className="mb-2">
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Deliverables Description / Base Package Deliverables</label>
+                      </div>
+                      {eventDeliverables.length === 0 ? (
+                        <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
+                          <p className="text-xs text-zinc-500 italic">No deliverables added yet.</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const currentList = [...eventDeliverables];
+                              currentList.push("");
+                              const updated = {
+                                ...editableDeliverables,
+                                [eventKey]: currentList,
+                                [nameKey]: currentList
+                              };
+                              setEditableDeliverables(updated);
+                              if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
+                            }}
+                            className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
+                          >
+                            + Add Deliverable
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {eventDeliverables.map((item, idx) => (
+                            <CompactQtyItemRow
+                              key={idx}
+                              value={item}
+                              options={activeMasterDeliverables}
+                              placeholder="Type or select Deliverable..."
+                              accentColor="emerald"
+                              onChange={(newVal) => {
+                                const currentList = [...eventDeliverables];
+                                currentList[idx] = newVal;
+                                const updated = {
+                                  ...editableDeliverables,
+                                  [eventKey]: currentList,
+                                  [nameKey]: currentList
+                                };
+                                setEditableDeliverables(updated);
+                                if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
+                              }}
+                              onDelete={() => {
+                                const currentList = [...eventDeliverables];
+                                currentList.splice(idx, 1);
+                                const updated = {
+                                  ...editableDeliverables,
+                                  [eventKey]: currentList,
+                                  [nameKey]: currentList
+                                };
+                                setEditableDeliverables(updated);
+                                if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
+                              }}
+                            />
+                          ))}
+                          <div className="flex justify-end pt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentList = [...eventDeliverables];
+                                currentList.push("");
+                                const updated = {
+                                  ...editableDeliverables,
+                                  [eventKey]: currentList,
+                                  [nameKey]: currentList
+                                };
+                                setEditableDeliverables(updated);
+                                if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
+                              }}
+                              className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
+                            >
+                              + Add Deliverable
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-4 mt-3 mb-4">
+                {/* Single Team Members Included */}
+                <div>
+                  <div className="mb-2">
+                    <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Team Members Included</label>
+                  </div>
+                  {inclusionsList.length === 0 ? (
+                    <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
+                      <p className="text-xs text-zinc-500 italic">No team members added yet.</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentList = [...inclusionsList];
+                          currentList.push("");
+                          const updated = {
+                            ...editableInclusions,
+                            [selectedPkgId]: currentList
+                          };
+                          setEditableInclusions(updated);
+                          if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
+                        }}
+                        className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
+                      >
+                        + Add Member
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {inclusionsList.map((item, idx) => (
+                        <CompactQtyItemRow
+                          key={idx}
+                          value={item}
+                          options={activeMasterRoles}
+                          placeholder="Type or select Role / Team Member..."
+                          accentColor="indigo"
+                          onChange={(newVal) => {
+                            const currentList = [...inclusionsList];
+                            currentList[idx] = newVal;
+                            const updated = {
+                              ...editableInclusions,
+                              [selectedPkgId]: currentList
+                            };
+                            setEditableInclusions(updated);
+                            if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
+                          }}
+                          onDelete={() => {
+                            const currentList = [...inclusionsList];
+                            currentList.splice(idx, 1);
+                            const updated = {
+                              ...editableInclusions,
+                              [selectedPkgId]: currentList
+                            };
+                            setEditableInclusions(updated);
+                            if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
+                          }}
+                        />
+                      ))}
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentList = [...inclusionsList];
+                            currentList.push("");
+                            const updated = {
+                              ...editableInclusions,
+                              [selectedPkgId]: currentList
+                            };
+                            setEditableInclusions(updated);
+                            if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
+                          }}
+                          className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
+                        >
+                          + Add Member
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Single Deliverables */}
+                <div>
+                  <div className="mb-2">
+                    <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Deliverables Description / Base Package Deliverables</label>
+                  </div>
+                  {deliverablesList.length === 0 ? (
+                    <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
+                      <p className="text-xs text-zinc-500 italic">No deliverables added yet.</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentList = [...deliverablesList];
+                          currentList.push("");
+                          const updated = {
+                            ...editableDeliverables,
+                            [selectedPkgId]: currentList
+                          };
+                          setEditableDeliverables(updated);
+                          if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
+                        }}
+                        className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
+                      >
+                        + Add Deliverable
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {deliverablesList.map((item, idx) => (
+                        <CompactQtyItemRow
+                          key={idx}
+                          value={item}
+                          options={activeMasterDeliverables}
+                          placeholder="Type or select Deliverable..."
+                          accentColor="emerald"
+                          onChange={(newVal) => {
+                            const currentList = [...deliverablesList];
+                            currentList[idx] = newVal;
+                            const updated = {
+                              ...editableDeliverables,
+                              [selectedPkgId]: currentList
+                            };
+                            setEditableDeliverables(updated);
+                            if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
+                          }}
+                          onDelete={() => {
+                            const currentList = [...deliverablesList];
+                            currentList.splice(idx, 1);
+                            const updated = {
+                              ...editableDeliverables,
+                              [selectedPkgId]: currentList
+                            };
+                            setEditableDeliverables(updated);
+                            if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
+                          }}
+                        />
+                      ))}
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentList = [...deliverablesList];
+                            currentList.push("");
+                            const updated = {
+                              ...editableDeliverables,
+                              [selectedPkgId]: currentList
+                            };
+                            setEditableDeliverables(updated);
+                            if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
+                          }}
+                          className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
+                        >
+                          + Add Deliverable
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {isEdit && (
+          <div className="mt-4 flex justify-end pb-2">
+            <button
+              type="button"
+              onClick={handleSavePackageOnly}
+              disabled={isSaving}
+              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] font-bold uppercase tracking-wider rounded-lg shadow transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSaving ? 'Saving...' : 'Save Package'}
+            </button>
+          </div>
+        )}
+
+        {renderQuotationAndStep4Section(isEdit)}
+      </div>
+    );
+  };
+
   useEffect(() => {
     let isMounted = true;
 
@@ -4665,11 +5166,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     
     const hasPackageAnywhere = !!(lead.Select_Package_Option || primaryLP?.package_id || latestQuote?.package_id);
     if (completedStep >= 3 || hasPackageAnywhere) {
-      setIsPackageSelectedAndSaved(true);
-      setIsPackageDetailsSaved(true);
     } else {
-      setIsPackageSelectedAndSaved(false);
-      setIsPackageDetailsSaved(false);
     }
 
     setQuoteDiscount(fullLead.Quotation_Discount ?? latestQuote?.discount_amount ?? 0);
@@ -4828,7 +5325,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       pincode: latestQuote?.pincode || fullLead.pincode || '',
       client_residence_address: latestQuote?.client_residence_address || fullLead.client_residence_address || '',
       desired_event_shoot_type: latestQuote?.desired_event_shoot_type || fullLead.desired_event_shoot_type || '',
-      Select_Package_Option: fullLead.Select_Package_Option || latestQuote?.package_id || primaryLP?.package_id || '',
       // Step 2
       event_type: fullLead.event_type || '',
       custom_event_name: fullLead.custom_event_name || '',
@@ -4845,12 +5341,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       lead_source: fullLead.lead_source || '',
       Specify_Custom_Lead_Source_Name: fullLead.Specify_Custom_Lead_Source_Name || '',
       shoot_type: evShootType,
-      // Step 3
-      selected_package_id: fullLead.Select_Package_Option || latestQuote?.package_id || primaryLP?.package_id || '',
-      package_cost: cleanPkgPrice,
-      package_price: cleanPkgPrice,
-      deliverables: loadedDelText,
-      deliverables_description: loadedDelText,
+      // Step 3 (Always initialize as empty per requirements)
+      selected_package_id: '',
+      Select_Package_Option: '',
+      package_cost: '',
+      package_price: '',
+      deliverables: '',
+      deliverables_description: '',
       notes_special_customizations: fullLead.notes_special_customizations || latestQuote?.notes_special_customizations || primaryLP?.notes_special_customizations || '',
       notes: fullLead.remarks || '',
       // Step 4
@@ -4900,32 +5397,30 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       showToastMsg("Quotation details are locked. Owner unlock approval required to edit.", "error");
       return;
     }
-    setWizardLeadData((prev) => ({
-      ...prev,
-      selected_package_id: packageId,
-      Select_Package_Option: packageId,
-    }));
-    setIsPackageSelectedAndSaved(false);
-    setIsPackageDetailsSaved(false);
-  };
 
-  const handlePackageConfirm = () => {
-    const packageId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
+    const activeEvents = activeTab === 'create' ? createEvents : crmEvents;
+    
     if (!packageId) {
-      showToastMsg("Please select a package first.", "error");
+      setWizardLeadData((prev) => ({
+        ...prev,
+        selected_package_id: '',
+        Select_Package_Option: '',
+        package_name: '',
+        package_cost: 0,
+        package_price: 0,
+        budget: 0,
+        final_quoted_amount: 0,
+        deliverables: '',
+        notes: '',
+      }));
+      setEditableInclusions((prev) => ({ ...prev, '': [] }));
+      setEditableDeliverables((prev) => ({ ...prev, '': [] }));
       return;
     }
-    if (isStep3Locked) {
-      showToastMsg("Quotation details are locked. Owner unlock approval required to edit.", "error");
-      return;
-    }
-    setIsPackageSelectedAndSaved(true);
-    setIsPackageDetailsSaved(true);
 
     if (packageId === 'Custom Package' || packageId === 'custom_package') {
       const customPkgVal = 'Custom Package';
       const existingPrice = wizardLeadData.package_cost || wizardLeadData.package_price || selectedLead?.package_price || selectedLead?.budget || 0;
-
       setWizardLeadData((prev) => ({
         ...prev,
         selected_package_id: customPkgVal,
@@ -4939,8 +5434,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       const newInclusions = { ...editableInclusions };
       if (!newInclusions[customPkgVal]) newInclusions[customPkgVal] = [];
-      if (crmEvents && crmEvents.length > 0) {
-        crmEvents.forEach((ev) => {
+      if (activeEvents && activeEvents.length > 0) {
+        activeEvents.forEach((ev) => {
           const k1 = `${customPkgVal}_${ev.id}`;
           const k2 = `${customPkgVal}_${ev.event_name || ev.event_type || 'Unnamed Event'}`;
           if (!newInclusions[k1]) newInclusions[k1] = [];
@@ -4950,8 +5445,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       const newDeliverables = { ...editableDeliverables };
       if (!newDeliverables[customPkgVal]) newDeliverables[customPkgVal] = [];
-      if (crmEvents && crmEvents.length > 0) {
-        crmEvents.forEach((ev) => {
+      if (activeEvents && activeEvents.length > 0) {
+        activeEvents.forEach((ev) => {
           const k1 = `${customPkgVal}_${ev.id}`;
           const k2 = `${customPkgVal}_${ev.event_name || ev.event_type || 'Unnamed Event'}`;
           if (!newDeliverables[k1]) newDeliverables[k1] = [];
@@ -4961,8 +5456,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       setEditableInclusions(newInclusions);
       setEditableDeliverables(newDeliverables);
-
-      saveStep3DataRealtime(newInclusions, newDeliverables, customPkgVal);
       return;
     }
 
@@ -4990,21 +5483,21 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const newInclusions = { ...editableInclusions };
       newInclusions[packageId] = defaultInc;
       
-      if (crmEvents && crmEvents.length > 0) {
-        crmEvents.forEach((ev) => {
-          newInclusions[`${packageId}_${ev.id}`] = [...defaultInc];
-          newInclusions[`${packageId}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [...defaultInc];
-        });
-      }
-
       const newDeliverables = { ...editableDeliverables };
       newDeliverables[packageId] = defaultDel;
 
+      if (activeEvents && activeEvents.length > 0) {
+        activeEvents.forEach((ev) => {
+          newInclusions[`${packageId}_${ev.id}`] = [...defaultInc];
+          newInclusions[`${packageId}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [...defaultInc];
+          
+          newDeliverables[`${packageId}_${ev.id}`] = [...defaultDel];
+          newDeliverables[`${packageId}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [...defaultDel];
+        });
+      }
+
       setEditableInclusions(newInclusions);
       setEditableDeliverables(newDeliverables);
-
-      // Immediately save the selected package with default inclusions and deliverables to Supabase
-      saveStep3DataRealtime(newInclusions, newDeliverables, packageId);
     } else {
       setWizardLeadData((prev) => ({
         ...prev,
@@ -5210,7 +5703,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead.Select_Package_Option || 'Custom Package';
 
       // 2. Perform the full save of lead_packages to Supabase using our robust real-time save logic
-      await saveStep3DataRealtime(editableInclusions, editableDeliverables, pkgId);
+      // await saveStep3DataRealtime removed to avoid duplicate DB calls
 
       // Construct JSON strings for deliverables and team members
       const inclusionsList = editableInclusions[pkgId] || [];
@@ -5316,7 +5809,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       });
 
       await completeApprovedUnlockRequest(selectedLead.lead_id);
-      setIsPackageDetailsSaved(true);
     } catch (err: any) {
       console.error("Save package only failed:", err);
       setSaveErrorPopup({
@@ -5517,7 +6009,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         }
         const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead.Select_Package_Option || 'Custom Package';
         if (pkgId) {
-          await saveStep3DataRealtime(editableInclusions, editableDeliverables, pkgId);
+          // await saveStep3DataRealtime removed to avoid duplicate DB calls
         }
 
         const inclusionsList = editableInclusions[pkgId] || [];
@@ -8392,7 +8884,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       )}
 
       {/* Header Bar */}
-      {activeTab !== 'create' && (
+      {activeTab !== 'create' && activeTab !== 'custom_package_master' && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-black text-white flex items-center gap-2">
@@ -10224,168 +10716,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">3. Package Selection</span>
                   </div>
 
-                  {activeTab !== 'create' && (
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                      Select Package Option *
-                    </label>
-
-                    <select
-                      id="wizard_step3_first_field"
-                      value={selectedPkgIds[0] || ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val) {
-                          setSelectedPkgIds([val]);
-                          handlePackageDropdownChange(val);
-                        } else {
-                          setSelectedPkgIds([]);
-                          handlePackageDropdownChange("");
-                        }
-                      }}
-                      className={`w-full bg-[#0F172A] border rounded-lg py-2.5 px-3.5 text-xs cursor-pointer focus:outline-none transition-all ${
-                        selectedPkgIds.length === 0
-                          ? 'border-rose-500/40 focus:border-rose-500 text-rose-300'
-                          : 'border-slate-800 focus:border-emerald-600 text-white'
-                      }`}
-                    >
-                      <option value="" className="text-slate-400">── Choose configuration package ──</option>
-                      {PACKAGES_LIST.flatMap(cat => cat.items).filter(p => String(p.id) !== 'Custom Package' && String(p.name) !== 'Custom Package').map((pkg) => (
-                        <option key={pkg.id} value={pkg.id} className="text-white bg-[#0F172A]">
-                          {pkg.name} (₹{pkg.cost.toLocaleString('en-IN')})
-                        </option>
-                      ))}
-                      <option value="Custom Package" className="text-white bg-[#0F172A]">Custom Package</option>
-                    </select>
-
-                    {selectedPkgIds.length === 0 && (
-                      <p className="text-rose-450 font-bold text-xs mt-1.5 font-mono animate-pulse flex items-center gap-1.5">
-                        ⚠️ Please select a package before continuing.
-                      </p>
-                    )}
-                  </div>
-                  )}
-
-                  {/* Selected Package Summary Panel with viewer + compare workflows */}
-                  {selectedPkgIds.length > 0 && (
-                    <div id="create_lead_pkg_summary_panel" className="bg-[#0F172A] border border-slate-800 rounded-xl p-4.5 space-y-4 animate-fade-in text-xs text-left">
-                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-slate-350">Selected Package</span>
-                          <span className="bg-emerald-990/90 text-emerald-400 px-2 py-0.5 rounded-full font-mono text-[10px] font-bold border border-emerald-900/40">
-                            {selectedPkgIds.length} Package
-                          </span>
-                        </div>
-                        
-                        {selectedPkgIds.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => setIsComparingPkgs(true)}
-                            className="px-2.5 py-1 bg-indigo-600/10 hover:bg-indigo-600/25 text-indigo-400 border border-indigo-500/20 rounded-lg font-bold text-[10px] cursor-pointer transition-colors uppercase font-mono tracking-wider flex items-center gap-1"
-                          >
-                            ⚖️ Compare Specs ({selectedPkgIds.length})
-                          </button>
-                        )}
-                      </div>
-                      
-                      <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
-                        {selectedPkgIds.map((id) => {
-                          const pkgObj = packages.find(p => p.package_id === id);
-                          if (!pkgObj) return null;
-                          return (
-                            <div key={id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950/60 border border-slate-850 p-3 rounded-lg hover:border-slate-800 transition-colors">
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-extrabold text-white text-[12px]">{pkgObj.package_name}</span>
-                                  <span className="text-[9px] bg-slate-800/80 text-custom text-slate-400 px-1.5 py-0.5 rounded font-mono uppercase">
-                                    {normalizeCategory(pkgObj.category)}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                                  <span>Price:</span>
-                                  <span className="font-mono text-emerald-400 font-bold">₹{pkgObj.price.toLocaleString('en-IN')}</span>
-                                </div>
-                              </div>
-                              
-                              <div className="flex items-center gap-2 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedPkgIds(selectedPkgIds.filter(x => x !== id))}
-                                  className="px-2.5 py-1.5 bg-rose-950/20 hover:bg-rose-950/40 text-rose-400 border border-rose-900/30 hover:border-rose-900/50 rounded-lg font-semibold cursor-pointer transition-all flex items-center gap-1 text-[11px]"
-                                  title="Remove Package"
-                                >
-                                  🗑️ Remove
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      
-                      <div className="bg-slate-950/70 p-3 rounded-lg border border-slate-850 flex items-center justify-between">
-                        <span className="text-slate-400 font-medium">Combined Package Total</span>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-slate-500 font-mono text-[11px]">Total Amount =</span>
-                          <span className="font-mono text-emerald-400 font-black text-xs sm:text-sm">₹{subtotal.toLocaleString('en-IN')}</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Display Package Pricing & Live Auto Calculation Output */}
-                  {selectedPkgIds.length > 0 && (
-                    <div id="pkg_pricing_calc_panel" className="bg-slate-950/70 p-4 rounded-xl border border-slate-800/80 space-y-3 animate-fade-in">
-                      <span className="text-[10px] font-bold text-slate-400 font-mono block border-b border-slate-800/65 pb-1.5 uppercase tracking-wider">
-                        Selected Packages & Price Estimate
-                      </span>
-                      <ul className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                        {selectedPkgIds.map((id) => {
-                          const pkg = PACKAGES_LIST.flatMap(cat => cat.items).find(item => item.id === id);
-                          if (!pkg) return null;
-                          return (
-                            <li key={id} className="flex justify-between items-center text-xs text-slate-300">
-                              <span className="flex items-center gap-2">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                {pkg.name}
-                              </span>
-                              <span className="font-mono text-emerald-400">₹{pkg.cost.toLocaleString('en-IN')}</span>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                      
-                      <div className="border-t border-slate-800/80 pt-3 space-y-2.5 text-xs">
-                        <div className="flex justify-between text-slate-400">
-                          <span>Subtotal</span>
-                          <span className="font-mono text-slate-200">₹{subtotal.toLocaleString('en-IN')}</span>
-                        </div>
-                        
-                        <div className="flex justify-between items-center text-slate-400">
-                          <span>Discount (Optional)</span>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-slate-500">₹</span>
-                            <input
-                              type="number"
-                              min="0"
-                              max={subtotal}
-                              placeholder="0"
-                              value={leadDiscount || ''}
-                              onChange={(e) => {
-                                const val = Math.min(subtotal, Math.max(0, Number(e.target.value)));
-                                setLeadDiscount(val);
-                              }}
-                              className="w-24 bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-right font-mono text-xs text-slate-100 focus:outline-none focus:border-emerald-600 transition-all"
-                            />
-                          </div>
-                        </div>
-                        
-                        <div className="flex justify-between items-center text-white font-extrabold border-t border-slate-800/80 pt-2.5">
-                          <span className="tracking-wide">Final Total Project Value</span>
-                          <span className="font-mono text-amber-400 text-sm">₹{finalTotal.toLocaleString('en-IN')}</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  {renderStep3Workspace(false)}
                 </div>
               )}
             </div>
@@ -12073,14 +12404,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                          <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
                            <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">3</span>
                            <span>Quotation Workspace</span>
-                         </h3>
-                       </div>
-                       <div className="space-y-3.5 text-left">
+                          </h3>
+                        </div>
+                        {renderStep3Workspace(true)}
+                        <div className="hidden">
+                        <div className="space-y-3.5 text-left">
                          <div>
                            <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Select Package Option *</label>
                            <select
                              id="select_package_option"
-                             value={wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option || (selectedLead as any)?.selected_package_id || (leadPackages?.find(lp => lp.lead_id === selectedLead?.lead_id)?.package_id) || (quotations?.find(q => q.lead_id === selectedLead?.lead_id)?.package_id) || ''}
+                             value={wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || ''}
                              onChange={(e) => handlePackageDropdownChange(e.target.value)}
                              className={`w-full bg-slate-955 border focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer ${
                                !(wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option)
@@ -12090,7 +12423,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                            >
                              <option value="">── Choose configuration package ──</option>
                              {(() => {
-                               const currentPkgId = wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option || (selectedLead as any)?.selected_package_id || (leadPackages?.find(lp => lp.lead_id === selectedLead?.lead_id)?.package_id) || (quotations?.find(q => q.lead_id === selectedLead?.lead_id)?.package_id) || '';
+                               const currentPkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || '';
                                const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
                                const activePkgs = availablePkgs.filter(p => (!p.status || p.status.toLowerCase() === 'active') && String(p.package_id) !== 'Custom Package' && String(p.package_id) !== 'custom_package' && String(p.package_name) !== 'Custom Package');
                                if (currentPkgId && !activePkgs.some(p => String(p.package_id) === String(currentPkgId))) {
@@ -12125,12 +12458,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                            )}
                          </div>
  
-                         {isPackageSelectedAndSaved && (() => {
+                         {(() => {
                            const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
-                           const currentPkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option; let selectedPkg = availablePkgs.find(p => String(p.package_id) === String(currentPkgId)); if (!selectedPkg && currentPkgId) { selectedPkg = { package_id: currentPkgId, package_name: (currentPkgId === 'custom_package' || currentPkgId === 'Custom Package') ? 'Custom Package' : `Package ${currentPkgId} (Legacy)`, price: wizardLeadData.package_cost || 0, deliverables: wizardLeadData.deliverables || "", status: "Active" } as any; }
-                           if (!selectedPkg) return null;
-
-                          const selectedPkgId = selectedPkg.package_id;
+                           const currentPkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option; 
+                           let selectedPkg = availablePkgs.find(p => String(p.package_id) === String(currentPkgId)); 
+                           if (!selectedPkg && currentPkgId) { 
+                             selectedPkg = { package_id: currentPkgId, package_name: (currentPkgId === 'custom_package' || currentPkgId === 'Custom Package') ? 'Custom Package' : `Package ${currentPkgId} (Legacy)`, price: wizardLeadData.package_cost || 0, deliverables: wizardLeadData.deliverables || "", status: "Active" } as any; 
+                           }
+                           const selectedPkgId = selectedPkg?.package_id || '';
                           const inclusionsList = editableInclusions[selectedPkgId] || [];
                           const deliverablesList = editableDeliverables[selectedPkgId] || [];
 
@@ -12180,7 +12515,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 </label>
                                 <input
                                   type="number"
-                                  value={wizardLeadData.package_cost !== undefined && wizardLeadData.package_cost !== null ? wizardLeadData.package_cost : (selectedPkg.price || '')}
+                                  value={wizardLeadData.package_cost !== undefined && wizardLeadData.package_cost !== null ? wizardLeadData.package_cost : (selectedPkg?.price || '')}
                                   onChange={(e) => {
                                     const val = e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0);
                                     const numVal = val === '' ? 0 : Number(val);
@@ -12558,10 +12893,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 </button>
                               </div>
 
-                              {isPackageDetailsSaved && renderQuotationAndStep4Section(true)}
+                              {renderQuotationAndStep4Section(true)}
                             </div>
                           );
                         })()}
+                        </div>
                       </div>
 
                       {/* STEP 5 INTEGRATED (CRM): Status Update / Order Confirmation Details at BOTTOM of Step 3 */}

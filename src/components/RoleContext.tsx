@@ -859,6 +859,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const currentUserRef = useRef<User | null>(null);
   const isLoggingInRef = useRef<boolean>(false);
+  const isFetchingRef = useRef<boolean>(false);
+  const fetchPendingRef = useRef<boolean>(false);
+  const lastFetchTimeRef = useRef<number>(0);
 
   useEffect(() => {
     currentUserRef.current = currentUser;
@@ -2033,226 +2036,240 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   // Fetch full dataset from Supabase
   const fetchFromDb = async (showLoader = false) => {
     if (!supabaseClient) return;
+
+    if (isFetchingRef.current) {
+      fetchPendingRef.current = true;
+      if (showLoader) setIsDataLoading(true);
+      return;
+    }
+
+    isFetchingRef.current = true;
+    lastFetchTimeRef.current = Date.now();
     if (showLoader) setIsDataLoading(true);
 
     try {
-      const results = await Promise.all([
-        supabaseClient.from('users').select('*'),
-        supabaseClient.from('leads').select('*').order('created_at', { ascending: false }),
-        supabaseClient.from('orders').select('*').order('created_at', { ascending: false }),
-        supabaseClient.from('operations').select('*'),
-        supabaseClient.from('raw_footage').select('*'),
-        supabaseClient.from('production').select('*'),
-        supabaseClient.from('payments').select('*'),
-        supabaseClient.from('activity_logs').select('*').order('timestamp', { ascending: false }),
-        supabaseClient.from('operations_staff').select('*').order('name'),
-        supabaseClient.from('notifications').select('*').order('created_at', { ascending: false }),
-        supabaseClient.from('equipment').select('*').order('created_at', { ascending: false }),
-        supabaseClient.from('lead_packages').select('*'),
-        supabaseClient.from('packages').select('*').order('created_at', { ascending: false }),
-        supabaseClient.from('staff_assignments').select('*'),
-        supabaseClient.from('quotations').select('*'),
-        supabaseClient.from('lead_status_history').select('*').order('created_at', { ascending: true }),
-        supabaseClient.from('lead_staff_assignment_history').select('*').order('assigned_at', { ascending: false }),
-        supabaseClient.from('lead_equipment_history').select('*').order('returned_at', { ascending: false }),
-        supabaseClient.from('lead_events').select('*').order('created_at', { ascending: true }),
-        supabaseClient.from('equipment_handovers').select('*').order('created_at', { ascending: false }),
-        supabaseClient.from('production_specialties').select('*'),
-        supabaseClient.from('editor_assignments').select('*'),
-        supabaseClient.from('production_staff').select('*'),
-        supabaseClient.from('calendar_memos').select('*').order('created_at', { ascending: false })
-      ]);
+      let runAgain = true;
+      while (runAgain) {
+        fetchPendingRef.current = false;
 
-      const tables = [
-        'users', 'leads', 'orders', 'operations', 'raw_footage', 'production', 
-        'payments', 'activity_logs', 'operations_staff', 'notifications', 
-        'equipment', 'lead_packages', 'packages', 'staff_assignments', 
-        'quotations', 'lead_status_history', 'lead_staff_assignment_history', 
-        'lead_equipment_history', 'lead_events', 'equipment_handovers', 
-        'production_specialties', 'editor_assignments', 'production_staff', 'calendar_memos'
-      ];
-      
-      let hasError = false;
-      for (let i = 0; i < results.length; i++) {
-        if (results[i].error) {
-           console.warn(`Data Fetch Warning in table ${tables[i]}:`, results[i].error);
-           if (tables[i] === 'leads' && results[i].error.message?.includes('created_at')) {
-             // Fallback for leads if created_at is missing
-             const fallbackRes = await supabaseClient.from('leads').select('*');
-             results[i] = fallbackRes;
-           }
-           if (tables[i] === 'orders' && results[i].error.message?.includes('created_at')) {
-             const fallbackRes = await supabaseClient.from('orders').select('*');
-             results[i] = fallbackRes;
-           }
+        const results = await Promise.all([
+          supabaseClient.from('users').select('*'),
+          supabaseClient.from('leads').select('*').order('created_at', { ascending: false }),
+          supabaseClient.from('orders').select('*').order('created_at', { ascending: false }),
+          supabaseClient.from('operations').select('*'),
+          supabaseClient.from('raw_footage').select('*'),
+          supabaseClient.from('production').select('*'),
+          supabaseClient.from('payments').select('*'),
+          supabaseClient.from('activity_logs').select('*').order('timestamp', { ascending: false }),
+          supabaseClient.from('operations_staff').select('*').order('name'),
+          supabaseClient.from('notifications').select('*').order('created_at', { ascending: false }),
+          supabaseClient.from('equipment').select('*').order('created_at', { ascending: false }),
+          supabaseClient.from('lead_packages').select('*'),
+          supabaseClient.from('packages').select('*').order('created_at', { ascending: false }),
+          supabaseClient.from('staff_assignments').select('*'),
+          supabaseClient.from('quotations').select('*'),
+          supabaseClient.from('lead_status_history').select('*').order('created_at', { ascending: true }),
+          supabaseClient.from('lead_staff_assignment_history').select('*').order('assigned_at', { ascending: false }),
+          supabaseClient.from('lead_equipment_history').select('*').order('returned_at', { ascending: false }),
+          supabaseClient.from('lead_events').select('*').order('created_at', { ascending: true }),
+          supabaseClient.from('equipment_handovers').select('*').order('created_at', { ascending: false }),
+          supabaseClient.from('production_specialties').select('*'),
+          supabaseClient.from('editor_assignments').select('*'),
+          supabaseClient.from('production_staff').select('*'),
+          supabaseClient.from('calendar_memos').select('*').order('created_at', { ascending: false })
+        ]);
+
+        const tables = [
+          'users', 'leads', 'orders', 'operations', 'raw_footage', 'production', 
+          'payments', 'activity_logs', 'operations_staff', 'notifications', 
+          'equipment', 'lead_packages', 'packages', 'staff_assignments', 
+          'quotations', 'lead_status_history', 'lead_staff_assignment_history', 
+          'lead_equipment_history', 'lead_events', 'equipment_handovers', 
+          'production_specialties', 'editor_assignments', 'production_staff', 'calendar_memos'
+        ];
+        
+        for (let i = 0; i < results.length; i++) {
+          if (results[i].error) {
+             console.warn(`Data Fetch Warning in table ${tables[i]}:`, results[i].error);
+             if (tables[i] === 'leads' && results[i].error.message?.includes('created_at')) {
+               const fallbackRes = await supabaseClient.from('leads').select('*');
+               results[i] = fallbackRes;
+             }
+             if (tables[i] === 'orders' && results[i].error.message?.includes('created_at')) {
+               const fallbackRes = await supabaseClient.from('orders').select('*');
+               results[i] = fallbackRes;
+             }
+          }
         }
-      }
 
-      const [
-        { data: dbUsers },
-        { data: dbLeads },
-        { data: dbOrders },
-        { data: dbOperations },
-        { data: dbRawFootage },
-        { data: dbProduction },
-        { data: dbPayments },
-        { data: dbLogs },
-        { data: dbStaff },
-        { data: dbNotifications },
-        { data: dbEquipment },
-        { data: dbLeadPackages },
-        { data: dbPackages },
-        { data: dbStaffAssignments },
-        { data: dbQuotations },
-        { data: dbStatusHistory },
-        { data: dbLeadStaffAssignmentHistory },
-        { data: dbLeadEquipmentHistory },
-        { data: dbLeadEvents },
-        { data: dbHandovers },
-        { data: dbSpecList },
-        { data: dbAssignList },
-        { data: dbProdStaff },
-        { data: dbCalendarMemos }
-      ] = results;
+        const [
+          { data: dbUsers },
+          { data: dbLeads },
+          { data: dbOrders },
+          { data: dbOperations },
+          { data: dbRawFootage },
+          { data: dbProduction },
+          { data: dbPayments },
+          { data: dbLogs },
+          { data: dbStaff },
+          { data: dbNotifications },
+          { data: dbEquipment },
+          { data: dbLeadPackages },
+          { data: dbPackages },
+          { data: dbStaffAssignments },
+          { data: dbQuotations },
+          { data: dbStatusHistory },
+          { data: dbLeadStaffAssignmentHistory },
+          { data: dbLeadEquipmentHistory },
+          { data: dbLeadEvents },
+          { data: dbHandovers },
+          { data: dbSpecList },
+          { data: dbAssignList },
+          { data: dbProdStaff },
+          { data: dbCalendarMemos }
+        ] = results;
 
-      if (dbUsers && dbUsers.length === 0) {
-        await seedDatabase();
-        await fetchFromDb(showLoader);
-        return;
-      }
-      if (dbUsers) {
-        setUsers(dbUsers.map(mapUserFieldsFromDb));
-      }
+        if (dbUsers && dbUsers.length === 0) {
+          await seedDatabase();
+          fetchPendingRef.current = true;
+          break;
+        }
+        if (dbUsers) {
+          setUsers(dbUsers.map(mapUserFieldsFromDb));
+        }
 
-      if (dbLeads) {
-        const parsedLeads = dbLeads.map((l: any) => {
-          let evts = [];
-          if (dbLeadEvents) {
-            evts = dbLeadEvents
-              .filter((e: any) => e.lead_id === l.lead_id)
-              .map((e: any) => ({
-                ...e,
-                event_start_date: e.event_start_date || e.event_date || '',
-                event_end_date: e.event_end_date || e.Event_End_Date || l.Event_End_Date || '',
-                event_start_time: e.event_start_time || '',
-                event_end_time: e.event_end_time || ''
-              }));
-          }
-          if (evts.length === 0 && l.notes_special_customizations) {
-            evts = deserializeLeadEvents(l.notes_special_customizations).events || [];
-          }
-          let finalStatus = l.current_status || l.status || 'New Lead';
-          if (finalStatus === 'Follow-up' || finalStatus === 'Follow-Up') {
-            finalStatus = 'Follow Up';
-          }
-          return { ...l, status: finalStatus, current_status: finalStatus, events: evts };
-        });
-        setLeads(parsedLeads);
-      }
-      
-      if (dbOrders) {
-         setOrders(dbOrders.map((o: any) => ({ ...o, current_stage: o.current_stage || o.order_status })));
-      }
-      if (dbOperations) setOperations(dbOperations);
-      if (dbRawFootage) setRawFootage(dbRawFootage);
-      if (dbProduction) setProduction(dbProduction);
-      if (dbPayments) setPayments(dbPayments);
-      if (dbLogs) setLogs(dbLogs);
-      if (dbHandovers) setEquipmentHandovers(dbHandovers);
-      if (dbSpecList) setSpecialities(dbSpecList);
-      if (dbAssignList) {
-        setEditorAssignments(dbAssignList.map((item: any) => ({
-          ...item,
-          Edited_Drive_Link: item.Edited_Drive_Link || item.edited_drive_link || null,
-          edited_drive_link: item.edited_drive_link || item.Edited_Drive_Link || null
-        })));
-      }
-      
-      if (dbStaff) {
-         setStaff(dbStaff.map((item: any) => {
-            let extra: any = {};
-            if (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) {
-              try { extra = JSON.parse(item.notes); } catch (e) {}
+        if (dbLeads) {
+          const parsedLeads = dbLeads.map((l: any) => {
+            let evts = [];
+            if (dbLeadEvents) {
+              evts = dbLeadEvents
+                .filter((e: any) => e.lead_id === l.lead_id)
+                .map((e: any) => ({
+                  ...e,
+                  event_start_date: e.event_start_date || e.event_date || '',
+                  event_end_date: e.event_end_date || e.Event_End_Date || l.Event_End_Date || '',
+                  event_start_time: e.event_start_time || '',
+                  event_end_time: e.event_end_time || ''
+                }));
             }
-            return {
-              ...item,
-              ...extra,
-              staff_id: mapFromDbStaffId(item.staff_id),
-              notes: (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) ? (extra.notes || '') : item.notes, Skill: Array.isArray(item.Skill) ? item.Skill : (typeof item.Skill === 'string' ? item.Skill.split(',').map(s=>s.trim()).filter(Boolean) : (Array.isArray(extra.Skill) ? extra.Skill : [])), Staff_Type: item.Staff_Type || extra.Staff_Type || 'In-House'
-            };
-         }));
-      }
-
-      if (dbProdStaff) {
-         setProductionStaff(dbProdStaff.map(mapProductionStaffFromDb));
-      }
-      
-      if (dbNotifications) {
-        setNotifications(dbNotifications.map(mapNotificationFromDb));
-      }
-      if (dbEquipment) {
-        setEquipment(dbEquipment.map((item: any) => ({ ...item, equipment_id: mapFromDbEquipmentId(item.equipment_id), equipment_type: item.Equipment_Category || item.equipment_type || 'Camera', status: item.Equipment_Status || item.status || 'Active' })));
-      }
-      if (dbLeadPackages) setLeadPackages(dbLeadPackages);
-      
-      let finalPackagesData = dbPackages || [];
-      if (!finalPackagesData || finalPackagesData.length < 10) {
-        try {
-          const proxyRes = await fetch('/api/db/select', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ table: 'packages' })
+            if (evts.length === 0 && l.notes_special_customizations) {
+              evts = deserializeLeadEvents(l.notes_special_customizations).events || [];
+            }
+            let finalStatus = l.current_status || l.status || 'New Lead';
+            if (finalStatus === 'Follow-up' || finalStatus === 'Follow-Up') {
+              finalStatus = 'Follow Up';
+            }
+            return { ...l, status: finalStatus, current_status: finalStatus, events: evts };
           });
-          const parsed = await safeParseResponse(proxyRes);
-          if (parsed.ok && parsed.isJson) {
-            const proxyJson = parsed.data;
-            if (proxyJson && proxyJson.success && Array.isArray(proxyJson.data) && proxyJson.data.length > finalPackagesData.length) {
-              finalPackagesData = proxyJson.data;
-            }
-          }
-        } catch (e) {
-          console.warn('[RoleContext] Proxy fetch packages fallback error:', e);
+          setLeads(parsedLeads);
         }
-      }
+        
+        if (dbOrders) {
+           setOrders(dbOrders.map((o: any) => ({ ...o, current_stage: o.current_stage || o.order_status })));
+        }
+        if (dbOperations) setOperations(dbOperations);
+        if (dbRawFootage) setRawFootage(dbRawFootage);
+        if (dbProduction) setProduction(dbProduction);
+        if (dbPayments) setPayments(dbPayments);
+        if (dbLogs) setLogs(dbLogs);
+        if (dbHandovers) setEquipmentHandovers(dbHandovers);
+        if (dbSpecList) setSpecialities(dbSpecList);
+        if (dbAssignList) {
+          setEditorAssignments(dbAssignList.map((item: any) => ({
+            ...item,
+            Edited_Drive_Link: item.Edited_Drive_Link || item.edited_drive_link || null,
+            edited_drive_link: item.edited_drive_link || item.Edited_Drive_Link || null
+          })));
+        }
+        
+        if (dbStaff) {
+           setStaff(dbStaff.map((item: any) => {
+              let extra: any = {};
+              if (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) {
+                try { extra = JSON.parse(item.notes); } catch (e) {}
+              }
+              return {
+                ...item,
+                ...extra,
+                staff_id: mapFromDbStaffId(item.staff_id),
+                notes: (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) ? (extra.notes || '') : item.notes, Skill: Array.isArray(item.Skill) ? item.Skill : (typeof item.Skill === 'string' ? item.Skill.split(',').map(s=>s.trim()).filter(Boolean) : (Array.isArray(extra.Skill) ? extra.Skill : [])), Staff_Type: item.Staff_Type || extra.Staff_Type || 'In-House'
+              };
+           }));
+        }
 
-      // Merge fetched package data with INITIAL_PACKAGES to guarantee all 39 master packages are available
-      const mappedDbPkgs = (finalPackagesData && finalPackagesData.length > 0) 
-        ? finalPackagesData.map(mapDbRecordToPackage) 
-        : [];
-      
-      const pkgMap = new Map<string, Package>();
-      // First populate with all 39 master packages
-      (INITIAL_PACKAGES || []).forEach(p => pkgMap.set(String(p.package_id), p));
-      // Override with fresh DB values if available
-      mappedDbPkgs.forEach(p => pkgMap.set(String(p.package_id), p));
+        if (dbProdStaff) {
+           setProductionStaff(dbProdStaff.map(mapProductionStaffFromDb));
+        }
+        
+        if (dbNotifications) {
+          setNotifications(dbNotifications.map(mapNotificationFromDb));
+        }
+        if (dbEquipment) {
+          setEquipment(dbEquipment.map((item: any) => ({ ...item, equipment_id: mapFromDbEquipmentId(item.equipment_id), equipment_type: item.Equipment_Category || item.equipment_type || 'Camera', status: item.Equipment_Status || item.status || 'Active' })));
+        }
+        if (dbLeadPackages) setLeadPackages(dbLeadPackages);
+        
+        let finalPackagesData = dbPackages || [];
+        if (!finalPackagesData || finalPackagesData.length < 10) {
+          try {
+            const proxyRes = await fetch('/api/db/select', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ table: 'packages' })
+            });
+            const parsed = await safeParseResponse(proxyRes);
+            if (parsed.ok && parsed.isJson) {
+              const proxyJson = parsed.data;
+              if (proxyJson && proxyJson.success && Array.isArray(proxyJson.data) && proxyJson.data.length > finalPackagesData.length) {
+                finalPackagesData = proxyJson.data;
+              }
+            }
+          } catch (e) {
+            console.warn('[RoleContext] Proxy fetch packages fallback error:', e);
+          }
+        }
 
-      setPackages(Array.from(pkgMap.values()));
-      if (dbCalendarMemos) setCalendarMemos(dbCalendarMemos);
-      if (dbStaffAssignments) setStaffAssignments(dbStaffAssignments);
-      
-      if (dbQuotations) {
-        setQuotations(dbQuotations.map((q: any) => {
-           let srv = q.services_included;
-           if (typeof srv === 'string') {
-             try { srv = JSON.parse(srv); } catch(e){}
-           }
-           if (srv && !Array.isArray(srv) && typeof srv === 'object' && srv.services) {
-             srv = srv.services;
-           }
-           return { ...q, services_included: Array.isArray(srv) ? srv : [] };
-        }));
+        // Merge fetched package data with INITIAL_PACKAGES to guarantee all 39 master packages are available
+        const mappedDbPkgs = (finalPackagesData && finalPackagesData.length > 0) 
+          ? finalPackagesData.map(mapDbRecordToPackage) 
+          : [];
+        
+        const pkgMap = new Map<string, Package>();
+        (INITIAL_PACKAGES || []).forEach(p => pkgMap.set(String(p.package_id), p));
+        mappedDbPkgs.forEach(p => pkgMap.set(String(p.package_id), p));
+
+        setPackages(Array.from(pkgMap.values()));
+        if (dbCalendarMemos) setCalendarMemos(dbCalendarMemos);
+        if (dbStaffAssignments) setStaffAssignments(dbStaffAssignments);
+        
+        if (dbQuotations) {
+          setQuotations(dbQuotations.map((q: any) => {
+             let srv = q.services_included;
+             if (typeof srv === 'string') {
+               try { srv = JSON.parse(srv); } catch(e){}
+             }
+             if (srv && !Array.isArray(srv) && typeof srv === 'object' && srv.services) {
+               srv = srv.services;
+             }
+             return { ...q, services_included: Array.isArray(srv) ? srv : [] };
+          }));
+        }
+        
+        if (dbStatusHistory) setStatusHistory(dbStatusHistory);
+        if (dbLeadStaffAssignmentHistory) setLeadStaffAssignmentHistory(dbLeadStaffAssignmentHistory);
+        if (dbLeadEquipmentHistory) setLeadEquipmentHistory(dbLeadEquipmentHistory);
+        
+        updateDiagnosticMetric('read', 'ok');
+        updateDiagnosticMetric('connection', 'connected');
+
+        runAgain = fetchPendingRef.current;
       }
-      
-      if (dbStatusHistory) setStatusHistory(dbStatusHistory);
-      if (dbLeadStaffAssignmentHistory) setLeadStaffAssignmentHistory(dbLeadStaffAssignmentHistory);
-      if (dbLeadEquipmentHistory) setLeadEquipmentHistory(dbLeadEquipmentHistory);
-      
-      updateDiagnosticMetric('read', 'ok');
-      updateDiagnosticMetric('connection', 'connected');
     } catch (err: any) {
       console.error('Data fetch error:', err);
       window.alert(`Database Fetch Error: ${err.message}`);
     } finally {
+      isFetchingRef.current = false;
+      fetchPendingRef.current = false;
       setIsDataLoading(false);
     }
   };
@@ -2493,6 +2510,11 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     // Handle window focus and document visibility to fetch fresh data when user returns to app
     const handleFocusOrVisible = () => {
+      const now = Date.now();
+      if (now - lastFetchTimeRef.current < 15000) {
+        console.log("[SYNC] App focused/visible, but last fetch was less than 15s ago. Skipping redundant pull.");
+        return;
+      }
       console.log("[SYNC] App focused/visible, pulling fresh database records...");
       fetchFromDb(false).catch(e => console.warn('fetchFromDb failed:', e?.message || e));
     };
@@ -2506,10 +2528,18 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // Background polling fallback every 15 seconds to guarantee absolute synchronization
+    // Background polling fallback every 30 seconds to guarantee absolute synchronization
     const pollingInterval = setInterval(() => {
+      if (document.visibilityState !== 'visible') {
+        return; // Skip polling if tab is hidden
+      }
+      const now = Date.now();
+      if (now - lastFetchTimeRef.current < 30000) {
+        return; // Skip polling if we fetched recently
+      }
+      console.log("[SYNC] Background polling triggering database update...");
       fetchFromDb(false).catch(e => console.warn('fetchFromDb polling failed:', e?.message || e));
-    }, 15000);
+    }, 30000);
 
     // Realtime subscriptions handle granular updates. No global sync needed.
     return () => {
@@ -3296,15 +3326,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
 
     const targetLead = leads.find((ld) => ld.lead_id === leadId);
-    if (supabaseClient) {
-      const { data: dbLead, error: dbLeadErr } = await supabaseClient.from('leads').select('lead_id').eq('lead_id', leadId).maybeSingle();
-      if (dbLeadErr) {
-        throw new Error(`Failed to check if lead exists in 'leads' table. Supabase Error: ${dbLeadErr.message}`);
-      }
-      if (!dbLead) {
-        throw new Error(`Lead record with ID "${leadId}" was not found in the "leads" table.`);
-      }
-    } else if (!targetLead) {
+    if (!targetLead) {
       throw new Error(`Lead record with ID "${leadId}" was not found in local cache.`);
     }
 
@@ -3416,15 +3438,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
 
     const targetLead = leads.find((ld) => ld.lead_id === leadId);
-    if (supabaseClient) {
-      const { data: dbLead, error: dbLeadErr } = await supabaseClient.from('leads').select('lead_id').eq('lead_id', leadId).maybeSingle();
-      if (dbLeadErr) {
-        throw new Error(`Failed to check if lead exists in 'leads' table. Supabase Error: ${dbLeadErr.message}`);
-      }
-      if (!dbLead) {
-        throw new Error(`Lead record with ID "${leadId}" was not found in the "leads" table.`);
-      }
-    } else if (!targetLead) {
+    if (!targetLead) {
       throw new Error(`Lead record with ID "${leadId}" was not found in local cache.`);
     }
 
@@ -3481,7 +3495,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
         if (supabaseClient) {
           try {
-            const { data: dbOrders } = await supabaseClient.from('orders').select('order_id');
+            // Only fetch a few latest order IDs
+            const { data: dbOrders } = await supabaseClient.from('orders').select('order_id').order('created_at', { ascending: false }).limit(20);
             if (dbOrders) {
               dbOrders.forEach((o: any) => { if (o.order_id) existingOrderIds.add(o.order_id); });
             }
@@ -6277,19 +6292,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
 
     const prevLead = leads.find(l => l.lead_id === leadId);
-    if (supabaseClient) {
-      try {
-        const { data: dbLead, error: dbLeadErr } = await supabaseClient.from('leads').select('lead_id').eq('lead_id', leadId).maybeSingle();
-        if (dbLeadErr) {
-          console.warn(`Failed to check if lead exists in 'leads' table: ${dbLeadErr.message}`);
-        }
-        if (!dbLead && !prevLead) {
-          console.warn(`Lead record with ID "${leadId}" was not found in 'leads' table, applying update locally.`);
-        }
-      } catch (checkErr: any) {
-        console.warn(`Lead existence check skipped or failed:`, checkErr?.message || checkErr);
-      }
-    } else if (!prevLead) {
+    if (!prevLead) {
       console.warn(`Lead record with ID "${leadId}" was not found in local cache.`);
     }
 
@@ -6349,16 +6352,16 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       // 2. Delete removed events
       const idsToDelete = existingIds.filter(id => !incomingIds.includes(id));
       if (idsToDelete.length > 0) {
-        for (const idToDelete of idsToDelete) {
+        await Promise.all(idsToDelete.map(async (idToDelete) => {
           const delRes = await pushDelete('lead_events', 'id', idToDelete);
           if (!delRes.success) {
             throw new Error(`Failed to delete removed event: ${delRes.error}`);
           }
-        }
+        }));
       }
 
       // 3. Upsert (Insert new, Update existing)
-      for (const ev of updatedEvents) {
+      await Promise.all(updatedEvents.map(async (ev) => {
         const isNew = !ev.id || ev.id.startsWith('EV-');
         
         const eventPayload = {
@@ -6387,7 +6390,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           const updRes = await pushUpdate('lead_events', 'id', ev.id, eventPayload);
           if (!updRes.success) throw new Error(`Failed to update existing event: ${updRes.error}`);
         }
-      }
+      }));
     }
     
     setLeads((prev) =>

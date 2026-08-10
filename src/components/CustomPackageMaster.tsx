@@ -582,11 +582,11 @@ export const CustomPackageMaster: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full sm:w-auto">
             <button
               onClick={handleManualRefresh}
               disabled={isRefreshing}
-              className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 hover:text-white transition-all text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer"
+              className="w-full sm:w-auto justify-center px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 hover:text-white transition-all text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isRefreshing ? 'animate-spin' : ''}`} />
               <span>Refresh</span>
@@ -594,7 +594,7 @@ export const CustomPackageMaster: React.FC = () => {
 
             <button
               onClick={handleOpenAddRole}
-              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 transition-all text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-lg shadow-amber-500/10"
+              className="w-full sm:w-auto justify-center px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 transition-all text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-lg shadow-amber-500/10"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
               <span>+ Add Custom Role</span>
@@ -602,7 +602,7 @@ export const CustomPackageMaster: React.FC = () => {
 
             <button
               onClick={handleOpenAddDeliverable}
-              className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 transition-all text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-500/10"
+              className="w-full sm:w-auto justify-center px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 transition-all text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-500/10"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
               <span>+ Add Custom Deliverable</span>
@@ -612,7 +612,7 @@ export const CustomPackageMaster: React.FC = () => {
 
         {/* Filter and View Toggles Bar */}
         <div className="mt-6 pt-4 border-t border-zinc-850 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5 bg-zinc-950 p-1 rounded-xl border border-zinc-850 w-full sm:w-auto">
+          <div className="flex items-center gap-1.5 bg-zinc-950 p-1 rounded-xl border border-zinc-850 w-full sm:w-auto overflow-x-auto whitespace-nowrap scrollbar-none">
             <button
               onClick={() => setActiveTab('all')}
               className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
@@ -699,7 +699,7 @@ export const CustomPackageMaster: React.FC = () => {
 
                 <button
                   onClick={handleOpenAddRole}
-                  className="px-3.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-400 transition-all text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+                  className="w-full sm:w-auto justify-center px-3.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-400 transition-all text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>+ Add Custom Role</span>
@@ -713,35 +713,29 @@ export const CustomPackageMaster: React.FC = () => {
                   <p className="text-[11px] text-zinc-600 mt-1">Click "+ Add Custom Role" to create your first role designation.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-xl border border-zinc-850">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-zinc-950/80 text-zinc-400 font-mono uppercase text-[10px] tracking-wider border-b border-zinc-850">
-                        <th className="py-3 px-4">Role Name</th>
-                        <th className="py-3 px-4">Description</th>
-                        <th className="py-3 px-4">Status</th>
-                        <th className="py-3 px-4">Created Date</th>
-                        <th className="py-3 px-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-850/60 font-sans">
-                      {filteredRoles.map((role) => {
-                        const used = isRoleInUse(role.role_name);
-                        return (
-                          <tr key={role.id} className="hover:bg-zinc-850/40 transition-colors group">
-                            <td className="py-3 px-4 font-bold text-zinc-100 flex items-center gap-2">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
-                              <span>{role.role_name}</span>
-                              {used && (
-                                <span className="text-[9px] font-mono px-1.5 py-0.2 bg-zinc-800 text-zinc-400 rounded border border-zinc-700" title="Used in active packages or leads">
-                                  In Use
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-3 px-4 text-zinc-400 max-w-xs truncate">
-                              {role.description || <span className="italic text-zinc-600 text-[11px]">No description</span>}
-                            </td>
-                            <td className="py-3 px-4 font-mono">
+                <>
+                  {/* Mobile-friendly stacked card layout for small screens */}
+                  <div className="block md:hidden space-y-3">
+                    {filteredRoles.map((role) => {
+                      const used = isRoleInUse(role.role_name);
+                      return (
+                        <div key={role.id} className="bg-zinc-950/40 border border-zinc-850 p-4 rounded-xl space-y-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                                <span className="font-bold text-zinc-100 text-xs">{role.role_name}</span>
+                                {used && (
+                                  <span className="text-[9px] font-mono px-1.5 py-0.2 bg-zinc-800 text-zinc-400 rounded border border-zinc-700" title="Used in active packages or leads">
+                                    In Use
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-zinc-405 leading-relaxed">
+                                {role.description || <span className="italic text-zinc-600">No description</span>}
+                              </p>
+                            </div>
+                            <div className="flex-shrink-0">
                               {role.status === 'Active' ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                                   <CheckCircle2 className="w-3 h-3" />
@@ -753,52 +747,140 @@ export const CustomPackageMaster: React.FC = () => {
                                   Inactive
                                 </span>
                               )}
-                            </td>
-                            <td className="py-3 px-4 font-mono text-[11px] text-zinc-500">
-                              {role.created_at ? new Date(role.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
-                            </td>
-                            <td className="py-3 px-4 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <button
-                                  onClick={() => handleOpenEditRole(role)}
-                                  className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-white transition-all text-[11px] font-mono font-medium flex items-center gap-1 cursor-pointer"
-                                  title="Edit Role"
-                                >
-                                  <Edit className="w-3 h-3 text-amber-400" />
-                                  <span>Edit</span>
-                                </button>
+                            </div>
+                          </div>
 
-                                <button
-                                  onClick={() => handleToggleRoleStatus(role)}
-                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-medium transition-all cursor-pointer ${
-                                    role.status === 'Active'
-                                      ? 'bg-zinc-800 hover:bg-amber-950/40 text-amber-400 hover:text-amber-300 border border-amber-500/20'
-                                      : 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-400 border border-emerald-500/30'
-                                  }`}
-                                  title={role.status === 'Active' ? 'Deactivate Role' : 'Activate Role'}
-                                >
-                                  {role.status === 'Active' ? 'Deactivate' : 'Activate'}
-                                </button>
+                          <div className="text-[10px] text-zinc-500 font-mono flex justify-between items-center border-t border-zinc-850/50 pt-2">
+                            <span>Created: {role.created_at ? new Date(role.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}</span>
+                          </div>
 
-                                <button
-                                  onClick={() => handleDeleteRole(role)}
-                                  className={`p-1.5 rounded-lg text-rose-400 transition-all cursor-pointer ${
-                                    used 
-                                      ? 'opacity-40 hover:opacity-100 hover:bg-rose-500/10' 
-                                      : 'hover:bg-rose-500/15 hover:text-rose-300'
-                                  }`}
-                                  title={used ? "Role is used in packages/leads (Click to view warning)" : "Delete Role"}
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-850/50">
+                            <button
+                              onClick={() => handleOpenEditRole(role)}
+                              className="flex-1 min-w-[70px] px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-white transition-all text-xs font-mono font-medium flex items-center justify-center gap-1 cursor-pointer"
+                              title="Edit Role"
+                            >
+                              <Edit className="w-3 h-3 text-amber-400" />
+                              <span>Edit</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleToggleRoleStatus(role)}
+                              className={`flex-1 min-w-[90px] px-2.5 py-1.5 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer text-center ${
+                                role.status === 'Active'
+                                  ? 'bg-zinc-800 hover:bg-amber-950/40 text-amber-400 hover:text-amber-300 border border-amber-500/20'
+                                  : 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-400 border border-emerald-500/30'
+                              }`}
+                              title={role.status === 'Active' ? 'Deactivate Role' : 'Activate Role'}
+                            >
+                              {role.status === 'Active' ? 'Deactivate' : 'Activate'}
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteRole(role)}
+                              className={`p-1.5 rounded-lg text-rose-400 transition-all cursor-pointer border border-zinc-850 bg-zinc-900 ${
+                                used 
+                                  ? 'opacity-40 hover:opacity-100 hover:bg-rose-500/10' 
+                                  : 'hover:bg-rose-500/15 hover:text-rose-300'
+                              }`}
+                              title={used ? "Role is used in packages/leads (Click to view warning)" : "Delete Role"}
+                            >
+                              <Trash2 className="w-3.5 h-3.5 mx-auto" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Desktop view table */}
+                  <div className="hidden md:block overflow-x-auto rounded-xl border border-zinc-850">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-zinc-950/80 text-zinc-400 font-mono uppercase text-[10px] tracking-wider border-b border-zinc-850">
+                          <th className="py-3 px-4">Role Name</th>
+                          <th className="py-3 px-4">Description</th>
+                          <th className="py-3 px-4">Status</th>
+                          <th className="py-3 px-4">Created Date</th>
+                          <th className="py-3 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-850/60 font-sans">
+                        {filteredRoles.map((role) => {
+                          const used = isRoleInUse(role.role_name);
+                          return (
+                            <tr key={role.id} className="hover:bg-zinc-850/40 transition-colors group">
+                              <td className="py-3 px-4 font-bold text-zinc-100 flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                                <span>{role.role_name}</span>
+                                {used && (
+                                  <span className="text-[9px] font-mono px-1.5 py-0.2 bg-zinc-800 text-zinc-400 rounded border border-zinc-700" title="Used in active packages or leads">
+                                    In Use
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 text-zinc-400 max-w-xs truncate">
+                                {role.description || <span className="italic text-zinc-600 text-[11px]">No description</span>}
+                              </td>
+                              <td className="py-3 px-4 font-mono">
+                                {role.status === 'Active' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    Active
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-800 text-zinc-400 border border-zinc-700">
+                                    <XCircle className="w-3 h-3" />
+                                    Inactive
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 font-mono text-[11px] text-zinc-500">
+                                {role.created_at ? new Date(role.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    onClick={() => handleOpenEditRole(role)}
+                                    className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-white transition-all text-[11px] font-mono font-medium flex items-center gap-1 cursor-pointer"
+                                    title="Edit Role"
+                                  >
+                                    <Edit className="w-3 h-3 text-amber-400" />
+                                    <span>Edit</span>
+                                  </button>
+
+                                  <button
+                                    onClick={() => handleToggleRoleStatus(role)}
+                                    className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-medium transition-all cursor-pointer ${
+                                      role.status === 'Active'
+                                        ? 'bg-zinc-800 hover:bg-amber-950/40 text-amber-400 hover:text-amber-300 border border-amber-500/20'
+                                        : 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-400 border border-emerald-500/30'
+                                    }`}
+                                    title={role.status === 'Active' ? 'Deactivate Role' : 'Activate Role'}
+                                  >
+                                    {role.status === 'Active' ? 'Deactivate' : 'Activate'}
+                                  </button>
+
+                                  <button
+                                    onClick={() => handleDeleteRole(role)}
+                                    className={`p-1.5 rounded-lg text-rose-400 transition-all cursor-pointer ${
+                                      used 
+                                        ? 'opacity-40 hover:opacity-100 hover:bg-rose-500/10' 
+                                        : 'hover:bg-rose-500/15 hover:text-rose-300'
+                                    }`}
+                                    title={used ? "Role is used in packages/leads (Click to view warning)" : "Delete Role"}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -826,7 +908,7 @@ export const CustomPackageMaster: React.FC = () => {
 
                 <button
                   onClick={handleOpenAddDeliverable}
-                  className="px-3.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 transition-all text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+                  className="w-full sm:w-auto justify-center px-3.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 transition-all text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>+ Add Custom Deliverable</span>
@@ -840,35 +922,29 @@ export const CustomPackageMaster: React.FC = () => {
                   <p className="text-[11px] text-zinc-600 mt-1">Click "+ Add Custom Deliverable" to add your first master deliverable item.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-xl border border-zinc-850">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-zinc-950/80 text-zinc-400 font-mono uppercase text-[10px] tracking-wider border-b border-zinc-850">
-                        <th className="py-3 px-4">Deliverable Name</th>
-                        <th className="py-3 px-4">Description</th>
-                        <th className="py-3 px-4">Status</th>
-                        <th className="py-3 px-4">Created Date</th>
-                        <th className="py-3 px-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-850/60 font-sans">
-                      {filteredDeliverables.map((del) => {
-                        const used = isDeliverableInUse(del.deliverable_name);
-                        return (
-                          <tr key={del.id} className="hover:bg-zinc-850/40 transition-colors group">
-                            <td className="py-3 px-4 font-bold text-zinc-100 flex items-center gap-2">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
-                              <span>{del.deliverable_name}</span>
-                              {used && (
-                                <span className="text-[9px] font-mono px-1.5 py-0.2 bg-zinc-800 text-zinc-400 rounded border border-zinc-700" title="Used in active packages or leads">
-                                  In Use
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-3 px-4 text-zinc-400 max-w-xs truncate">
-                              {del.description || <span className="italic text-zinc-600 text-[11px]">No description</span>}
-                            </td>
-                            <td className="py-3 px-4 font-mono">
+                <>
+                  {/* Mobile-friendly stacked card layout for small screens */}
+                  <div className="block md:hidden space-y-3">
+                    {filteredDeliverables.map((del) => {
+                      const used = isDeliverableInUse(del.deliverable_name);
+                      return (
+                        <div key={del.id} className="bg-zinc-950/40 border border-zinc-850 p-4 rounded-xl space-y-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+                                <span className="font-bold text-zinc-100 text-xs">{del.deliverable_name}</span>
+                                {used && (
+                                  <span className="text-[9px] font-mono px-1.5 py-0.2 bg-zinc-800 text-zinc-400 rounded border border-zinc-700" title="Used in active packages or leads">
+                                    In Use
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-zinc-405 leading-relaxed">
+                                {del.description || <span className="italic text-zinc-600">No description</span>}
+                              </p>
+                            </div>
+                            <div className="flex-shrink-0">
                               {del.status === 'Active' ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                                   <CheckCircle2 className="w-3 h-3" />
@@ -880,52 +956,140 @@ export const CustomPackageMaster: React.FC = () => {
                                   Inactive
                                 </span>
                               )}
-                            </td>
-                            <td className="py-3 px-4 font-mono text-[11px] text-zinc-500">
-                              {del.created_at ? new Date(del.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
-                            </td>
-                            <td className="py-3 px-4 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <button
-                                  onClick={() => handleOpenEditDeliverable(del)}
-                                  className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-white transition-all text-[11px] font-mono font-medium flex items-center gap-1 cursor-pointer"
-                                  title="Edit Deliverable"
-                                >
-                                  <Edit className="w-3 h-3 text-emerald-400" />
-                                  <span>Edit</span>
-                                </button>
+                            </div>
+                          </div>
 
-                                <button
-                                  onClick={() => handleToggleDeliverableStatus(del)}
-                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-medium transition-all cursor-pointer ${
-                                    del.status === 'Active'
-                                      ? 'bg-zinc-800 hover:bg-amber-950/40 text-amber-400 hover:text-amber-300 border border-amber-500/20'
-                                      : 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-400 border border-emerald-500/30'
-                                  }`}
-                                  title={del.status === 'Active' ? 'Deactivate Deliverable' : 'Activate Deliverable'}
-                                >
-                                  {del.status === 'Active' ? 'Deactivate' : 'Activate'}
-                                </button>
+                          <div className="text-[10px] text-zinc-500 font-mono flex justify-between items-center border-t border-zinc-850/50 pt-2">
+                            <span>Created: {del.created_at ? new Date(del.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}</span>
+                          </div>
 
-                                <button
-                                  onClick={() => handleDeleteDeliverable(del)}
-                                  className={`p-1.5 rounded-lg text-rose-400 transition-all cursor-pointer ${
-                                    used 
-                                      ? 'opacity-40 hover:opacity-100 hover:bg-rose-500/10' 
-                                      : 'hover:bg-rose-500/15 hover:text-rose-300'
-                                  }`}
-                                  title={used ? "Deliverable is used in packages/leads (Click to view warning)" : "Delete Deliverable"}
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-850/50">
+                            <button
+                              onClick={() => handleOpenEditDeliverable(del)}
+                              className="flex-1 min-w-[70px] px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-white transition-all text-xs font-mono font-medium flex items-center justify-center gap-1 cursor-pointer"
+                              title="Edit Deliverable"
+                            >
+                              <Edit className="w-3 h-3 text-emerald-400" />
+                              <span>Edit</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleToggleDeliverableStatus(del)}
+                              className={`flex-1 min-w-[90px] px-2.5 py-1.5 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer text-center ${
+                                del.status === 'Active'
+                                  ? 'bg-zinc-800 hover:bg-amber-950/40 text-amber-400 hover:text-amber-300 border border-amber-500/20'
+                                  : 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-400 border border-emerald-500/30'
+                              }`}
+                              title={del.status === 'Active' ? 'Deactivate Deliverable' : 'Activate Deliverable'}
+                            >
+                              {del.status === 'Active' ? 'Deactivate' : 'Activate'}
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteDeliverable(del)}
+                              className={`p-1.5 rounded-lg text-rose-400 transition-all cursor-pointer border border-zinc-850 bg-zinc-900 ${
+                                used 
+                                  ? 'opacity-40 hover:opacity-100 hover:bg-rose-500/10' 
+                                  : 'hover:bg-rose-500/15 hover:text-rose-300'
+                              }`}
+                              title={used ? "Deliverable is used in packages/leads (Click to view warning)" : "Delete Deliverable"}
+                            >
+                              <Trash2 className="w-3.5 h-3.5 mx-auto" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Desktop view table */}
+                  <div className="hidden md:block overflow-x-auto rounded-xl border border-zinc-850">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-zinc-950/80 text-zinc-400 font-mono uppercase text-[10px] tracking-wider border-b border-zinc-850">
+                          <th className="py-3 px-4">Deliverable Name</th>
+                          <th className="py-3 px-4">Description</th>
+                          <th className="py-3 px-4">Status</th>
+                          <th className="py-3 px-4">Created Date</th>
+                          <th className="py-3 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-850/60 font-sans">
+                        {filteredDeliverables.map((del) => {
+                          const used = isDeliverableInUse(del.deliverable_name);
+                          return (
+                            <tr key={del.id} className="hover:bg-zinc-850/40 transition-colors group">
+                              <td className="py-3 px-4 font-bold text-zinc-100 flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+                                <span>{del.deliverable_name}</span>
+                                {used && (
+                                  <span className="text-[9px] font-mono px-1.5 py-0.2 bg-zinc-800 text-zinc-400 rounded border border-zinc-700" title="Used in active packages or leads">
+                                    In Use
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 text-zinc-400 max-w-xs truncate">
+                                {del.description || <span className="italic text-zinc-600 text-[11px]">No description</span>}
+                              </td>
+                              <td className="py-3 px-4 font-mono">
+                                {del.status === 'Active' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    Active
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-800 text-zinc-400 border border-zinc-700">
+                                    <XCircle className="w-3 h-3" />
+                                    Inactive
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 font-mono text-[11px] text-zinc-500">
+                                {del.created_at ? new Date(del.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    onClick={() => handleOpenEditDeliverable(del)}
+                                    className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-white transition-all text-[11px] font-mono font-medium flex items-center gap-1 cursor-pointer"
+                                    title="Edit Deliverable"
+                                  >
+                                    <Edit className="w-3 h-3 text-emerald-400" />
+                                    <span>Edit</span>
+                                  </button>
+
+                                  <button
+                                    onClick={() => handleToggleDeliverableStatus(del)}
+                                    className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-medium transition-all cursor-pointer ${
+                                      del.status === 'Active'
+                                        ? 'bg-zinc-800 hover:bg-amber-950/40 text-amber-400 hover:text-amber-300 border border-amber-500/20'
+                                        : 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-400 border border-emerald-500/30'
+                                    }`}
+                                    title={del.status === 'Active' ? 'Deactivate Deliverable' : 'Activate Deliverable'}
+                                  >
+                                    {del.status === 'Active' ? 'Deactivate' : 'Activate'}
+                                  </button>
+
+                                  <button
+                                    onClick={() => handleDeleteDeliverable(del)}
+                                    className={`p-1.5 rounded-lg text-rose-400 transition-all cursor-pointer ${
+                                      used 
+                                        ? 'opacity-40 hover:opacity-100 hover:bg-rose-500/10' 
+                                        : 'hover:bg-rose-500/15 hover:text-rose-300'
+                                    }`}
+                                    title={used ? "Deliverable is used in packages/leads (Click to view warning)" : "Delete Deliverable"}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
           )}
