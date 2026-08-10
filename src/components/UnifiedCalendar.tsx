@@ -267,16 +267,30 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
       leads.forEach(ld => {
         if (!ld) return;
         // Display only leads where:
-        // - Status = Order Confirmed
-        // - Status is NOT Delivered
-        // - Status is NOT Completed
-        // - Status is NOT Cancelled
-        // Remove the event automatically when status changes.
         const statusClean = (ld.status || ld.current_status || '').trim();
-        const preOrderStatuses = ['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Lost Lead', 'Lost'];
-        const completedStatuses = ['Delivered', 'Project Completed', 'Completed', 'Event Cancelled', 'Closed', 'Project Closed', 'Approved', 'Project Delivered'];
-        if (preOrderStatuses.includes(statusClean)) return;
-        if (completedStatuses.includes(statusClean)) return;
+        
+        // Define stages
+        const opsStages = ['Order Confirmed', 'Event Scheduled', 'Operations Assigned', 'Event Started', 'Event Ended', 'Event Completed'];
+        const prodStages = ['Verified Footage', 'Footage Handover Verified', 'Raw Footage Received', 'Assigned Editor', 'Editing Started', 'Editing In Progress', 'Customer Review', 'Editing Completed'];
+        const postProdStages = ['Delivered', 'Client Acceptance', 'Business Owner Review', 'Closed', 'Project Closed', 'Order Closed', 'Project Completed', 'Completed', 'Approved', 'Project Delivered'];
+        
+        let isVisible = false;
+
+        if (role === 'sales' || role === 'owner') {
+          // Visible from Order Confirmed through Closed
+          isVisible = opsStages.includes(statusClean) || prodStages.includes(statusClean) || postProdStages.includes(statusClean);
+        } else if (role === 'operations') {
+          // Operations (and operations staff): Order Confirmed to Event Completed
+          isVisible = opsStages.includes(statusClean);
+        } else if (role === 'production') {
+          // Production (and production staff): Verified Footage to Editing Completed
+          isVisible = prodStages.includes(statusClean);
+        } else {
+          // Fallback
+          isVisible = opsStages.includes(statusClean) || prodStages.includes(statusClean);
+        }
+
+        if (!isVisible) return;
 
         // 2. Fetch events from ld.events or fall back to lead-level event if no events are saved
         const eventsList = (ld.events && ld.events.length > 0) ? ld.events : [
@@ -388,28 +402,6 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
 
   // Filters Event list by role first
   const roleFilteredEvents = useMemo(() => {
-    if (role === 'production' || role === 'owner') {
-      const projectMap = new Map<string, CalendarEvent>();
-      
-      allEvents.forEach(ev => {
-        const projectId = ev.orderId || ev.id;
-        
-        // Use the proper Target Delivery Date
-        const targetDate = ev.targetDeliveryDate;
-        if (targetDate) {
-          if (!projectMap.has(projectId)) {
-             projectMap.set(projectId, {
-                ...ev,
-                id: `target-delivery-${projectId}`,
-                eventClass: 'Target Delivery',
-                date: targetDate, // Override the date to be Target Delivery Date
-             });
-          }
-        }
-      });
-      return Array.from(projectMap.values());
-    }
-
     return allEvents;
   }, [allEvents, role]);
 

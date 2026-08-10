@@ -5906,6 +5906,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
 
       if (isCreateFlow) {
+        setSelectedPkgIds(['Custom Package']);
+        handlePackageChange('Custom Package');
         setWizardStep(3);
       } else {
         const newCompleted = Math.max(crmHighestStep, 2);
@@ -6145,6 +6147,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       if (isCreateFlow) {
         setSalesStatus(targetStatus as CurrentStage);
+        setSelectedPkgIds(['Custom Package']);
+        handlePackageChange('Custom Package');
         setWizardStep(3);
       } else {
         const newCompleted = Math.max(crmHighestStep, 2);
@@ -10200,6 +10204,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">3. Package Selection</span>
                   </div>
 
+                  {activeTab !== 'create' && (
                   <div>
                     <label className="block text-xs font-semibold text-slate-400 mb-1.5">
                       Select Package Option *
@@ -10239,6 +10244,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       </p>
                     )}
                   </div>
+                  )}
 
                   {/* Selected Package Summary Panel with viewer + compare workflows */}
                   {selectedPkgIds.length > 0 && (
