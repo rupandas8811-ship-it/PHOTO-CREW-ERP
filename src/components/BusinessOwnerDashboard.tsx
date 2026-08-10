@@ -36,7 +36,7 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 import { OwnerStaffPerformanceReport } from './OwnerModule';
-import { formatINR, formatTime12Hour, deserializeLeadEvents } from '../utils';
+import { formatINR, formatTime12Hour, deserializeLeadEvents, resolveStorageUrl } from '../utils';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { Order, Lead, Production, Payment } from '../types';
 
@@ -1945,7 +1945,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
   onApprove,
   onReject
 }) => {
-  const { editorAssignments } = useRole();
+  const { editorAssignments, quotations } = useRole();
   const [previewProof, setPreviewProof] = useState<{
     imageUrl: string;
     label: string;
@@ -1957,12 +1957,73 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
   const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id);
   const pay = payments.find(p => p.order_id === order.order_id || p.lead_id === order.lead_id);
 
-  // Financial Summary calculation
-  const totalQuotation = order.quotation_amount || order.grand_total || order.total_amount || 0;
-  const discountAmount = order.discount || pay?.discount_amount || 0;
+  // Fetch Step 3 saved quotation matching this order / lead
+  const matchedQuotation = (quotations || []).find((q: any) =>
+    (order.order_id && q.order_id === order.order_id) ||
+    (order.lead_id && q.lead_id === order.lead_id) ||
+    (order.quotation_id && q.quotation_id === order.quotation_id) ||
+    (lead?.lead_id && q.lead_id === lead.lead_id)
+  );
+
+  // Financial Summary calculations (fetched directly from Sales Dashboard Step 3 quotation data)
+  const packagePrice = Number(
+    matchedQuotation?.package_price ??
+    (order as any)?.package_price ??
+    (lead as any)?.package_price ??
+    0
+  );
+
+  const quotationDiscount = Number(
+    matchedQuotation?.discount_amount ??
+    matchedQuotation?.discount ??
+    (matchedQuotation as any)?.Quotation_Discount ??
+    order?.quotation_discount ??
+    order?.discount ??
+    (order as any)?.Quotation_Discount ??
+    (lead as any)?.Quotation_Discount ??
+    (lead as any)?.quotation_discount ??
+    pay?.discount_amount ??
+    0
+  );
+
+  const additionalServicesCost = Number(
+    matchedQuotation?.additional_services_cost ??
+    (matchedQuotation as any)?.Additional_Services_Cost ??
+    order?.additional_services_cost ??
+    (order as any)?.Additional_Services_Cost ??
+    (lead as any)?.additional_services_cost ??
+    (lead as any)?.Additional_Services_Cost ??
+    0
+  );
+
+  const rawFinalQuotationAmount = Number(
+    matchedQuotation?.final_amount ??
+    matchedQuotation?.final_quotation_amount ??
+    (matchedQuotation as any)?.Final_Quotation_Amount ??
+    matchedQuotation?.quotation_amount ??
+    (order as any)?.Final_Quotation_Amount ??
+    (order as any)?.final_quotation_amount ??
+    order?.quotation_amount ??
+    order?.grand_total ??
+    order?.total_amount ??
+    (lead as any)?.Final_Quotation_Amount ??
+    (lead as any)?.final_quotation_amount ??
+    lead?.budget ??
+    0
+  );
+
+  const calculatedFinal = (packagePrice || 0) - (quotationDiscount || 0) + (additionalServicesCost || 0);
+  const finalQuotationAmount = rawFinalQuotationAmount > 0 ? rawFinalQuotationAmount : (calculatedFinal > 0 ? calculatedFinal : 0);
+
   const paymentReceived = pay ? ((pay.advance_received || 0) + (pay.final_payment_received || 0)) : (order.advance_received || 0);
-  const outstandingBalance = pay ? pay.balance_due : (order.balance_amount || Math.max(0, totalQuotation - paymentReceived));
-  const paymentStatus = pay?.payment_status || order.payment_status || (outstandingBalance <= 0 ? 'Paid' : 'Pending Balance');
+
+  const pendingAmount = pay
+    ? pay.balance_due
+    : (order.balance_amount !== undefined && order.balance_amount !== null && order.balance_amount >= 0
+      ? order.balance_amount
+      : Math.max(0, finalQuotationAmount - paymentReceived));
+
+  const paymentStatus = pay?.payment_status || order.payment_status || (pendingAmount <= 0 ? 'Paid' : 'Pending Balance');
 
   const customerMobile = order.customer_phone || order.mobile || lead?.phone || lead?.mobile || pay?.customer_phone || 'N/A';
   const assignedEditor = prod?.editor_assigned || 'Unassigned';
@@ -2084,18 +2145,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
     }> = [];
 
     const isValidImg = (val: any): string | null => {
-      if (!val || typeof val !== 'string') return null;
-      const trimmed = val.trim();
-      if (
-        trimmed.startsWith('data:') ||
-        trimmed.startsWith('http://') ||
-        trimmed.startsWith('https://') ||
-        trimmed.startsWith('blob:') ||
-        /\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(trimmed)
-      ) {
-        return trimmed;
-      }
-      return null;
+      return resolveStorageUrl(val);
     };
 
     const formatImgUrl = (url: string) => {
@@ -2332,23 +2382,31 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
               <DollarSign className="w-3.5 h-3.5" />
               <span>Financial Summary</span>
             </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 text-xs">
+              <div>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Package Price</span>
+                <span className="text-zinc-100 font-mono font-bold">{formatINR(packagePrice)}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Quotation Discount</span>
+                <span className="text-amber-400 font-mono font-bold">{formatINR(quotationDiscount)}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Additional Services Cost</span>
+                <span className="text-blue-400 font-mono font-bold">{formatINR(additionalServicesCost)}</span>
+              </div>
               <div>
                 <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Final Quotation Amount</span>
-                <span className="text-zinc-100 font-mono font-bold">{formatINR(totalQuotation)}</span>
+                <span className="text-emerald-400 font-mono font-bold">{formatINR(finalQuotationAmount)}</span>
               </div>
               <div>
-                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Discount</span>
-                <span className="text-amber-400 font-mono font-bold">{formatINR(discountAmount)}</span>
-              </div>
-              <div>
-                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Advance / Payment Received</span>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Advance Collected / Payment Received</span>
                 <span className="text-emerald-400 font-mono font-bold">{formatINR(paymentReceived)}</span>
               </div>
               <div>
                 <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Pending Amount</span>
-                <span className={`font-mono font-bold ${outstandingBalance <= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {formatINR(outstandingBalance)}
+                <span className={`font-mono font-bold ${pendingAmount <= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {formatINR(pendingAmount)}
                 </span>
               </div>
             </div>

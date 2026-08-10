@@ -8,7 +8,7 @@ import {
 import { supabaseClient } from '../supabaseClient';
 import { EditorAssignment } from '../types';
 import { ProjectDetailModal } from './ProjectDetailModal';
-import { parseQtyAndText, formatQtyItem, deserializeLeadEvents, parseDeliverablesWithQty } from '../utils';
+import { parseQtyAndText, formatQtyItem, deserializeLeadEvents, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl } from '../utils';
 
 // Image compression helper
 const compressImage = (file: File): Promise<string> => {
@@ -838,38 +838,64 @@ Thank you.`;
     try {
       const timestamp = new Date().toISOString();
       const b = editingCompletedModal.group;
-      const proofStr = editingCompletedForm.confirmation_proof.trim();
+      const proofInput = editingCompletedForm.confirmation_proof.trim();
+
+      // 1. Upload proof image to Supabase Storage bucket ('img') if file/data-uri, or resolve public URL
+      const uploadedProofUrl = await uploadProofToStorage(proofInput, 'consent_proof');
+      if (!uploadedProofUrl || !uploadedProofUrl.trim()) {
+        throw new Error("Proof upload failed: Returned Storage URL is null or empty.");
+      }
+
+      console.log("[ProductionStaffModule] Proof Storage URL generated:", uploadedProofUrl);
+
       const deliverablesToUpdate = b.deliverables.filter((d: any) => editingCompletedForm.selectedIds.includes(d.assignmentId));
 
+      // 2. Save proof URL & status to editor_assignments table
       for (const deliv of deliverablesToUpdate) {
         await updateEditorAssignmentStatus(deliv.assignmentId, 'Editing Completed' as any);
 
-        await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, {
-          customer_communication_proof: proofStr,
-          client_communication_proof: proofStr,
-          confirmation_proof: proofStr,
-          proof_url: proofStr,
+        const resAssign = await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, {
+          customer_communication_proof: uploadedProofUrl,
+          client_communication_proof: uploadedProofUrl,
+          confirmation_proof: uploadedProofUrl,
+          proof_url: uploadedProofUrl,
+          proof_image: uploadedProofUrl,
           status: 'Editing Completed'
         });
+
+        if (resAssign && resAssign.success === false) {
+          throw new Error(`Failed to save proof to editor assignment (${deliv.assignmentId}): ${resAssign.error || 'Database save failed'}`);
+        }
       }
 
+      // 3. Save proof URL & status to production table
       const uniqueProdIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.prodObj?.production_id).filter(Boolean)));
       for (const prodId of uniqueProdIds as string[]) {
-        await updateProduction(prodId, {
+        const resProd = await updateProduction(prodId, {
           editing_status: 'Editing Completed' as any,
           production_status: 'Editing Completed' as any,
-          client_communication_proof: proofStr,
-          customer_communication_proof: proofStr,
-          confirmation_proof: proofStr,
-          proof_url: proofStr,
+          client_communication_proof: uploadedProofUrl,
+          customer_communication_proof: uploadedProofUrl,
+          confirmation_proof: uploadedProofUrl,
+          proof_url: uploadedProofUrl,
+          proof_image: uploadedProofUrl,
           remarks: `Editing Completed & Customer Confirmation Proof uploaded by ${staffName} on ${new Date().toLocaleDateString()}`
         });
       }
 
+      // 4. Save proof URL to orders table
       const uniqueOrderIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.orderId).filter(Boolean)));
       for (const orderId of uniqueOrderIds as string[]) {
         if (orderId !== 'ORD-ASSIGNED') {
           await updateOrderStage(orderId, 'Editing Completed' as any);
+          const resOrd = await pushUpdate('orders', 'order_id', orderId, {
+            client_communication_proof: uploadedProofUrl,
+            customer_communication_proof: uploadedProofUrl,
+            proof_url: uploadedProofUrl
+          });
+          if (resOrd && resOrd.success === false) {
+            console.warn(`[ProductionStaffModule] Non-fatal warn on orders save: ${resOrd.error}`);
+          }
         }
       }
 
@@ -883,11 +909,10 @@ Thank you.`;
 
       setEditingCompletedModal(null);
       setEditingCompletedForm({ confirmation_proof: '', selectedIds: [] });
-      await refreshData();
-      showToast('🎉 Status updated to Editing Completed!');
+      alert("✅ Customer Confirmation Proof saved successfully and marked as Editing Completed!");
     } catch (err: any) {
-      console.error('Error submitting Editing Completed:', err);
-      alert('Failed to submit: ' + (err.message || 'Please try again.'));
+      console.error("[ProductionStaffModule] Error saving confirmation proof:", err);
+      alert("❌ Failed to save Customer Confirmation Proof: " + (err.message || String(err)));
     } finally {
       setIsSubmitting(false);
     }

@@ -14,7 +14,7 @@ import { Production, EditingStatus, Staff } from '../types';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { ProjectDetailModal } from './ProjectDetailModal';
-import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem, parseQtyAndText, parseDeliverablesWithQty } from '../utils';
+import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem, parseQtyAndText, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl } from '../utils';
 import { AppLogo } from './AppLogo';
 import { StatusText } from './ui/StatusText';
 import { EventDropdownCell } from './EventDropdownCell';
@@ -9458,18 +9458,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           a.image
                         ];
                         for (const cand of candidates) {
-                          if (cand && typeof cand === 'string') {
-                            const trimmed = cand.trim();
-                            if (
-                              trimmed.startsWith('data:') ||
-                              trimmed.startsWith('http://') ||
-                              trimmed.startsWith('https://') ||
-                              trimmed.startsWith('blob:') ||
-                              /\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(trimmed)
-                            ) {
-                              return trimmed;
-                            }
-                          }
+                          const res = resolveStorageUrl(cand);
+                          if (res) return res;
                         }
 
                         // Check prodRec fallback if single assignment or staff matches
@@ -9485,18 +9475,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               prodRec.proof_image
                             ];
                             for (const cand of prodCandidates) {
-                              if (cand && typeof cand === 'string') {
-                                const trimmed = cand.trim();
-                                if (
-                                  trimmed.startsWith('data:') ||
-                                  trimmed.startsWith('http://') ||
-                                  trimmed.startsWith('https://') ||
-                                  trimmed.startsWith('blob:') ||
-                                  /\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(trimmed)
-                                ) {
-                                  return trimmed;
-                                }
-                              }
+                              const res = resolveStorageUrl(cand);
+                              if (res) return res;
                             }
                           }
                         }
@@ -10864,9 +10844,20 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     try {
                       setIsSaving(true);
                       
+                      let uploadedProofUrl = caCommunicationProof;
+                      if (caCommunicationProof && caCommunicationProof.trim()) {
+                        try {
+                          uploadedProofUrl = await uploadProofToStorage(caCommunicationProof, 'client_acceptance');
+                        } catch (uErr) {
+                          console.warn("Proof storage upload warning in Client Acceptance:", uErr);
+                        }
+                      }
+
                       const updates: any = {
                         editing_status: 'Client Acceptance',
-                        client_communication_proof: caCommunicationProof,
+                        client_communication_proof: uploadedProofUrl,
+                        customer_communication_proof: uploadedProofUrl,
+                        proof_url: uploadedProofUrl
                       };
                       
                       await updateProduction(clientAcceptanceProd.production_id, updates);

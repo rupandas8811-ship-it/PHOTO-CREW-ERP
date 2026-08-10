@@ -1,4 +1,112 @@
 import { Lead, Order, Payment, Customer } from './types';
+import { supabaseClient } from './supabaseClient';
+
+/**
+ * Resolves a raw image value (which could be a full URL, base64 data URI, or a Supabase Storage relative path)
+ * into a usable HTTP/HTTPS public image URL.
+ */
+export function resolveStorageUrl(val: any): string | null {
+  if (!val || typeof val !== 'string') return null;
+  const trimmed = val.trim();
+  if (!trimmed) return null;
+
+  if (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith('blob:')
+  ) {
+    return trimmed;
+  }
+
+  // If it's a relative path like "proofs/xyz.jpg" or "img/proofs/xyz.jpg" or "xyz.png"
+  if (/\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(trimmed) || trimmed.includes('/')) {
+    const cleanPath = trimmed.replace(/^img\//, '').replace(/^\//, '');
+    const supabaseUrl = 'https://aqifyxsimhqayfjwzzwj.supabase.co';
+    return `${supabaseUrl}/storage/v1/object/public/img/${cleanPath}`;
+  }
+
+  return null;
+}
+
+/**
+ * Uploads an image (base64 string or File) to Supabase Storage bucket 'img'
+ * and returns the public URL. If proofInput is already an HTTP/HTTPS URL, returns it directly.
+ */
+export async function uploadProofToStorage(proofInput: string | File, filenamePrefix: string = 'proof'): Promise<string> {
+  if (!proofInput) {
+    throw new Error("No proof image or link provided.");
+  }
+
+  // 1. If it's an HTTP or HTTPS URL already, return as is
+  if (typeof proofInput === 'string') {
+    const trimmed = proofInput.trim();
+    if (!trimmed) throw new Error("Proof string is empty.");
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+  }
+
+  if (!supabaseClient) {
+    throw new Error("Supabase client is not initialized.");
+  }
+
+  let blob: Blob;
+  let contentType = 'image/jpeg';
+
+  if (proofInput instanceof File) {
+    blob = proofInput;
+    contentType = proofInput.type || 'image/jpeg';
+  } else if (typeof proofInput === 'string' && proofInput.trim().startsWith('data:')) {
+    const trimmed = proofInput.trim();
+    const parts = trimmed.split(';base64,');
+    contentType = parts[0].replace('data:', '') || 'image/jpeg';
+    const byteCharacters = atob(parts[1]);
+    const byteArrays = [];
+    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+      const slice = byteCharacters.slice(offset, offset + 512);
+      const byteNumbers = new Array(slice.length);
+      for (let i = 0; i < slice.length; i++) {
+        byteNumbers[i] = slice.charCodeAt(i);
+      }
+      byteArrays.push(new Uint8Array(byteNumbers));
+    }
+    blob = new Blob(byteArrays, { type: contentType });
+  } else if (typeof proofInput === 'string') {
+    const resolved = resolveStorageUrl(proofInput);
+    if (resolved) return resolved;
+    throw new Error("Invalid proof format provided.");
+  } else {
+    throw new Error("Invalid proof input format.");
+  }
+
+  const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
+  const fileName = `proofs/${filenamePrefix}_${Date.now()}_${Math.floor(Math.random() * 10000)}.${ext}`;
+
+  // Upload to 'img' bucket
+  const { error } = await supabaseClient.storage
+    .from('img')
+    .upload(fileName, blob, {
+      contentType,
+      upsert: true
+    });
+
+  if (error) {
+    console.error("[uploadProofToStorage] Storage upload error:", error);
+    throw new Error(`Supabase Storage Upload Error: ${error.message || JSON.stringify(error)}`);
+  }
+
+  const { data: publicData } = supabaseClient.storage
+    .from('img')
+    .getPublicUrl(fileName);
+
+  if (!publicData || !publicData.publicUrl) {
+    throw new Error("Failed to generate public Storage URL for uploaded proof.");
+  }
+
+  console.log("[uploadProofToStorage] Uploaded proof successfully:", publicData.publicUrl);
+  return publicData.publicUrl;
+}
 
 /**
  * Converts any AM/PM or HH:mm time string to a 24-hour HH:mm:ss format for SQL.
