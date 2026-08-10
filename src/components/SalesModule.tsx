@@ -4895,7 +4895,26 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     });
   };
 
-  const handlePackageChange = (packageId: string) => {
+  const handlePackageDropdownChange = (packageId: string) => {
+    if (isStep3Locked) {
+      showToastMsg("Quotation details are locked. Owner unlock approval required to edit.", "error");
+      return;
+    }
+    setWizardLeadData((prev) => ({
+      ...prev,
+      selected_package_id: packageId,
+      Select_Package_Option: packageId,
+    }));
+    setIsPackageSelectedAndSaved(false);
+    setIsPackageDetailsSaved(false);
+  };
+
+  const handlePackageConfirm = () => {
+    const packageId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
+    if (!packageId) {
+      showToastMsg("Please select a package first.", "error");
+      return;
+    }
     if (isStep3Locked) {
       showToastMsg("Quotation details are locked. Owner unlock approval required to edit.", "error");
       return;
@@ -5907,8 +5926,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
 
       if (isCreateFlow) {
-        setSelectedPkgIds(['Custom Package']);
-        handlePackageChange('Custom Package');
+        setSelectedPkgIds([]);
+        setWizardLeadData(prev => ({ ...prev, selected_package_id: '', Select_Package_Option: '' }));
         setWizardStep(3);
       } else {
         const newCompleted = Math.max(crmHighestStep, 2);
@@ -6148,8 +6167,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       if (isCreateFlow) {
         setSalesStatus(targetStatus as CurrentStage);
-        setSelectedPkgIds(['Custom Package']);
-        handlePackageChange('Custom Package');
+        setSelectedPkgIds([]);
+        setWizardLeadData(prev => ({ ...prev, selected_package_id: '', Select_Package_Option: '' }));
         setWizardStep(3);
       } else {
         const newCompleted = Math.max(crmHighestStep, 2);
@@ -10218,10 +10237,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         const val = e.target.value;
                         if (val) {
                           setSelectedPkgIds([val]);
-                          handlePackageChange(val);
+                          handlePackageDropdownChange(val);
                         } else {
                           setSelectedPkgIds([]);
-                          handlePackageChange("");
+                          handlePackageDropdownChange("");
                         }
                       }}
                       className={`w-full bg-[#0F172A] border rounded-lg py-2.5 px-3.5 text-xs cursor-pointer focus:outline-none transition-all ${
@@ -12062,7 +12081,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                            <select
                              id="select_package_option"
                              value={wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option || (selectedLead as any)?.selected_package_id || (leadPackages?.find(lp => lp.lead_id === selectedLead?.lead_id)?.package_id) || (quotations?.find(q => q.lead_id === selectedLead?.lead_id)?.package_id) || ''}
-                             onChange={(e) => handlePackageChange(e.target.value)}
+                             onChange={(e) => handlePackageDropdownChange(e.target.value)}
                              className={`w-full bg-slate-955 border focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer ${
                                !(wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option)
                                  ? 'border-rose-500/40 focus:border-rose-500 text-rose-200'
@@ -12106,7 +12125,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                            )}
                          </div>
  
-                         {(() => {
+                         {isPackageSelectedAndSaved && (() => {
                            const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
                            const currentPkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option; let selectedPkg = availablePkgs.find(p => String(p.package_id) === String(currentPkgId)); if (!selectedPkg && currentPkgId) { selectedPkg = { package_id: currentPkgId, package_name: (currentPkgId === 'custom_package' || currentPkgId === 'Custom Package') ? 'Custom Package' : `Package ${currentPkgId} (Legacy)`, price: wizardLeadData.package_cost || 0, deliverables: wizardLeadData.deliverables || "", status: "Active" } as any; }
                            if (!selectedPkg) return null;
