@@ -1333,9 +1333,40 @@ const generateQuotationPDF = (
   doc.line(15, currentY + (pricingRowH * 2), 195, currentY + (pricingRowH * 2));
   doc.line(115, currentY, 115, currentY + cfg.pricingCardHeight);
 
-  const baseSumVal = baseServices.reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
+  // Fetch saved / entered Final Quotation Amount from Sales Dashboard Section 2 / lead record
+  const getSavedFinalAmount = () => {
+    if (!lead) return null;
+    const candidates = [
+      lead.Final_Quotation_Amount,
+      lead.final_quotation_amount,
+      lead.final_amount,
+      lead.final_quoted_amount,
+      lead.dynamicFinalAmt,
+      lead.budget,
+      lead.quotation_amount
+    ];
+    for (const val of candidates) {
+      if (val !== undefined && val !== null && val !== '') {
+        const num = Number(val);
+        if (!Number.isNaN(num) && num > 0) {
+          return num;
+        }
+      }
+    }
+    return null;
+  };
+
+  const savedFinalAmt = getSavedFinalAmount();
+  const baseSumValRaw = baseServices.reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
   const addlSumVal = additionalServices.reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
-  const finalAmountSum = Math.max(0, baseSumVal + addlSumVal - discountValue);
+
+  // Use the saved Final Quotation Amount from Section 2 if available, otherwise calculate
+  const finalAmountSum = savedFinalAmt !== null ? savedFinalAmt : Math.max(0, baseSumValRaw + addlSumVal - discountValue);
+
+  // Ensure baseSumVal matches when displayed if baseSumValRaw was 0
+  const baseSumVal = (baseSumValRaw > 0) 
+    ? baseSumValRaw 
+    : Math.max(0, finalAmountSum + discountValue - addlSumVal);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
@@ -3774,6 +3805,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   }, [dynamicFinalAmt]);
 
   const getLeadInfoForQuote = (isEdit: boolean) => {
+    const finalAmountVal = dynamicFinalAmt;
     if (isEdit) {
       return {
         ...selectedLead,
@@ -3784,7 +3816,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         event_location: wizardLeadData.event_location,
         event_type: wizardLeadData.event_type,
         shoot_type: wizardLeadData.shoot_type,
-        budget: wizardLeadData.budget,
+        budget: wizardLeadData.budget || finalAmountVal,
         whatsapp_number: wizardLeadData.whatsapp_number,
         address: wizardLeadData.address,
         city: wizardLeadData.city,
@@ -3797,7 +3829,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option || '',
         sales_staff_name: salesStaffName,
         sales_staff_mobile: salesStaffMobile,
-        events: crmEvents
+        events: crmEvents,
+        Final_Quotation_Amount: finalAmountVal || wizardLeadData.final_quoted_amount || wizardLeadData.budget || selectedLead?.Final_Quotation_Amount || selectedLead?.final_quotation_amount || selectedLead?.final_amount,
+        final_quotation_amount: finalAmountVal || wizardLeadData.final_quoted_amount || wizardLeadData.budget || selectedLead?.final_quotation_amount || selectedLead?.Final_Quotation_Amount || selectedLead?.final_amount,
+        final_amount: finalAmountVal || wizardLeadData.final_quoted_amount || wizardLeadData.budget || selectedLead?.final_amount || selectedLead?.Final_Quotation_Amount || selectedLead?.final_quotation_amount,
+        dynamicFinalAmt: finalAmountVal
       };
     } else {
       return {
@@ -3808,7 +3844,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || '',
         sales_staff_name: salesStaffName,
         sales_staff_mobile: salesStaffMobile,
-        events: createEvents
+        events: createEvents,
+        Final_Quotation_Amount: finalAmountVal || createForm.budget,
+        final_quotation_amount: finalAmountVal || createForm.budget,
+        final_amount: finalAmountVal || createForm.budget,
+        dynamicFinalAmt: finalAmountVal
       };
     }
   };
