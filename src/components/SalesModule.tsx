@@ -3293,7 +3293,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           let updated = { ...prev };
           let changed = false;
           const incList = parseTeamMembers(pkg.team_members);
-          const defaultInc = incList.length > 0 ? incList : ['1 Professional Photographer'];
+          const defaultInc = incList.length > 0 ? incList : ['1 Candid Photographer'];
           
           if (!prev[pkgId] || prev[pkgId].length === 0) {
             updated[pkgId] = defaultInc;
@@ -4798,7 +4798,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setEditableInclusions(primaryLP.editable_inclusions);
     } else if (matchedPkg?.team_members) {
       const defaultInc = parseTeamMembers(matchedPkg.team_members);
-      setEditableInclusions({ [matchedPkgId]: defaultInc.length > 0 ? defaultInc : ['1 Professional Photographer'] });
+      setEditableInclusions({ [matchedPkgId]: defaultInc.length > 0 ? defaultInc : ['1 Candid Photographer'] });
     } else {
       setEditableInclusions({});
     }
@@ -4963,7 +4963,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }));
       
       const incList = parseTeamMembers(pkg.team_members);
-      const defaultInc = incList.length > 0 ? incList : ['1 Professional Photographer'];
+      const defaultInc = incList.length > 0 ? incList : ['1 Candid Photographer'];
       
       const delList = parseTeamMembers(pkg.deliverables);
       const defaultDel = delList.length > 0 ? delList : ['High Resolution Edited Photos'];
@@ -5873,9 +5873,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         event_location: firstEvent.event_location,
         google_maps_link: firstEvent.google_maps_link || '',
         lead_source: isCreateFlow ? createForm.lead_source : wizardLeadData.lead_source,
-        shoot_type: firstEvent.event_shoot_type || 'CANDID PHOTOGRAPHY',
-        event_shoot_type: firstEvent.event_shoot_type || 'CANDID PHOTOGRAPHY',
-        desired_event_shoot_type: firstEvent.event_shoot_type || 'CANDID PHOTOGRAPHY',
+        shoot_type: firstEvent.event_shoot_type || '',
+        event_shoot_type: firstEvent.event_shoot_type || '',
+        desired_event_shoot_type: firstEvent.event_shoot_type || '',
         client_residence_address: isCreateFlow ? createForm.client_residence_address : wizardLeadData.client_residence_address,
         city: isCreateFlow ? createForm.city : wizardLeadData.city,
         state: isCreateFlow ? createForm.state : wizardLeadData.state,
@@ -6088,9 +6088,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         event_location: firstEvent.event_location,
         google_maps_link: firstEvent.google_maps_link || '',
         lead_source: isCreateFlow ? createForm.lead_source : wizardLeadData.lead_source,
-        shoot_type: firstEvent.event_shoot_type || 'CANDID PHOTOGRAPHY',
-        event_shoot_type: firstEvent.event_shoot_type || 'CANDID PHOTOGRAPHY',
-        desired_event_shoot_type: firstEvent.event_shoot_type || 'CANDID PHOTOGRAPHY',
+        shoot_type: firstEvent.event_shoot_type || '',
+        event_shoot_type: firstEvent.event_shoot_type || '',
+        desired_event_shoot_type: firstEvent.event_shoot_type || '',
         client_residence_address: isCreateFlow ? createForm.client_residence_address : wizardLeadData.client_residence_address,
         city: isCreateFlow ? createForm.city : wizardLeadData.city,
         state: isCreateFlow ? createForm.state : wizardLeadData.state,
@@ -13173,9 +13173,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   }
                   if (text.includes('photographer')) {
                     const matches = text.match(/(\d+)\s+photographer/i);
-                    return matches ? `${matches[1]} Lead Photographer(s)` : '1 Professional Photographer';
+                    return matches ? `${matches[1]} Lead Photographer(s)` : '1 Candid Photographer';
                   }
-                  return '1 Professional Photographer';
+                  return '1 Candid Photographer';
                 }
 
                 if (key === 'videographer') {
