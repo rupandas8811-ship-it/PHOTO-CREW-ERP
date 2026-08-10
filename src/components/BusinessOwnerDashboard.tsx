@@ -59,6 +59,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     updateOrderStage, 
     updateProduction, 
     logActivity,
+    refreshData,
     globalDateRange,
     setGlobalDateRange
   } = useRole();

@@ -425,7 +425,8 @@ export interface Production {
   raw_footage_status?: string;
   target_delivery_date?: string;
   actual_delivery_date?: string;
-  production_status?: 'New Project' | 'Footage Received' | 'Editor Assigned' | 'Editing Started' | 'In Progress' | 'Customer Review' | 'Revision Required' | 'Approved' | 'Delivered' | 'Closed' | 'Project Completed' | 'Project Cancelled' | 'Order Closed';
+  production_status?: EditingStatus | 'New Project' | 'Footage Received' | 'Editor Assigned' | 'Editing Started' | 'In Progress' | 'Customer Review' | 'Revision Required' | 'Approved' | 'Delivered' | 'Closed' | 'Project Completed' | 'Project Cancelled' | 'Order Closed' | string;
+  current_status?: string;
   approval_status?: string;
   editing_progress?: string;
   delivery_link?: string;

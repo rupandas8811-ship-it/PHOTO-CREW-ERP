@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRole } from './RoleContext';
 import { 
   X, User, Phone, Mail, MapPin, DollarSign, Calendar, Clock, Film, 
@@ -37,6 +37,36 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
   const { orders, leads, operations, rawFootage, production, payments, logs, currentRole, equipmentHandovers } = useRole();
   const [activeTab, setActiveTab] = useState<'overview' | 'sales' | 'operations' | 'production' | 'billing'>('overview');
 
+  useEffect(() => {
+    if (isOpen) {
+      const timer = setTimeout(() => {
+        const modalCard = document.getElementById('project_detail_modal_card') || document.getElementById('project_detail_master_modal');
+        if (modalCard) {
+          const rect = modalCard.getBoundingClientRect();
+          const windowHeight = window.innerHeight || document.documentElement.clientHeight;
+          const windowWidth = window.innerWidth || document.documentElement.clientWidth;
+
+          const isFullyVisible = (
+            rect.top >= 8 &&
+            rect.left >= 8 &&
+            rect.bottom <= (windowHeight - 8) &&
+            rect.right <= (windowWidth - 8)
+          );
+
+          if (!isFullyVisible) {
+            modalCard.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center',
+              inline: 'nearest'
+            });
+          }
+        }
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
   if (!isOpen || !orderId) return null;
 
   // Single Record Lookup Strategy
@@ -58,7 +88,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
 
   return (
     <div id="project_detail_master_modal" className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full w-full max-w-4xl max-h-[92vh] overflow-hidden shadow-2xl flex flex-col relative">
+      <div id="project_detail_modal_card" className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden shadow-2xl flex flex-col relative">
         
         {/* Shutter calibrated overlay indicator */}
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 via-rose-500 to-indigo-500" />

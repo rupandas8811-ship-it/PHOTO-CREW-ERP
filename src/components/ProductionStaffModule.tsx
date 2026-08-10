@@ -209,6 +209,74 @@ export const ProductionStaffModule: React.FC = () => {
   const [editingCompletedModal, setEditingCompletedModal] = useState<{group: any, actionItem: any} | null>(null);
   const [editingCompletedForm, setEditingCompletedForm] = useState<{confirmation_proof: string, selectedIds: string[]}>({ confirmation_proof: '', selectedIds: [] });
 
+  // Auto-scroll popup/modal into view whenever ANY popup is opened from Production Staff Dashboard
+  useEffect(() => {
+    if (
+      editingStartedModal ||
+      customerReviewModal ||
+      whatsappModal ||
+      editingCompletedModal ||
+      selectedProjectForDetail ||
+      activeDropdownId
+    ) {
+      const timer = setTimeout(() => {
+        let activeEl: HTMLElement | null = null;
+
+        if (editingStartedModal) {
+          activeEl = document.getElementById('editing_started_modal_card');
+        } else if (customerReviewModal) {
+          activeEl = document.getElementById('customer_review_modal_card');
+        } else if (whatsappModal) {
+          activeEl = document.getElementById('whatsapp_modal_card');
+        } else if (editingCompletedModal) {
+          activeEl = document.getElementById('editing_completed_modal_card');
+        } else if (selectedProjectForDetail) {
+          activeEl = document.getElementById('project_detail_modal_card') || document.getElementById('project_detail_master_modal');
+        } else if (activeDropdownId) {
+          activeEl = document.getElementById(`action_dropdown_menu_${activeDropdownId}`);
+        }
+
+        // Fallback search for any active popup/dialog
+        if (!activeEl) {
+          activeEl = document.querySelector(
+            '#editing_started_modal_card, #customer_review_modal_card, #whatsapp_modal_card, #editing_completed_modal_card, #project_detail_modal_card, [role="dialog"]'
+          ) as HTMLElement;
+        }
+
+        if (activeEl) {
+          const rect = activeEl.getBoundingClientRect();
+          const windowHeight = window.innerHeight || document.documentElement.clientHeight;
+          const windowWidth = window.innerWidth || document.documentElement.clientWidth;
+
+          // Check if popup/element is already fully within the visible viewport
+          const isFullyVisible = (
+            rect.top >= 8 &&
+            rect.left >= 8 &&
+            rect.bottom <= (windowHeight - 8) &&
+            rect.right <= (windowWidth - 8)
+          );
+
+          if (!isFullyVisible) {
+            activeEl.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center',
+              inline: 'nearest'
+            });
+          }
+        }
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
+  }, [
+    editingStartedModal,
+    customerReviewModal,
+    whatsappModal,
+    editingCompletedModal,
+    selectedProjectForDetail,
+    activeDropdownId
+  ]);
+
 
 
   // Build assigned bookings list grouped by Order/Event for logged in assigned editor
@@ -937,7 +1005,7 @@ Thank you.`;
 
                                       {/* DROPDOWN MENU */}
                                       {activeDropdownId === delivItem.assignmentId && (
-                                        <div className="absolute right-0 mt-2 w-56 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden divide-y divide-zinc-800 animate-in fade-in zoom-in-95 text-left">
+                                        <div id={`action_dropdown_menu_${delivItem.assignmentId}`} className="absolute right-0 mt-2 w-56 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden divide-y divide-zinc-800 animate-in fade-in zoom-in-95 text-left">
                                           
                                           {/* View Details */}
                                           <button
@@ -1055,7 +1123,7 @@ Thank you.`;
       {/* ========================================================= */}
       {editingStartedModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+          <div id="editing_started_modal_card" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <Play className="w-5 h-5 text-sky-400" />
@@ -1150,7 +1218,7 @@ Thank you.`;
       {/* ========================================================= */}
       {customerReviewModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+          <div id="customer_review_modal_card" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <UserCheck className="w-5 h-5 text-amber-400" />
@@ -1221,7 +1289,7 @@ Thank you.`;
       {/* ========================================================= */}
       {whatsappModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-emerald-500/40 rounded-2xl w-full w-full max-w-md shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95">
+          <div id="whatsapp_modal_card" className="bg-zinc-900 border border-emerald-500/40 rounded-2xl w-full w-full max-w-md shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <div className="flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-emerald-400" />
@@ -1303,7 +1371,7 @@ Thank you.`;
       {/* ========================================================= */}
       {editingCompletedModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+          <div id="editing_completed_modal_card" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-indigo-400" />
