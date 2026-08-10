@@ -8,7 +8,7 @@ import {
 import { supabaseClient } from '../supabaseClient';
 import { EditorAssignment } from '../types';
 import { ProjectDetailModal } from './ProjectDetailModal';
-import { parseQtyAndText, formatQtyItem, deserializeLeadEvents } from '../utils';
+import { parseQtyAndText, formatQtyItem, deserializeLeadEvents, parseDeliverablesWithQty } from '../utils';
 
 // Image compression helper
 const compressImage = (file: File): Promise<string> => {
@@ -204,6 +204,106 @@ const getResolvedEventType = (lead: any, order: any, prod: any, assignment?: any
   return candidate || 'N/A';
 };
 
+// Helper to extract exact deliverable quantity saved for an assigned deliverable
+const getAssignedDeliverableQty = (
+  assignment: any,
+  targetEvent: any,
+  lead: any,
+  order: any,
+  prod: any,
+  quotationsList: any[]
+): number => {
+  if (!assignment) return 1;
+
+  const rawSpeciality = (
+    assignment.speciality ||
+    assignment.deliverable_id ||
+    assignment.deliverable ||
+    ''
+  ).toString().trim();
+
+  // 1. Direct check: If assignment speciality itself starts with or contains quantity (e.g. "2 x Photobook Album", "2 × Photobook Album", "Photobook Album - Qty: 2")
+  const directParsed = parseQtyAndText(rawSpeciality);
+  if (directParsed.qty > 1) {
+    return directParsed.qty;
+  }
+
+  // 2. Direct property on assignment if present
+  if (typeof (assignment as any).qty === 'number' && (assignment as any).qty > 0) {
+    return (assignment as any).qty;
+  }
+  if (typeof (assignment as any).quantity === 'number' && (assignment as any).quantity > 0) {
+    return (assignment as any).quantity;
+  }
+
+  const cleanSpeciality = (directParsed.text || rawSpeciality).trim();
+  if (!cleanSpeciality) return 1;
+
+  const targetEventId = targetEvent?.id || targetEvent?.event_id || assignment.event_id || prod?.event_id;
+  const targetEventName = targetEvent?.event_name || targetEvent?.custom_event_name || targetEvent?.event_type || getResolvedEventName(lead, order, prod, assignment);
+
+  let eventDeliverablesList: { name: string; qty: number }[] = [];
+
+  // 3. Extract deliverables directly from targetEvent (from lead.events / order.events / prod.events)
+  if (targetEvent && targetEvent.deliverables) {
+    if (Array.isArray(targetEvent.deliverables)) {
+      eventDeliverablesList = parseDeliverablesWithQty(JSON.stringify(targetEvent.deliverables));
+    } else if (typeof targetEvent.deliverables === 'string') {
+      eventDeliverablesList = parseDeliverablesWithQty(targetEvent.deliverables);
+    }
+  }
+
+  // 4. If targetEvent has no deliverables, parse deliverables_description from order, lead, or quotation
+  if (eventDeliverablesList.length === 0) {
+    let deliverablesText = order?.deliverables_description || lead?.deliverables_description || (prod as any)?.deliverables_description || '';
+    
+    if (!deliverablesText && lead) {
+      const targetLeadQuotes = (quotationsList || []).filter((q: any) => q.lead_id === lead.lead_id);
+      targetLeadQuotes.sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+      if (targetLeadQuotes[0]) {
+        deliverablesText = targetLeadQuotes[0].deliverables_description || targetLeadQuotes[0].deliverables || '';
+      }
+    }
+
+    if (deliverablesText) {
+      eventDeliverablesList = parseDeliverablesWithQty(deliverablesText, targetEventName, targetEventId);
+    }
+  }
+
+  // 5. Fallback: check general package deliverables on lead, order
+  if (eventDeliverablesList.length === 0) {
+    const fallbackText = lead?.deliverables || order?.deliverables || '';
+    if (fallbackText) {
+      eventDeliverablesList = parseDeliverablesWithQty(fallbackText);
+    }
+  }
+
+  // 6. Match cleanSpeciality against items in eventDeliverablesList
+  if (eventDeliverablesList.length > 0) {
+    const normSearch = cleanSpeciality.toLowerCase();
+
+    // 6a. Exact clean name match
+    const exactMatch = eventDeliverablesList.find(d => {
+      const normD = parseQtyAndText(d.name).text.trim().toLowerCase();
+      return normD === normSearch || d.name.trim().toLowerCase() === normSearch;
+    });
+    if (exactMatch && exactMatch.qty > 0) {
+      return exactMatch.qty;
+    }
+
+    // 6b. Partial / substring match
+    const substringMatch = eventDeliverablesList.find(d => {
+      const normD = parseQtyAndText(d.name).text.trim().toLowerCase();
+      return (normD && normSearch.includes(normD)) || (normSearch && normD.includes(normSearch));
+    });
+    if (substringMatch && substringMatch.qty > 0) {
+      return substringMatch.qty;
+    }
+  }
+
+  return 1;
+};
+
 export const ProductionStaffModule: React.FC = () => {
   const { 
     currentUser, 
@@ -214,6 +314,7 @@ export const ProductionStaffModule: React.FC = () => {
     operations, 
     production,
     editorAssignments, 
+    quotations,
     updateEditorAssignmentStatus, 
     updateProduction,
     updateOrderStage,
@@ -421,6 +522,8 @@ export const ProductionStaffModule: React.FC = () => {
         // Edited Drive Link resolution
         const editedDriveLink = (assignment.Edited_Drive_Link || assignment.edited_drive_link || prod?.edited_drive_link || '').trim();
 
+        const delivQty = getAssignedDeliverableQty(assignment, targetEvent, lead, order, prod, quotations);
+
         individualDeliverables.push({
             assignmentId: assignment.assignment_id,
             orderId: order?.order_id || prod?.order_id || prod?.tracking_id || assignment.order_id || assignment.production_id || 'ORD-ASSIGNED',
@@ -432,6 +535,7 @@ export const ProductionStaffModule: React.FC = () => {
             eventName,
             eventType,
             deliverable: assignment.speciality,
+            qty: delivQty,
             targetFinishDate: prod?.target_delivery_date || prod?.expected_delivery_date || assignment.target_finish_date || '',
             status: currentStatus,
             rawFootageLink,
@@ -506,7 +610,7 @@ export const ProductionStaffModule: React.FC = () => {
     });
 
     setActiveBookings(groupedList);
-  }, [staffName, resolvedStaffId, currentUser, editorAssignments, orders, leads, production, operations]);
+  }, [staffName, resolvedStaffId, currentUser, editorAssignments, orders, leads, production, operations, quotations]);
 
   const getStatusBadge = (status: string) => {
     switch(status) {
@@ -820,8 +924,8 @@ Thank you.`;
         <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
           {group.deliverables.map((d: any) => {
             const isValid = validStatuses.includes(d.status);
+            const delivQty = d.qty || getAssignedDeliverableQty(d.assignmentObj, d.targetEventObj, d.leadObj, d.orderObj, d.prodObj, quotations);
             const parsedDeliv = parseQtyAndText(d.deliverable);
-            const delivQty = parsedDeliv.qty || 1;
             const delivName = parsedDeliv.text || d.deliverable;
             const isSelected = selectedIds.includes(d.assignmentId);
             return (
@@ -1031,8 +1135,8 @@ Thank you.`;
                               const delivBadge = getStatusBadge(delivItem.status);
                               const isDelivLocked = ['Client Acceptance', 'Business Owner Review', 'Project Completed', 'Completed', 'Order Closed'].includes(delivItem.status) || grp.orderObj?.current_stage === 'Business Owner Review';
 
+                              const delivQty = delivItem.qty || getAssignedDeliverableQty(delivItem.assignmentObj, delivItem.targetEventObj, delivItem.leadObj, delivItem.orderObj, delivItem.prodObj, quotations);
                               const parsedDeliv = parseQtyAndText(delivItem.deliverable);
-                              const delivQty = parsedDeliv.qty || 1;
                               const delivName = parsedDeliv.text || delivItem.deliverable;
 
                               return (
