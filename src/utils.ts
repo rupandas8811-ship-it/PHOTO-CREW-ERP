@@ -382,19 +382,40 @@ export function serializeLeadEvents(events: LeadEvent[], textNotes: string = '')
  */
 export function deserializeLeadEvents(textNotes: string | undefined): { events: LeadEvent[], notes: string } {
   if (!textNotes) return { events: [], notes: '' };
-  if (!textNotes.includes('---EVENTS_JSON---')) {
-    return { events: [], notes: textNotes };
-  }
-  const parts = textNotes.split('---EVENTS_JSON---');
-  const notes = parts[0].trim();
-  try {
-    const events = JSON.parse(parts[1].trim());
-    if (Array.isArray(events)) {
-      return { events, notes };
+
+  let notes = textNotes;
+  let jsonString = '';
+
+  const markerRegex = /---EVENTS_JSON---/i;
+  const match = markerRegex.exec(textNotes);
+
+  if (match) {
+    const splitIdx = match.index;
+    notes = textNotes.substring(0, splitIdx).trim();
+    jsonString = textNotes.substring(splitIdx + match[0].length).trim();
+  } else {
+    // Check if textNotes contains a JSON array or object
+    const firstBracket = textNotes.indexOf('[');
+    const lastBracket = textNotes.lastIndexOf(']');
+    if (firstBracket !== -1 && lastBracket > firstBracket) {
+      notes = textNotes.substring(0, firstBracket).trim();
+      jsonString = textNotes.substring(firstBracket, lastBracket + 1).trim();
     }
-  } catch (e) {
-    console.warn("Failed to parse serialized lead events:", e);
   }
+
+  if (jsonString) {
+    try {
+      const parsed = JSON.parse(jsonString);
+      if (Array.isArray(parsed)) {
+        return { events: parsed, notes };
+      } else if (parsed && typeof parsed === 'object') {
+        return { events: [parsed], notes };
+      }
+    } catch (e) {
+      console.warn("Failed to parse serialized lead events:", e);
+    }
+  }
+
   return { events: [], notes: textNotes };
 }
 

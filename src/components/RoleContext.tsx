@@ -6375,7 +6375,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             updated_at: timestamp
           };
           const parsed = deserializeLeadEvents(updated.notes_special_customizations);
-          updated.events = parsed.events;
+          updated.events = (updatedEvents && updatedEvents.length > 0) ? updatedEvents : (parsed.events || ld.events || []);
           return updated;
         }
         return ld;

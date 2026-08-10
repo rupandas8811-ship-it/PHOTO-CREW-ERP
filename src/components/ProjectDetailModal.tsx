@@ -91,18 +91,34 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
   
   const allResolvedEvents = rawEvents.length > 0 
     ? rawEvents.map((ev: any, idx: number) => {
-        const eType = ev.event_type === 'Other' 
-          ? (ev.custom_event_type || 'Other') 
-          : (ev.event_type || 'N/A');
+        const rawEType = ev.event_type || lead?.event_type || order?.event_type || 'N/A';
+        const eType = rawEType === 'Other' 
+          ? (ev.custom_event_type || lead?.custom_event_type || 'Other') 
+          : rawEType;
 
-        const eName = ev.event_name === 'Other' 
-          ? (ev.custom_event_name || 'Other') 
-          : (ev.event_name || ev.custom_event_name || 'N/A');
+        let eName = 'N/A';
+        if (ev.event_name === 'Other') {
+          eName = ev.custom_event_name || 'Other';
+        } else if (ev.custom_event_name && ev.custom_event_name.trim() !== '') {
+          eName = ev.custom_event_name;
+        } else if (ev.event_name && ev.event_name.trim() !== '') {
+          eName = ev.event_name;
+        } else if (lead?.custom_event_name && lead.custom_event_name.trim() !== '') {
+          eName = lead.custom_event_name;
+        } else if (lead?.event_name && lead.event_name !== 'Other' && lead.event_name.trim() !== '') {
+          eName = lead.event_name;
+        } else if (order?.event_name && order.event_name !== 'Other' && order.event_name.trim() !== '') {
+          eName = order.event_name;
+        } else if (eType && eType !== 'N/A') {
+          eName = eType;
+        }
 
         return {
           id: ev.id || ev.event_id || `ev_${idx}`,
           eventType: eType,
           eventName: eName,
+          rawEventType: ev.event_type,
+          rawEventName: ev.event_name,
           eventDate: ev.event_date || 'N/A',
           eventStartTime: ev.event_start_time || ev.event_time || 'N/A',
           eventEndDate: ev.event_end_date || ev.Event_End_Date || 'N/A',
@@ -118,7 +134,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
     : [{
         id: 'default_event',
         eventType: lead?.event_type === 'Other' ? (lead?.custom_event_type || 'Other') : (lead?.event_type || order?.event_type || 'N/A'),
-        eventName: lead?.event_name === 'Other' ? (lead?.custom_event_name || 'Other') : (lead?.event_name || lead?.custom_event_name || order?.event_name || 'N/A'),
+        eventName: lead?.custom_event_name || (lead?.event_name && lead.event_name !== 'Other' ? lead.event_name : null) || (order?.event_name && order.event_name !== 'Other' ? order.event_name : null) || (lead?.event_type === 'Other' ? lead?.custom_event_type : lead?.event_type) || order?.event_type || 'N/A',
         eventDate: lead?.event_date || order?.event_date || 'N/A',
         eventStartTime: lead?.event_time || order?.event_time || 'N/A',
         eventEndDate: lead?.event_end_date || 'N/A',
@@ -131,15 +147,24 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
         reportingTime: lead?.reporting_time || 'N/A'
       }];
 
-  const targetEvent = eventId 
-    ? allResolvedEvents.find((ev) => 
-        (ev.id && String(ev.id) === String(eventId)) ||
-        (ev.eventName && String(ev.eventName).trim().toLowerCase() === String(eventId).trim().toLowerCase()) ||
-        (ev.eventType && String(ev.eventType).trim().toLowerCase() === String(eventId).trim().toLowerCase())
-      )
-    : null;
+  let targetEvent: any = null;
+  if (eventId) {
+    const searchIdStr = String(eventId).trim().toLowerCase();
+    targetEvent = allResolvedEvents.find((ev, idx) => {
+      const matchId = (ev.id && String(ev.id).trim().toLowerCase() === searchIdStr) ||
+                      `ev_${idx}` === searchIdStr ||
+                      String(idx) === searchIdStr;
+      const matchName = (ev.eventName && String(ev.eventName).trim().toLowerCase() === searchIdStr) ||
+                        (ev.rawEventName && String(ev.rawEventName).trim().toLowerCase() === searchIdStr);
+      const matchType = (ev.eventType && String(ev.eventType).trim().toLowerCase() === searchIdStr) ||
+                        (ev.rawEventType && String(ev.rawEventType).trim().toLowerCase() === searchIdStr);
+      return matchId || matchName || matchType;
+    });
+  }
 
-  const resolvedEvents = targetEvent ? [targetEvent] : allResolvedEvents;
+  const resolvedEvents = targetEvent 
+    ? [targetEvent] 
+    : (allResolvedEvents.length > 0 ? allResolvedEvents : []);
 
   // Stage sequence mapping helper
   const currentIndex = STAGES_ORDER.indexOf(order.current_stage);

@@ -112,65 +112,66 @@ const getTargetEventForAssignment = (lead: any, order: any, prod: any, assignmen
   const rawEvents = getLeadEvents(lead);
 
   if (rawEvents.length > 0) {
-    // 1. Try matching by exact event_id / id
-    if (targetEventId) {
-      const matchById = rawEvents.find((ev: any) => 
-        (ev.id && String(ev.id) === String(targetEventId)) ||
-        (ev.event_id && String(ev.event_id) === String(targetEventId)) ||
-        (ev.event_name && String(ev.event_name) === String(targetEventId)) ||
-        (ev.event_type && String(ev.event_type) === String(targetEventId))
+    // 1. Try matching by exact event_id / id or index
+    if (targetEventId !== undefined && targetEventId !== null && String(targetEventId).trim() !== '') {
+      const searchStr = String(targetEventId).trim().toLowerCase();
+      const matchById = rawEvents.find((ev: any, idx: number) => 
+        (ev.id && String(ev.id).trim().toLowerCase() === searchStr) ||
+        (ev.event_id && String(ev.event_id).trim().toLowerCase() === searchStr) ||
+        `ev_${idx}` === searchStr ||
+        String(idx) === searchStr ||
+        (ev.event_name && String(ev.event_name).trim().toLowerCase() === searchStr) ||
+        (ev.event_type && String(ev.event_type).trim().toLowerCase() === searchStr)
       );
       if (matchById) return matchById;
     }
 
-    // 2. Try matching by event_name or custom_event_name or event_type on prod / order / assignment
-    const searchName = prod?.custom_event_name || prod?.event_name || order?.custom_event_name || order?.event_name;
-    if (searchName) {
+    // 2. Try matching by event_name or custom_event_name or speciality on assignment / prod / order
+    const searchName = assignment?.event_name || prod?.custom_event_name || prod?.event_name || order?.custom_event_name || order?.event_name;
+    if (searchName && searchName.trim() !== '') {
+      const searchLower = searchName.trim().toLowerCase();
       const matchByName = rawEvents.find((ev: any) => 
-        (ev.event_name && ev.event_name.trim().toLowerCase() === searchName.trim().toLowerCase()) ||
-        (ev.custom_event_name && ev.custom_event_name.trim().toLowerCase() === searchName.trim().toLowerCase()) ||
-        (ev.event_type && ev.event_type.trim().toLowerCase() === searchName.trim().toLowerCase())
+        (ev.event_name && ev.event_name.trim().toLowerCase() === searchLower) ||
+        (ev.custom_event_name && ev.custom_event_name.trim().toLowerCase() === searchLower) ||
+        (ev.event_type && ev.event_type.trim().toLowerCase() === searchLower)
       );
       if (matchByName) return matchByName;
     }
 
-    // 3. Fallback: if only 1 event exists, return that single event
-    if (rawEvents.length === 1) {
-      return rawEvents[0];
-    }
+    // 3. Fallback: return the first event from THIS lead's EVENTS_JSON
+    return rawEvents[0];
   }
 
   return null;
 };
 
-// Helper to extract resolved Event Name without generic 'Project' fallback unless genuinely empty
+// Helper to extract resolved Event Name without generic fallback
 const getResolvedEventName = (lead: any, order: any, prod: any, assignment?: any): string => {
   const targetEv = getTargetEventForAssignment(lead, order, prod, assignment);
   if (targetEv) {
-    if (targetEv.event_name && targetEv.event_name !== 'Other' && targetEv.event_name.trim() !== '') {
-      return targetEv.event_name;
+    if (targetEv.event_name === 'Other') {
+      return targetEv.custom_event_name || 'Other';
     }
     if (targetEv.custom_event_name && targetEv.custom_event_name.trim() !== '') {
       return targetEv.custom_event_name;
     }
-    if (targetEv.event_type && targetEv.event_type !== 'Other' && targetEv.event_type.trim() !== '') {
-      return targetEv.event_type;
+    if (targetEv.event_name && targetEv.event_name.trim() !== '') {
+      return targetEv.event_name;
     }
-    if (targetEv.custom_event_type && targetEv.custom_event_type.trim() !== '') {
-      return targetEv.custom_event_type;
+    const eType = targetEv.event_type === 'Other' ? targetEv.custom_event_type : targetEv.event_type;
+    if (eType && eType.trim() !== '') {
+      return eType;
     }
   }
 
   const candidate = (
-    (lead?.event_name === 'Other' ? lead?.custom_event_name : lead?.event_name) ||
-    order?.event_name ||
+    lead?.custom_event_name ||
+    (lead?.event_name && lead.event_name !== 'Other' ? lead.event_name : null) ||
+    (order?.event_name && order.event_name !== 'Other' ? order.event_name : null) ||
     order?.custom_event_name ||
-    prod?.event_name ||
     (lead?.event_type === 'Other' ? lead?.custom_event_type : lead?.event_type) ||
     order?.event_type ||
-    prod?.event_type ||
-    order?.project_name ||
-    prod?.project_name ||
+    prod?.event_name ||
     ''
   ).toString().trim();
 
@@ -178,17 +179,7 @@ const getResolvedEventName = (lead: any, order: any, prod: any, assignment?: any
     return candidate;
   }
 
-  const secondary = (
-    lead?.custom_event_name || 
-    order?.custom_event_name || 
-    lead?.custom_event_type || 
-    lead?.event_type || 
-    order?.event_type || 
-    prod?.event_type || 
-    ''
-  ).toString().trim();
-
-  return (secondary && secondary !== 'Other') ? secondary : 'Event';
+  return 'N/A';
 };
 
 // Helper to extract resolved Event Type from Sales Step 2 records
