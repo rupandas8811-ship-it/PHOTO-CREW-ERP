@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRole } from './RoleContext';
 import { 
   Calendar, Clock, CheckCircle2, Eye, FileVideo, Play, UserCheck, 
-  ShieldCheck, ChevronDown, Upload, FileText, CheckSquare, Lock, Activity, 
+  ShieldCheck, ChevronDown, ChevronUp, Upload, FileText, CheckSquare, Lock, Activity, 
   Link as LinkIcon, AlertCircle, X, Sparkles, Check, MessageSquare, Copy, ExternalLink, RefreshCw
 } from 'lucide-react';
 import { supabaseClient } from '../supabaseClient';
@@ -337,7 +337,6 @@ export const ProductionStaffModule: React.FC = () => {
   const staffName = prodStaffMember?.name || opStaffMember?.name || currentUser?.name || 'Staff';
   
   // Local state
-  const [activeBookings, setActiveBookings] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -346,6 +345,16 @@ export const ProductionStaffModule: React.FC = () => {
     setTimeout(() => setToastMessage(null), 4000);
   };
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
+
+  // Collapsible cards state: record of orderId -> boolean
+  const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
+
+  const toggleOrderExpand = (orderId: string) => {
+    setExpandedOrders(prev => ({
+      ...prev,
+      [orderId]: !prev[orderId]
+    }));
+  };
 
   // Selected project for ProjectDetailModal
   const [selectedProjectForDetail, setSelectedProjectForDetail] = useState<{ orderId: string; eventId?: string } | string | null>(null);
@@ -454,8 +463,8 @@ export const ProductionStaffModule: React.FC = () => {
 
 
   // Build assigned bookings list grouped by Order/Event for logged in assigned editor
-  useEffect(() => {
-    if (!resolvedStaffId && !staffName && !currentUser?.id) return;
+  const activeBookings = useMemo(() => {
+    if (!resolvedStaffId && !staffName && !currentUser?.id) return [];
 
     // Strict filter: ONLY tasks assigned to THIS staff member
     const myAssignments = editorAssignments.filter(ea => {
@@ -548,10 +557,10 @@ export const ProductionStaffModule: React.FC = () => {
         });
     });
 
-    // Group deliverables by Order ID + Event ID/Name for this staff member
+    // Group deliverables by Order ID for this staff member
     const groupsMap = new Map<string, any>();
     individualDeliverables.forEach(item => {
-      const groupKey = `${item.orderId}_${item.eventId || item.eventName}`;
+      const groupKey = item.orderId;
       if (!groupsMap.has(groupKey)) {
         groupsMap.set(groupKey, {
           groupId: groupKey,
@@ -578,6 +587,9 @@ export const ProductionStaffModule: React.FC = () => {
       if (!grp.rawFootageLink && item.rawFootageLink) {
         grp.rawFootageLink = item.rawFootageLink;
       }
+      if (item.targetFinishDate && (!grp.targetFinishDate || item.targetFinishDate < grp.targetFinishDate)) {
+        grp.targetFinishDate = item.targetFinishDate;
+      }
     });
 
     // Calculate stage rank helper
@@ -592,7 +604,7 @@ export const ProductionStaffModule: React.FC = () => {
     };
 
     // Overall status per grouped task
-    const groupedList = Array.from(groupsMap.values()).map(grp => {
+    return Array.from(groupsMap.values()).map(grp => {
       const ranks = grp.deliverables.map((d: any) => getTaskStageRank(d.status, d.editedDriveLink));
       const minRank = Math.min(...ranks);
 
@@ -603,13 +615,21 @@ export const ProductionStaffModule: React.FC = () => {
       else if (minRank >= 2) overallStatus = 'Editing Started';
       else if (minRank >= 1) overallStatus = 'Assigned Editor';
 
+      const uniqueEventNames = Array.from(new Set(grp.deliverables.map((d: any) => d.eventName).filter(Boolean)));
+      const displayName = uniqueEventNames.join(', ') || 'Unnamed Event';
+      const eventCount = uniqueEventNames.length || 1;
+
+      const uniqueEventDates = Array.from(new Set(grp.deliverables.map((d: any) => d.eventDate).filter(Boolean)));
+      const displayDate = uniqueEventDates.join(', ') || grp.eventDate;
+
       return {
         ...grp,
+        eventName: displayName,
+        eventCount,
+        eventDate: displayDate,
         overallStatus
       };
     });
-
-    setActiveBookings(groupedList);
   }, [staffName, resolvedStaffId, currentUser, editorAssignments, orders, leads, production, operations, quotations]);
 
   const getStatusBadge = (status: string) => {
@@ -775,7 +795,7 @@ export const ProductionStaffModule: React.FC = () => {
 
       // Prepare WhatsApp popup payload
       const cName = b.customerName || 'Customer';
-      const eName = b.eventName || 'Event';
+      const eName = customerReviewModal.actionItem?.eventName || b.eventName || 'Event';
       const cPhone = b.customerMobile || '';
       const messageText = `Hello ${cName},
 
@@ -1015,15 +1035,19 @@ Thank you.`;
             <div className="space-y-6">
               {activeBookings.map((grp) => {
                 const badge = getStatusBadge(grp.overallStatus);
+                const isExpanded = !!expandedOrders[grp.orderId];
 
                 return (
                   <div key={grp.groupId} className="bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl space-y-0">
                     {/* TASK HEADER PANEL */}
-                    <div className="p-4 sm:p-5 bg-zinc-900/90 border-b border-zinc-800 flex flex-col xl:flex-row xl:items-center justify-between gap-5">
+                    <div 
+                      onClick={() => toggleOrderExpand(grp.orderId)}
+                      className="p-4 sm:p-5 bg-zinc-900/90 border-b border-zinc-800 flex flex-col xl:flex-row xl:items-center justify-between gap-5 cursor-pointer hover:bg-zinc-900 transition-colors"
+                    >
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-start flex-1">
                         
                         {/* Customer */}
-                        <div className="space-y-0.5">
+                        <div className="space-y-0.5" onClick={(e) => e.stopPropagation()}>
                           <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Customer</div>
                           <div className="font-black text-white text-base leading-snug truncate" title={grp.customerName}>
                             {grp.customerName}
@@ -1038,25 +1062,8 @@ Thank you.`;
                           )}
                         </div>
 
-                        {/* Event Details */}
-                        <div className="space-y-0.5">
-                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Event Details</div>
-                          <div className="font-bold text-purple-300 text-sm truncate" title={grp.eventName}>
-                            {grp.eventName}
-                          </div>
-                          {grp.eventType && grp.eventType !== grp.eventName && grp.eventType !== 'N/A' && (
-                            <div className="text-[10px] font-mono font-bold text-amber-400/90 truncate">
-                              Type: {grp.eventType}
-                            </div>
-                          )}
-                          <div className="text-[11px] text-zinc-400 font-mono flex items-center gap-1 mt-0.5">
-                            <Calendar className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                            <span>{grp.eventDate || '—'}</span>
-                          </div>
-                        </div>
-
                         {/* Order ID */}
-                        <div className="space-y-0.5">
+                        <div className="space-y-0.5" onClick={(e) => e.stopPropagation()}>
                           <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Order ID</div>
                           <span 
                             onClick={() => setSelectedProjectForDetail({ orderId: grp.orderId, eventId: grp.eventId })}
@@ -1070,24 +1077,15 @@ Thank you.`;
                           )}
                         </div>
 
-                        {/* Raw Footage Link */}
+                        {/* Event count */}
                         <div className="space-y-0.5">
-                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Raw Footage Link</div>
-                          {grp.rawFootageLink && typeof grp.rawFootageLink === 'string' && grp.rawFootageLink.trim() !== '' ? (
-                            <a
-                              href={grp.rawFootageLink.trim().startsWith('http') ? grp.rawFootageLink.trim() : `https://${grp.rawFootageLink.trim()}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              referrerPolicy="no-referrer"
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm mt-0.5"
-                              title={grp.rawFootageLink}
-                            >
-                              <LinkIcon className="w-3.5 h-3.5 shrink-0" />
-                              <span>View Raw Footage</span>
-                            </a>
-                          ) : (
-                            <span className="text-zinc-500 italic text-xs font-mono block pt-1">Not Provided</span>
-                          )}
+                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Event Count</div>
+                          <div className="font-bold text-purple-300 text-sm">
+                            {grp.eventCount} {grp.eventCount === 1 ? 'Event' : 'Events'}
+                          </div>
+                          <div className="text-[10px] text-zinc-400 font-mono truncate" title={grp.eventName}>
+                            {grp.eventName}
+                          </div>
                         </div>
 
                         {/* Target Delivery Date */}
@@ -1096,165 +1094,185 @@ Thank you.`;
                           <span className="font-mono text-xs text-zinc-200 font-bold block pt-1">{grp.targetFinishDate || 'Not set'}</span>
                         </div>
 
+                        {/* Overall Task Status Badge */}
+                        <div className="space-y-0.5">
+                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Overall Task Status</div>
+                          <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-mono font-bold border ${badge.color}`}>
+                            {badge.label}
+                          </span>
+                        </div>
+
                       </div>
 
-                      {/* Overall Task Status Badge */}
-                      <div className="shrink-0 flex xl:flex-col items-center xl:items-end justify-between border-t xl:border-t-0 border-zinc-800 pt-3 xl:pt-0">
-                        <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider mb-1 font-bold">Overall Task Status</div>
-                        <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-mono font-bold border ${badge.color}`}>
-                          {badge.label}
-                        </span>
+                      {/* Expand / Collapse Control */}
+                      <div className="shrink-0 flex items-center justify-between xl:justify-end border-t xl:border-t-0 border-zinc-800 pt-3 xl:pt-0">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleOrderExpand(grp.orderId);
+                          }}
+                          className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-zinc-700 cursor-pointer shadow-sm"
+                        >
+                          {isExpanded ? (
+                            <>
+                              <span>Collapse Details</span>
+                              <ChevronUp className="w-4 h-4 text-zinc-400" />
+                            </>
+                          ) : (
+                            <>
+                              <span>Expand Details</span>
+                              <ChevronDown className="w-4 h-4 text-zinc-400" />
+                            </>
+                          )}
+                        </button>
                       </div>
                     </div>
 
                     {/* ASSIGNED DELIVERABLES TABLE */}
-                    <div className="p-4 bg-zinc-950/90">
-                      <div className="text-[11px] font-mono font-bold text-zinc-400 uppercase tracking-wider mb-3 flex items-center justify-between">
-                        <span className="flex items-center gap-2">
-                          <span>📦 Assigned Deliverables</span>
-                          <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px]">
-                            {grp.deliverables.length} {grp.deliverables.length === 1 ? 'Deliverable' : 'Deliverables'}
+                    {isExpanded && (
+                      <div className="p-4 bg-zinc-950/90 animate-in fade-in slide-in-from-top-1 duration-200">
+                        <div className="text-[11px] font-mono font-bold text-zinc-400 uppercase tracking-wider mb-3 flex items-center justify-between">
+                          <span className="flex items-center gap-2">
+                            <span>📦 Assigned Deliverables</span>
+                            <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px]">
+                              {grp.deliverables.length} {grp.deliverables.length === 1 ? 'Deliverable' : 'Deliverables'}
+                            </span>
                           </span>
-                        </span>
-                        <span className="text-[10px] text-zinc-500 font-normal">Assigned to: <strong className="text-purple-400">{staffName}</strong></span>
-                      </div>
+                          <span className="text-[10px] text-zinc-500 font-normal">Assigned to: <strong className="text-purple-400">{staffName}</strong></span>
+                        </div>
 
-                      <div className="overflow-x-auto w-full">
-                        <table className="w-full text-left border-collapse min-w-max">
-                          <thead>
-                            <tr className="bg-zinc-900/50 border-b border-zinc-800 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
-                              <th className="px-3.5 py-2.5 font-bold">Deliverable</th>
-                              <th className="px-3.5 py-2.5 font-bold text-center">Qty</th>
-                              <th className="px-3.5 py-2.5 font-bold">Current Status</th>
-                              <th className="px-3.5 py-2.5 font-bold">Edited Drive Link</th>
-                              <th className="px-3.5 py-2.5 font-bold text-center">Action</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-zinc-900/80 text-xs font-sans">
-                            {grp.deliverables.map((delivItem: any) => {
-                              const delivBadge = getStatusBadge(delivItem.status);
-                              const isDelivLocked = ['Client Acceptance', 'Business Owner Review', 'Project Completed', 'Completed', 'Order Closed'].includes(delivItem.status) || grp.orderObj?.current_stage === 'Business Owner Review';
+                        <div className="overflow-x-auto w-full">
+                          <table className="w-full text-left border-collapse min-w-max">
+                            <thead>
+                              <tr className="bg-zinc-900/50 border-b border-zinc-800 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
+                                <th className="px-3.5 py-2.5 font-bold">Event Name</th>
+                                <th className="px-3.5 py-2.5 font-bold">Deliverable</th>
+                                <th className="px-3.5 py-2.5 font-bold text-center">Qty</th>
+                                <th className="px-3.5 py-2.5 font-bold">Current Status</th>
+                                <th className="px-3.5 py-2.5 font-bold">Edited Drive Link</th>
+                                <th className="px-3.5 py-2.5 font-bold text-center">Action</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-900/80 text-xs font-sans">
+                              {grp.deliverables.map((delivItem: any) => {
+                                const delivBadge = getStatusBadge(delivItem.status);
+                                const isDelivLocked = ['Client Acceptance', 'Business Owner Review', 'Project Completed', 'Completed', 'Order Closed'].includes(delivItem.status) || grp.orderObj?.current_stage === 'Business Owner Review';
 
-                              const delivQty = delivItem.qty || getAssignedDeliverableQty(delivItem.assignmentObj, delivItem.targetEventObj, delivItem.leadObj, delivItem.orderObj, delivItem.prodObj, quotations);
-                              const parsedDeliv = parseQtyAndText(delivItem.deliverable);
-                              const delivName = parsedDeliv.text || delivItem.deliverable;
+                                const delivQty = delivItem.qty || getAssignedDeliverableQty(delivItem.assignmentObj, delivItem.targetEventObj, delivItem.leadObj, delivItem.orderObj, delivItem.prodObj, quotations);
+                                const parsedDeliv = parseQtyAndText(delivItem.deliverable);
+                                const delivName = parsedDeliv.text || delivItem.deliverable;
 
-                              return (
-                                <tr key={delivItem.assignmentId} className="hover:bg-zinc-900/40 transition-colors">
-                                  {/* Deliverable Name */}
-                                  <td className="px-3.5 py-3 font-bold text-purple-300">
-                                    <div className="flex items-center gap-2">
-                                      <span>🎯 {delivName}</span>
-                                    </div>
-                                    <span className="text-[10px] text-zinc-500 font-mono font-normal block mt-0.5">{delivItem.assignmentId}</span>
-                                  </td>
+                                return (
+                                  <tr key={delivItem.assignmentId} className="hover:bg-zinc-900/40 transition-colors">
+                                    {/* Event Name */}
+                                    <td className="px-3.5 py-3 font-semibold text-purple-300">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-zinc-200 font-bold">{delivItem.eventName || 'N/A'}</span>
+                                      </div>
+                                      {delivItem.eventType && delivItem.eventType !== delivItem.eventName && delivItem.eventType !== 'N/A' && (
+                                        <span className="text-[10px] text-amber-400 font-mono font-semibold block">{delivItem.eventType}</span>
+                                      )}
+                                    </td>
 
-                                  {/* Qty */}
-                                  <td className="px-3.5 py-3 font-mono font-bold text-center">
-                                    <span className="px-2.5 py-0.5 rounded bg-zinc-900 text-zinc-200 text-xs border border-zinc-800">
-                                      {delivQty}
-                                    </span>
-                                  </td>
+                                    {/* Deliverable Name */}
+                                    <td className="px-3.5 py-3 font-bold text-zinc-300">
+                                      <div className="flex items-center gap-2">
+                                        <span>🎯 {delivName}</span>
+                                      </div>
+                                      <span className="text-[10px] text-zinc-500 font-mono font-normal block mt-0.5">{delivItem.assignmentId}</span>
+                                    </td>
 
-                                  {/* Status */}
-                                  <td className="px-3.5 py-3 whitespace-nowrap">
-                                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border ${delivBadge.color}`}>
-                                      {delivBadge.label}
-                                    </span>
-                                  </td>
+                                    {/* Qty */}
+                                    <td className="px-3.5 py-3 font-mono font-bold text-center">
+                                      <span className="px-2.5 py-0.5 rounded bg-zinc-900 text-zinc-200 text-xs border border-zinc-800">
+                                        {delivQty}
+                                      </span>
+                                    </td>
 
-                                  {/* Edited Link */}
-                                  <td className="px-3.5 py-3 font-mono">
-                                    {delivItem.editedDriveLink && (delivItem.editedDriveLink.startsWith('http://') || delivItem.editedDriveLink.startsWith('https://')) ? (
-                                      <a
-                                        href={delivItem.editedDriveLink.startsWith('http') ? delivItem.editedDriveLink : `https://${delivItem.editedDriveLink}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        referrerPolicy="no-referrer"
-                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-lg text-[10px] font-bold transition-all cursor-pointer max-w-[150px] truncate"
-                                        title={delivItem.editedDriveLink}
-                                      >
-                                        <LinkIcon className="w-3 h-3 shrink-0" />
-                                        <span className="truncate">View Link</span>
-                                      </a>
-                                    ) : (
-                                      <span className="text-zinc-600 italic text-[11px]">Pending Upload</span>
-                                    )}
-                                  </td>
+                                    {/* Status */}
+                                    <td className="px-3.5 py-3 whitespace-nowrap">
+                                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border ${delivBadge.color}`}>
+                                        {delivBadge.label}
+                                      </span>
+                                    </td>
 
-                                  {/* Action Dropdown */}
-                                  <td className="px-3.5 py-3 text-center relative">
-                                    <div className="relative inline-block text-left">
-                                      <button
-                                        type="button"
-                                        onClick={() => setActiveDropdownId(activeDropdownId === delivItem.assignmentId ? null : delivItem.assignmentId)}
-                                        className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-purple-600 hover:bg-purple-500 text-white transition-all flex items-center gap-1.5 shadow-md cursor-pointer mx-auto"
-                                      >
-                                        <span>⚡ Action</span>
-                                        <ChevronDown className="w-3.5 h-3.5" />
-                                      </button>
+                                    {/* Edited Link */}
+                                    <td className="px-3.5 py-3 font-mono">
+                                      {delivItem.editedDriveLink && (delivItem.editedDriveLink.startsWith('http://') || delivItem.editedDriveLink.startsWith('https://')) ? (
+                                        <a
+                                          href={delivItem.editedDriveLink.startsWith('http') ? delivItem.editedDriveLink : `https://${delivItem.editedDriveLink}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          referrerPolicy="no-referrer"
+                                          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-lg text-[10px] font-bold transition-all cursor-pointer max-w-[150px] truncate"
+                                          title={delivItem.editedDriveLink}
+                                        >
+                                          <LinkIcon className="w-3 h-3 shrink-0" />
+                                          <span className="truncate">View Link</span>
+                                        </a>
+                                      ) : (
+                                        <span className="text-zinc-600 italic text-[11px]">Pending Upload</span>
+                                      )}
+                                    </td>
 
-                                      {/* DROPDOWN MENU */}
-                                      {activeDropdownId === delivItem.assignmentId && (
-                                        <div id={`action_dropdown_menu_${delivItem.assignmentId}`} className="absolute right-0 mt-2 w-56 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden divide-y divide-zinc-800 animate-in fade-in zoom-in-95 text-left">
-                                          
-                                          {/* View Details */}
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setActiveDropdownId(null);
-                                              setSelectedProjectForDetail({ orderId: grp.orderId, eventId: grp.eventId });
-                                            }}
-                                            className="w-full text-left px-4 py-2.5 text-xs text-zinc-200 hover:bg-purple-600/20 hover:text-purple-300 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                          >
-                                            <Eye className="w-4 h-4 text-purple-400" /> View Details
-                                          </button>
+                                    {/* Action Dropdown */}
+                                    <td className="px-3.5 py-3 text-center relative">
+                                      <div className="relative inline-block text-left">
+                                        <button
+                                          type="button"
+                                          onClick={() => setActiveDropdownId(activeDropdownId === delivItem.assignmentId ? null : delivItem.assignmentId)}
+                                          className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-purple-600 hover:bg-purple-500 text-white transition-all flex items-center gap-1.5 shadow-md cursor-pointer mx-auto"
+                                        >
+                                          <span>⚡ Action</span>
+                                          <ChevronDown className="w-3.5 h-3.5" />
+                                        </button>
 
-                                          {/* Locked State Notification */}
-                                          {isDelivLocked ? (
-                                            <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-[11px] font-bold flex items-center gap-2">
-                                              <Lock className="w-3.5 h-3.5" /> Editing Completed
-                                            </div>
-                                          ) : (
-                                            <>
-                                              {/* Workflow Step 1: Editing Started */}
-                                              {(delivItem.status === 'Assigned Editor' || delivItem.status === 'Editor Assigned' || delivItem.status === 'Assigned' || delivItem.status === 'Raw Footage Received') && (
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    setActiveDropdownId(null);
-                                                    setEditingStartedModal({ group: grp, actionItem: delivItem });
-                                                    setEditingStartedForm({
-                                                      expected_delivery_date: delivItem.targetFinishDate || new Date().toISOString().split('T')[0],
-                                                      estimated_completion_date: delivItem.targetFinishDate || new Date().toISOString().split('T')[0],
-                                                      estimated_completion_time: '18:00',
-                                                      selectedIds: [delivItem.assignmentId]
-                                                    });
-                                                  }}
-                                                  className="w-full text-left px-4 py-2.5 text-xs text-sky-400 hover:bg-sky-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                                >
-                                                  <Play className="w-4 h-4" /> Start Editing
-                                                </button>
-                                              )}
+                                        {/* DROPDOWN MENU */}
+                                        {activeDropdownId === delivItem.assignmentId && (
+                                          <div id={`action_dropdown_menu_${delivItem.assignmentId}`} className="absolute right-0 mt-2 w-56 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden divide-y divide-zinc-800 animate-in fade-in zoom-in-95 text-left">
+                                            
+                                            {/* View Details */}
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setActiveDropdownId(null);
+                                                setSelectedProjectForDetail({ orderId: grp.orderId, eventId: grp.eventId });
+                                              }}
+                                              className="w-full text-left px-4 py-2.5 text-xs text-zinc-200 hover:bg-purple-600/20 hover:text-purple-300 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                            >
+                                              <Eye className="w-4 h-4 text-purple-400" /> View Details
+                                            </button>
 
-                                              {/* Workflow Step 2: Customer Review */}
-                                              {delivItem.status === 'Editing Started' && (
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    setActiveDropdownId(null);
-                                                    setCustomerReviewModal({ group: grp, actionItem: delivItem });
-                                                    setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '', selectedIds: [delivItem.assignmentId] });
-                                                  }}
-                                                  className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                                >
-                                                  <UserCheck className="w-4 h-4" /> Upload Review
-                                                </button>
-                                              )}
+                                            {/* Locked State Notification */}
+                                            {isDelivLocked ? (
+                                              <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-[11px] font-bold flex items-center gap-2">
+                                                <Lock className="w-3.5 h-3.5" /> Editing Completed
+                                              </div>
+                                            ) : (
+                                              <>
+                                                {/* Workflow Step 1: Editing Started */}
+                                                {(delivItem.status === 'Assigned Editor' || delivItem.status === 'Editor Assigned' || delivItem.status === 'Assigned' || delivItem.status === 'Raw Footage Received') && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setActiveDropdownId(null);
+                                                      setEditingStartedModal({ group: grp, actionItem: delivItem });
+                                                      setEditingStartedForm({
+                                                        expected_delivery_date: delivItem.targetFinishDate || new Date().toISOString().split('T')[0],
+                                                        estimated_completion_date: delivItem.targetFinishDate || new Date().toISOString().split('T')[0],
+                                                        estimated_completion_time: '18:00',
+                                                        selectedIds: [delivItem.assignmentId]
+                                                      });
+                                                    }}
+                                                    className="w-full text-left px-4 py-2.5 text-xs text-sky-400 hover:bg-sky-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                                  >
+                                                    <Play className="w-4 h-4" /> Start Editing
+                                                  </button>
+                                                )}
 
-                                              {/* Workflow Step 3: Re-send Customer Review & Upload Confirmation Proof */}
-                                              {delivItem.status === 'Customer Review' && (
-                                                <>
+                                                {/* Workflow Step 2: Customer Review */}
+                                                {delivItem.status === 'Editing Started' && (
                                                   <button
                                                     type="button"
                                                     onClick={() => {
@@ -1264,42 +1282,59 @@ Thank you.`;
                                                     }}
                                                     className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
                                                   >
-                                                    <RefreshCw className="w-4 h-4" /> Re-send Review Link
+                                                    <UserCheck className="w-4 h-4" /> Upload Review
                                                   </button>
+                                                )}
 
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                      setActiveDropdownId(null);
-                                                      setEditingCompletedModal({ group: grp, actionItem: delivItem });
-                                                      setEditingCompletedForm({ confirmation_proof: '', selectedIds: [delivItem.assignmentId] });
-                                                    }}
-                                                    className="w-full text-left px-4 py-2.5 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                                  >
-                                                    <CheckCircle2 className="w-4 h-4" /> Upload Confirmation Proof
-                                                  </button>
-                                                </>
-                                              )}
+                                                {/* Workflow Step 3: Re-send Customer Review & Upload Confirmation Proof */}
+                                                {delivItem.status === 'Customer Review' && (
+                                                  <>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        setActiveDropdownId(null);
+                                                        setCustomerReviewModal({ group: grp, actionItem: delivItem });
+                                                        setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '', selectedIds: [delivItem.assignmentId] });
+                                                      }}
+                                                      className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                                    >
+                                                      <RefreshCw className="w-4 h-4" /> Re-send Review Link
+                                                    </button>
 
-                                              {/* Workflow Step 4: Editing Completed */}
-                                              {(delivItem.status === 'Editing Completed' || delivItem.status === 'Editing Complete' || delivItem.status === 'Completed') && (
-                                                <div className="px-4 py-2.5 bg-emerald-500/10 text-emerald-400 text-xs font-bold flex items-center gap-2 border-t border-zinc-800">
-                                                  <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Editing Completed
-                                                </div>
-                                              )}
-                                            </>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        setActiveDropdownId(null);
+                                                        setEditingCompletedModal({ group: grp, actionItem: delivItem });
+                                                        setEditingCompletedForm({ confirmation_proof: '', selectedIds: [delivItem.assignmentId] });
+                                                      }}
+                                                      className="w-full text-left px-4 py-2.5 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                                    >
+                                                      <CheckCircle2 className="w-4 h-4" /> Upload Confirmation Proof
+                                                    </button>
+                                                  </>
+                                                )}
+
+                                                {/* Workflow Step 4: Editing Completed */}
+                                                {(delivItem.status === 'Editing Completed' || delivItem.status === 'Editing Complete' || delivItem.status === 'Completed') && (
+                                                  <div className="px-4 py-2.5 bg-emerald-500/10 text-emerald-400 text-xs font-bold flex items-center gap-2 border-t border-zinc-800">
+                                                    <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Editing Completed
+                                                  </div>
+                                                )}
+                                              </>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 );
               })}
