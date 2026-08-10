@@ -31,10 +31,12 @@ import {
   FileSpreadsheet,
   Printer,
   Ban,
-  BarChart3
+  BarChart3,
+  ExternalLink,
+  Image as ImageIcon
 } from 'lucide-react';
 import { OwnerStaffPerformanceReport } from './OwnerModule';
-import { formatINR, formatTime12Hour } from '../utils';
+import { formatINR, formatTime12Hour, deserializeLeadEvents } from '../utils';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { Order, Lead, Production, Payment } from '../types';
 
@@ -1943,24 +1945,267 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
   onApprove,
   onReject
 }) => {
+  const { editorAssignments } = useRole();
+  const [previewProof, setPreviewProof] = useState<{
+    imageUrl: string;
+    label: string;
+    staffName: string;
+    deliverableName: string;
+  } | null>(null);
+
   const lead = leads.find(l => l.lead_id === order.lead_id);
   const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id);
   const pay = payments.find(p => p.order_id === order.order_id || p.lead_id === order.lead_id);
 
-  const totalQuotation = order.quotation_amount || 0;
+  // Financial Summary calculation
+  const totalQuotation = order.quotation_amount || order.grand_total || order.total_amount || 0;
+  const discountAmount = order.discount || pay?.discount_amount || 0;
   const paymentReceived = pay ? ((pay.advance_received || 0) + (pay.final_payment_received || 0)) : (order.advance_received || 0);
   const outstandingBalance = pay ? pay.balance_due : (order.balance_amount || Math.max(0, totalQuotation - paymentReceived));
+  const paymentStatus = pay?.payment_status || order.payment_status || (outstandingBalance <= 0 ? 'Paid' : 'Pending Balance');
 
   const customerMobile = order.customer_phone || order.mobile || lead?.phone || lead?.mobile || pay?.customer_phone || 'N/A';
-  const eventName = order.custom_event_name || order.event_type || lead?.event_type || 'Photography & Videography';
   const assignedEditor = prod?.editor_assigned || 'Unassigned';
   const clientAcceptanceStatus = prod?.editing_status || prod?.customer_review_status || order.current_stage || 'Client Acceptance';
 
-  const customerAcceptanceProof = prod?.customer_acceptance_proof || prod?.remarks || "Verified via Client Portal";
-  const deliveryConfirmation = prod?.delivery_confirmation || prod?.raw_footage_location || "Project Delivered & Confirmed";
-  const communicationProof = prod?.communication_proof || prod?.internal_comments || "Client Acceptance Confirmation Logged";
-
   const isBusinessOwner = currentRole === 'Business Owner';
+
+  // Extract ALL events separately for this order
+  const resolvedEvents = useMemo(() => {
+    const rawLeadEvents = lead?.events && Array.isArray(lead.events) && lead.events.length > 0 ? lead.events : [];
+    const deserialized = (!rawLeadEvents || rawLeadEvents.length === 0) && (lead?.notes_special_customizations || order?.notes_special_customizations)
+      ? deserializeLeadEvents(lead?.notes_special_customizations || order?.notes_special_customizations).events
+      : [];
+
+    const combined = rawLeadEvents.length > 0 ? rawLeadEvents : (deserialized.length > 0 ? deserialized : []);
+
+    if (combined && combined.length > 0) {
+      return combined.map((ev: any, idx: number) => {
+        const rawEType = ev.event_type || lead?.event_type || order?.event_type || 'N/A';
+        const eType = rawEType === 'Other' ? (ev.custom_event_type || 'Other') : rawEType;
+
+        let eName = 'N/A';
+        if (ev.event_name === 'Other') {
+          eName = ev.custom_event_name || 'Other';
+        } else if (ev.custom_event_name && ev.custom_event_name.trim() !== '') {
+          eName = ev.custom_event_name;
+        } else if (ev.event_name && ev.event_name.trim() !== '') {
+          eName = ev.event_name;
+        } else if (eType && eType !== 'N/A') {
+          eName = eType;
+        } else {
+          eName = `Event ${idx + 1}`;
+        }
+
+        const eDate = ev.event_date || order?.event_date || lead?.event_date || 'N/A';
+        const eTime = ev.event_start_time || ev.event_time || order?.event_time || lead?.event_time || 'N/A';
+        const eLocation = ev.venue || ev.location || order?.venue || order?.location || lead?.venue || lead?.location || 'N/A';
+
+        // Deliverables assigned for this event
+        const matchedAssignments = (editorAssignments || []).filter((a: any) =>
+          a.event_id === ev.event_id || a.event_id === ev.id || a.event_id === `ev_${idx + 1}`
+        );
+
+        let deliverablesList: string[] = [];
+        if (ev.deliverables && Array.isArray(ev.deliverables) && ev.deliverables.length > 0) {
+          deliverablesList = ev.deliverables;
+        } else if (ev.assigned_deliverables && Array.isArray(ev.assigned_deliverables) && ev.assigned_deliverables.length > 0) {
+          deliverablesList = ev.assigned_deliverables;
+        } else if (matchedAssignments.length > 0) {
+          deliverablesList = matchedAssignments.map((a: any) => `${a.speciality || 'Deliverable'} (${a.staff_name || 'Editor'})`);
+        } else {
+          deliverablesList = order.deliverables && Array.isArray(order.deliverables) && order.deliverables.length > 0
+            ? order.deliverables
+            : [order.custom_event_name || order.event_type || 'Full Coverage'];
+        }
+
+        return {
+          id: ev.event_id || ev.id || `ev_${idx + 1}`,
+          eventName: eName,
+          eventType: eType,
+          eventDate: eDate,
+          eventTime: eTime,
+          eventLocation: eLocation,
+          deliverables: deliverablesList,
+          assignments: matchedAssignments
+        };
+      });
+    }
+
+    // Fallback single event if no event array exists
+    const eName = order.custom_event_name || order.event_name || order.event_type || lead?.custom_event_name || lead?.event_type || 'Photography & Videography';
+    const eType = order.event_type || lead?.event_type || 'N/A';
+    const eDate = order.event_date || lead?.event_date || 'N/A';
+    const eTime = order.event_time || lead?.event_time || 'N/A';
+    const eLocation = order.venue || order.location || lead?.venue || lead?.location || 'N/A';
+
+    const orderAssignments = (editorAssignments || []).filter((a: any) =>
+      a.production_id === prod?.production_id ||
+      a.order_id === order.order_id ||
+      a.order_id === order.lead_id ||
+      a.order_id === prod?.tracking_id
+    );
+
+    let delivs = order.deliverables && Array.isArray(order.deliverables) && order.deliverables.length > 0
+      ? order.deliverables
+      : prod?.deliverables && Array.isArray(prod.deliverables)
+      ? prod.deliverables
+      : [];
+
+    if (delivs.length === 0 && orderAssignments.length > 0) {
+      delivs = orderAssignments.map((a: any) => `${a.speciality || 'Deliverable'} (${a.staff_name || 'Editor'})`);
+    }
+    if (delivs.length === 0) {
+      delivs = ['Full Coverage'];
+    }
+
+    return [{
+      id: order.event_id || 'ev_1',
+      eventName: eName,
+      eventType: eType,
+      eventDate: eDate,
+      eventTime: eTime,
+      eventLocation: eLocation,
+      deliverables: delivs,
+      assignments: orderAssignments
+    }];
+  }, [order, lead, prod, editorAssignments]);
+
+  // Extract Client Communication & Consent Proof uploaded by Production Staff
+  const proofList = useMemo(() => {
+    const items: Array<{
+      id: string;
+      label: string;
+      staffName: string;
+      deliverableName: string;
+      eventName: string;
+      imageUrl: string;
+      displayUrl: string;
+    }> = [];
+
+    const isValidImg = (val: any): string | null => {
+      if (!val || typeof val !== 'string') return null;
+      const trimmed = val.trim();
+      if (
+        trimmed.startsWith('data:') ||
+        trimmed.startsWith('http://') ||
+        trimmed.startsWith('https://') ||
+        trimmed.startsWith('blob:') ||
+        /\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(trimmed)
+      ) {
+        return trimmed;
+      }
+      return null;
+    };
+
+    const formatImgUrl = (url: string) => {
+      if (!url) return '';
+      const trimmed = url.trim();
+      if (trimmed.includes('drive.google.com/file/d/')) {
+        const fileIdMatch = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (fileIdMatch && fileIdMatch[1]) {
+          return `https://lh3.googleusercontent.com/d/${fileIdMatch[1]}`;
+        }
+      }
+      if (trimmed.includes('drive.google.com/open?id=')) {
+        const fileIdMatch = trimmed.match(/id=([a-zA-Z0-9_-]+)/);
+        if (fileIdMatch && fileIdMatch[1]) {
+          return `https://lh3.googleusercontent.com/d/${fileIdMatch[1]}`;
+        }
+      }
+      return trimmed;
+    };
+
+    // 1. Check editor_assignments
+    const orderAssignments = (editorAssignments || []).filter((a: any) =>
+      a.production_id === prod?.production_id ||
+      a.order_id === order.order_id ||
+      a.order_id === order.lead_id ||
+      a.order_id === prod?.tracking_id
+    );
+
+    orderAssignments.forEach((a: any, idx: number) => {
+      const candidates = [
+        a.customer_communication_proof,
+        a.client_communication_proof,
+        a.confirmation_proof,
+        a.proof_url,
+        a.proof_image,
+        a.uploaded_proof
+      ];
+
+      for (const cand of candidates) {
+        const valid = isValidImg(cand);
+        if (valid && !items.some(i => i.imageUrl === valid)) {
+          items.push({
+            id: a.assignment_id || `assign_proof_${idx}`,
+            label: `Client Communication & Consent Proof`,
+            staffName: a.staff_name || prod?.editor_assigned || 'Production Staff',
+            deliverableName: a.speciality || 'Deliverable Proof',
+            eventName: a.event_id || 'Event',
+            imageUrl: valid,
+            displayUrl: formatImgUrl(valid)
+          });
+          break;
+        }
+      }
+    });
+
+    // 2. Check production record
+    if (prod) {
+      const prodCandidates = [
+        { key: 'client_communication_proof', name: 'Client Communication & Consent Proof' },
+        { key: 'customer_communication_proof', name: 'Customer Communication Proof' },
+        { key: 'customer_acceptance_proof', name: 'Customer Acceptance Proof' },
+        { key: 'confirmation_proof', name: 'Confirmation Proof' },
+        { key: 'proof_url', name: 'Uploaded Proof Image' },
+        { key: 'communication_proof', name: 'Communication Consent Proof' },
+        { key: 'proof_image', name: 'Proof Image' }
+      ];
+
+      for (const pCand of prodCandidates) {
+        const rawVal = (prod as any)[pCand.key];
+        const valid = isValidImg(rawVal);
+        if (valid && !items.some(i => i.imageUrl === valid)) {
+          items.push({
+            id: `prod_proof_${pCand.key}`,
+            label: pCand.name,
+            staffName: prod.editor_assigned || 'Production Staff',
+            deliverableName: 'Client Consent',
+            eventName: 'Order Consent',
+            imageUrl: valid,
+            displayUrl: formatImgUrl(valid)
+          });
+        }
+      }
+    }
+
+    // 3. Check order record
+    if (order) {
+      const orderCandidates = [
+        { key: 'client_communication_proof', name: 'Client Communication & Consent Proof' },
+        { key: 'customer_communication_proof', name: 'Customer Communication Proof' },
+        { key: 'proof_url', name: 'Uploaded Proof Image' }
+      ];
+      for (const oCand of orderCandidates) {
+        const rawVal = (order as any)[oCand.key];
+        const valid = isValidImg(rawVal);
+        if (valid && !items.some(i => i.imageUrl === valid)) {
+          items.push({
+            id: `order_proof_${oCand.key}`,
+            label: oCand.name,
+            staffName: 'Production Staff',
+            deliverableName: 'Client Consent',
+            eventName: 'Order Consent',
+            imageUrl: valid,
+            displayUrl: formatImgUrl(valid)
+          });
+        }
+      }
+    }
+
+    return items;
+  }, [order, prod, editorAssignments]);
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
@@ -1991,8 +2236,8 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
           </button>
         </div>
 
-        {/* 5 Summary Sections */}
-        <div className="space-y-4">
+        {/* Scrollable Modal Content */}
+        <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
           
           {/* Section 1: Customer Details */}
           <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
@@ -2016,25 +2261,100 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
             </div>
           </div>
 
-          {/* Section 2: Event Details */}
+          {/* Section 2: ALL Events (MULTIPLE EVENTS SEPARATELY) */}
+          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
+                <CalendarIcon className="w-3.5 h-3.5" />
+                <span>Event Details ({resolvedEvents.length})</span>
+              </h3>
+              <span className="text-[10px] font-mono text-zinc-500 uppercase">
+                {resolvedEvents.length} Event{resolvedEvents.length > 1 ? 's' : ''} in Order
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {resolvedEvents.map((ev, idx) => (
+                <div key={ev.id || idx} className="bg-zinc-950/80 border border-zinc-800/80 rounded-lg p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between pb-2 border-b border-zinc-850">
+                    <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/30 text-[10px] font-mono font-bold uppercase tracking-wider">
+                      EVENT {idx + 1}
+                    </span>
+                    <span className="text-xs font-bold text-zinc-200">{ev.eventName}</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                    <div>
+                      <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Event Name</span>
+                      <span className="text-zinc-100 font-bold">{ev.eventName}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Event Type</span>
+                      <span className="text-zinc-200 font-mono">{ev.eventType}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Event Date</span>
+                      <span className="text-zinc-200 font-mono">{ev.eventDate}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Event Time</span>
+                      <span className="text-zinc-200 font-mono">{ev.eventTime}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Event Location</span>
+                      <span className="text-zinc-200 font-mono truncate block" title={ev.eventLocation}>{ev.eventLocation}</span>
+                    </div>
+                  </div>
+
+                  {/* Assigned Deliverables */}
+                  <div className="pt-2 border-t border-zinc-900/80">
+                    <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold mb-1">Assigned Deliverables</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {Array.isArray(ev.deliverables) && ev.deliverables.length > 0 ? (
+                        ev.deliverables.map((deliv: string, dIdx: number) => (
+                          <span key={dIdx} className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 text-[11px] font-mono">
+                            {deliv}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-zinc-500 italic text-xs font-mono">No specific deliverables listed</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Section 3: Financial Summary (ONCE PER ORDER) */}
           <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
-            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5 mb-3">
-              <CalendarIcon className="w-3.5 h-3.5" />
-              <span>Event Details</span>
+            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5 mb-3">
+              <DollarSign className="w-3.5 h-3.5" />
+              <span>Financial Summary</span>
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
               <div>
-                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Event Name</span>
-                <span className="text-zinc-100 font-bold">{eventName}</span>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Final Quotation Amount</span>
+                <span className="text-zinc-100 font-mono font-bold">{formatINR(totalQuotation)}</span>
               </div>
               <div>
-                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Event Date</span>
-                <span className="text-zinc-200 font-mono">{order.event_date}</span>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Discount</span>
+                <span className="text-amber-400 font-mono font-bold">{formatINR(discountAmount)}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Advance / Payment Received</span>
+                <span className="text-emerald-400 font-mono font-bold">{formatINR(paymentReceived)}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Pending Amount</span>
+                <span className={`font-mono font-bold ${outstandingBalance <= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {formatINR(outstandingBalance)}
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Section 3: Production Summary */}
+          {/* Section 4: Production Summary & Client Acceptance Status */}
           <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
             <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1.5 mb-3">
               <PackageCheck className="w-3.5 h-3.5" />
@@ -2042,7 +2362,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <div>
-                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Assigned Editor</span>
+                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Assigned Editor / Staff</span>
                 <span className="text-zinc-100 font-bold">{assignedEditor}</span>
               </div>
               <div>
@@ -2054,56 +2374,44 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
             </div>
           </div>
 
-          {/* Section 4: Financial Summary */}
-          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
-            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5 mb-3">
-              <DollarSign className="w-3.5 h-3.5" />
-              <span>Financial Summary</span>
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-              <div>
-                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Total Quotation Amount</span>
-                <span className="text-zinc-100 font-mono font-bold">{formatINR(totalQuotation)}</span>
-              </div>
-              <div>
-                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Total Payment Received</span>
-                <span className="text-emerald-400 font-mono font-bold">{formatINR(paymentReceived)}</span>
-              </div>
-              <div>
-                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Outstanding Balance</span>
-                <span className={`font-mono font-bold ${outstandingBalance <= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {formatINR(outstandingBalance)}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 5: Customer Acceptance */}
-          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
-            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-teal-400 flex items-center gap-1.5 mb-3">
+          {/* Section 5: Client Communication & Consent Proof */}
+          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-3">
+            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-teal-400 flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Customer Acceptance</span>
+              <span>Client Communication & Consent Proof</span>
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-              <div>
-                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Customer Acceptance Proof</span>
-                <span className="text-zinc-200 text-xs block truncate mt-0.5" title={customerAcceptanceProof}>
-                  {customerAcceptanceProof}
-                </span>
+
+            {proofList.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {proofList.map((proof) => (
+                  <div key={proof.id} className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-bold text-zinc-200 block truncate">{proof.label}</span>
+                      <span className="text-[10px] font-mono text-zinc-400 block truncate">
+                        Uploaded by: {proof.staffName}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewProof({
+                        imageUrl: proof.imageUrl,
+                        label: proof.label,
+                        staffName: proof.staffName,
+                        deliverableName: proof.deliverableName
+                      })}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-mono font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>VIEW IMAGE</span>
+                    </button>
+                  </div>
+                ))}
               </div>
-              <div>
-                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Delivery Confirmation</span>
-                <span className="text-zinc-200 text-xs block truncate mt-0.5" title={deliveryConfirmation}>
-                  {deliveryConfirmation}
-                </span>
+            ) : (
+              <div className="p-3 bg-zinc-950 border border-zinc-800/80 rounded-lg text-center">
+                <span className="text-xs font-mono text-zinc-500 italic">No Proof Uploaded</span>
               </div>
-              <div>
-                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Communication Proof</span>
-                <span className="text-zinc-200 text-xs block truncate mt-0.5" title={communicationProof}>
-                  {communicationProof}
-                </span>
-              </div>
-            </div>
+            )}
           </div>
 
         </div>
@@ -2148,6 +2456,81 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
         </div>
 
       </div>
+
+      {/* Proof Image Preview Modal */}
+      {previewProof && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[60] flex items-center justify-center p-4">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-150">
+            <div className="p-4 border-b border-zinc-850 flex items-center justify-between bg-zinc-900/50">
+              <div>
+                <span className="text-[10px] font-mono font-bold uppercase text-emerald-400 tracking-wider">
+                  Client Communication & Consent Proof
+                </span>
+                <h4 className="text-sm font-bold text-white mt-0.5">
+                  {previewProof.label} ({previewProof.staffName})
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewProof(null)}
+                className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 flex-1 overflow-y-auto flex items-center justify-center bg-black">
+              {(() => {
+                const formattedUrl = previewProof.imageUrl.includes('drive.google.com/file/d/')
+                  ? previewProof.imageUrl.replace(/\/file\/d\/([a-zA-Z0-9_-]+).*/, '/uc?export=view&id=$1')
+                  : previewProof.imageUrl.includes('drive.google.com/open?id=')
+                  ? previewProof.imageUrl.replace(/.*id=([a-zA-Z0-9_-]+).*/, '/uc?export=view&id=$1')
+                  : previewProof.imageUrl;
+
+                return (
+                  <img
+                    src={formattedUrl}
+                    alt="Client Communication & Consent Proof"
+                    className="max-h-[60vh] w-auto object-contain rounded-lg border border-zinc-800 shadow-xl"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent && !parent.querySelector('.img-error-fallback')) {
+                        const errDiv = document.createElement('div');
+                        errDiv.className = 'img-error-fallback p-6 text-center text-zinc-400 font-mono text-xs';
+                        errDiv.innerHTML = `<p class="mb-2 text-rose-400 font-bold">Image preview unavailable inline</p><p class="text-zinc-500 text-[11px]">Click "Open Full Image" below to view the proof image.</p>`;
+                        parent.appendChild(errDiv);
+                      }
+                    }}
+                  />
+                );
+              })()}
+            </div>
+
+            <div className="p-4 border-t border-zinc-850 flex items-center justify-between bg-zinc-900/50">
+              <a
+                href={previewProof.imageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                referrerPolicy="no-referrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-mono font-bold transition-colors cursor-pointer"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open Full Image</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={() => setPreviewProof(null)}
+                className="px-4 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-mono font-bold cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

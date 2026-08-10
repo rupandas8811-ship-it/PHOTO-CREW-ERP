@@ -522,6 +522,12 @@ export interface EditorAssignment {
   order_id?: string;
   event_id?: string;
   deliverable_id?: string;
+  customer_communication_proof?: string;
+  client_communication_proof?: string;
+  confirmation_proof?: string;
+  proof_url?: string;
+  proof_image?: string;
+  uploaded_proof?: string;
 }
 
 export interface StaffAssignment {

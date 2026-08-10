@@ -9422,6 +9422,25 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const linkStr = getSpecificAssignmentLink(assignment);
                       const hasLink = Boolean(linkStr);
 
+                      // Format Google Drive links & URLs for direct image display
+                      const formatImageDisplayUrl = (url: string) => {
+                        if (!url) return '';
+                        const trimmed = url.trim();
+                        if (trimmed.includes('drive.google.com/file/d/')) {
+                          const fileIdMatch = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
+                          if (fileIdMatch && fileIdMatch[1]) {
+                            return `https://lh3.googleusercontent.com/d/${fileIdMatch[1]}`;
+                          }
+                        }
+                        if (trimmed.includes('drive.google.com/open?id=')) {
+                          const fileIdMatch = trimmed.match(/id=([a-zA-Z0-9_-]+)/);
+                          if (fileIdMatch && fileIdMatch[1]) {
+                            return `https://lh3.googleusercontent.com/d/${fileIdMatch[1]}`;
+                          }
+                        }
+                        return trimmed;
+                      };
+
                       // Extract specific proof/uploaded image for this exact assignment/deliverable record
                       const getSpecificAssignmentProof = (a: any, prodRec: any): string | null => {
                         if (!a) return null;
@@ -9442,14 +9461,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           if (cand && typeof cand === 'string') {
                             const trimmed = cand.trim();
                             if (
-                              trimmed.startsWith('data:image/') ||
+                              trimmed.startsWith('data:') ||
                               trimmed.startsWith('http://') ||
                               trimmed.startsWith('https://') ||
                               trimmed.startsWith('blob:') ||
-                              trimmed.endsWith('.jpg') ||
-                              trimmed.endsWith('.jpeg') ||
-                              trimmed.endsWith('.png') ||
-                              trimmed.endsWith('.webp')
+                              /\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(trimmed)
                             ) {
                               return trimmed;
                             }
@@ -9472,14 +9488,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               if (cand && typeof cand === 'string') {
                                 const trimmed = cand.trim();
                                 if (
-                                  trimmed.startsWith('data:image/') ||
+                                  trimmed.startsWith('data:') ||
                                   trimmed.startsWith('http://') ||
                                   trimmed.startsWith('https://') ||
                                   trimmed.startsWith('blob:') ||
-                                  trimmed.endsWith('.jpg') ||
-                                  trimmed.endsWith('.jpeg') ||
-                                  trimmed.endsWith('.png') ||
-                                  trimmed.endsWith('.webp')
+                                  /\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(trimmed)
                                 ) {
                                   return trimmed;
                                 }
@@ -9492,6 +9505,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       };
 
                       const proofImgUrl = getSpecificAssignmentProof(assignment, prod);
+                      const displayProofImgUrl = proofImgUrl ? formatImageDisplayUrl(proofImgUrl) : null;
 
                       return (
                         <tr key={assignment.assignment_id || idx} className="hover:bg-zinc-900/40 transition-colors">
@@ -9542,11 +9556,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             )}
                           </td>
                           <td className="p-3">
-                            {proofImgUrl ? (
+                            {displayProofImgUrl ? (
                               <button
                                 type="button"
                                 onClick={() => setPreviewProofModal({
-                                  imageUrl: proofImgUrl,
+                                  imageUrl: proofImgUrl!,
                                   staffName,
                                   deliverableName,
                                   eventName,
@@ -9601,12 +9615,34 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
             {/* Image Content */}
             <div className="p-6 overflow-y-auto flex-1 flex flex-col items-center justify-center bg-zinc-950/80">
-              <div className="relative max-w-full max-h-[65vh] rounded-xl overflow-hidden border border-zinc-800 shadow-2xl bg-black">
-                <img
-                  src={previewProofModal.imageUrl}
-                  alt={`Uploaded Proof - ${previewProofModal.staffName} - ${previewProofModal.deliverableName}`}
-                  className="max-h-[65vh] w-auto object-contain mx-auto rounded-lg"
-                />
+              <div className="relative max-w-full max-h-[65vh] rounded-xl overflow-hidden border border-zinc-800 shadow-2xl bg-black flex items-center justify-center">
+                {(() => {
+                  const formatted = previewProofModal.imageUrl.includes('drive.google.com/file/d/')
+                    ? previewProofModal.imageUrl.replace(/\/file\/d\/([a-zA-Z0-9_-]+).*/, '/uc?export=view&id=$1')
+                    : previewProofModal.imageUrl.includes('drive.google.com/open?id=')
+                    ? previewProofModal.imageUrl.replace(/.*id=([a-zA-Z0-9_-]+).*/, '/uc?export=view&id=$1')
+                    : previewProofModal.imageUrl;
+                  
+                  return (
+                    <img
+                      src={formatted}
+                      alt={`Uploaded Proof - ${previewProofModal.staffName} - ${previewProofModal.deliverableName}`}
+                      className="max-h-[65vh] w-auto object-contain mx-auto rounded-lg"
+                      onError={(e) => {
+                        // Fallback if image load fails
+                        const target = e.currentTarget;
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent && !parent.querySelector('.img-error-msg')) {
+                          const errDiv = document.createElement('div');
+                          errDiv.className = 'img-error-msg p-8 text-center text-zinc-400 font-mono text-xs';
+                          errDiv.innerHTML = `<p class="mb-2 text-rose-400 font-bold">Image preview unavailable inline</p><p class="text-zinc-500 text-[11px]">Click "Open Full Image" below to view the uploaded proof.</p>`;
+                          parent.appendChild(errDiv);
+                        }
+                      }}
+                    />
+                  );
+                })()}
               </div>
             </div>
 
@@ -9617,7 +9653,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 target="_blank"
                 rel="noopener noreferrer"
                 referrerPolicy="no-referrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white font-mono text-xs font-bold transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:text-emerald-300 font-mono text-xs font-bold transition-colors cursor-pointer"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
                 <span>Open Full Image</span>

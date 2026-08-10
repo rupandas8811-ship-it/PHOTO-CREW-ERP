@@ -846,6 +846,9 @@ Thank you.`;
 
         await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, {
           customer_communication_proof: proofStr,
+          client_communication_proof: proofStr,
+          confirmation_proof: proofStr,
+          proof_url: proofStr,
           status: 'Editing Completed'
         });
       }
@@ -856,6 +859,9 @@ Thank you.`;
           editing_status: 'Editing Completed' as any,
           production_status: 'Editing Completed' as any,
           client_communication_proof: proofStr,
+          customer_communication_proof: proofStr,
+          confirmation_proof: proofStr,
+          proof_url: proofStr,
           remarks: `Editing Completed & Customer Confirmation Proof uploaded by ${staffName} on ${new Date().toLocaleDateString()}`
         });
       }

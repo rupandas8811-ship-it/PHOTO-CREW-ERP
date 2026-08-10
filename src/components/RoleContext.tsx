@@ -1273,7 +1273,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'customer_review_status', 'delivery_date', 'remarks', 'project_priority',
         'target_delivery_date', 'actual_delivery_date', 'assigned_staff', 'project_notes',
         'internal_comments', 'raw_footage_status', 'production_status', 'approval_status',
-        'editing_progress', 'client_communication_proof', 'order_id', 'lead_id', 'customer_name',
+        'editing_progress', 'client_communication_proof', 'customer_communication_proof', 'confirmation_proof', 'proof_url', 'proof_image', 'uploaded_proof', 'order_id', 'lead_id', 'customer_name',
         'event_id', 'assigned_team', 'final_consolidated_drive_link', 'current_status'
       ],
       payments: [
@@ -1306,7 +1306,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       editor_assignments: [
         'assignment_id', 'production_id', 'staff_id', 'staff_name', 'speciality', 
         'assigned_date', 'target_finish_date', 'status', 'created_at', 'event_id', 
-        'order_id', 'deliverable_id', 'Edited_Drive_Link', 'edited_drive_link'
+        'order_id', 'deliverable_id', 'Edited_Drive_Link', 'edited_drive_link',
+        'customer_communication_proof', 'client_communication_proof', 'confirmation_proof', 'proof_url', 'proof_image', 'uploaded_proof'
       ],
       operations_staff: [
         'staff_id', 'name', 'mobile', 'whatsapp_number', 'email', 'role', 'department', 'status', 'joining_date', 
@@ -1675,12 +1676,16 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             updateDiagnosticMetric('update', 'ok');
             if (table === 'editor_assignments') {
               const linkVal = sanitized.Edited_Drive_Link || sanitized.edited_drive_link;
-              setEditorAssignments(prev => prev.map(a => a.assignment_id === finalMatchValue ? {
-                ...a,
-                ...sanitized,
-                Edited_Drive_Link: linkVal || a.Edited_Drive_Link,
-                edited_drive_link: linkVal || a.edited_drive_link
-              } : a));
+              setEditorAssignments(prev => {
+                const updated = prev.map(a => a.assignment_id === finalMatchValue ? {
+                  ...a,
+                  ...sanitized,
+                  Edited_Drive_Link: linkVal || a.Edited_Drive_Link,
+                  edited_drive_link: linkVal || a.edited_drive_link
+                } : a);
+                localStorage.setItem('erp_editor_assignments', JSON.stringify(updated));
+                return updated;
+              });
             }
             if (table === 'leads') {
               const leadId = finalMatchValue;
@@ -1821,6 +1826,20 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
                 })
               );
             }
+          }
+
+          if (table === 'editor_assignments') {
+            const linkVal = sanitized.Edited_Drive_Link || sanitized.edited_drive_link;
+            setEditorAssignments(prev => {
+              const updated = prev.map(a => a.assignment_id === matchValue ? {
+                ...a,
+                ...sanitized,
+                Edited_Drive_Link: linkVal || a.Edited_Drive_Link,
+                edited_drive_link: linkVal || a.edited_drive_link
+              } : a);
+              localStorage.setItem('erp_editor_assignments', JSON.stringify(updated));
+              return updated;
+            });
           }
 
           // Clean up from erp_local_<tableKey> upon successful db write
