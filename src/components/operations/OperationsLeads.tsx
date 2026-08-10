@@ -3328,9 +3328,12 @@ export const OperationsLeads: React.FC = () => {
                 </button>
               </div>
 
-              <div className="text-xs text-zinc-400 leading-relaxed bg-purple-500/10 border border-purple-500/20 rounded-xl p-3">
-                Review each assigned crew member's Raw Footage link below. Enter the <strong>Final Consolidated Raw Footage Drive Link</strong> to complete verification and transfer the order to Production.
-              </div>
+              {/* Review description banner - Hidden per UI requirement */}
+              {false && (
+                <div className="text-xs text-zinc-400 leading-relaxed bg-purple-500/10 border border-purple-500/20 rounded-xl p-3">
+                  Review each assigned crew member's Raw Footage link below. Enter the <strong>Final Consolidated Raw Footage Drive Link</strong> to complete verification and transfer the order to Production.
+                </div>
+              )}
 
               {/* ASSIGNED TEAM MEMBERS VERIFICATION SECTION */}
               <div className="space-y-3 bg-zinc-950 p-4 rounded-xl border border-zinc-800">
@@ -3397,121 +3400,123 @@ export const OperationsLeads: React.FC = () => {
                 )}
               </div>
 
-              {/* PROOF REVIEWS SECTION */}
-              <div className="space-y-4">
-                <h4 className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5 border-b border-zinc-800 pb-1">
-                  📷 Staff Uploaded Proofs & Link Review
-                </h4>
+              {/* PROOF REVIEWS SECTION - Hidden per UI requirement */}
+              {false && (
+                <div className="space-y-4">
+                  <h4 className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5 border-b border-zinc-800 pb-1">
+                    📷 Staff Uploaded Proofs & Link Review
+                  </h4>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  
-                  {/* 1. Asset Collection Photo Proof */}
-                  <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-2">
-                    <div className="text-[11px] font-bold text-zinc-300 flex justify-between items-center">
-                      <span>Asset Collection Photo Proof</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    
+                    {/* 1. Asset Collection Photo Proof */}
+                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-2">
+                      <div className="text-[11px] font-bold text-zinc-300 flex justify-between items-center">
+                        <span>Asset Collection Photo Proof</span>
+                        {assetCollectionProof.photoUrl ? (
+                          <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">Uploaded</span>
+                        ) : (
+                          <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded font-mono">Not Uploaded</span>
+                        )}
+                      </div>
                       {assetCollectionProof.photoUrl ? (
-                        <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">Uploaded</span>
+                        <div className="space-y-1">
+                          <a href={assetCollectionProof.photoUrl} target="_blank" rel="noreferrer" className="block relative group overflow-hidden rounded-lg border border-zinc-800 h-28 bg-zinc-900">
+                            <img src={assetCollectionProof.photoUrl} alt="Asset Collection" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity">
+                              View Full Photo ↗
+                            </div>
+                          </a>
+                        </div>
                       ) : (
-                        <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded font-mono">Not Uploaded</span>
+                        <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
+                          No proof photo found
+                        </div>
                       )}
                     </div>
-                    {assetCollectionProof.photoUrl ? (
-                      <div className="space-y-1">
-                        <a href={assetCollectionProof.photoUrl} target="_blank" rel="noreferrer" className="block relative group overflow-hidden rounded-lg border border-zinc-800 h-28 bg-zinc-900">
-                          <img src={assetCollectionProof.photoUrl} alt="Asset Collection" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity">
-                            View Full Photo ↗
-                          </div>
-                        </a>
-                      </div>
-                    ) : (
-                      <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
-                        No proof photo found
-                      </div>
-                    )}
-                  </div>
 
-                  {/* 2. Event Start Photo Proof */}
-                  <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-2">
-                    <div className="text-[11px] font-bold text-zinc-300 flex justify-between items-center">
-                      <span>Event Start Photo Proof</span>
+                    {/* 2. Event Start Photo Proof */}
+                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-2">
+                      <div className="text-[11px] font-bold text-zinc-300 flex justify-between items-center">
+                        <span>Event Start Photo Proof</span>
+                        {eventStartProof.photoUrl ? (
+                          <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">Uploaded</span>
+                        ) : (
+                          <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded font-mono">Not Uploaded</span>
+                        )}
+                      </div>
                       {eventStartProof.photoUrl ? (
-                        <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">Uploaded</span>
+                        <div className="space-y-1">
+                          <a href={eventStartProof.photoUrl} target="_blank" rel="noreferrer" className="block relative group overflow-hidden rounded-lg border border-zinc-800 h-28 bg-zinc-900">
+                            <img src={eventStartProof.photoUrl} alt="Event Start" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity">
+                              View Full Photo ↗
+                            </div>
+                          </a>
+                        </div>
                       ) : (
-                        <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded font-mono">Not Uploaded</span>
+                        <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
+                          No proof photo found
+                        </div>
                       )}
                     </div>
-                    {eventStartProof.photoUrl ? (
-                      <div className="space-y-1">
-                        <a href={eventStartProof.photoUrl} target="_blank" rel="noreferrer" className="block relative group overflow-hidden rounded-lg border border-zinc-800 h-28 bg-zinc-900">
-                          <img src={eventStartProof.photoUrl} alt="Event Start" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity">
-                            View Full Photo ↗
-                          </div>
-                        </a>
-                      </div>
-                    ) : (
-                      <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
-                        No proof photo found
-                      </div>
-                    )}
-                  </div>
 
-                  {/* 3. Event Completion Photo Proof */}
-                  <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-2">
-                    <div className="text-[11px] font-bold text-zinc-300 flex justify-between items-center">
-                      <span>Event Completion Photo Proof</span>
+                    {/* 3. Event Completion Photo Proof */}
+                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-2">
+                      <div className="text-[11px] font-bold text-zinc-300 flex justify-between items-center">
+                        <span>Event Completion Photo Proof</span>
+                        {eventCompletionProof.photoUrl ? (
+                          <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">Uploaded</span>
+                        ) : (
+                          <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded font-mono">Not Uploaded</span>
+                        )}
+                      </div>
                       {eventCompletionProof.photoUrl ? (
-                        <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">Uploaded</span>
+                        <div className="space-y-1">
+                          <a href={eventCompletionProof.photoUrl} target="_blank" rel="noreferrer" className="block relative group overflow-hidden rounded-lg border border-zinc-800 h-28 bg-zinc-900">
+                            <img src={eventCompletionProof.photoUrl} alt="Event Completion" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity">
+                              View Full Photo ↗
+                            </div>
+                          </a>
+                        </div>
                       ) : (
-                        <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded font-mono">Not Uploaded</span>
+                        <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
+                          No proof photo found
+                        </div>
                       )}
                     </div>
-                    {eventCompletionProof.photoUrl ? (
-                      <div className="space-y-1">
-                        <a href={eventCompletionProof.photoUrl} target="_blank" rel="noreferrer" className="block relative group overflow-hidden rounded-lg border border-zinc-800 h-28 bg-zinc-900">
-                          <img src={eventCompletionProof.photoUrl} alt="Event Completion" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity">
-                            View Full Photo ↗
-                          </div>
-                        </a>
-                      </div>
-                    ) : (
-                      <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
-                        No proof photo found
-                      </div>
-                    )}
-                  </div>
 
-                  {/* 4. Equipment Handover Photo Proof (Optional) */}
-                  <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-2">
-                    <div className="text-[11px] font-bold text-zinc-300 flex justify-between items-center">
-                      <span>Equipment Handover Photo <span className="text-zinc-500 font-normal">(Optional)</span></span>
+                    {/* 4. Equipment Handover Photo Proof (Optional) */}
+                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-2">
+                      <div className="text-[11px] font-bold text-zinc-300 flex justify-between items-center">
+                        <span>Equipment Handover Photo <span className="text-zinc-500 font-normal">(Optional)</span></span>
+                        {equipmentHandoverProof.photoUrl ? (
+                          <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">Handover Completed</span>
+                        ) : (
+                          <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded font-mono">Equipment Not Handover</span>
+                        )}
+                      </div>
                       {equipmentHandoverProof.photoUrl ? (
-                        <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">Handover Completed</span>
+                        <div className="space-y-1">
+                          <a href={equipmentHandoverProof.photoUrl} target="_blank" rel="noreferrer" className="block relative group overflow-hidden rounded-lg border border-zinc-800 h-28 bg-zinc-900">
+                            <img src={equipmentHandoverProof.photoUrl} alt="Equipment Handover" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity">
+                              View Full Photo ↗
+                            </div>
+                          </a>
+                        </div>
                       ) : (
-                        <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded font-mono">Equipment Not Handover</span>
+                        <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex flex-col items-center justify-center text-[11px] text-zinc-500 p-2 text-center">
+                          <span>Equipment Not Handover</span>
+                          <span className="text-[9px] text-zinc-600 mt-0.5">(Optional for verification)</span>
+                        </div>
                       )}
                     </div>
-                    {equipmentHandoverProof.photoUrl ? (
-                      <div className="space-y-1">
-                        <a href={equipmentHandoverProof.photoUrl} target="_blank" rel="noreferrer" className="block relative group overflow-hidden rounded-lg border border-zinc-800 h-28 bg-zinc-900">
-                          <img src={equipmentHandoverProof.photoUrl} alt="Equipment Handover" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity">
-                            View Full Photo ↗
-                          </div>
-                        </a>
-                      </div>
-                    ) : (
-                      <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex flex-col items-center justify-center text-[11px] text-zinc-500 p-2 text-center">
-                        <span>Equipment Not Handover</span>
-                        <span className="text-[9px] text-zinc-600 mt-0.5">(Optional for verification)</span>
-                      </div>
-                    )}
-                  </div>
 
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* UPLOAD FINAL CONSOLIDATED RAW FOOTAGE STEP */}
               {!allCrewVerified ? (
