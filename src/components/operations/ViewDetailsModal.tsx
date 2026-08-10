@@ -2,6 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { X, User, Phone, MessageSquare, Mail, MapPin, Calendar, Clock, Package, ShieldCheck, Video, Camera, Award, FileText, CheckCircle2 } from 'lucide-react';
 import { useRole } from '../RoleContext';
+import { deserializeLeadEvents } from '../../utils';
 
 interface ViewDetailsModalProps {
   isOpen: boolean;
@@ -60,9 +61,14 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
   // Event Details Resolution
   const finalOrderId = order?.order_id || booking?.orderId || targetOrderId || 'N/A';
 
+  const rawEventsFromLead = lead?.events && Array.isArray(lead.events) && lead.events.length > 0 ? lead.events : [];
+  const deserializedEvents = (!rawEventsFromLead || rawEventsFromLead.length === 0) && lead?.notes_special_customizations
+    ? deserializeLeadEvents(lead.notes_special_customizations).events
+    : [];
+
   const rawEvents = (events && events.length > 0) 
     ? events 
-    : (lead?.events && Array.isArray(lead.events) && lead.events.length > 0 ? lead.events : []);
+    : (rawEventsFromLead.length > 0 ? rawEventsFromLead : deserializedEvents);
 
   const resolvedEvents = rawEvents.length > 0 
     ? rawEvents.map((ev: any, idx: number) => {

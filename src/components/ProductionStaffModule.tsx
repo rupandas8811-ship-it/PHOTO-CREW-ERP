@@ -8,7 +8,7 @@ import {
 import { supabaseClient } from '../supabaseClient';
 import { EditorAssignment } from '../types';
 import { ProjectDetailModal } from './ProjectDetailModal';
-import { parseQtyAndText, formatQtyItem } from '../utils';
+import { parseQtyAndText, formatQtyItem, deserializeLeadEvents } from '../utils';
 
 // Image compression helper
 const compressImage = (file: File): Promise<string> => {
@@ -92,10 +92,24 @@ const getRawFootageDriveLink = (assignment: any, prod: any, order: any, lead: an
   return '';
 };
 
+// Helper to extract events array from lead (either directly on lead.events or deserialized from notes_special_customizations)
+const getLeadEvents = (lead: any) => {
+  if (lead?.events && Array.isArray(lead.events) && lead.events.length > 0) {
+    return lead.events;
+  }
+  if (lead?.notes_special_customizations) {
+    const deserialized = deserializeLeadEvents(lead.notes_special_customizations);
+    if (deserialized.events && Array.isArray(deserialized.events) && deserialized.events.length > 0) {
+      return deserialized.events;
+    }
+  }
+  return [];
+};
+
 // Helper to identify the exact event record in lead.events for an assignment / prod / order
 const getTargetEventForAssignment = (lead: any, order: any, prod: any, assignment?: any) => {
   const targetEventId = assignment?.event_id || prod?.event_id;
-  const rawEvents = lead?.events && Array.isArray(lead.events) && lead.events.length > 0 ? lead.events : [];
+  const rawEvents = getLeadEvents(lead);
 
   if (rawEvents.length > 0) {
     // 1. Try matching by exact event_id / id

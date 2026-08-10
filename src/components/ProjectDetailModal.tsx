@@ -4,7 +4,7 @@ import {
   X, User, Phone, Mail, MapPin, DollarSign, Calendar, Clock, Film, 
   CheckCircle, AlertCircle, RefreshCw, Layers, ArrowRight, Shield, FileText, Landmark
 } from 'lucide-react';
-import { formatINR, formatTime12Hour } from '../utils';
+import { formatINR, formatTime12Hour, deserializeLeadEvents } from '../utils';
 import { CurrentStage } from '../types';
 
 interface ProjectDetailModalProps {
@@ -83,24 +83,28 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
   const orderHandovers = equipmentHandovers ? equipmentHandovers.filter((eh) => eh.order_id === orderId) : [];
 
   // Extract exact Event Information from Step 2 (Sales Quotation / Lead)
-  const rawEvents = lead?.events && Array.isArray(lead.events) && lead.events.length > 0 ? lead.events : [];
+  const rawEventsFromLead = lead?.events && Array.isArray(lead.events) && lead.events.length > 0 ? lead.events : [];
+  const deserializedEvents = (!rawEventsFromLead || rawEventsFromLead.length === 0) && lead?.notes_special_customizations
+    ? deserializeLeadEvents(lead.notes_special_customizations).events
+    : [];
+  const rawEvents = rawEventsFromLead.length > 0 ? rawEventsFromLead : (deserializedEvents.length > 0 ? deserializedEvents : []);
   
   const allResolvedEvents = rawEvents.length > 0 
     ? rawEvents.map((ev: any, idx: number) => {
         const eType = ev.event_type === 'Other' 
-          ? (ev.custom_event_type || ev.event_type || 'Other') 
+          ? (ev.custom_event_type || 'Other') 
           : (ev.event_type || 'N/A');
 
         const eName = ev.event_name === 'Other' 
-          ? (ev.custom_event_name || ev.event_name || eType) 
-          : (ev.event_name || ev.custom_event_name || eType || 'N/A');
+          ? (ev.custom_event_name || 'Other') 
+          : (ev.event_name || ev.custom_event_name || 'N/A');
 
         return {
           id: ev.id || ev.event_id || `ev_${idx}`,
           eventType: eType,
           eventName: eName,
           eventDate: ev.event_date || 'N/A',
-          eventStartTime: ev.event_start_time || 'N/A',
+          eventStartTime: ev.event_start_time || ev.event_time || 'N/A',
           eventEndDate: ev.event_end_date || ev.Event_End_Date || 'N/A',
           eventEndTime: ev.event_end_time || 'N/A',
           eventLocation: ev.event_location || 'N/A',
