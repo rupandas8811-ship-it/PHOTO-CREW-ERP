@@ -8368,65 +8368,67 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       )}
 
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-black text-white flex items-center gap-2">
-            <span className="p-1 px-2.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-mono rounded tracking-widest">SALES</span>
-            <span>Sales & Lead Desk</span>
-          </h2>
-          <p className="text-xs text-zinc-400 mt-0.5">
-            Collect potential inbound queries, log CRM call reports, propose quotations and confirm contracts.
-          </p>
-        </div>
+      {activeTab !== 'create' && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-black text-white flex items-center gap-2">
+              <span className="p-1 px-2.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-mono rounded tracking-widest">SALES</span>
+              <span>Sales & Lead Desk</span>
+            </h2>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Collect potential inbound queries, log CRM call reports, propose quotations and confirm contracts.
+            </p>
+          </div>
 
-        {/* Create and Tabs Controls */}
-        <div className="flex items-center gap-2">
-          <button
-            id="btn_lead_tab_profiles"
-            onClick={() => { setActiveTab('profiles'); setSelectedLead(null); setSelectedCustomerProfileId(null); }}
-            className={`hidden px-4 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
-              activeTab === 'profiles'
-                ? 'bg-zinc-900 border-zinc-750 text-white font-black hover:border-zinc-700'
-                : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            👥 Customer Profiles
-          </button>
-
-          <button
-            id="btn_lead_tab_calendar"
-            onClick={() => { setActiveTab('calendar'); setSelectedLead(null); setSelectedCustomerProfileId(null); }}
-            className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
-              activeTab === 'calendar'
-                ? 'bg-zinc-900 border-zinc-750 text-white font-black hover:border-zinc-700'
-                : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            <Calendar className="w-3.5 h-3.5 text-zinc-405 group-hover:text-zinc-200" />
-            <span>Sales Calendar</span>
-          </button>
-          
-          {canEdit ? (
+          {/* Create and Tabs Controls */}
+          <div className="flex items-center gap-2">
             <button
-              id="btn_lead_create_flag"
-              onClick={() => { setActiveTab('create'); setSelectedLead(null); }}
-              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl shadow-sm cursor-pointer transition-all ${
-                activeTab === 'create'
-                  ? 'bg-emerald-600 hover:bg-emerald-505 text-white'
-                  : 'bg-emerald-500/10 hover:bg-emerald-600/20 text-emerald-450 border border-emerald-500/25'
+              id="btn_lead_tab_profiles"
+              onClick={() => { setActiveTab('profiles'); setSelectedLead(null); setSelectedCustomerProfileId(null); }}
+              className={`hidden px-4 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+                activeTab === 'profiles'
+                  ? 'bg-zinc-900 border-zinc-750 text-white font-black hover:border-zinc-700'
+                  : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Create Quotation</span>
+              👥 Customer Profiles
             </button>
-          ) : (
-            <span className="text-[11px] bg-red-500/10 text-red-400 border border-red-500/20 rounded px-2.5 py-1 flex items-center gap-1.5" title="You are restricted from adding leads in this role.">
-              <Ban className="w-3 h-3" />
-              <span>Sales Access Blocked</span>
-            </span>
-          )}
+
+            <button
+              id="btn_lead_tab_calendar"
+              onClick={() => { setActiveTab('calendar'); setSelectedLead(null); setSelectedCustomerProfileId(null); }}
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+                activeTab === 'calendar'
+                  ? 'bg-zinc-900 border-zinc-750 text-white font-black hover:border-zinc-700'
+                  : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5 text-zinc-405 group-hover:text-zinc-200" />
+              <span>Sales Calendar</span>
+            </button>
+            
+            {canEdit ? (
+              <button
+                id="btn_lead_create_flag"
+                onClick={() => { setActiveTab('create'); setSelectedLead(null); }}
+                className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl shadow-sm cursor-pointer transition-all ${
+                  activeTab === 'create'
+                    ? 'bg-emerald-600 hover:bg-emerald-505 text-white'
+                    : 'bg-emerald-500/10 hover:bg-emerald-600/20 text-emerald-450 border border-emerald-500/25'
+                }`}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Create Quotation</span>
+              </button>
+            ) : (
+              <span className="text-[11px] bg-red-500/10 text-red-400 border border-red-500/20 rounded px-2.5 py-1 flex items-center gap-1.5" title="You are restricted from adding leads in this role.">
+                <Ban className="w-3 h-3" />
+                <span>Sales Access Blocked</span>
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Sandbox Area */}
       {false && selectedLead && (

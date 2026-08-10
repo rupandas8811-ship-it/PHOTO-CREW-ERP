@@ -990,68 +990,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
       {/* ==================================================== */}
       {activeTab === 'sales' && (
         <div className="space-y-6">
-          {/* Summary Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-10 gap-3">
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
-              <span className="text-[10px] font-mono text-zinc-400 uppercase">Sales Staff</span>
-              <div className="text-xl font-black text-white mt-1">{salesData.summary.totalSalesStaff}</div>
-              <span className="text-[9px] text-zinc-500 font-mono mt-1">Active Team</span>
-            </div>
-
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
-              <span className="text-[10px] font-mono text-zinc-400 uppercase">Total Leads</span>
-              <div className="text-xl font-black text-amber-400 mt-1">{salesData.summary.totalLeads}</div>
-              <span className="text-[9px] text-zinc-500 font-mono mt-1">Assigned Pipeline</span>
-            </div>
-
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
-              <span className="text-[10px] font-mono text-zinc-400 uppercase">New Leads</span>
-              <div className="text-xl font-black text-blue-400 mt-1">{salesData.summary.totalNewLeads}</div>
-              <span className="text-[9px] text-zinc-500 font-mono mt-1">To Contact</span>
-            </div>
-
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
-              <span className="text-[10px] font-mono text-zinc-400 uppercase">Follow-ups</span>
-              <div className="text-xl font-black text-purple-400 mt-1">{salesData.summary.totalFollowUps}</div>
-              <span className="text-[9px] text-zinc-500 font-mono mt-1">Active Touchpoints</span>
-            </div>
-
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
-              <span className="text-[10px] font-mono text-zinc-400 uppercase">Quotations</span>
-              <div className="text-xl font-black text-cyan-400 mt-1">{salesData.summary.totalQuotations}</div>
-              <span className="text-[9px] text-zinc-500 font-mono mt-1">Quotes Issued</span>
-            </div>
-
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
-              <span className="text-[10px] font-mono text-zinc-400 uppercase">Orders Confirmed</span>
-              <div className="text-xl font-black text-emerald-400 mt-1">{salesData.summary.totalOrdersConfirmed}</div>
-              <span className="text-[9px] text-zinc-500 font-mono mt-1">Conversions</span>
-            </div>
-
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
-              <span className="text-[10px] font-mono text-zinc-400 uppercase">Orders Lost</span>
-              <div className="text-xl font-black text-rose-400 mt-1">{salesData.summary.totalLost}</div>
-              <span className="text-[9px] text-zinc-500 font-mono mt-1">Lost Deals</span>
-            </div>
-
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
-              <span className="text-[10px] font-mono text-zinc-400 uppercase">Quotation Val</span>
-              <div className="text-xs font-black text-indigo-400 mt-1 truncate">{formatCurrency(salesData.summary.grandQuotationValue)}</div>
-              <span className="text-[9px] text-zinc-500 font-mono mt-1">Potential</span>
-            </div>
-
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
-              <span className="text-[10px] font-mono text-zinc-400 uppercase">Total Revenue</span>
-              <div className="text-xs font-black text-emerald-400 mt-1 truncate">{formatCurrency(salesData.summary.grandRevenue)}</div>
-              <span className="text-[9px] text-zinc-500 font-mono mt-1">Actual Sales</span>
-            </div>
-
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
-              <span className="text-[10px] font-mono text-zinc-400 uppercase">Conversion Rate</span>
-              <div className="text-xl font-black text-amber-400 mt-1">{salesData.summary.overallConversionRate}%</div>
-              <span className="text-[9px] text-zinc-500 font-mono mt-1">Lead to Order</span>
-            </div>
-          </div>
+          {/* Summary Cards hidden per user request */}
 
           {/* Performance Ranking Header */}
           <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-xl space-y-4">
@@ -1202,51 +1141,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
             )}
           </div>
 
-          {/* Sales Performance Charts */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Chart 1: Revenue by Sales Staff */}
-            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-xl space-y-3">
-              <h3 className="text-xs font-black uppercase tracking-wider text-zinc-300 font-mono flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-emerald-400" />
-                Revenue Generated by Sales Staff (₹)
-              </h3>
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={salesData.rows}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                    <XAxis dataKey="salesStaff" stroke="#71717a" fontSize={10} />
-                    <YAxis stroke="#71717a" fontSize={10} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px' }}
-                      formatter={(val: any) => [formatCurrency(Number(val)), 'Revenue']}
-                    />
-                    <Bar dataKey="revenue" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Chart 2: Leads vs Orders Confirmed */}
-            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-xl space-y-3">
-              <h3 className="text-xs font-black uppercase tracking-wider text-zinc-300 font-mono flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-amber-400" />
-                Leads vs Confirmed Orders by Sales Staff
-              </h3>
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={salesData.rows}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                    <XAxis dataKey="salesStaff" stroke="#71717a" fontSize={10} />
-                    <YAxis stroke="#71717a" fontSize={10} />
-                    <Tooltip contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px' }} />
-                    <Legend wrapperStyle={{ fontSize: '11px' }} />
-                    <Bar dataKey="leads" name="Total Leads" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="ordersConfirmed" name="Orders Confirmed" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
+          {/* Sales Performance Charts hidden per user request */}
         </div>
       )}
 

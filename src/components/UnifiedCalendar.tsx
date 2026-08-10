@@ -749,65 +749,39 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   return (
     <div id="unified_calendar_container" className="space-y-6 text-zinc-100 pb-10">
       
-      {/* 1. Header and Layout Cockpit */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-zinc-950/40 border border-zinc-900 p-5 rounded-2xl shadow-xl">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl text-yellow-500 shadow-md">
-            <CalendarIcon className="w-6 h-6 animate-pulse" />
+      {/* 1. Header Navigation Bar (Controls only) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-zinc-950/40 border border-zinc-900 p-4 rounded-2xl shadow-xl">
+        {calendarError && (
+          <div className="w-full p-2.5 bg-red-950/60 border border-red-500/30 rounded-lg text-xs text-red-200 flex items-center justify-between gap-2">
+            <span>{calendarError}</span>
+            <button 
+              onClick={() => setCalendarError(null)}
+              className="text-red-400 hover:text-white font-bold"
+            >
+              Dismiss
+            </button>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-mono tracking-wider uppercase px-2 py-0.5 bg-yellow-500/10 text-yellow-500 rounded border border-yellow-500/20">
-                {role.toUpperCase()} COMPASS
-              </span>
-              {isDataLoading ? (
-                <span className="text-xs text-yellow-500 flex items-center gap-1.5 font-mono animate-pulse">
-                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
-                  Synchronizing Database...
-                </span>
-              ) : (
-                <span className="text-xs text-zinc-400 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  Live Sync Connected
-                </span>
-              )}
-            </div>
-            <h1 className="text-xl font-bold tracking-tight text-white mt-0.5">
-              {role === 'owner' ? 'Studio Master Calendar' : `${role.slice(0,1).toUpperCase() + role.slice(1)} Logistics Slate`}
-            </h1>
-            {calendarError && (
-              <div className="mt-2 p-2.5 bg-red-950/60 border border-red-500/30 rounded-lg text-xs text-red-200 flex items-center justify-between gap-2 max-w-md">
-                <span>{calendarError}</span>
-                <button 
-                  onClick={() => setCalendarError(null)}
-                  className="text-red-400 hover:text-white font-bold"
-                >
-                  Dismiss
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        )}
 
         {/* View selection controls */}
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          <div className="flex bg-zinc-900 border border-zinc-800 p-1 rounded-xl">
-            {(['month', 'week', 'day', 'agenda'] as const).map(view => (
-              <button
-                key={view}
-                id={`btn_cal_view_${view}`}
-                onClick={() => setCalendarView(view)}
-                className={`px-3 py-1.5 text-xs font-mono rounded-lg transition-all capitalize ${
-                  calendarView === view
-                    ? 'bg-zinc-800 text-white font-black shadow-inner border border-zinc-700/50'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-                }`}
-              >
-                {view}
-              </button>
-            ))}
-          </div>
+        <div className="flex bg-zinc-900 border border-zinc-800 p-1 rounded-xl">
+          {(['month', 'week', 'day', 'agenda'] as const).map(view => (
+            <button
+              key={view}
+              id={`btn_cal_view_${view}`}
+              onClick={() => setCalendarView(view)}
+              className={`px-3 py-1.5 text-xs font-mono rounded-lg transition-all capitalize ${
+                calendarView === view
+                  ? 'bg-zinc-800 text-white font-black shadow-inner border border-zinc-700/50'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+              }`}
+            >
+              {view}
+            </button>
+          ))}
+        </div>
 
+        <div className="flex items-center gap-2">
           <button
             id="btn_cal_today"
             onClick={handleSetToday}
@@ -831,163 +805,6 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
               Assign Memo
             </button>
           )}
-        </div>
-      </div>
-
-      {/* Today's Sticky Master Tracker */}
-      {widgets.todayEvents.length > 0 && (
-        <div id="sticky_today_tracker" className="bg-gradient-to-r from-emerald-950/70 via-zinc-950/80 to-zinc-950/60 border border-emerald-500/40 p-4 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.2)] flex flex-col md:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
-          <div className="flex items-center gap-3">
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 animate-pulse"></span>
-            </span>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono tracking-wider uppercase px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded-md border border-emerald-500/30 font-black animate-pulse">
-                  TODAY
-                </span>
-                <span className="text-[11px] font-mono text-zinc-400 font-bold">MONDAY, 15 JUNE 2026</span>
-              </div>
-              <h2 className="text-sm font-bold text-white mt-1">
-                Active Live Operations: <span className="text-emerald-400 font-mono font-extrabold">{widgets.todayEvents.length}</span> {widgets.todayEvents.length === 1 ? 'event' : 'events'} scheduled today
-              </h2>
-            </div>
-          </div>
-          
-          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-            {widgets.todayEvents.map(ev => {
-              const h = getEventHighlights(ev);
-              return (
-                <button
-                  key={ev.id}
-                  onClick={() => {
-                    setSelectedEvent(ev);
-                  }}
-                  className={`px-3 py-1.5 bg-zinc-900/60 hover:bg-zinc-850/80 border border-zinc-805 hover:border-zinc-700 text-[11px] text-zinc-200 rounded-lg flex items-center gap-2 transition cursor-pointer font-medium max-w-[170px] break-words`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  <span className="break-words">{ev.customerName} ({ev.eventType})</span>
-                </button>
-              );
-            })}
-            <button
-              onClick={() => {
-                setSelectedDate(todayStr);
-                setCalendarView('day');
-              }}
-              className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-black text-[11px] rounded-lg transition-all shadow-md active:scale-95 cursor-pointer"
-            >
-              Inspect Day
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* 2. Top-Level Activity Dashboard Widgets */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
-        {/* Events Today */}
-        <div 
-          onClick={() => {
-            setSelectedDate(todayStr);
-            setCalendarView('day');
-          }}
-          className="bg-zinc-950/30 border border-zinc-900 p-3.5 rounded-xl flex flex-col justify-between hover:border-emerald-500/30 hover:bg-emerald-950/5 transition-all group cursor-pointer"
-        >
-          <div className="flex justify-between items-start">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-450 font-bold">Events Today</span>
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse mt-1 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
-          </div>
-          <div className="mt-2.5">
-            <div className="text-xl font-black text-white group-hover:text-emerald-400 transition-colors flex items-center gap-1.5">
-              <span>{widgets.todayEvents.length}</span>
-              <span className="text-[9px] font-mono font-bold uppercase text-emerald-500/80 bg-emerald-500/10 px-1 py-0.5 rounded scale-90">LIVE</span>
-            </div>
-            <div className="text-[10px] text-zinc-450 block mt-0.5 break-words">
-              {widgets.todayEvents.length > 0 ? `${widgets.todayEvents[0].customerName}` : 'No shoots rostered'}
-            </div>
-          </div>
-        </div>
-
-        {/* Events Tomorrow */}
-        <div 
-          onClick={() => {
-            setSelectedDate(tomorrowStr);
-            setCalendarView('day');
-          }}
-          className="bg-zinc-950/30 border border-zinc-900 p-3.5 rounded-xl flex flex-col justify-between hover:border-orange-500/30 hover:bg-orange-950/5 transition-all group cursor-pointer"
-        >
-          <div className="flex justify-between items-start">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-450 font-bold">Events Tomorrow</span>
-            <span className="w-2 h-2 rounded-full bg-orange-400 mt-1 shadow-[0_0_8px_rgba(249,115,22,0.5)]" />
-          </div>
-          <div className="mt-2.5">
-            <div className="text-xl font-black text-white group-hover:text-orange-400 transition-colors flex items-center gap-1.5">
-              <span>{widgets.tomorrowEvents.length}</span>
-              <span className="text-[9px] font-mono font-bold uppercase text-orange-500/80 bg-orange-500/10 px-1 py-0.5 rounded scale-90">READY</span>
-            </div>
-            <div className="text-[10px] text-zinc-450 block mt-0.5 break-words">
-              {widgets.tomorrowEvents.length > 0 ? `${widgets.tomorrowEvents[0].customerName}` : 'No sessions locked'}
-            </div>
-          </div>
-        </div>
-
-        {/* Upcoming This Week */}
-        <div className="bg-zinc-950/30 border border-zinc-900 p-3.5 rounded-xl flex flex-col justify-between hover:border-zinc-800 hover:bg-zinc-900/10 transition-all group">
-          <div className="flex justify-between items-start">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-450 font-bold">Upcoming This Week</span>
-            <span className="w-2 h-2 rounded-full bg-blue-500 mt-1" />
-          </div>
-          <div className="mt-2.5">
-            <div className="text-xl font-black text-white group-hover:text-blue-400 transition-colors">
-              {widgets.upcomingEvents.length}
-            </div>
-            <div className="text-[10px] text-zinc-450 block mt-0.5 break-words">
-              Shoots & Pipeline dates
-            </div>
-          </div>
-        </div>
-
-        {/* Overdue Events */}
-        <div className={`border p-3.5 rounded-xl flex flex-col justify-between hover:bg-zinc-900/10 transition-all group ${
-          widgets.overdueTasks.length > 0 
-            ? 'bg-red-950/15 border-red-500/40 text-red-100 ring-1 ring-red-500/10' 
-            : 'bg-zinc-950/30 border-zinc-900'
-        }`}>
-          <div className="flex justify-between items-start">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-450 font-bold">Overdue Events</span>
-            {widgets.overdueTasks.length > 0 ? (
-              <AlertCircle className="w-4 h-4 text-red-500 animate-bounce" />
-            ) : (
-              <span className="w-2 h-2 rounded-full bg-zinc-650 mt-1" />
-            )}
-          </div>
-          <div className="mt-2.5">
-            <div className={`text-xl font-black transition-colors ${
-              widgets.overdueTasks.length > 0 ? 'text-red-400' : 'text-white'
-            }`}>
-              {widgets.overdueTasks.length}
-            </div>
-            <div className="text-[10px] text-zinc-450 block mt-0.5 break-words">
-              {widgets.overdueTasks.length > 0 ? 'Outstanding schedules' : 'SLA Target stable'}
-            </div>
-          </div>
-        </div>
-
-        {/* Deliveries Due */}
-        <div className="bg-zinc-950/30 border border-zinc-900 p-3.5 rounded-xl flex flex-col justify-between hover:border-zinc-800 hover:bg-zinc-900/10 transition-all group">
-          <div className="flex justify-between items-start">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-450 font-bold">Edit Deliveries</span>
-            <span className="w-2 h-2 rounded-full bg-purple-500 mt-1" />
-          </div>
-          <div className="mt-2.5">
-            <div className="text-xl font-black text-white group-hover:text-purple-400 transition-colors">
-              {widgets.deliveriesDue.length}
-            </div>
-            <div className="text-[10px] text-zinc-450 block mt-0.5 break-words">
-              Due in post-proc
-            </div>
-          </div>
         </div>
       </div>
 
@@ -1045,10 +862,10 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
       </div>
 
       {/* 4. Secondary Row: Main Screen Split Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 items-start">
+      <div className="grid grid-cols-1 gap-6 items-start">
         
         {/* LEFT COLUMN: Main viewport calendar area */}
-        <div className="xl:col-span-3 bg-zinc-950/45 border border-zinc-905 p-3 sm:p-4 md:p-6 rounded-2xl shadow-xl space-y-4 md:space-y-6 relative">
+        <div className="bg-zinc-950/45 border border-zinc-905 p-3 sm:p-4 md:p-6 rounded-2xl shadow-xl space-y-4 md:space-y-6 relative">
           {isDataLoading && (
             <div className="absolute inset-0 bg-zinc-950/70 backdrop-blur-[1px] flex items-center justify-center rounded-2xl z-50">
               <div className="flex flex-col items-center gap-3 bg-zinc-900 border border-zinc-800 p-6 rounded-xl shadow-2xl animate-fade-in">
@@ -1749,103 +1566,6 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
               </div>
             </div>
           )}
-
-        </div>
-
-        {/* RIGHT COLUMN: Studio Ledger & Details focus */}
-        <div className="space-y-6">
-          
-          {/* Calendar day summary panel */}
-          <div className="bg-zinc-950/45 border border-zinc-900 p-5 rounded-2xl shadow-xl space-y-4">
-            <div className="border-b border-zinc-900 pb-3">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 block">Day Summary</span>
-              <h3 className="text-sm font-bold text-white mt-0.5">
-                {selectedDate ? parseLocalDate(selectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' }) : 'No day selected'}
-              </h3>
-            </div>
-
-            {/* List mini cards of active day */}
-            <div className="space-y-2 max-h-[400px] overflow-y-auto no-scrollbar">
-              {(() => {
-                const dayEvs = filteredEvents.filter(ev => ev.date === selectedDate);
-                if (dayEvs.length === 0) {
-                  return (
-                    <div className="py-10 text-center text-zinc-600 font-mono text-xs italic">
-                      No events listed
-                    </div>
-                  );
-                }
-
-                return dayEvs.map(ev => {
-                  const col = getColorClasses(ev.eventClass);
-                  return (
-                    <div
-                      key={ev.id}
-                      id={`day_summary_card_${ev.id}`}
-                      onClick={(e) => {
-  e.stopPropagation();
-  if (ev.sourceType === 'memo') {
-    setNewMemoTitle(ev.customerName);
-    setNewMemoMessage(ev.notes || '');
-    setEditingMemoId(ev.id);
-    setSelectedDate(ev.date);
-    setShowAddMemo(true);
-  } else {
-    setPopupLeadId(ev.raw?.lead_id || ev.orderId);
-  }
-}}
-                      className={`p-3 rounded-xl transition cursor-pointer text-xs flex flex-col gap-2 ${col.card}`}
-                    >
-                      <div className="flex justify-between items-start gap-1">
-                        <span className="font-extrabold text-zinc-200 line-clamp-1">{ev.customerName}</span>
-                        <span className={`text-[8px] font-mono px-1.5 py-0.5 border rounded-md  shrink-0 ${col.badge}`}>
-                          {ev.eventClass}
-                        </span>
-                      </div>
-                      
-                      <div className="flex items-center gap-3 text-[10px] text-zinc-450 font-mono break-words">
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-zinc-600" />
-                          <span>{ev.eventTime}</span>
-                        </div>
-                        <div className="flex items-center gap-1 min-w-0">
-                          <MapPin className="w-3 h-3 text-zinc-600" />
-                          <span className="break-words">{ev.eventLocation.split(',')[0]}</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                });
-              })()}
-            </div>
-          </div>
-
-          {/* Quick Studio Legend panel */}
-          <div className="bg-zinc-950/45 border border-zinc-900 p-5 rounded-2xl shadow-xl space-y-3.5">
-            <h3 className="text-xs font-mono uppercase tracking-widest text-zinc-400 border-b border-zinc-900 pb-2 flex items-center gap-1">
-              <Tag className="w-3.5 h-3.5 text-yellow-500" />
-              <span>Studio Colors SLA</span>
-            </h3>
-
-            <div className="grid grid-cols-1 gap-2.5 text-[11px] font-mono">
-              {[
-                { label: 'Event Today', dot: 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse' },
-                { label: 'Event Tomorrow', dot: 'bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.5)]' },
-                { label: 'Event Scheduled', dot: 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' },
-                { label: 'Event In Progress', dot: 'bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)]' },
-                { label: 'Event Completed', dot: 'bg-green-700' },
-                { label: 'Overdue Event', dot: 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' },
-                { label: 'Calendar Memo', dot: 'bg-purple-600' }
-              ].map((item, id) => {
-                return (
-                  <div key={id} className="flex items-center gap-2">
-                    <span className={`w-3 h-3 rounded-full border border-zinc-850 ${item.dot}`} />
-                    <span className="text-zinc-300 font-medium">{item.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
 
         </div>
 

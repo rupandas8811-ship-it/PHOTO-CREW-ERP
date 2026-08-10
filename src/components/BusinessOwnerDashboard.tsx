@@ -669,103 +669,13 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
   return (
     <div className="space-y-6 text-zinc-100 font-sans pb-12">
       
-      {/* Header Banner & Navigation Tabs */}
-      <div className="bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 border border-zinc-800/80 rounded-2xl p-4 sm:p-5 shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
-        
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] font-mono font-bold uppercase tracking-wider">
-                Executive Command
-              </span>
-              <span className="text-xs text-zinc-500 font-mono">Business Owner Desk</span>
-            </div>
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white mt-1">
-              Business Owner Dashboard
-            </h1>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              Monitor overall performance, approve completed projects, and track business metrics.
-            </p>
-          </div>
-
-          {/* Toast / Notification Banner */}
-          {approvalFeedback && (
-            <div className="bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 px-4 py-2.5 rounded-xl text-xs font-medium flex items-center gap-2 shadow-lg animate-in fade-in duration-300">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-              <span>{approvalFeedback}</span>
-            </div>
-          )}
+      {/* Toast / Notification Banner */}
+      {approvalFeedback && (
+        <div className="bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 px-4 py-2.5 rounded-xl text-xs font-medium flex items-center gap-2 shadow-lg animate-in fade-in duration-300 mb-4">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          <span>{approvalFeedback}</span>
         </div>
-
-        {/* 5 Main Dashboard Section Tabs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-5 gap-2 mt-5 pt-4 border-t border-zinc-850">
-          <button
-            onClick={() => handleSectionSwitch('overview')}
-            className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-              currentSection === 'overview'
-                ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 shadow-md shadow-amber-500/5'
-                : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
-            }`}
-          >
-            <LayoutDashboard className="w-4 h-4 text-amber-400" />
-            <span className="truncate">1. Business Overview</span>
-          </button>
-
-          <button
-            onClick={() => handleSectionSwitch('calendar')}
-            className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-              currentSection === 'calendar'
-                ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 shadow-md shadow-amber-500/5'
-                : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
-            }`}
-          >
-            <CalendarIcon className="w-4 h-4 text-purple-400" />
-            <span className="truncate">2. Event Calendar</span>
-          </button>
-
-          <button
-            onClick={() => handleSectionSwitch('approval')}
-            className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-              currentSection === 'approval'
-                ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 shadow-md shadow-amber-500/5'
-                : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
-            }`}
-          >
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span className="truncate">3. Waiting Approval</span>
-            {waitingApprovalOrders.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-[10px] font-mono">
-                {waitingApprovalOrders.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => handleSectionSwitch('summary')}
-            className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-              currentSection === 'summary'
-                ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 shadow-md shadow-amber-500/5'
-                : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
-            }`}
-          >
-            <FileText className="w-4 h-4 text-blue-400" />
-            <span className="truncate">4. Revenue Summary</span>
-          </button>
-          
-          <button
-            onClick={() => handleSectionSwitch('staff_performance')}
-            className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-              currentSection === 'staff_performance'
-                ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 shadow-md shadow-amber-500/5'
-                : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
-            }`}
-          >
-            <BarChart3 className="w-4 h-4 text-pink-400" />
-            <span className="truncate">5. Staff Performance</span>
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* SECTION 1: BUSINESS OVERVIEW */}
       {currentSection === 'overview' && (
@@ -1010,245 +920,243 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
         </div>
       )}
 
-      {/* SECTION 3: ORDERS AWAITING FINAL APPROVAL */}
+      {/* SECTION 3: ORDERS AWAITING FINAL APPROVAL / UNLOCK REQUESTS */}
       {currentSection === 'approval' && (
         <div className="space-y-6 animate-in fade-in duration-200">
 
           {/* QUOTATION UNLOCK REQUESTS */}
-          <div className="bg-zinc-950/80 border border-zinc-850 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
-            <div>
-              <h2 className="text-sm font-black uppercase tracking-wider text-amber-400 font-mono flex items-center gap-2">
-                <Ban className="w-4 h-4" />
-                <span>QUOTATION UNLOCK REQUESTS</span>
-              </h2>
-              <p className="text-xs text-zinc-400 mt-0.5">
-                Sales staff requests to unlock quotations for editing.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-mono text-zinc-400">Total Pending:</span>
-              <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-mono font-bold">
-                {unlockRequests.length} Requests
-              </span>
-            </div>
-          </div>
-
-          <div className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden shadow-2xl mb-8">
-            {unlockRequests.length === 0 ? (
-              <div className="p-12 text-center space-y-3">
-                <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="w-6 h-6" />
+          {unlockRequests.length > 0 && (
+            <div className="space-y-4 mb-8">
+              <div className="bg-zinc-950/80 border border-zinc-850 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+                <div>
+                  <h2 className="text-sm font-black uppercase tracking-wider text-amber-400 font-mono flex items-center gap-2">
+                    <Ban className="w-4 h-4" />
+                    <span>QUOTATION UNLOCK REQUESTS</span>
+                  </h2>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Sales staff requests to unlock quotations for editing.
+                  </p>
                 </div>
-                <h3 className="text-sm font-bold text-white">No Quotation Unlock Requests</h3>
-                <p className="text-xs text-zinc-400 max-w-md mx-auto">
-                  There are no pending requests from the sales team to unlock quotations.
-                </p>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono text-zinc-400">Total Pending:</span>
+                  <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-mono font-bold">
+                    {unlockRequests.length} Requests
+                  </span>
+                </div>
               </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse min-w-max">
-                  <thead>
-                    <tr className="bg-zinc-900/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
-                      <th className="py-3 px-4">Order ID</th>
-                      <th className="py-3 px-4">Lead ID</th>
-                      <th className="py-3 px-4">Customer Name</th>
-                      <th className="py-3 px-4">Sales Staff</th>
-                      <th className="py-3 px-4">Reason</th>
-                      <th className="py-3 px-4">Request Date</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-850">
-                    {unlockRequests.map(request => {
-                      const orderDetails = orders.find(o => o.order_id === request.order_id || o.lead_id === request.lead_id);
-                      const leadDetails = leads.find(l => l.lead_id === request.lead_id || (request.order_id && l.lead_id === request.order_id));
 
-                      const customerName = 
-                        request.customer_name || 
-                        leadDetails?.customer_name || 
-                        orderDetails?.customer_name || 
-                        (request.action_url ? (() => { try { return JSON.parse(request.action_url).customer_name; } catch(e) { return null; } })() : null) || 
-                        '-';
+              <div className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden shadow-2xl">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse min-w-max">
+                    <thead>
+                      <tr className="bg-zinc-900/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
+                        <th className="py-3 px-4">Order ID</th>
+                        <th className="py-3 px-4">Lead ID</th>
+                        <th className="py-3 px-4">Customer Name</th>
+                        <th className="py-3 px-4">Sales Staff</th>
+                        <th className="py-3 px-4">Reason</th>
+                        <th className="py-3 px-4">Request Date</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-850">
+                      {unlockRequests.map(request => {
+                        const orderDetails = orders.find(o => o.order_id === request.order_id || o.lead_id === request.lead_id);
+                        const leadDetails = leads.find(l => l.lead_id === request.lead_id || (request.order_id && l.lead_id === request.order_id));
 
-                      const orderId = request.order_id || orderDetails?.order_id || '-';
-                      const leadId = request.lead_id || leadDetails?.lead_id || '-';
+                        const customerName = 
+                          request.customer_name || 
+                          leadDetails?.customer_name || 
+                          orderDetails?.customer_name || 
+                          (request.action_url ? (() => { try { return JSON.parse(request.action_url).customer_name; } catch(e) { return null; } })() : null) || 
+                          '-';
 
-                      const staffName = 
-                        request.sales_staff_name || 
-                        request.requested_by_name || 
-                        leadDetails?.sales_person || 
-                        orderDetails?.sales_person || 
-                        (request.action_url ? (() => { try { return JSON.parse(request.action_url).sales_staff_name; } catch(e) { return null; } })() : null) || 
-                        'Sales Staff';
+                        const orderId = request.order_id || orderDetails?.order_id || '-';
+                        const leadId = request.lead_id || leadDetails?.lead_id || '-';
 
-                      const staffMobile = 
-                        request.sales_staff_mobile || 
-                        leadDetails?.sales_staff_mobile || 
-                        leadDetails?.mobile || 
-                        (request.action_url ? (() => { try { return JSON.parse(request.action_url).sales_staff_mobile; } catch(e) { return null; } })() : null) || 
-                        '-';
+                        const staffName = 
+                          request.sales_staff_name || 
+                          request.requested_by_name || 
+                          leadDetails?.sales_person || 
+                          orderDetails?.sales_person || 
+                          (request.action_url ? (() => { try { return JSON.parse(request.action_url).sales_staff_name; } catch(e) { return null; } })() : null) || 
+                          'Sales Staff';
 
-                      const reqReason = request.reason || request.request_reason || request.title || 'Quotation unlock requested';
-                      const reqStatus = request.status || request.request_status || 'Pending';
-                      const reqDate = (request.requested_at || request.created_at) ? new Date(request.requested_at || request.created_at).toLocaleDateString() : '-';
+                        const staffMobile = 
+                          request.sales_staff_mobile || 
+                          leadDetails?.sales_staff_mobile || 
+                          leadDetails?.mobile || 
+                          (request.action_url ? (() => { try { return JSON.parse(request.action_url).sales_staff_mobile; } catch(e) { return null; } })() : null) || 
+                          '-';
 
-                      return (
-                        <tr key={request.request_id || request.order_id} className="hover:bg-zinc-900/50 transition-colors">
-                          <td className="py-3 px-4 font-mono font-bold text-amber-400">{orderId}</td>
-                          <td className="py-3 px-4 font-mono text-xs text-indigo-400 font-semibold">{leadId}</td>
-                          <td className="py-3 px-4 text-zinc-100 font-bold text-sm">{customerName}</td>
-                          <td className="py-3 px-4 text-zinc-300">
-                            <div className="font-semibold text-zinc-200">{staffName}</div>
-                            <div className="text-[10px] text-zinc-400 font-mono mt-0.5">{staffMobile}</div>
-                          </td>
-                          <td className="py-3 px-4 text-zinc-300">
-                            <div className="font-medium text-amber-200/90">{reqReason}</div>
-                            {request.custom_reason && <div className="text-[10px] text-zinc-400 mt-0.5">{request.custom_reason}</div>}
-                          </td>
-                          <td className="py-3 px-4 text-zinc-400 font-mono text-xs">{reqDate}</td>
-                          <td className="py-3 px-4">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold">
-                              {reqStatus}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            <button
-                              onClick={() => setUnlockRequestModal({
-                                ...request,
-                                customer_name: customerName,
-                                lead_id: leadId,
-                                order_id: orderId,
-                                sales_staff_name: staffName,
-                                sales_staff_mobile: staffMobile,
-                                reason: reqReason
-                              })}
-                              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded shadow text-xs font-bold transition-colors cursor-pointer"
-                            >
-                              Review
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                        const reqReason = request.reason || request.request_reason || request.title || 'Quotation unlock requested';
+                        const reqStatus = request.status || request.request_status || 'Pending';
+                        const reqDate = (request.requested_at || request.created_at) ? new Date(request.requested_at || request.created_at).toLocaleDateString() : '-';
+
+                        return (
+                          <tr key={request.request_id || request.order_id} className="hover:bg-zinc-900/50 transition-colors">
+                            <td className="py-3 px-4 font-mono font-bold text-amber-400">{orderId}</td>
+                            <td className="py-3 px-4 font-mono text-xs text-indigo-400 font-semibold">{leadId}</td>
+                            <td className="py-3 px-4 text-zinc-100 font-bold text-sm">{customerName}</td>
+                            <td className="py-3 px-4 text-zinc-300">
+                              <div className="font-semibold text-zinc-200">{staffName}</div>
+                              <div className="text-[10px] text-zinc-400 font-mono mt-0.5">{staffMobile}</div>
+                            </td>
+                            <td className="py-3 px-4 text-zinc-300">
+                              <div className="font-medium text-amber-200/90">{reqReason}</div>
+                              {request.custom_reason && <div className="text-[10px] text-zinc-400 mt-0.5">{request.custom_reason}</div>}
+                            </td>
+                            <td className="py-3 px-4 text-zinc-400 font-mono text-xs">{reqDate}</td>
+                            <td className="py-3 px-4">
+                              <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold">
+                                {reqStatus}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <button
+                                onClick={() => setUnlockRequestModal({
+                                  ...request,
+                                  customer_name: customerName,
+                                  lead_id: leadId,
+                                  order_id: orderId,
+                                  sales_staff_name: staffName,
+                                  sales_staff_mobile: staffMobile,
+                                  reason: reqReason
+                                })}
+                                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded shadow text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                Review
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
           
-          <div className="bg-zinc-950/80 border border-zinc-850 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
-            <div>
-              <h2 className="text-sm font-black uppercase tracking-wider text-emerald-400 font-mono flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4" />
-                <span>SECTION 3: ORDERS AWAITING FINAL APPROVAL</span>
-              </h2>
-              <p className="text-xs text-zinc-400 mt-0.5">
-                Projects with Client Acceptance status waiting for final Business Owner approval and closure.
+          {/* SECTION 3: ORDERS AWAITING FINAL APPROVAL */}
+          {waitingApprovalOrders.length > 0 && (
+            <div className="space-y-4">
+              <div className="bg-zinc-950/80 border border-zinc-850 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+                <div>
+                  <h2 className="text-sm font-black uppercase tracking-wider text-emerald-400 font-mono flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>SECTION 3: ORDERS AWAITING FINAL APPROVAL</span>
+                  </h2>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Projects with Client Acceptance status waiting for final Business Owner approval and closure.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono text-zinc-400">Total Pending:</span>
+                  <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-mono font-bold">
+                    {waitingApprovalOrders.length} Projects
+                  </span>
+                </div>
+              </div>
+
+              {/* Waiting Approval Table */}
+              <div className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden shadow-2xl">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse min-w-max">
+                    <thead>
+                      <tr className="bg-zinc-900/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
+                        <th className="py-3 px-4">Order ID</th>
+                        <th className="py-3 px-4">Customer Name</th>
+                        <th className="py-3 px-4">Event Name</th>
+                        <th className="py-3 px-4">Payment Status</th>
+                        <th className="py-3 px-4">Outstanding Balance</th>
+                        <th className="py-3 px-4">Current Status</th>
+                        <th className="py-3 px-4 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-850">
+                      {waitingApprovalOrders.map(order => {
+                        const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id || p.order_id === order.order_id || p.production_id === order.order_id || p.production_id === order.lead_id);
+                        const pay = payments.find(p => p.order_id === order.order_id || p.lead_id === order.lead_id);
+                        const lead = leads.find(l => l.lead_id === order.lead_id || l.lead_id === order.order_id);
+                        
+                        const totalQuotation = order.quotation_amount || lead?.quotation_amount || 0;
+                        const paymentReceived = pay ? ((pay.advance_received || 0) + (pay.final_payment_received || 0)) : (order.advance_received || 0);
+                        const balanceDue = pay ? pay.balance_due : (order.balance_amount || Math.max(0, totalQuotation - paymentReceived));
+                        const payStatus = pay ? pay.payment_status : (balanceDue <= 0 ? 'Fully Paid' : (paymentReceived > 0 ? 'Partially Paid' : 'Pending'));
+                        const customerMobile = order.customer_phone || order.mobile || lead?.phone || lead?.mobile || pay?.customer_phone || 'N/A';
+
+                        return (
+                          <tr key={order.order_id} className="hover:bg-zinc-900/50 transition-colors">
+                            <td className="py-3.5 px-4 font-mono font-bold text-amber-400">
+                              {order.order_id}
+                            </td>
+                            <td className="py-3.5 px-4 font-bold text-zinc-200">
+                              <div>{order.customer_name}</div>
+                              {customerMobile !== 'N/A' && (
+                                <div className="text-[10px] text-zinc-400 font-mono font-normal">{customerMobile}</div>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 text-zinc-300">
+                              <div className="font-semibold text-zinc-200">{order.custom_event_name || order.event_type || 'Photography & Videography'}</div>
+                              {order.event_date && (
+                                <div className="text-[10px] text-zinc-400 font-mono">{order.event_date}</div>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold border ${
+                                payStatus === 'Fully Paid'
+                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                  : payStatus === 'Partially Paid'
+                                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                                  : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                              }`}>
+                                {payStatus}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 font-mono font-bold text-zinc-200">
+                              <div className={balanceDue <= 0 ? 'text-emerald-400' : 'text-rose-400'}>{formatINR(balanceDue)}</div>
+                              <div className="text-[10px] text-zinc-400 font-mono">Quotation: {formatINR(totalQuotation)}</div>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono text-[10px] font-bold">
+                                {prod?.editing_status || order.current_stage || 'Client Acceptance'}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 text-right">
+                              <button
+                                onClick={() => setReviewModalOrder(order)}
+                                className="px-3.5 py-1.5 rounded-xl bg-amber-500 text-black font-black hover:bg-amber-400 transition-all cursor-pointer text-xs flex items-center gap-1.5 ml-auto shadow-md"
+                              >
+                                <ShieldCheck className="w-3.5 h-3.5" />
+                                <span>Review</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Fallback empty state when both unlock requests and waiting approval orders are 0 */}
+          {unlockRequests.length === 0 && waitingApprovalOrders.length === 0 && (
+            <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-12 text-center space-y-3 shadow-xl">
+              <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <h3 className="text-sm font-bold text-white">No Pending Approvals or Requests</h3>
+              <p className="text-xs text-zinc-400 max-w-md mx-auto">
+                There are currently no quotation unlock requests from sales staff or orders awaiting final Business Owner approval.
               </p>
             </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-mono text-zinc-400">Total Pending:</span>
-              <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-mono font-bold">
-                {waitingApprovalOrders.length} Projects
-              </span>
-            </div>
-          </div>
-
-          {/* Waiting Approval Table */}
-          <div className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden shadow-2xl">
-            {waitingApprovalOrders.length === 0 ? (
-              <div className="p-12 text-center space-y-3">
-                <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="w-6 h-6" />
-                </div>
-                <h3 className="text-sm font-bold text-white">No Orders Waiting for Approval</h3>
-                <p className="text-xs text-zinc-400 max-w-md mx-auto">
-                  All client-accepted orders have been reviewed and approved. When a project reaches Client Acceptance, it will appear here for your final approval.
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse min-w-max">
-                  <thead>
-                    <tr className="bg-zinc-900/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
-                      <th className="py-3 px-4">Order ID</th>
-                      <th className="py-3 px-4">Customer Name</th>
-                      <th className="py-3 px-4">Event Name</th>
-                      <th className="py-3 px-4">Payment Status</th>
-                      <th className="py-3 px-4">Outstanding Balance</th>
-                      <th className="py-3 px-4">Current Status</th>
-                      <th className="py-3 px-4 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-850">
-                    {waitingApprovalOrders.map(order => {
-                      const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id || p.order_id === order.order_id || p.production_id === order.order_id || p.production_id === order.lead_id);
-                      const pay = payments.find(p => p.order_id === order.order_id || p.lead_id === order.lead_id);
-                      const lead = leads.find(l => l.lead_id === order.lead_id || l.lead_id === order.order_id);
-                      
-                      const totalQuotation = order.quotation_amount || lead?.quotation_amount || 0;
-                      const paymentReceived = pay ? ((pay.advance_received || 0) + (pay.final_payment_received || 0)) : (order.advance_received || 0);
-                      const balanceDue = pay ? pay.balance_due : (order.balance_amount || Math.max(0, totalQuotation - paymentReceived));
-                      const payStatus = pay ? pay.payment_status : (balanceDue <= 0 ? 'Fully Paid' : (paymentReceived > 0 ? 'Partially Paid' : 'Pending'));
-                      const customerMobile = order.customer_phone || order.mobile || lead?.phone || lead?.mobile || pay?.customer_phone || 'N/A';
-
-                      return (
-                        <tr key={order.order_id} className="hover:bg-zinc-900/50 transition-colors">
-                          <td className="py-3.5 px-4 font-mono font-bold text-amber-400">
-                            {order.order_id}
-                          </td>
-                          <td className="py-3.5 px-4 font-bold text-zinc-200">
-                            <div>{order.customer_name}</div>
-                            {customerMobile !== 'N/A' && (
-                              <div className="text-[10px] text-zinc-400 font-mono font-normal">{customerMobile}</div>
-                            )}
-                          </td>
-                          <td className="py-3.5 px-4 text-zinc-300">
-                            <div className="font-semibold text-zinc-200">{order.custom_event_name || order.event_type || 'Photography & Videography'}</div>
-                            {order.event_date && (
-                              <div className="text-[10px] text-zinc-400 font-mono">{order.event_date}</div>
-                            )}
-                          </td>
-                          <td className="py-3.5 px-4">
-                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold border ${
-                              payStatus === 'Fully Paid'
-                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                                : payStatus === 'Partially Paid'
-                                ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                                : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                            }`}>
-                              {payStatus}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 font-mono font-bold text-zinc-200">
-                            <div className={balanceDue <= 0 ? 'text-emerald-400' : 'text-rose-400'}>{formatINR(balanceDue)}</div>
-                            <div className="text-[10px] text-zinc-400 font-mono">Quotation: {formatINR(totalQuotation)}</div>
-                          </td>
-                          <td className="py-3.5 px-4">
-                            <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono text-[10px] font-bold">
-                              {prod?.editing_status || order.current_stage || 'Client Acceptance'}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 text-right">
-                            <button
-                              onClick={() => setReviewModalOrder(order)}
-                              className="px-3.5 py-1.5 rounded-xl bg-amber-500 text-black font-black hover:bg-amber-400 transition-all cursor-pointer text-xs flex items-center gap-1.5 ml-auto shadow-md"
-                            >
-                              <ShieldCheck className="w-3.5 h-3.5" />
-                              <span>Review</span>
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          )}
 
         </div>
       )}
@@ -1966,56 +1874,75 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
   );
 
   // Financial Summary calculations (fetched directly from Sales Dashboard Step 3 quotation data)
-  const packagePrice = Number(
-    matchedQuotation?.package_price ??
-    (order as any)?.package_price ??
-    (lead as any)?.package_price ??
-    0
+  const getPositiveVal = (...candidates: any[]): number => {
+    for (const val of candidates) {
+      if (val !== undefined && val !== null && val !== '') {
+        const num = Number(val);
+        if (!isNaN(num) && num > 0) {
+          return num;
+        }
+      }
+    }
+    return 0;
+  };
+
+  const quotationDiscount = getPositiveVal(
+    matchedQuotation?.discount_amount,
+    matchedQuotation?.discount,
+    (matchedQuotation as any)?.Quotation_Discount,
+    matchedQuotation?.quotation_discount,
+    (lead as any)?.Quotation_Discount,
+    (lead as any)?.quotation_discount,
+    (order as any)?.Quotation_Discount,
+    pay?.discount_amount
   );
 
-  const quotationDiscount = Number(
-    matchedQuotation?.discount_amount ??
-    matchedQuotation?.discount ??
-    (matchedQuotation as any)?.Quotation_Discount ??
-    order?.quotation_discount ??
-    order?.discount ??
-    (order as any)?.Quotation_Discount ??
-    (lead as any)?.Quotation_Discount ??
-    (lead as any)?.quotation_discount ??
-    pay?.discount_amount ??
-    0
+  const additionalServicesCost = getPositiveVal(
+    matchedQuotation?.additional_services_cost,
+    (matchedQuotation as any)?.Additional_Services_Cost,
+    (lead as any)?.Additional_Services_Cost,
+    (lead as any)?.additional_services_cost,
+    order?.additional_services_cost,
+    (order as any)?.Additional_Services_Cost
   );
 
-  const additionalServicesCost = Number(
-    matchedQuotation?.additional_services_cost ??
-    (matchedQuotation as any)?.Additional_Services_Cost ??
-    order?.additional_services_cost ??
-    (order as any)?.Additional_Services_Cost ??
-    (lead as any)?.additional_services_cost ??
-    (lead as any)?.Additional_Services_Cost ??
-    0
+  // Package Base Price from Sales Quotation Section 2 (lead.package_price and matchedQuotation.package_price store base price)
+  const rawPkgPrice = getPositiveVal(
+    matchedQuotation?.package_price,
+    (lead as any)?.package_price,
+    (matchedQuotation as any)?.Package_Price,
+    (order as any)?.package_base_price,
+    (order as any)?.base_package_price,
+    (lead as any)?.budget
   );
 
-  const rawFinalQuotationAmount = Number(
-    matchedQuotation?.final_amount ??
-    matchedQuotation?.final_quotation_amount ??
-    (matchedQuotation as any)?.Final_Quotation_Amount ??
-    matchedQuotation?.quotation_amount ??
-    (order as any)?.Final_Quotation_Amount ??
-    (order as any)?.final_quotation_amount ??
-    order?.quotation_amount ??
-    order?.grand_total ??
-    order?.total_amount ??
-    (lead as any)?.Final_Quotation_Amount ??
-    (lead as any)?.final_quotation_amount ??
-    lead?.budget ??
-    0
+  // Final Quotation Amount from Sales Quotation Section 2
+  const rawFinalQuotationAmount = getPositiveVal(
+    matchedQuotation?.final_quotation_amount,
+    matchedQuotation?.final_amount,
+    (matchedQuotation as any)?.Final_Quotation_Amount,
+    matchedQuotation?.quotation_amount,
+    (lead as any)?.Final_Quotation_Amount,
+    (lead as any)?.final_quotation_amount,
+    (lead as any)?.final_amount,
+    (order as any)?.Final_Quotation_Amount,
+    order?.quotation_amount,
+    order?.grand_total,
+    order?.total_amount
   );
 
-  const calculatedFinal = (packagePrice || 0) - (quotationDiscount || 0) + (additionalServicesCost || 0);
-  const finalQuotationAmount = rawFinalQuotationAmount > 0 ? rawFinalQuotationAmount : (calculatedFinal > 0 ? calculatedFinal : 0);
+  // If rawPkgPrice was recorded as final amount (e.g. on order.package_price), ensure packagePrice reflects base price
+  const packagePrice = (rawPkgPrice > 0 && (rawPkgPrice > rawFinalQuotationAmount || quotationDiscount === 0))
+    ? rawPkgPrice
+    : (rawFinalQuotationAmount > 0 ? rawFinalQuotationAmount + quotationDiscount - additionalServicesCost : rawPkgPrice);
 
-  const paymentReceived = pay ? ((pay.advance_received || 0) + (pay.final_payment_received || 0)) : (order.advance_received || 0);
+  const finalQuotationAmount = rawFinalQuotationAmount > 0
+    ? rawFinalQuotationAmount
+    : Math.max(0, packagePrice - quotationDiscount + additionalServicesCost);
+
+  const paymentReceived = pay
+    ? ((pay.advance_received || 0) + (pay.final_payment_received || 0))
+    : (order.advance_received || (lead as any)?.advance_collected || 0);
 
   const pendingAmount = pay
     ? pay.balance_due
