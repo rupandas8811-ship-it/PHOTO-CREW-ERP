@@ -36,6 +36,7 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 import { OwnerStaffPerformanceReport } from './OwnerModule';
+import { BusinessOwnerCardDetailModal } from './BusinessOwnerCardDetailModal';
 import { formatINR, formatTime12Hour, deserializeLeadEvents, resolveStorageUrl } from '../utils';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { Order, Lead, Production, Payment } from '../types';
@@ -88,6 +89,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
   };
 
   // Date Filter State
+  const [showFilters, setShowFilters] = useState(false);
   const [datePreset, setDatePreset] = useState<'all' | 'today' | 'this_month' | 'this_year' | 'custom'>('this_month');
   const [startDate, setStartDate] = useState<string>(() => {
     const d = new Date();
@@ -323,6 +325,121 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       return sum + (o.balance_amount || 0);
     }, 0);
   }, [filteredOrders, payments]);
+
+  // Clickable card modal state
+  const [selectedCard, setSelectedCard] = useState<string | null>(null);
+
+  // Configs for Overview Card details
+  const modalData = useMemo(() => {
+    if (!selectedCard) return [];
+    if (selectedCard === 'overview_revenue') {
+      return filteredOrders;
+    }
+    if (selectedCard === 'overview_active') {
+      return filteredOrders.filter(o => o.current_stage !== 'Order Closed' && o.current_stage !== 'Closed' && o.current_stage !== 'Event Cancelled');
+    }
+    if (selectedCard === 'overview_approval') {
+      return waitingApprovalOrders;
+    }
+    if (selectedCard === 'overview_outstanding') {
+      return filteredOrders.map(o => {
+        const pay = payments.find(p => p.order_id === o.order_id || p.lead_id === o.lead_id);
+        const totalRev = o.quotation_amount || o.advance_received || 0;
+        const received = pay ? ((pay.advance_received || 0) + (pay.final_payment_received || 0)) : (o.advance_received || 0);
+        const outstanding = pay ? (pay.balance_due || 0) : (o.balance_amount || Math.max(0, totalRev - received));
+        return {
+          ...o,
+          totalRevenue: totalRev,
+          paymentReceived: received,
+          outstandingAmount: outstanding
+        };
+      }).filter(item => item.outstandingAmount > 0);
+    }
+    return [];
+  }, [selectedCard, filteredOrders, waitingApprovalOrders, payments]);
+
+  const modalColumns = useMemo(() => {
+    const baseCols = [
+      { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-400">{item.order_id || item.lead_id}</span> },
+      { key: 'customer_name', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customer_name}</span> },
+      { key: 'custom_event_name', label: 'Event Name', render: (item: any) => <span>{item.custom_event_name || item.event_type || 'Photography'}</span> },
+      { key: 'event_date', label: 'Event Date', render: (item: any) => <span className="font-mono text-zinc-400">{item.event_date ? item.event_date.split('T')[0] : 'N/A'}</span> }
+    ];
+
+    if (selectedCard === 'overview_revenue') {
+      return [
+        ...baseCols,
+        { key: 'quotation_amount', label: 'Quotation Amount', render: (item: any) => <span className="font-mono text-emerald-400 font-bold">{formatINR(item.quotation_amount || 0)}</span> },
+        { key: 'advance_received', label: 'Advance Received', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.advance_received || 0)}</span> }
+      ];
+    }
+    if (selectedCard === 'overview_active') {
+      return [
+        ...baseCols,
+        { key: 'current_stage', label: 'Current Stage', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold font-mono text-[10px]">{item.current_stage || 'In Progress'}</span> }
+      ];
+    }
+    if (selectedCard === 'overview_approval') {
+      return [
+        ...baseCols,
+        { key: 'current_stage', label: 'Current Stage', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold font-mono text-[10px]">{item.current_stage || 'Awaiting Approval'}</span> }
+      ];
+    }
+    if (selectedCard === 'overview_outstanding') {
+      return [
+        ...baseCols,
+        { key: 'totalRevenue', label: 'Total Revenue', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.totalRevenue || 0)}</span> },
+        { key: 'paymentReceived', label: 'Received', render: (item: any) => <span className="font-mono text-emerald-400">{formatINR(item.paymentReceived || 0)}</span> },
+        { key: 'outstandingAmount', label: 'Outstanding Balance', render: (item: any) => <span className="font-mono text-rose-400 font-bold">{formatINR(item.outstandingAmount || 0)}</span> }
+      ];
+    }
+    return [];
+  }, [selectedCard]);
+
+  const modalTitleAndMeta = useMemo(() => {
+    switch (selectedCard) {
+      case 'overview_revenue':
+        return {
+          title: 'Total Revenue Breakdown',
+          totalLabel: 'Total Revenue Sum',
+          totalValue: formatINR(totalRevenue),
+          accentColor: 'emerald' as const,
+          filterDescription: `This list displays all ${filteredOrders.length} orders created within the active date range (${startDate} to ${endDate}), contributing to the total revenue calculation.`
+        };
+      case 'overview_active':
+        return {
+          title: 'Active Orders Details',
+          totalLabel: 'Active Projects Count',
+          totalValue: `${modalData.length} Projects`,
+          accentColor: 'blue' as const,
+          filterDescription: 'This list displays all active projects that are currently in progress, excluding closed or cancelled orders, filtered within the selected date range.'
+        };
+      case 'overview_approval':
+        return {
+          title: 'Awaiting Business Owner Approval',
+          totalLabel: 'Awaiting Approvals Count',
+          totalValue: `${modalData.length} Projects`,
+          accentColor: 'amber' as const,
+          filterDescription: 'This list displays all projects currently waiting for review and final closure by the Business Owner.'
+        };
+      case 'overview_outstanding':
+        return {
+          title: 'Outstanding Payments List',
+          totalLabel: 'Total Outstanding Balance',
+          totalValue: formatINR(outstandingPaymentTotal),
+          accentColor: 'rose' as const,
+          filterDescription: 'This list displays all orders that have a non-zero outstanding balance within the active date range.'
+        };
+      default:
+        return {
+          title: 'Detail View',
+          totalLabel: 'Total',
+          totalValue: '0',
+          accentColor: 'amber' as const,
+          filterDescription: ''
+        };
+    }
+  }, [selectedCard, totalRevenue, outstandingPaymentTotal, modalData.length, startDate, endDate, filteredOrders.length]);
 
   // Review & Close Modal State
   const [reviewModalOrder, setReviewModalOrder] = useState<Order | null>(null);
@@ -693,8 +810,21 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
               </p>
             </div>
 
-            {/* Date Filter Bar */}
-            <div className="flex flex-wrap items-center gap-2">
+            {/* Filter toggle button */}
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 border rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                showFilters ? 'border-amber-500/40 text-amber-400 bg-amber-500/5' : 'border-zinc-800 text-zinc-400'
+              }`}
+            >
+              <Filter className="w-3.5 h-3.5" />
+              <span>Filter</span>
+            </button>
+          </div>
+
+          {/* Collapsible Date Filter Bar */}
+          {showFilters && (
+            <div className="bg-zinc-950/40 border border-zinc-900 p-4 rounded-2xl flex flex-wrap items-center gap-2 animate-fade-in shadow-inner">
               <div className="flex bg-zinc-900 p-1 rounded-xl border border-zinc-800 text-xs font-mono">
                 <button
                   onClick={() => handlePresetChange('this_month')}
@@ -740,18 +870,21 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                 </div>
               )}
             </div>
-          </div>
+          )}
 
           {/* 4 KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             
             {/* KPI 1: Total Revenue */}
-            <div className="bg-gradient-to-b from-emerald-950/20 to-zinc-950 border border-emerald-500/20 rounded-2xl p-5 shadow-xl hover:border-emerald-500/40 transition-all relative overflow-hidden group">
+            <div 
+              onClick={() => setSelectedCard('overview_revenue')}
+              className="bg-gradient-to-b from-emerald-950/20 to-zinc-950 border border-emerald-500/20 rounded-2xl p-5 shadow-xl hover:border-emerald-500/60 hover:from-emerald-950/30 hover:to-zinc-900 transition-all duration-200 relative overflow-hidden group cursor-pointer"
+            >
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-mono uppercase tracking-wider font-bold text-emerald-400/90">
                   Total Revenue
                 </span>
-                <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 group-hover:scale-110 transition-transform">
                   <DollarSign className="w-5 h-5" />
                 </div>
               </div>
@@ -764,18 +897,21 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                 </p>
               </div>
               <div className="mt-4 pt-3 border-t border-emerald-500/10 flex items-center justify-between text-[11px] font-mono text-zinc-400">
-                <span>Period Bounds:</span>
-                <span className="text-emerald-400 font-bold">{startDate} ~ {endDate}</span>
+                <span className="group-hover:text-emerald-400 transition-colors font-bold">Click to view details</span>
+                <ArrowUpRight className="w-3.5 h-3.5 text-emerald-500/50 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
               </div>
             </div>
 
             {/* KPI 2: Active Orders */}
-            <div className="bg-gradient-to-b from-blue-950/20 to-zinc-950 border border-blue-500/20 rounded-2xl p-5 shadow-xl hover:border-blue-500/40 transition-all relative overflow-hidden group">
+            <div 
+              onClick={() => setSelectedCard('overview_active')}
+              className="bg-gradient-to-b from-blue-950/20 to-zinc-950 border border-blue-500/20 rounded-2xl p-5 shadow-xl hover:border-blue-500/60 hover:from-blue-950/30 hover:to-zinc-900 transition-all duration-200 relative overflow-hidden group cursor-pointer"
+            >
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-mono uppercase tracking-wider font-bold text-blue-400/90">
                   Active Orders
                 </span>
-                <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
+                <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 group-hover:scale-110 transition-transform">
                   <PackageCheck className="w-5 h-5" />
                 </div>
               </div>
@@ -788,15 +924,15 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                 </p>
               </div>
               <div className="mt-4 pt-3 border-t border-blue-500/10 flex items-center justify-between text-[11px] font-mono text-zinc-400">
-                <span>Total Registered:</span>
-                <span className="text-blue-400 font-bold">{orders.length} Orders</span>
+                <span className="group-hover:text-blue-400 transition-colors font-bold">Click to view details</span>
+                <ArrowUpRight className="w-3.5 h-3.5 text-blue-500/50 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
               </div>
             </div>
 
             {/* KPI 3: Orders Waiting for Approval */}
             <div 
-              onClick={() => handleSectionSwitch('approval')}
-              className="bg-gradient-to-b from-amber-950/20 to-zinc-950 border border-amber-500/30 rounded-2xl p-5 shadow-xl hover:border-amber-500/60 transition-all relative overflow-hidden cursor-pointer group"
+              onClick={() => setSelectedCard('overview_approval')}
+              className="bg-gradient-to-b from-amber-950/20 to-zinc-950 border border-amber-500/30 rounded-2xl p-5 shadow-xl hover:border-amber-500/60 hover:from-amber-950/30 hover:to-zinc-900 transition-all duration-200 relative overflow-hidden cursor-pointer group"
             >
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-mono uppercase tracking-wider font-bold text-amber-400/90">
@@ -814,19 +950,22 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                   <span>Projects awaiting review & closure</span>
                 </p>
               </div>
-              <div className="mt-4 pt-3 border-t border-amber-500/10 flex items-center justify-between text-[11px] font-mono text-amber-400/80 font-bold group-hover:text-amber-300">
+              <div className="mt-4 pt-3 border-t border-amber-500/10 flex items-center justify-between text-[11px] font-mono text-amber-400/80 font-bold group-hover:text-amber-300 transition-colors">
                 <span>Click to review projects</span>
-                <ArrowUpRight className="w-3.5 h-3.5" />
+                <ArrowUpRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
               </div>
             </div>
 
             {/* KPI 4: Outstanding Payment */}
-            <div className="bg-gradient-to-b from-rose-950/20 to-zinc-950 border border-rose-500/20 rounded-2xl p-5 shadow-xl hover:border-rose-500/40 transition-all relative overflow-hidden group">
+            <div 
+              onClick={() => setSelectedCard('overview_outstanding')}
+              className="bg-gradient-to-b from-rose-950/20 to-zinc-950 border border-rose-500/20 rounded-2xl p-5 shadow-xl hover:border-rose-500/60 hover:from-rose-950/30 hover:to-zinc-900 transition-all duration-200 relative overflow-hidden group cursor-pointer"
+            >
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-mono uppercase tracking-wider font-bold text-rose-400/90">
                   Outstanding Payment
                 </span>
-                <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400">
+                <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 group-hover:scale-110 transition-transform">
                   <AlertCircle className="w-5 h-5" />
                 </div>
               </div>
@@ -839,8 +978,8 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                 </p>
               </div>
               <div className="mt-4 pt-3 border-t border-rose-500/10 flex items-center justify-between text-[11px] font-mono text-zinc-400">
-                <span>Action Required:</span>
-                <span className="text-rose-400 font-bold">Follow up with sales</span>
+                <span className="group-hover:text-rose-400 transition-colors font-bold">Click to view details</span>
+                <ArrowUpRight className="w-3.5 h-3.5 text-rose-500/50 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
               </div>
             </div>
 
@@ -1175,6 +1314,20 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       {currentSection === 'staff_performance' && (
         <OwnerStaffPerformanceReport />
       )}
+
+      {/* CARD DETAIL POPUP/MODAL */}
+      <BusinessOwnerCardDetailModal
+        isOpen={selectedCard !== null && selectedCard.startsWith('overview_')}
+        onClose={() => setSelectedCard(null)}
+        title={modalTitleAndMeta.title}
+        subtitle={`${startDate} ~ ${endDate}`}
+        accentColor={modalTitleAndMeta.accentColor}
+        data={modalData}
+        columns={modalColumns}
+        totalLabel={modalTitleAndMeta.totalLabel}
+        totalValue={modalTitleAndMeta.totalValue}
+        filterDescription={modalTitleAndMeta.filterDescription}
+      />
 
       {/* REVIEW & CLOSE MODAL */}
       {reviewModalOrder && (
@@ -1523,6 +1676,9 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
 
+  // Clickable summary card state
+  const [selectedCard, setSelectedCard] = useState<string | null>(null);
+
   // Combined detailed records
   const records = useMemo(() => {
     return orders.map(o => {
@@ -1574,6 +1730,119 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
   const totalOutSum = useMemo(() => filtered.reduce((s, r) => s + r.outstanding, 0), [filtered]);
   const completedCount = useMemo(() => filtered.filter(r => r.isCompleted || r.isClosed).length, [filtered]);
   const closedCount = useMemo(() => filtered.filter(r => r.isClosed).length, [filtered]);
+
+  // Configs for Summary Card details
+  const modalData = useMemo(() => {
+    if (!selectedCard) return [];
+    if (selectedCard === 'summary_revenue') {
+      return filtered;
+    }
+    if (selectedCard === 'summary_payment') {
+      return filtered.filter(r => r.paymentReceived > 0);
+    }
+    if (selectedCard === 'summary_outstanding') {
+      return filtered.filter(r => r.outstanding > 0);
+    }
+    if (selectedCard === 'summary_completed') {
+      return filtered.filter(r => r.isCompleted || r.isClosed);
+    }
+    if (selectedCard === 'summary_closed') {
+      return filtered.filter(r => r.isClosed);
+    }
+    return [];
+  }, [selectedCard, filtered]);
+
+  const modalColumns = useMemo(() => {
+    const baseCols = [
+      { key: 'orderId', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-400">{item.orderId}</span> },
+      { key: 'customerName', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customerName}</span> },
+      { key: 'eventName', label: 'Event Name', render: (item: any) => <span>{item.eventName}</span> },
+      { key: 'eventDate', label: 'Event Date', render: (item: any) => <span className="font-mono text-zinc-400">{item.eventDate ? item.eventDate.split('T')[0] : 'N/A'}</span> }
+    ];
+
+    if (selectedCard === 'summary_revenue') {
+      return [
+        ...baseCols,
+        { key: 'totalRevenue', label: 'Total Revenue', render: (item: any) => <span className="font-mono text-emerald-400 font-bold">{formatINR(item.totalRevenue)}</span> },
+        { key: 'paymentReceived', label: 'Received', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.paymentReceived)}</span> }
+      ];
+    }
+    if (selectedCard === 'summary_payment') {
+      return [
+        ...baseCols,
+        { key: 'totalRevenue', label: 'Total Revenue', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.totalRevenue)}</span> },
+        { key: 'paymentReceived', label: 'Payment Received', render: (item: any) => <span className="font-mono text-emerald-400 font-bold">{formatINR(item.paymentReceived)}</span> }
+      ];
+    }
+    if (selectedCard === 'summary_outstanding') {
+      return [
+        ...baseCols,
+        { key: 'totalRevenue', label: 'Total Revenue', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.totalRevenue)}</span> },
+        { key: 'paymentReceived', label: 'Received', render: (item: any) => <span className="font-mono text-emerald-400">{formatINR(item.paymentReceived)}</span> },
+        { key: 'outstanding', label: 'Outstanding Balance', render: (item: any) => <span className="font-mono text-rose-400 font-bold">{formatINR(item.outstanding)}</span> }
+      ];
+    }
+    if (selectedCard === 'summary_completed' || selectedCard === 'summary_closed') {
+      return [
+        ...baseCols,
+        { key: 'currentStage', label: 'Current Stage', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-850 font-bold font-mono text-[10px] text-zinc-300">{item.currentStage || 'Completed'}</span> }
+      ];
+    }
+    return [];
+  }, [selectedCard]);
+
+  const modalTitleAndMeta = useMemo(() => {
+    switch (selectedCard) {
+      case 'summary_revenue':
+        return {
+          title: 'Summary: Total Revenue',
+          totalLabel: 'Total Sum',
+          totalValue: formatINR(totalRevSum),
+          accentColor: 'blue' as const,
+          filterDescription: 'This list displays all summary orders active within the selected parameters, contributing to the Total Revenue.'
+        };
+      case 'summary_payment':
+        return {
+          title: 'Summary: Payment Received',
+          totalLabel: 'Total Received Sum',
+          totalValue: formatINR(totalRecSum),
+          accentColor: 'emerald' as const,
+          filterDescription: 'This list displays all payments received and credited for orders within the active period bounds.'
+        };
+      case 'summary_outstanding':
+        return {
+          title: 'Summary: Outstanding Balances',
+          totalLabel: 'Total Outstanding Balance',
+          totalValue: formatINR(totalOutSum),
+          accentColor: 'rose' as const,
+          filterDescription: 'This list displays all summary orders that currently have a positive outstanding balance.'
+        };
+      case 'summary_completed':
+        return {
+          title: 'Summary: Completed Orders',
+          totalLabel: 'Completed Projects Count',
+          totalValue: `${completedCount} Projects`,
+          accentColor: 'amber' as const,
+          filterDescription: 'This list displays all projects that have been successfully completed, awaiting final close or client accepted.'
+        };
+      case 'summary_closed':
+        return {
+          title: 'Summary: Closed Orders',
+          totalLabel: 'Closed Projects Count',
+          totalValue: `${closedCount} Projects`,
+          accentColor: 'blue' as const,
+          filterDescription: 'This list displays all projects that have been fully closed and archived.'
+        };
+      default:
+        return {
+          title: 'Detail View',
+          totalLabel: 'Total',
+          totalValue: '0',
+          accentColor: 'amber' as const,
+          filterDescription: ''
+        };
+    }
+  }, [selectedCard, totalRevSum, totalRecSum, totalOutSum, completedCount, closedCount]);
 
   // Export CSV
   const downloadCSV = () => {
@@ -1707,28 +1976,58 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
 
       {/* Summary KPI Highlights Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-5 gap-3">
-        <div className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5">
-          <div className="text-[10px] font-mono text-zinc-500 uppercase font-bold">Total Revenue</div>
+        <div 
+          onClick={() => setSelectedCard('summary_revenue')}
+          className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5 hover:bg-zinc-900 hover:border-zinc-700 hover:scale-[1.02] cursor-pointer transition-all duration-200"
+        >
+          <div className="text-[10px] font-mono text-zinc-500 uppercase font-bold flex items-center justify-between">
+            <span>Total Revenue</span>
+            <span className="text-[9px] text-zinc-600">Details &rarr;</span>
+          </div>
           <div className="text-lg font-black font-mono text-white mt-0.5">{formatINR(totalRevSum)}</div>
         </div>
 
-        <div className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5">
-          <div className="text-[10px] font-mono text-zinc-500 uppercase font-bold">Payment Received</div>
+        <div 
+          onClick={() => setSelectedCard('summary_payment')}
+          className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5 hover:bg-zinc-900 hover:border-zinc-750 hover:scale-[1.02] cursor-pointer transition-all duration-200"
+        >
+          <div className="text-[10px] font-mono text-zinc-500 uppercase font-bold flex items-center justify-between">
+            <span>Payment Received</span>
+            <span className="text-[9px] text-zinc-600">Details &rarr;</span>
+          </div>
           <div className="text-lg font-black font-mono text-emerald-400 mt-0.5">{formatINR(totalRecSum)}</div>
         </div>
 
-        <div className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5">
-          <div className="text-[10px] font-mono text-zinc-500 uppercase font-bold">Outstanding</div>
+        <div 
+          onClick={() => setSelectedCard('summary_outstanding')}
+          className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5 hover:bg-zinc-900 hover:border-zinc-750 hover:scale-[1.02] cursor-pointer transition-all duration-200"
+        >
+          <div className="text-[10px] font-mono text-zinc-500 uppercase font-bold flex items-center justify-between">
+            <span>Outstanding</span>
+            <span className="text-[9px] text-zinc-600">Details &rarr;</span>
+          </div>
           <div className="text-lg font-black font-mono text-rose-400 mt-0.5">{formatINR(totalOutSum)}</div>
         </div>
 
-        <div className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5">
-          <div className="text-[10px] font-mono text-zinc-500 uppercase font-bold">Completed Orders</div>
+        <div 
+          onClick={() => setSelectedCard('summary_completed')}
+          className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5 hover:bg-zinc-900 hover:border-zinc-750 hover:scale-[1.02] cursor-pointer transition-all duration-200"
+        >
+          <div className="text-[10px] font-mono text-zinc-500 uppercase font-bold flex items-center justify-between">
+            <span>Completed Orders</span>
+            <span className="text-[9px] text-zinc-600">Details &rarr;</span>
+          </div>
           <div className="text-lg font-black font-mono text-amber-400 mt-0.5">{completedCount} Projects</div>
         </div>
 
-        <div className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5 col-span-2 sm:col-span-1">
-          <div className="text-[10px] font-mono text-zinc-500 uppercase font-bold">Closed Orders</div>
+        <div 
+          onClick={() => setSelectedCard('summary_closed')}
+          className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5 col-span-2 sm:col-span-1 hover:bg-zinc-900 hover:border-zinc-750 hover:scale-[1.02] cursor-pointer transition-all duration-200"
+        >
+          <div className="text-[10px] font-mono text-zinc-500 uppercase font-bold flex items-center justify-between">
+            <span>Closed Orders</span>
+            <span className="text-[9px] text-zinc-600">Details &rarr;</span>
+          </div>
           <div className="text-lg font-black font-mono text-blue-400 mt-0.5">{closedCount} Projects</div>
         </div>
       </div>
@@ -1824,6 +2123,20 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
           </table>
         </div>
       </div>
+
+      {/* CARD DETAIL POPUP/MODAL */}
+      <BusinessOwnerCardDetailModal
+        isOpen={selectedCard !== null && selectedCard.startsWith('summary_')}
+        onClose={() => setSelectedCard(null)}
+        title={modalTitleAndMeta.title}
+        subtitle={`${startDate} ~ ${endDate}`}
+        accentColor={modalTitleAndMeta.accentColor}
+        data={modalData}
+        columns={modalColumns}
+        totalLabel={modalTitleAndMeta.totalLabel}
+        totalValue={modalTitleAndMeta.totalValue}
+        filterDescription={modalTitleAndMeta.filterDescription}
+      />
 
     </div>
   );

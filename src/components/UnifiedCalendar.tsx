@@ -22,7 +22,9 @@ import {
   Check, 
   HelpCircle,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Edit,
+  Trash2
 } from 'lucide-react';
 import { formatINR, formatTime12Hour } from '../utils';
 import { EVENT_TYPES, ACTIVE_STAGE_GROUPS } from '../types';
@@ -129,6 +131,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [eventTypeFilter, setEventTypeFilter] = useState('All');
+  const [showFilters, setShowFilters] = useState(false);
   
   // Memo form overlay state
   const [showAddMemo, setShowAddMemo] = useState(false);
@@ -756,22 +759,10 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
           </div>
         )}
 
-        {/* View selection controls */}
-        <div className="flex bg-zinc-900 border border-zinc-800 p-1 rounded-xl">
-          {(['month', 'week', 'day', 'agenda'] as const).map(view => (
-            <button
-              key={view}
-              id={`btn_cal_view_${view}`}
-              onClick={() => setCalendarView(view)}
-              className={`px-3 py-1.5 text-xs font-mono rounded-lg transition-all capitalize ${
-                calendarView === view
-                  ? 'bg-zinc-800 text-white font-black shadow-inner border border-zinc-700/50'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-              }`}
-            >
-              {view}
-            </button>
-          ))}
+        {/* View selection controls replaced with title */}
+        <div className="flex items-center gap-2">
+          <CalendarIcon className="w-5 h-5 text-yellow-500" />
+          <span className="text-sm font-black font-mono tracking-tight text-white uppercase">Calendar Timeline</span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -803,63 +794,78 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
 
       )}
       {/* 3. Filtering and Custom Parameters Console */}
-      <div className="bg-zinc-900/20 border border-zinc-900 p-4 rounded-2xl flex flex-col lg:flex-row items-center justify-between gap-4">
-        {/* Search Input */}
-        <div className="relative w-full lg:max-w-md">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
-          <input
-            id="cal_search_input"
-            type="text"
-            placeholder="Search client name, venue coordinates, or notes..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-zinc-950/50 hover:bg-zinc-950 border border-zinc-850 focus:border-yellow-500 h-9 pl-9 pr-4 rounded-xl text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none transition-all"
-          />
-        </div>
-
-        {/* Filters dropdowns */}
-        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-          <div className="flex items-center gap-1.5 w-full sm:w-auto">
-            <span className="text-[10px] font-mono uppercase text-zinc-500">Status</span>
-            <select
-              id="cal_status_filter"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-zinc-950 border border-zinc-850 h-9 px-3 rounded-xl text-xs text-zinc-300 focus:outline-none focus:border-yellow-500 cursor-pointer w-full sm:w-auto"
-            >
-              <option value="All">All Stages</option>
-              {ACTIVE_STAGE_GROUPS.map((group, idx) => (
-                <optgroup key={idx} label={group.label} className={`bg-zinc-950 ${group.colorClass} font-bold`}>
-                  {group.options.map(opt => (
-                    <option key={opt.value} value={opt.value} className="text-white font-normal">{opt.label}</option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+      <div className="bg-zinc-900/20 border border-zinc-900 p-4 rounded-2xl flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 w-full">
+          {/* Search Input */}
+          <div className="relative w-full sm:max-w-md">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+            <input
+              id="cal_search_input"
+              type="text"
+              placeholder="Search client name, venue coordinates, or notes..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-zinc-950/50 hover:bg-zinc-950 border border-zinc-850 focus:border-yellow-500 h-9 pl-9 pr-4 rounded-xl text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none transition-all"
+            />
           </div>
 
-          <div className="flex items-center gap-1.5 w-full sm:w-auto">
-            <span className="text-[10px] font-mono uppercase text-zinc-500">Event</span>
-            <select
-              id="cal_event_filter"
-              value={eventTypeFilter}
-              onChange={(e) => setEventTypeFilter(e.target.value)}
-              className="bg-zinc-950 border border-zinc-850 h-9 px-3 rounded-xl text-xs text-zinc-300 focus:outline-none focus:border-yellow-500 cursor-pointer w-full sm:w-auto"
-            >
-              <option value="All">All Event Types</option>
-              {EVENT_TYPES.map(t => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
+          {/* Filter toggle button */}
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 border rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              showFilters ? 'border-yellow-500/40 text-yellow-400 bg-yellow-500/5' : 'border-zinc-800 text-zinc-400'
+            }`}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            <span>Filter</span>
+          </button>
         </div>
+
+        {/* Collapsible filters */}
+        {showFilters && (
+          <div className="flex flex-wrap items-center gap-3 w-full pt-3 border-t border-zinc-850 animate-fade-in">
+            <div className="flex items-center gap-1.5 w-full sm:w-auto">
+              <span className="text-[10px] font-mono uppercase text-zinc-500">Status</span>
+              <select
+                id="cal_status_filter"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="bg-zinc-950 border border-zinc-850 h-9 px-3 rounded-xl text-xs text-zinc-300 focus:outline-none focus:border-yellow-500 cursor-pointer w-full sm:w-auto"
+              >
+                <option value="All">All Stages</option>
+                {ACTIVE_STAGE_GROUPS.map((group, idx) => (
+                  <optgroup key={idx} label={group.label} className={`bg-zinc-950 ${group.colorClass} font-bold`}>
+                    {group.options.map(opt => (
+                      <option key={opt.value} value={opt.value} className="text-white font-normal">{opt.label}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1.5 w-full sm:w-auto">
+              <span className="text-[10px] font-mono uppercase text-zinc-500">Event</span>
+              <select
+                id="cal_event_filter"
+                value={eventTypeFilter}
+                onChange={(e) => setEventTypeFilter(e.target.value)}
+                className="bg-zinc-950 border border-zinc-850 h-9 px-3 rounded-xl text-xs text-zinc-300 focus:outline-none focus:border-yellow-500 cursor-pointer w-full sm:w-auto"
+              >
+                <option value="All">All Event Types</option>
+                {EVENT_TYPES.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 4. Secondary Row: Main Screen Split Grid */}
-      <div className="grid grid-cols-1 gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         
         {/* LEFT COLUMN: Main viewport calendar area */}
-        <div className="bg-zinc-950/45 border border-zinc-905 p-3 sm:p-4 md:p-6 rounded-2xl shadow-xl space-y-4 md:space-y-6 relative">
+        <div className="lg:col-span-2 bg-zinc-950/45 border border-zinc-905 p-3 sm:p-4 md:p-6 rounded-2xl shadow-xl space-y-4 md:space-y-6 relative">
           {isDataLoading && (
             <div className="absolute inset-0 bg-zinc-950/70 backdrop-blur-[1px] flex items-center justify-center rounded-2xl z-50">
               <div className="flex flex-col items-center gap-3 bg-zinc-900 border border-zinc-800 p-6 rounded-xl shadow-2xl animate-fade-in">
@@ -1561,6 +1567,84 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
             </div>
           )}
 
+        </div>
+
+        {/* RIGHT COLUMN: Workspace Memos Board */}
+        <div className="lg:col-span-1 space-y-6">
+          <div className="bg-zinc-950/45 border border-zinc-905 p-4 md:p-6 rounded-2xl shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-850 pb-3">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-yellow-500" />
+                <h3 className="text-xs font-black uppercase tracking-wider text-white font-mono">
+                  Workspace Memos
+                </h3>
+              </div>
+              <button
+                id="btn_add_memo_sidebar"
+                onClick={() => {
+                  setEditingMemoId(null);
+                  setNewMemoTitle('');
+                  setNewMemoMessage('');
+                  setShowAddMemo(true);
+                }}
+                className="flex items-center gap-1 px-2 py-1 bg-yellow-500 hover:bg-yellow-450 border border-yellow-600 rounded-lg text-[10px] text-zinc-950 font-bold transition-all cursor-pointer"
+              >
+                <Plus className="w-3 h-3 stroke-[2.5]" />
+                <span>Add Memo</span>
+              </button>
+            </div>
+
+            <p className="text-[11px] text-zinc-500 font-sans">
+              Displaying role-specific bulletins and action items synchronized on this calendar board.
+            </p>
+
+            <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+              {calendarMemos && calendarMemos.length > 0 ? (
+                calendarMemos.map((memo) => (
+                  <div key={memo.id} className="p-3 bg-zinc-900/40 border border-zinc-850 rounded-xl space-y-2 relative group hover:border-zinc-800 transition-all">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 rounded">
+                          {memo.memo_date}
+                        </span>
+                        <h4 className="text-xs font-bold text-white mt-1.5">{memo.title}</h4>
+                      </div>
+                      <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => {
+                            setEditingMemoId(memo.id);
+                            setNewMemoTitle(memo.title);
+                            setNewMemoMessage(memo.message);
+                            setShowAddMemo(true);
+                          }}
+                          className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white transition"
+                          title="Edit Memo"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm("Are you sure you want to delete this memo?")) {
+                              deleteCalendarMemo(memo.id);
+                            }
+                          }}
+                          className="p-1 hover:bg-zinc-800 rounded text-red-450 hover:text-red-400 transition"
+                          title="Delete Memo"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 whitespace-pre-wrap leading-relaxed">{memo.message}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center bg-zinc-900/20 border border-dashed border-zinc-850 rounded-xl text-zinc-500 text-xs font-mono">
+                  No memos recorded for {role}.
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
       </div>

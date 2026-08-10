@@ -455,6 +455,46 @@ async function startServer() {
     }
   });
 
+  app.post('/api/db/select-all', async (req, res) => {
+    try {
+      const db = getServerSupabase();
+      const results = await Promise.all([
+        db.from('users').select('*'),
+        db.from('leads').select('*').order('created_at', { ascending: false }),
+        db.from('orders').select('*').order('created_at', { ascending: false }),
+        db.from('operations').select('*'),
+        db.from('raw_footage').select('*'),
+        db.from('production').select('*'),
+        db.from('payments').select('*'),
+        db.from('activity_logs').select('*').order('timestamp', { ascending: false }),
+        db.from('operations_staff').select('*').order('name'),
+        db.from('notifications').select('*').order('created_at', { ascending: false }),
+        db.from('equipment').select('*').order('created_at', { ascending: false }),
+        db.from('lead_packages').select('*'),
+        db.from('packages').select('*').order('created_at', { ascending: false }),
+        db.from('staff_assignments').select('*'),
+        db.from('quotations').select('*'),
+        db.from('lead_status_history').select('*').order('created_at', { ascending: true }),
+        db.from('lead_staff_assignment_history').select('*').order('assigned_at', { ascending: false }),
+        db.from('lead_equipment_history').select('*').order('returned_at', { ascending: false }),
+        db.from('lead_events').select('*').order('created_at', { ascending: true }),
+        db.from('equipment_handovers').select('*').order('created_at', { ascending: false }),
+        db.from('production_specialties').select('*'),
+        db.from('editor_assignments').select('*'),
+        db.from('production_staff').select('*'),
+        db.from('calendar_memos').select('*').order('created_at', { ascending: false })
+      ]);
+
+      const data = results.map(r => r.data || []);
+      const errors = results.map(r => r.error ? r.error.message : null);
+
+      res.json({ success: true, data, errors });
+    } catch (err: any) {
+      console.error('[Server DB Select All Exception]', err);
+      res.status(500).json({ success: false, error: err.message || String(err) });
+    }
+  });
+
   app.post('/api/db/delete', async (req, res) => {
     const { table, matchColumn, matchValue } = req.body;
     try {

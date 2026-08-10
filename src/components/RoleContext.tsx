@@ -862,6 +862,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isFetchingRef = useRef<boolean>(false);
   const fetchPendingRef = useRef<boolean>(false);
   const lastFetchTimeRef = useRef<number>(0);
+  const activeFetchPromiseRef = useRef<Promise<void> | null>(null);
+  const isCheckingRemindersRef = useRef<boolean>(false);
 
   useEffect(() => {
     currentUserRef.current = currentUser;
@@ -2037,47 +2039,66 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   const fetchFromDb = async (showLoader = false) => {
     if (!supabaseClient) return;
 
-    if (isFetchingRef.current) {
-      fetchPendingRef.current = true;
-      if (showLoader) setIsDataLoading(true);
-      return;
-    }
-
-    isFetchingRef.current = true;
-    lastFetchTimeRef.current = Date.now();
     if (showLoader) setIsDataLoading(true);
 
-    try {
-      let runAgain = true;
-      while (runAgain) {
-        fetchPendingRef.current = false;
+    if (activeFetchPromiseRef.current) {
+      return activeFetchPromiseRef.current;
+    }
 
-        const results = await Promise.all([
-          supabaseClient.from('users').select('*'),
-          supabaseClient.from('leads').select('*').order('created_at', { ascending: false }),
-          supabaseClient.from('orders').select('*').order('created_at', { ascending: false }),
-          supabaseClient.from('operations').select('*'),
-          supabaseClient.from('raw_footage').select('*'),
-          supabaseClient.from('production').select('*'),
-          supabaseClient.from('payments').select('*'),
-          supabaseClient.from('activity_logs').select('*').order('timestamp', { ascending: false }),
-          supabaseClient.from('operations_staff').select('*').order('name'),
-          supabaseClient.from('notifications').select('*').order('created_at', { ascending: false }),
-          supabaseClient.from('equipment').select('*').order('created_at', { ascending: false }),
-          supabaseClient.from('lead_packages').select('*'),
-          supabaseClient.from('packages').select('*').order('created_at', { ascending: false }),
-          supabaseClient.from('staff_assignments').select('*'),
-          supabaseClient.from('quotations').select('*'),
-          supabaseClient.from('lead_status_history').select('*').order('created_at', { ascending: true }),
-          supabaseClient.from('lead_staff_assignment_history').select('*').order('assigned_at', { ascending: false }),
-          supabaseClient.from('lead_equipment_history').select('*').order('returned_at', { ascending: false }),
-          supabaseClient.from('lead_events').select('*').order('created_at', { ascending: true }),
-          supabaseClient.from('equipment_handovers').select('*').order('created_at', { ascending: false }),
-          supabaseClient.from('production_specialties').select('*'),
-          supabaseClient.from('editor_assignments').select('*'),
-          supabaseClient.from('production_staff').select('*'),
-          supabaseClient.from('calendar_memos').select('*').order('created_at', { ascending: false })
-        ]);
+    const fetchPromise = (async () => {
+      isFetchingRef.current = true;
+      lastFetchTimeRef.current = Date.now();
+      try {
+        let runAgain = true;
+        while (runAgain) {
+          fetchPendingRef.current = false;
+
+          let results: any[];
+          try {
+            const proxyRes = await fetch('/api/db/select-all', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' }
+            });
+            const parsed = await safeParseResponse(proxyRes);
+            if (parsed.ok && parsed.isJson && parsed.data && parsed.data.success) {
+              const serverDataList = parsed.data.data;
+              const serverErrorsList = parsed.data.errors;
+              results = serverDataList.map((data: any, idx: number) => ({
+                data,
+                error: serverErrorsList[idx] ? { message: serverErrorsList[idx] } : null
+              }));
+            } else {
+              throw new Error(parsed.data?.error || 'Proxy select-all returned non-success response');
+            }
+          } catch (e) {
+            console.warn('[RoleContext] select-all proxy failed, falling back to individual fetches:', e);
+            results = await Promise.all([
+              supabaseClient.from('users').select('*'),
+              supabaseClient.from('leads').select('*').order('created_at', { ascending: false }),
+              supabaseClient.from('orders').select('*').order('created_at', { ascending: false }),
+              supabaseClient.from('operations').select('*'),
+              supabaseClient.from('raw_footage').select('*'),
+              supabaseClient.from('production').select('*'),
+              supabaseClient.from('payments').select('*'),
+              supabaseClient.from('activity_logs').select('*').order('timestamp', { ascending: false }),
+              supabaseClient.from('operations_staff').select('*').order('name'),
+              supabaseClient.from('notifications').select('*').order('created_at', { ascending: false }),
+              supabaseClient.from('equipment').select('*').order('created_at', { ascending: false }),
+              supabaseClient.from('lead_packages').select('*'),
+              supabaseClient.from('packages').select('*').order('created_at', { ascending: false }),
+              supabaseClient.from('staff_assignments').select('*'),
+              supabaseClient.from('quotations').select('*'),
+              supabaseClient.from('lead_status_history').select('*').order('created_at', { ascending: true }),
+              supabaseClient.from('lead_staff_assignment_history').select('*').order('assigned_at', { ascending: false }),
+              supabaseClient.from('lead_equipment_history').select('*').order('returned_at', { ascending: false }),
+              supabaseClient.from('lead_events').select('*').order('created_at', { ascending: true }),
+              supabaseClient.from('equipment_handovers').select('*').order('created_at', { ascending: false }),
+              supabaseClient.from('production_specialties').select('*'),
+              supabaseClient.from('editor_assignments').select('*'),
+              supabaseClient.from('production_staff').select('*'),
+              supabaseClient.from('calendar_memos').select('*').order('created_at', { ascending: false })
+            ]);
+          }
 
         const tables = [
           'users', 'leads', 'orders', 'operations', 'raw_footage', 'production', 
@@ -2270,9 +2291,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     } finally {
       isFetchingRef.current = false;
       fetchPendingRef.current = false;
+      activeFetchPromiseRef.current = null;
       setIsDataLoading(false);
     }
-  };
+  })();
+
+  activeFetchPromiseRef.current = fetchPromise;
+  return fetchPromise;
+};
 
   // Listen to Supabase Auth state changes to synchronize session and handle on-the-fly profiles
   useEffect(() => {
@@ -6848,162 +6874,235 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   // Automatic Reminder Notifications for Event Dates & Target Delivery Dates
   useEffect(() => {
     if (isDataLoading) return;
+    if (isCheckingRemindersRef.current) return;
 
     const checkAndGenerateReminders = async () => {
-      const todayStr = new Date().toISOString().split('T')[0];
-      const nowMs = Date.now();
-      
-      const getDaysDiff = (targetDateStr: string, todayDateStr: string) => {
-        const d1 = new Date(targetDateStr);
-        const d2 = new Date(todayDateStr);
-        d1.setHours(0,0,0,0);
-        d2.setHours(0,0,0,0);
-        const diffTime = d1.getTime() - d2.getTime();
-        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      };
-
-      // Load deleted notification IDs to avoid recreation
-      let deletedIds: string[] = [];
+      isCheckingRemindersRef.current = true;
       try {
-        const deletedStr = localStorage.getItem('erp_deleted_notifications');
-        if (deletedStr) {
-          deletedIds = JSON.parse(deletedStr);
+        const todayStr = new Date().toISOString().split('T')[0];
+        const nowMs = Date.now();
+        
+        const getDaysDiff = (targetDateStr: string, todayDateStr: string) => {
+          const d1 = new Date(targetDateStr);
+          const d2 = new Date(todayDateStr);
+          d1.setHours(0,0,0,0);
+          d2.setHours(0,0,0,0);
+          const diffTime = d1.getTime() - d2.getTime();
+          return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        };
+
+        // Load deleted notification IDs to avoid recreation
+        let deletedIds: string[] = [];
+        try {
+          const deletedStr = localStorage.getItem('erp_deleted_notifications');
+          if (deletedStr) {
+            deletedIds = JSON.parse(deletedStr);
+          }
+        } catch (e) {
+          console.warn("Error parsing deleted notifications:", e);
         }
-      } catch (e) {
-        console.warn("Error parsing deleted notifications:", e);
-      }
 
-      const newlyAddedIds = new Set<string>();
+        const newlyAddedIds = new Set<string>();
+        const pendingReminders: any[] = [];
 
-      // A. EVENT REMINDERS (for Sales Team, Operations Team, Business Owner)
-      for (const order of augmentedOrders) {
-        const eventDateStr = order.event_date;
-        if (!eventDateStr) continue;
+        // A. EVENT REMINDERS (for Sales Team, Operations Team, Business Owner)
+        for (const order of augmentedOrders) {
+          const eventDateStr = order.event_date;
+          if (!eventDateStr) continue;
 
-        const cleanEventDateStr = eventDateStr.split('T')[0];
-        const daysDiff = getDaysDiff(cleanEventDateStr, todayStr);
+          const cleanEventDateStr = eventDateStr.split('T')[0];
+          const daysDiff = getDaysDiff(cleanEventDateStr, todayStr);
 
-        const isEventCompleted = order.current_stage === 'Event Completed' || order.current_stage === 'Closed' || order.current_stage === 'Raw Footage Received';
-        if (isEventCompleted) continue;
+          const isEventCompleted = order.current_stage === 'Event Completed' || order.current_stage === 'Closed' || order.current_stage === 'Raw Footage Received';
+          if (isEventCompleted) continue;
 
-        const customerName = order.customer_name || 'Valued Client';
-        const eventType = order.event_type || order.package_name || 'Event';
-        const orderIdValue = order.order_id;
+          const customerName = order.customer_name || 'Valued Client';
+          const eventType = order.event_type || order.package_name || 'Event';
+          const orderIdValue = order.order_id;
 
-        // Reminder thresholds: 7 days, 3 days, 1 day, 0 days (Event Day)
-        const thresholds = [
-          { days: 7, label: '7 Days Before' },
-          { days: 3, label: '3 Days Before' },
-          { days: 1, label: '1 Day Before' },
-          { days: 0, label: 'Event Day' }
-        ];
+          // Reminder thresholds: 7 days, 3 days, 1 day, 0 days (Event Day)
+          const thresholds = [
+            { days: 7, label: '7 Days Before' },
+            { days: 3, label: '3 Days Before' },
+            { days: 1, label: '1 Day Before' },
+            { days: 0, label: 'Event Day' }
+          ];
 
-        for (const t of thresholds) {
-          if (daysDiff === t.days) {
-            const roles = ['Sales Team', 'Operations Team', 'Business Owner'];
-            for (const role of roles) {
-              const prefix = role.replace(/\s+/g, '');
-              const notifId = `NTF-rem-event-${orderIdValue}-${prefix}-${t.days}`;
-              const exists = notifications.some(n => n.notification_id === notifId) || deletedIds.includes(notifId) || newlyAddedIds.has(notifId);
-              
-              if (!exists) {
-                newlyAddedIds.add(notifId);
-                let title = '';
-                let message = '';
+          for (const t of thresholds) {
+            if (daysDiff === t.days) {
+              const roles = ['Sales Team', 'Operations Team', 'Business Owner'];
+              for (const role of roles) {
+                const prefix = role.replace(/\s+/g, '');
+                const notifId = `NTF-rem-event-${orderIdValue}-${prefix}-${t.days}`;
+                const exists = notifications.some(n => n.notification_id === notifId) || deletedIds.includes(notifId) || newlyAddedIds.has(notifId);
                 
-                if (role === 'Sales Team' || role === 'Business Owner') {
-                  title = `📅 Event Reminder (${t.label})`;
-                  message = `Event scheduled for **${customerName}** (${eventType}) is coming up in ${t.days === 0 ? 'TODAY' : t.days + ' days'} (Date: ${cleanEventDateStr}).`;
-                } else if (role === 'Operations Team') {
-                  title = `📅 Event Schedule Reminder (${t.label})`;
-                  message = `Operations Reminder: Event for **${customerName}** is scheduled in ${t.days === 0 ? 'TODAY' : t.days + ' days'}. Please verify staff assignments and kit readiness!`;
-                }
+                if (!exists) {
+                  newlyAddedIds.add(notifId);
+                  let title = '';
+                  let message = '';
+                  
+                  if (role === 'Sales Team' || role === 'Business Owner') {
+                    title = `📅 Event Reminder (${t.label})`;
+                    message = `Event scheduled for **${customerName}** (${eventType}) is coming up in ${t.days === 0 ? 'TODAY' : t.days + ' days'} (Date: ${cleanEventDateStr}).`;
+                  } else if (role === 'Operations Team') {
+                    title = `📅 Event Schedule Reminder (${t.label})`;
+                    message = `Operations Reminder: Event for **${customerName}** is scheduled in ${t.days === 0 ? 'TODAY' : t.days + ' days'}. Please verify staff assignments and kit readiness!`;
+                  }
 
-                await addNotification({
-                  notification_id: notifId,
-                  title,
-                  message,
-                  recipient_role: role,
-                  task_id: 'Event Reminder',
-                  notification_type: role === 'Operations Team' ? 'Event Schedule Reminder' : 'Event Reminder',
-                  project_id: orderIdValue,
-                  priority: t.days <= 1 ? 'High' : 'Medium'
-                });
+                  pendingReminders.push({
+                    notification_id: notifId,
+                    title,
+                    message,
+                    recipient_role: role,
+                    task_id: 'Event Reminder',
+                    notification_type: role === 'Operations Team' ? 'Event Schedule Reminder' : 'Event Reminder',
+                    project_id: orderIdValue,
+                    priority: t.days <= 1 ? 'High' : 'Medium'
+                  });
+                }
               }
             }
           }
         }
-      }
 
-      // B. PRODUCTION / DELIVERY REMINDERS (for Production Team)
-      for (const p of augmentedProduction) {
-        const targetDateStr = p.expected_delivery_date || p.target_delivery_date;
-        if (!targetDateStr) continue;
+        // B. PRODUCTION / DELIVERY REMINDERS (for Production Team)
+        for (const p of augmentedProduction) {
+          const targetDateStr = p.expected_delivery_date || p.target_delivery_date;
+          if (!targetDateStr) continue;
 
-        const cleanDateStr = targetDateStr.split('T')[0];
-        const daysDiff = getDaysDiff(cleanDateStr, todayStr);
+          const cleanDateStr = targetDateStr.split('T')[0];
+          const daysDiff = getDaysDiff(cleanDateStr, todayStr);
 
-        // Find customer name
-        const ord = augmentedOrders.find(o => o.order_id === p.tracking_id || o.lead_id === p.tracking_id);
-        const parentLead = leads.find(l => l.lead_id === p.tracking_id || (ord && l.lead_id === ord.lead_id));
-        const customerName = ord?.customer_name || parentLead?.customer_name || 'Customer';
-        const orderIdValue = ord?.order_id || p.tracking_id || 'N/A';
+          // Find customer name
+          const ord = augmentedOrders.find(o => o.order_id === p.tracking_id || o.lead_id === p.tracking_id);
+          const parentLead = leads.find(l => l.lead_id === p.tracking_id || (ord && l.lead_id === ord.lead_id));
+          const customerName = ord?.customer_name || parentLead?.customer_name || 'Customer';
+          const orderIdValue = ord?.order_id || p.tracking_id || 'N/A';
 
-        const isDelivered = p.editing_status === 'Delivered' || p.editing_status === 'Closed' || p.editing_status === 'Approved' || p.editing_status === 'Final Approval';
-        if (isDelivered) continue;
+          const isDelivered = p.editing_status === 'Delivered' || p.editing_status === 'Closed' || p.editing_status === 'Approved' || p.editing_status === 'Final Approval';
+          if (isDelivered) continue;
 
-        // Delivery reminder thresholds: 7 days, 3 days, 1 day, 0 days, overdue (daysDiff < 0)
-        const deliveryThresholds = [
-          { days: 7, label: '7 Days Before Delivery', title: 'Target Delivery Reminder', priority: 'Medium' },
-          { days: 3, label: '3 Days Before Delivery', title: 'Target Delivery Reminder', priority: 'High' },
-          { days: 1, label: '1 Day Before Delivery', title: 'Target Delivery Reminder', priority: 'High' },
-          { days: 0, label: 'Delivery Due Today', title: 'Delivery Due Today', priority: 'Critical' }
-        ];
+          // Delivery reminder thresholds: 7 days, 3 days, 1 day, 0 days, overdue (daysDiff < 0)
+          const deliveryThresholds = [
+            { days: 7, label: '7 Days Before Delivery', title: 'Target Delivery Reminder', priority: 'Medium' },
+            { days: 3, label: '3 Days Before Delivery', title: 'Target Delivery Reminder', priority: 'High' },
+            { days: 1, label: '1 Day Before Delivery', title: 'Target Delivery Reminder', priority: 'High' },
+            { days: 0, label: 'Delivery Due Today', title: 'Delivery Due Today', priority: 'Critical' }
+          ];
 
-        for (const t of deliveryThresholds) {
-          if (daysDiff === t.days) {
-            const notifId = `NTF-rem-prod-${p.production_id}-${t.days}`;
+          for (const t of deliveryThresholds) {
+            if (daysDiff === t.days) {
+              const notifId = `NTF-rem-prod-${p.production_id}-${t.days}`;
+              const exists = notifications.some(n => n.notification_id === notifId) || deletedIds.includes(notifId) || newlyAddedIds.has(notifId);
+              
+              if (!exists) {
+                newlyAddedIds.add(notifId);
+                pendingReminders.push({
+                  notification_id: notifId,
+                  title: t.title,
+                  message: `Project for **${customerName}** is due for delivery ${t.days === 0 ? 'TODAY' : 'in ' + t.days + ' days'} (Date: ${cleanDateStr}).`,
+                  recipient_role: 'Production Team',
+                  task_id: 'Delivery Reminder',
+                  notification_type: 'Target Delivery Reminder',
+                  project_id: orderIdValue,
+                  priority: t.priority
+                });
+              }
+            }
+          }
+
+          // Overdue Delivery
+          if (daysDiff < 0) {
+            const notifId = `NTF-rem-prod-${p.production_id}-overdue`;
             const exists = notifications.some(n => n.notification_id === notifId) || deletedIds.includes(notifId) || newlyAddedIds.has(notifId);
             
             if (!exists) {
               newlyAddedIds.add(notifId);
-              await addNotification({
+              pendingReminders.push({
                 notification_id: notifId,
-                title: t.title,
-                message: `Project for **${customerName}** is due for delivery ${t.days === 0 ? 'TODAY' : 'in ' + t.days + ' days'} (Date: ${cleanDateStr}).`,
+                title: 'Delivery Overdue',
+                message: `Project for **${customerName}** is OVERDUE! The target delivery date was ${cleanDateStr}.`,
                 recipient_role: 'Production Team',
                 task_id: 'Delivery Reminder',
-                notification_type: 'Target Delivery Reminder',
+                notification_type: 'Delivery Overdue',
                 project_id: orderIdValue,
-                priority: t.priority as any
+                priority: 'Critical'
               });
             }
           }
         }
 
-        // Overdue Delivery
-        if (daysDiff < 0) {
-          const notifId = `NTF-rem-prod-${p.production_id}-overdue`;
-          const exists = notifications.some(n => n.notification_id === notifId) || deletedIds.includes(notifId) || newlyAddedIds.has(notifId);
+        // Bulk create all pending reminders in ONE go
+        if (pendingReminders.length > 0) {
+          console.log(`[Reminders] Generating ${pendingReminders.length} automatic reminder notifications in bulk...`);
           
-          if (!exists) {
-            newlyAddedIds.add(notifId);
-            await addNotification({
-              notification_id: notifId,
-              title: 'Delivery Overdue',
-              message: `Project for **${customerName}** is OVERDUE! The target delivery date was ${cleanDateStr}.`,
-              recipient_role: 'Production Team',
-              task_id: 'Delivery Reminder',
-              notification_type: 'Delivery Overdue',
-              project_id: orderIdValue,
-              priority: 'Critical'
-            });
+          const mappedReminders = pendingReminders.map(rem => {
+            const notification_id = rem.notification_id || `NTF-${6001 + Math.floor(Math.random() * 10000)}`;
+            return {
+              ...rem,
+              notification_id,
+              created_at: new Date().toISOString(),
+              read_status: false,
+              is_read: false,
+              is_archived: false
+            };
+          });
+
+          // 1. Optimistic UI Update: add them all to local state in one single render cycle
+          setNotifications(prev => [...mappedReminders, ...prev]);
+
+          // 2. Save them all to Supabase in a single bulk insert request
+          if (supabaseClient) {
+            const dbPayloads = mappedReminders.map(notif => ({
+              notification_id: notif.notification_id,
+              recipient_role: notif.recipient_role || 'All',
+              title: notif.title,
+              message: notif.message,
+              is_read: notif.read_status,
+              user_id: notif.user_id || null,
+              project_id: notif.project_id || null,
+              task_id: notif.task_id || null,
+              notification_type: notif.notification_type || null,
+              read_status: notif.read_status,
+              priority: notif.priority || 'Medium',
+              recipient_user_id: notif.recipient_user_id || null,
+              recipient_email: notif.recipient_email || null,
+              sender_user_id: notif.sender_user_id || null,
+              sender_name: notif.sender_name || null,
+              related_table: notif.related_table || null,
+              related_record_id: notif.related_record_id || null,
+              action_url: notif.action_url || null,
+              is_archived: false,
+              read_at: notif.read_at || null,
+              expires_at: notif.expires_at || null,
+              created_at: notif.created_at
+            }));
+
+            try {
+              const { error } = await supabaseClient.from('notifications').insert(dbPayloads);
+              if (error) {
+                console.warn("[Reminders] Bulk insert failed, falling back to individual inserts:", error);
+                // Fallback: insert one-by-one if bulk fails for schema mismatch
+                for (const rem of mappedReminders) {
+                  await saveNotificationToSupabase(rem);
+                }
+              } else {
+                console.log("[Reminders] Bulk insert completed successfully.");
+              }
+            } catch (err) {
+              console.warn("[Reminders] Bulk insert error:", err);
+            }
           }
         }
+      } finally {
+        isCheckingRemindersRef.current = false;
       }
     };
 
-    checkAndGenerateReminders().catch(e => console.warn("checkAndGenerateReminders error:", e));
+    checkAndGenerateReminders().catch(e => {
+      console.warn("checkAndGenerateReminders error:", e);
+      isCheckingRemindersRef.current = false;
+    });
   }, [isDataLoading, augmentedProduction, notifications, augmentedOrders, leads]);
 
   const visibleLeads = useMemo(() => {
