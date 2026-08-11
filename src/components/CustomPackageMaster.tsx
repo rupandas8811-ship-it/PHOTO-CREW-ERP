@@ -667,7 +667,7 @@ export const CustomPackageMaster: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-zinc-100 uppercase tracking-wide font-mono flex items-center gap-2">
-                      <span>Section 1 – Custom Roles</span>
+                      <span>Custom Roles</span>
                       <span className="text-[10px] font-normal text-zinc-500 lowercase bg-zinc-950 px-2 py-0.5 rounded-full border border-zinc-800">
                         {filteredRoles.length} items
                       </span>
@@ -878,7 +878,7 @@ export const CustomPackageMaster: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-zinc-100 uppercase tracking-wide font-mono flex items-center gap-2">
-                      <span>Section 2 – Custom Deliverables</span>
+                      <span>Custom Deliverables</span>
                       <span className="text-[10px] font-normal text-zinc-500 lowercase bg-zinc-950 px-2 py-0.5 rounded-full border border-zinc-800">
                         {filteredDeliverables.length} items
                       </span>

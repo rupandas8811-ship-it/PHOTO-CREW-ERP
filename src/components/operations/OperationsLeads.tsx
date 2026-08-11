@@ -1589,7 +1589,7 @@ export const OperationsLeads: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* 1. Results Summary Row - 5 Operations Statuses */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
         {[
           { label: "Assigned Crew", val: stats.assignedCrew, theme: 'purple' as CameraLensTheme, filterValue: 'Assigned Crew', trendText: 'Rostered', chartPoints: [10, 18, 14, 25, 20, 31, 35] },
           { label: "Event Started", val: stats.eventStarted, theme: 'cyan' as CameraLensTheme, filterValue: "Event Started", trendText: 'Live On-Site', chartPoints: [5, 9, 7, 14, 11, 16, 15] },

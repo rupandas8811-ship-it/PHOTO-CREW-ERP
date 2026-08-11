@@ -803,7 +803,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
             <div>
               <h2 className="text-sm font-black uppercase tracking-wider text-amber-400 font-mono flex items-center gap-2">
                 <LayoutDashboard className="w-4 h-4" />
-                <span>SECTION 1: BUSINESS OVERVIEW</span>
+                <span>BUSINESS OVERVIEW</span>
               </h2>
               <p className="text-xs text-zinc-400 mt-0.5">
                 Key Performance Indicators across revenue, active projects, and pending approvals.
@@ -1021,7 +1021,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
             <div>
               <h2 className="text-sm font-black uppercase tracking-wider text-purple-400 font-mono flex items-center gap-2">
                 <CalendarIcon className="w-4 h-4" />
-                <span>SECTION 2: EVENT CALENDAR</span>
+                <span>EVENT CALENDAR</span>
               </h2>
               <p className="text-xs text-zinc-400 mt-0.5">
                 Single unified calendar displaying Event Dates, Delivery Dates, Client Acceptance, and Orders Waiting for Approval.
@@ -1186,7 +1186,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                 <div>
                   <h2 className="text-sm font-black uppercase tracking-wider text-emerald-400 font-mono flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4" />
-                    <span>SECTION 3: ORDERS AWAITING FINAL APPROVAL</span>
+                    <span>ORDERS AWAITING FINAL APPROVAL</span>
                   </h2>
                   <p className="text-xs text-zinc-400 mt-0.5">
                     Projects with Client Acceptance status waiting for final Business Owner approval and closure.
@@ -1942,7 +1942,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         <div>
           <h2 className="text-sm font-black uppercase tracking-wider text-blue-400 font-mono flex items-center gap-2">
             <FileText className="w-4 h-4" />
-            <span>SECTION 4: REVENUE & PAYMENT SUMMARY</span>
+            <span>REVENUE & PAYMENT SUMMARY</span>
           </h2>
           <p className="text-xs text-zinc-400 mt-0.5">
             Summary financial breakdown, search records, and downloadable executive reports.

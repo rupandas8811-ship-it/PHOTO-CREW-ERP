@@ -3084,7 +3084,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         <div className="space-y-6 animate-fade-in text-zinc-100">
           
           {/* Dashboard Widgets specific to Production Leads */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
             <CameraLensStatsCard
               label="New Projects Received"
               val={countNewProjects}
@@ -4203,7 +4203,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         return (
           <div className="space-y-6">
             {/* 7 ANALYTICS CARDS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-2 lg:grid-cols-7 gap-4 animate-in fade-in duration-300">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4 animate-in fade-in duration-300">
               <div className="bg-zinc-950 border border-zinc-900 p-4.5 rounded-2xl flex flex-col justify-between">
                 <span className="text-zinc-500 text-[9px] font-mono uppercase tracking-widest font-black leading-none mb-1 text-left block">Total Editors</span>
                 <span className="text-xl font-bold text-white font-mono mt-1 text-left block leading-none">{totalEditors}</span>
@@ -4784,7 +4784,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             </div>
 
             {/* KPI Summary Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
                 { title: 'Total Projects', value: totalProjects, sub: 'Lifetime volume', color: 'text-indigo-400' },
                 { title: 'In Progress', value: totalInProgress, sub: 'Editing active', color: 'text-sky-400' },
@@ -4800,7 +4800,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             </div>
 
             {/* Sub Performance Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-4">
                 <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Avg Delivery Speed</span>
                 <span className="text-xl font-bold text-cyan-400 font-mono tracking-tight block mt-1">{averageDeliveryTimeDays} Days</span>
@@ -4934,7 +4934,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           <div className="space-y-6">
             
             {/* Quick Metrics Subheader */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-4">
                 <div className="text-zinc-500 text-[10px] font-mono uppercase tracking-wider">Ready for Delivery</div>
                 <div className="text-2xl font-black text-teal-400 font-mono mt-1">{readyCount}</div>
@@ -5098,7 +5098,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
       {activeSubTab === 'pipeline' && (
         <div className="space-y-6">
           {/* Production Team Dashboard KPI Panel */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3.5">
             {[
               { label: 'Total Projects', val: statTotalVideo, color: 'text-indigo-400', bg: 'bg-indigo-500/10 border-indigo-500/20', icon: Layers },
               { label: 'Pending Raw Ingest', val: statPendingVideo, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20', icon: Clock },
@@ -5192,7 +5192,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
       {/* PROJECT QUEUE TAB */}
       {activeSubTab === 'project_queue' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             
             {/* New Projects Queue block */}
             <div className="bg-zinc-950 border border-zinc-900 p-5 rounded-2xl relative overflow-hidden">
@@ -6499,7 +6499,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         <div className="space-y-6 animate-fade-in">
           
           {/* Metrics summary */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             
             <div className="bg-zinc-950 border border-zinc-900 p-5 rounded-2xl relative overflow-hidden">
               <span className="absolute bottom-2 right-2 text-zinc-800/10 font-bold text-5xl select-none font-mono">RD</span>
@@ -6667,7 +6667,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         <div className="space-y-6">
           
           {/* Key Stat Blocks */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             
             <div className="bg-zinc-950 border border-zinc-900 p-5 rounded-2xl relative overflow-hidden">
               <div className="text-zinc-500 text-[10px] font-mono uppercase tracking-wider">Average Turnaround Time</div>

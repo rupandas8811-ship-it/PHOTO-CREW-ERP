@@ -212,6 +212,38 @@ async function startServer() {
       }
     }
 
+    // Handle invalid input syntax for type numeric/integer/bigint/etc.
+    const invalidSyntaxMatch = errorMsg.match(/invalid input syntax for type [^:]+: "([^"]+)"/i) ||
+                               errorMsg.match(/invalid input syntax for type [^:]+: ([^\s]+)/i);
+    if (invalidSyntaxMatch) {
+      const badVal = invalidSyntaxMatch[1];
+      console.warn(`[Server Self-Healing] Found invalid input syntax value "${badVal}". Locating matching field in payload...`);
+      for (const [k, v] of Object.entries(nextPayload)) {
+        if (v != null && (String(v) === badVal || (typeof v === 'string' && (v.includes(badVal) || badVal.includes(v))))) {
+          console.warn(`[Server Self-Healing] Found matching field "${k}" with invalid syntax value "${v}". Cleaning or stripping...`);
+          const digits = String(v).replace(/\D/g, '');
+          if (digits && digits.length > 0 && String(v) !== digits) {
+            nextPayload[k] = digits;
+            console.warn(`[Server Self-Healing] Replaced field "${k}" with digits: "${digits}"`);
+          } else {
+            const val = nextPayload[k];
+            delete nextPayload[k];
+            const currentRemarks = nextPayload.remarks || nextPayload.notes || '';
+            const annotation = `[System Fallback - ${k}]: ${val}`;
+            if (nextPayload.remarks !== undefined) {
+              nextPayload.remarks = currentRemarks ? `${currentRemarks}\n${annotation}` : annotation;
+            } else if (nextPayload.notes !== undefined) {
+              nextPayload.notes = currentRemarks ? `${currentRemarks}\n${annotation}` : annotation;
+            } else if (['leads', 'orders', 'operations', 'production'].includes(table)) {
+              nextPayload.remarks = annotation;
+            }
+          }
+          healed = true;
+          break;
+        }
+      }
+    }
+
     return healed ? nextPayload : null;
   };
 
@@ -300,6 +332,11 @@ async function startServer() {
               clone[key] = num;
             }
           }
+        }
+      } else if (isPhone && typeof val === 'string' && val.trim() !== '') {
+        const digits = val.replace(/\D/g, '');
+        if (digits) {
+          clone[key] = digits;
         }
       }
     }

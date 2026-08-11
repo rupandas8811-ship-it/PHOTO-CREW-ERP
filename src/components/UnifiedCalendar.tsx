@@ -371,6 +371,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
         });
       });
 
+      /* Calendar memos hidden per user request */
+      /*
       if (calendarMemos) {
         calendarMemos.forEach((memo) => {
           events.push({
@@ -393,6 +395,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
           });
         });
       }
+      */
 
       return events;
     } catch (err: any) {
@@ -774,7 +777,10 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
       
       {/* 1. Header Navigation Bar (Controls only) */}
       {role !== 'operations' && (
-      <div hidden={role === 'sales'} className="flex flex-wrap items-center justify-between gap-3 bg-zinc-950/40 border border-zinc-900 p-4 rounded-2xl shadow-xl">
+      <div 
+        className={`${role === 'sales' ? 'hidden' : 'flex'} flex-wrap items-center justify-between gap-3 bg-zinc-950/40 border border-zinc-900 p-4 rounded-2xl shadow-xl`}
+        style={role === 'sales' ? { display: 'none' } : undefined}
+      >
         {calendarError && (
           <div className="w-full p-2.5 bg-red-950/60 border border-red-500/30 rounded-lg text-xs text-red-200 flex items-center justify-between gap-2">
             <span>{calendarError}</span>
@@ -811,7 +817,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                 setNewMemoMessage('');
                 setShowAddMemo(true);
               }}
-              className="hidden flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500 hover:bg-yellow-450 border border-yellow-600 rounded-xl text-xs text-zinc-950 font-bold transition-all cursor-pointer"
+              className="hidden"
+              style={{ display: 'none' }}
             >
               <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
               Assign Memo
@@ -953,7 +960,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                     <th className="p-3">Order ID</th>
                     <th className="p-3">Event Time</th>
                     <th className="p-3">Current Status</th>
-                    <th className="p-3 text-right">Action</th>
+                    <th className="p-3 text-right min-w-[100px] whitespace-nowrap">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900">
@@ -970,10 +977,11 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                           {ev.currentStage || ev.eventClass || 'N/A'}
                         </span>
                       </td>
-                      <td className="p-3 text-right">
+                      <td className="p-3 text-right whitespace-nowrap min-w-[100px]">
                         <button
                           onClick={() => setPopupLeadId(ev.raw?.lead_id || ev.orderId)}
-                          className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] rounded-md transition-all shadow-sm cursor-pointer whitespace-nowrap"
+                          className="inline-block px-3 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] rounded-md transition-all shadow-sm cursor-pointer whitespace-nowrap min-w-max"
+                          style={{ whiteSpace: 'nowrap' }}
                         >
                           Details
                         </button>
@@ -1696,7 +1704,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
         </div>
 
         {/* RIGHT COLUMN: Workspace Memos Board (Hidden per user request) */}
-        <div className="hidden lg:col-span-1 space-y-6">
+        <div className="hidden" style={{ display: 'none' }}>
           <div className="bg-zinc-950/45 border border-zinc-905 p-4 md:p-6 rounded-2xl shadow-xl space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-850 pb-3">
               <div className="flex items-center gap-2">
@@ -1889,7 +1897,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                     <th className="p-3.5">Current Status</th>
                     <th className="p-3.5">Payment Status</th>
                     <th className="p-3.5 text-right">Outstanding Balance</th>
-                    <th className="p-3.5 text-right pr-5 w-[80px]">Action</th>
+                    <th className="p-3.5 text-right pr-5 min-w-[100px] whitespace-nowrap">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900/60">
@@ -1953,7 +1961,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                           <td className="p-3.5 text-right font-mono text-[11px] font-bold text-zinc-200">
                             ₹{Number(balanceDue).toLocaleString("en-IN")}
                           </td>
-                          <td className="p-3.5 text-right pr-5">
+                          <td className="p-3.5 text-right pr-5 whitespace-nowrap min-w-[100px]">
                             <button 
                               onClick={() => {
                                 window.dispatchEvent(new CustomEvent("calendar-action-click", { detail: { leadId: lead.lead_id, role, orderId: orderIdDisplay } }));
@@ -1961,7 +1969,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                                 setPopupDate(null);
                                 setPopupLeadId(null);
                               }}
-                              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] rounded-md transition-all shadow-sm cursor-pointer whitespace-nowrap"
+                              className="inline-block px-3 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] rounded-md transition-all shadow-sm cursor-pointer whitespace-nowrap min-w-max"
+                              style={{ whiteSpace: 'nowrap' }}
                             >
                               Details
                             </button>

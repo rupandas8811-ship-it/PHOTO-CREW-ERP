@@ -2201,6 +2201,80 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [unlockRequestCustomReason, setUnlockRequestCustomReason] = useState('');
   const [selectedUnlockLead, setSelectedUnlockLead] = useState<Lead | null>(null);
 
+  // Helper function to resolve Lost Reason and Notes from all possible sources
+  const getLostReasonAndNotes = (lead: Lead | null, historyList?: any[]) => {
+    if (!lead) return { reason: 'Not provided', notes: 'Not provided' };
+
+    // 1. Direct fields on lead (check casing variations)
+    let reason = lead.Lost_Reason || (lead as any).lost_reason || (lead as any).LostReason || (lead as any).lostReason;
+    let notes = lead.Lost_Notes || (lead as any).lost_notes || (lead as any).LostNotes || (lead as any).lostNotes;
+
+    // 2. Extract from remarks field if reason or notes is missing
+    if (lead.remarks) {
+      if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') {
+        const matchReason = lead.remarks.match(/Lost Reason:\s*([^.\n]+)/i);
+        if (matchReason && matchReason[1] && matchReason[1].trim()) {
+          reason = matchReason[1].trim();
+        }
+      }
+      if (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null') {
+        const matchNotes = lead.remarks.match(/Notes:\s*(.*)/i);
+        if (matchNotes && matchNotes[1] && matchNotes[1].trim()) {
+          notes = matchNotes[1].trim();
+        }
+      }
+    }
+
+    // 3. Check follow_up_notes if reason is still missing
+    if ((!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') && (lead as any).follow_up_notes) {
+      const fNotes = String((lead as any).follow_up_notes).trim();
+      if (fNotes && !fNotes.startsWith('[Update')) {
+        reason = fNotes;
+      }
+    }
+
+    // 4. Check statusHistory array
+    if ((!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null' || !notes || notes === 'N/A' || notes === 'NULL' || notes === 'null') && historyList && historyList.length > 0) {
+      const lostHistItems = [...historyList]
+        .filter(h => String(h.lead_id) === String(lead.lead_id) && ['Lost Lead', 'Lead Lost', 'Lost'].includes(h.new_status || h.status || ''))
+        .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+      const lostHist = lostHistItems[0];
+      if (lostHist) {
+        if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') {
+          if (lostHist.remarks) {
+            const matchR = lostHist.remarks.match(/Lost Reason:\s*([^.\n]+)/i);
+            if (matchR && matchR[1] && matchR[1].trim()) {
+              reason = matchR[1].trim();
+            } else {
+              reason = lostHist.remarks.trim();
+            }
+          } else if (lostHist.call_notes) {
+            reason = lostHist.call_notes.trim();
+          }
+        }
+        if (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null') {
+          if (lostHist.remarks) {
+            const matchN = lostHist.remarks.match(/Notes:\s*(.*)/i);
+            if (matchN && matchN[1] && matchN[1].trim()) {
+              notes = matchN[1].trim();
+            }
+          }
+        }
+      }
+    }
+
+    // Sanitize
+    if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null' || reason.trim() === '') {
+      reason = 'Not provided';
+    }
+    if (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null' || notes.trim() === '') {
+      notes = 'Not provided';
+    }
+
+    return { reason, notes };
+  };
+
   const [showCancelConfirmPopup, setShowCancelConfirmPopup] = useState(false);
   const [errorDetails, setErrorDetails] = useState<{
     title: string;
@@ -2880,15 +2954,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
     }
 
-    if (!candidate && currentRole === 'Sales Team' && currentUser) {
-      candidate = currentUser.name;
-    }
-
-    if (!candidate && currentRole === 'Sales Team' && currentUser) {
-      candidate = currentUser.mobile || '';
-    }
-
-    if (!candidate && currentRole === 'Sales Team' && currentUser) {
+    if (!candidate && currentUser?.name) {
       candidate = currentUser.name;
     }
 
@@ -2915,7 +2981,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       candidate = String(leadObj.sales_staff_mobile).trim();
     }
 
-    if (!candidate && currentRole === 'Sales Team' && currentUser) {
+    if (!candidate && currentUser?.mobile) {
       candidate = currentUser.mobile || '';
     }
 
@@ -2933,6 +2999,41 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const [salesStaffName, setSalesStaffName] = useState<string>('');
   const [salesStaffMobile, setSalesStaffMobile] = useState<string>('');
+
+  const getEffectiveSalesStaffName = (): string => {
+    if (salesStaffName && String(salesStaffName).trim()) {
+      return String(salesStaffName).trim();
+    }
+    if (currentUser?.name && String(currentUser.name).trim()) {
+      return String(currentUser.name).trim();
+    }
+    if (selectedLead?.sales_staff_name && String(selectedLead.sales_staff_name).trim()) {
+      return String(selectedLead.sales_staff_name).trim();
+    }
+    return 'Sales Staff';
+  };
+
+  const getEffectiveSalesStaffMobile = (): string => {
+    let raw = '';
+    if (salesStaffMobile && String(salesStaffMobile).trim()) {
+      raw = String(salesStaffMobile).trim();
+    } else if (currentUser?.mobile && String(currentUser.mobile).trim()) {
+      raw = String(currentUser.mobile).trim();
+    } else if (selectedLead?.sales_staff_mobile && String(selectedLead.sales_staff_mobile).trim()) {
+      raw = String(selectedLead.sales_staff_mobile).trim();
+    }
+    const digits = raw.replace(/\D/g, '');
+    return digits || raw;
+  };
+
+  React.useEffect(() => {
+    if (currentUser?.name && (!salesStaffName || !salesStaffName.trim())) {
+      setSalesStaffName(currentUser.name);
+    }
+    if (currentUser?.mobile && (!salesStaffMobile || !salesStaffMobile.trim())) {
+      setSalesStaffMobile(currentUser.mobile);
+    }
+  }, [currentUser]);
   const [quoteDiscount, setQuoteDiscount] = useState<number | ''>('');
   const [quoteAdditional, setQuoteAdditional] = useState<number | ''>('');
   
@@ -3823,6 +3924,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   }, [dynamicFinalAmt]);
 
   const getLeadInfoForQuote = (isEdit: boolean) => {
+    const effectiveSalesName = getEffectiveSalesStaffName();
+    const effectiveSalesMobile = getEffectiveSalesStaffMobile();
+
     const finalAmountVal = dynamicFinalAmt;
     if (isEdit) {
       return {
@@ -3845,8 +3949,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         deliverables_description: wizardLeadData.deliverables,
         notes_special_customizations: wizardLeadData.notes,
         Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option || '',
-        sales_staff_name: salesStaffName,
-        sales_staff_mobile: salesStaffMobile,
+        sales_staff_name: effectiveSalesName,
+        sales_staff_mobile: effectiveSalesMobile,
         events: crmEvents,
         Final_Quotation_Amount: finalAmountVal || wizardLeadData.final_quoted_amount || wizardLeadData.budget || selectedLead?.Final_Quotation_Amount || selectedLead?.final_quotation_amount || selectedLead?.final_amount,
         final_quotation_amount: finalAmountVal || wizardLeadData.final_quoted_amount || wizardLeadData.budget || selectedLead?.final_quotation_amount || selectedLead?.Final_Quotation_Amount || selectedLead?.final_amount,
@@ -3860,8 +3964,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         deliverables_description: selectedPkgs.map(p => pkgDeliverables[p.id] || p.deliverables || 'N/A').join('\n'),
         notes_special_customizations: selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
         Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || '',
-        sales_staff_name: salesStaffName,
-        sales_staff_mobile: salesStaffMobile,
+        sales_staff_name: effectiveSalesName,
+        sales_staff_mobile: effectiveSalesMobile,
         events: createEvents,
         Final_Quotation_Amount: finalAmountVal || createForm.budget,
         final_quotation_amount: finalAmountVal || createForm.budget,
@@ -3886,20 +3990,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setIsSaving(true);
     console.log("✔ Starting quotation generation...");
     try {
+      const effName = getEffectiveSalesStaffName();
+      const effMobile = getEffectiveSalesStaffMobile();
+      if (!salesStaffName || !salesStaffName.trim()) setSalesStaffName(effName);
+      if (!salesStaffMobile || !salesStaffMobile.trim()) setSalesStaffMobile(effMobile);
+
       const leadObj = getLeadInfoForQuote(isEdit);
       const leadIdForError = leadObj?.lead_id || createdLeadId || 'UNKNOWN';
-
-      if (!salesStaffName || !String(salesStaffName).trim()) {
-        showValidationError("input_sales_staff_name", "Missing required field: Sales Staff Name");
-        setIsSaving(false);
-        return null;
-      }
-      const mobileVal = String(salesStaffMobile || '').trim();
-      if (!salesStaffMobile || !mobileVal || mobileVal.length !== 10 || !/^\d+$/.test(mobileVal)) {
-        showValidationError("input_sales_staff_mobile", "Invalid mobile number. Must be 10 digits.");
-        setIsSaving(false);
-        return null;
-      }
 
       console.log("✔ Validating form...");
       const activePkgs = getSelectedPkgsInfo(isEdit);
@@ -4127,15 +4224,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handlePreviewQuotePDF = async (isEdit: boolean) => {
     try {
-      if (!salesStaffName || !String(salesStaffName).trim()) {
-        showValidationError("input_sales_staff_name", "Quotation Incomplete! Please enter Sales Staff Name.");
-        return;
-      }
-      const mobileVal = String(salesStaffMobile || '').trim();
-      if (!salesStaffMobile || !mobileVal || mobileVal.length !== 10 || !/^\d+$/.test(mobileVal)) {
-        showValidationError("input_sales_staff_mobile", "Please enter a valid 10-digit mobile number.");
-        return;
-      }
+      const effName = getEffectiveSalesStaffName();
+      const effMobile = getEffectiveSalesStaffMobile();
+      if (!salesStaffName || !salesStaffName.trim()) setSalesStaffName(effName);
+      if (!salesStaffMobile || !salesStaffMobile.trim()) setSalesStaffMobile(effMobile);
 
       const leadObj = getLeadInfoForQuote(isEdit);
       const activePkgs = getSelectedPkgsInfo(isEdit);
@@ -4396,15 +4488,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     return (
       <div className="space-y-6">
-        {/* Section 2: Quotation Details */}
+        {/* Quotation Details */}
         <div className="bg-slate-900/50 border border-slate-805/40 rounded-xl p-4.5 space-y-3.5 shadow-sm">
           <h4 className="text-xs font-bold text-amber-500 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-2">
-            <span>📋</span> Section 2: Quotation Details
+            <span>📋</span> Quotation Details
           </h4>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Package Amount (Editable Package Base Price) */}
-            <div>
+            <div className="hidden" style={{ display: 'none' }}>
               <label className="block text-xs font-semibold text-slate-400 mb-1.5">
                 Package Base Price (₹)
               </label>
@@ -4477,15 +4569,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </span>
             </div>
           </div>
-        </div>
 
-        {/* Section 4: Actions */}
-        <div className="bg-slate-900/50 border border-slate-805/40 rounded-xl p-4.5 space-y-3.5 shadow-sm">
-          <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-2">
-            <span>⚙️</span> Section 4: Quotation Actions
-          </h4>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {/* Action buttons directly under Quotation Details */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-3 border-t border-slate-800/60">
             {/* Download PDF */}
             <button
               type="button"
@@ -4611,7 +4697,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           </div>
 
           {/* Single Package Base Price (₹) Field (Hidden visually per request, keeping value intact internally) */}
-          <div className="hidden">
+          <div className="hidden" style={{ display: 'none' }}>
             <label className="block text-[11px] font-bold text-amber-400 uppercase tracking-wide font-mono flex items-center gap-1.5">
               <span>💰</span> Package Base Price (₹) *
             </label>
@@ -4986,18 +5072,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           </div>
         </div>
 
-        {isEdit && (
-          <div className="mt-4 flex justify-end pb-2">
-            <button
-              type="button"
-              onClick={handleSavePackageOnly}
-              disabled={isSaving}
-              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] font-bold uppercase tracking-wider rounded-lg shadow transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSaving ? 'Saving...' : 'Save Package'}
-            </button>
-          </div>
-        )}
+        <div className="mt-4 flex justify-end pb-2">
+          <button
+            type="button"
+            onClick={handleSavePackageOnly}
+            disabled={isSaving}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-bold uppercase tracking-wider rounded-lg shadow transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSaving ? 'Saving Package...' : 'Save Package'}
+          </button>
+        </div>
 
         {renderQuotationAndStep4Section(isEdit)}
       </div>
@@ -5102,10 +5186,46 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           .maybeSingle();
         
         if (!dbLeadErr && dbLead) {
-          fullLead = { ...lead, ...dbLead };
+          fullLead = {
+            ...lead,
+            ...dbLead,
+            Lost_Reason: dbLead.Lost_Reason || dbLead.lost_reason || lead.Lost_Reason || (lead as any).lost_reason,
+            Lost_Notes: dbLead.Lost_Notes || dbLead.lost_notes || lead.Lost_Notes || (lead as any).lost_notes
+          };
         }
       } catch (err) {
         console.warn("Failed to fetch full lead details on select", err);
+      }
+    }
+
+    // If lost lead and reason is missing, attempt to fetch from lead_status_history
+    if (['Lost Lead', 'Lead Lost', 'Lost'].includes(fullLead.status || (fullLead as any).current_status || '')) {
+      const currentR = fullLead.Lost_Reason || (fullLead as any).lost_reason;
+      if (!currentR || currentR === 'N/A' || currentR === 'NULL') {
+        if (supabaseClient && fullLead.lead_id) {
+          try {
+            const { data: histData } = await supabaseClient
+              .from('lead_status_history')
+              .select('*')
+              .eq('lead_id', fullLead.lead_id)
+              .order('created_at', { ascending: false });
+            if (histData && histData.length > 0) {
+              const lostHist = histData.find((h: any) => ['Lost Lead', 'Lead Lost', 'Lost'].includes(h.new_status || h.status || ''));
+              if (lostHist) {
+                if (lostHist.remarks) {
+                  const matchR = lostHist.remarks.match(/Lost Reason:\s*([^.\n]+)/i);
+                  fullLead.Lost_Reason = matchR && matchR[1] ? matchR[1].trim() : lostHist.remarks.trim();
+                  const matchN = lostHist.remarks.match(/Notes:\s*(.*)/i);
+                  if (matchN && matchN[1]) fullLead.Lost_Notes = matchN[1].trim();
+                } else if (lostHist.call_notes) {
+                  fullLead.Lost_Reason = lostHist.call_notes.trim();
+                }
+              }
+            }
+          } catch (e) {
+            console.warn("Failed to load status history for lost lead reason", e);
+          }
+        }
       }
     }
 
@@ -5547,18 +5667,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return false;
     }
 
-    // Validate Sales Executive details
-    if (!salesStaffName || !String(salesStaffName).trim()) {
-      showValidationError("input_sales_staff_name", "Please enter Sales Staff Name.");
-      showToastMsg("❌ Please complete all required fields before saving the package.", "error");
-      return false;
+    // Auto-detect & attach current logged-in Sales Executive
+    const effName = getEffectiveSalesStaffName();
+    const effMobile = getEffectiveSalesStaffMobile();
+    if (!salesStaffName || !salesStaffName.trim()) {
+      setSalesStaffName(effName);
     }
-
-    const mobileVal = String(salesStaffMobile || '').trim();
-    if (!mobileVal || mobileVal.length !== 10 || !/^\d+$/.test(mobileVal)) {
-      showValidationError("input_sales_staff_mobile", "Please enter a valid 10-digit Sales Staff Mobile Number.");
-      showToastMsg("❌ Please complete all required fields before saving the package.", "error");
-      return false;
+    if (!salesStaffMobile || !salesStaffMobile.trim()) {
+      setSalesStaffMobile(effMobile);
     }
 
     if (mode === 'all') {
@@ -5718,11 +5834,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   };
 
   const handleSavePackageOnly = async () => {
-    if (!selectedLead || isSaving) return;
+    if (isSaving) return;
     if (isStep3Locked) {
       showToastMsg("Quotation details are locked. Owner unlock approval required to edit.", "error");
       return;
     }
+    const targetLeadId = selectedLead?.lead_id || createdLeadId;
     setIsSaving(true);
     try {
       // 1. Perform unified validation
@@ -5731,15 +5848,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         return;
       }
 
-      const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead.Select_Package_Option || 'Custom Package';
-
-      // 2. Perform the full save of lead_packages to Supabase using our robust real-time save logic
-      // await saveStep3DataRealtime removed to avoid duplicate DB calls
+      const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead?.Select_Package_Option || 'Custom Package';
 
       // Construct JSON strings for deliverables and team members
       const inclusionsList = editableInclusions[pkgId] || [];
-      const teamMembersJson = (crmEvents && crmEvents.length > 0)
-        ? crmEvents.map(event => {
+      const currentEvents = selectedLead ? crmEvents : createEvents;
+      const teamMembersJson = (currentEvents && currentEvents.length > 0)
+        ? currentEvents.map(event => {
             const eventKey = `${pkgId}_${event.id}`;
             const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
             const list = editableInclusions[eventKey] !== undefined 
@@ -5759,8 +5874,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const teamMembersText = JSON.stringify(teamMembersJson);
 
       const deliverablesList = editableDeliverables[pkgId] || [];
-      const deliverablesJson = (crmEvents && crmEvents.length > 0)
-        ? crmEvents.map(event => {
+      const deliverablesJson = (currentEvents && currentEvents.length > 0)
+        ? currentEvents.map(event => {
             const eventKey = `${pkgId}_${event.id}`;
             const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
             const list = editableDeliverables[eventKey] !== undefined 
@@ -5783,7 +5898,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       // 3. Update the lead record in Supabase with latest Step 3 package / pricing / staff info
       const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
       
-      const updatedEvents = crmEvents.map(ev => ({
+      const updatedEvents = currentEvents.map(ev => ({
         ...ev,
         assigned_staff_names: ev.assigned_staff_names || '',
         assigned_staff_mobiles: ev.assigned_staff_mobiles || ''
@@ -5794,21 +5909,26 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const cleanAdditional = quoteAdditional === "" || quoteAdditional == null || isNaN(Number(quoteAdditional)) ? null : Number(quoteAdditional);
       const cleanFinalAmt = Math.max(0, (cleanPkgCost || 0) + (cleanAdditional || 0) - (cleanDiscount || 0));
 
-      await updateLead(selectedLead.lead_id, {
-        budget: cleanPkgCost,
-        package_price: cleanPkgCost,
-        deliverables_description: deliverablesText,
-        Team_Members: teamMembersText,
-        notes_special_customizations: wizardLeadData.notes,
-        remarks: updatedRemarks,
-        Select_Package_Option: pkgId,
-        sales_staff_name: salesStaffName,
-        sales_staff_mobile: salesStaffMobile,
-        Quotation_Discount: cleanDiscount,
-        Additional_Services_Cost: cleanAdditional,
-        Final_Quotation_Amount: cleanFinalAmt,
-        events: updatedEvents
-      });
+      const effectiveSalesName = getEffectiveSalesStaffName();
+      const effectiveSalesMobile = getEffectiveSalesStaffMobile();
+
+      if (targetLeadId && targetLeadId !== 'DRAFT-LEAD' && supabaseClient) {
+        await updateLead(targetLeadId, {
+          budget: cleanPkgCost,
+          package_price: cleanPkgCost,
+          deliverables_description: deliverablesText,
+          Team_Members: teamMembersText,
+          notes_special_customizations: wizardLeadData.notes,
+          remarks: updatedRemarks,
+          Select_Package_Option: pkgId,
+          sales_staff_name: effectiveSalesName,
+          sales_staff_mobile: effectiveSalesMobile,
+          Quotation_Discount: cleanDiscount,
+          Additional_Services_Cost: cleanAdditional,
+          Final_Quotation_Amount: cleanFinalAmt,
+          events: updatedEvents
+        });
+      }
 
       setWizardLeadData(prev => ({
         ...prev,
@@ -5821,25 +5941,28 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }));
 
       // Update the local selectedLead state so that the UI reflects it
-      setSelectedLead(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          budget: cleanPkgCost || 0,
-          package_price: cleanPkgCost || 0,
-          deliverables_description: deliverablesText,
-          notes_special_customizations: wizardLeadData.notes,
-          remarks: updatedRemarks,
-          Select_Package_Option: pkgId,
-          sales_staff_name: salesStaffName,
-          sales_staff_mobile: salesStaffMobile,
-          Quotation_Discount: cleanDiscount,
-          Additional_Services_Cost: cleanAdditional,
-          Final_Quotation_Amount: cleanFinalAmt,
-        };
-      });
+      if (selectedLead) {
+        setSelectedLead(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            budget: cleanPkgCost || 0,
+            package_price: cleanPkgCost || 0,
+            deliverables_description: deliverablesText,
+            notes_special_customizations: wizardLeadData.notes,
+            remarks: updatedRemarks,
+            Select_Package_Option: pkgId,
+            sales_staff_name: effectiveSalesName,
+            sales_staff_mobile: effectiveSalesMobile,
+            Quotation_Discount: cleanDiscount,
+            Additional_Services_Cost: cleanAdditional,
+            Final_Quotation_Amount: cleanFinalAmt,
+          };
+        });
+        await completeApprovedUnlockRequest(selectedLead.lead_id);
+      }
 
-      await completeApprovedUnlockRequest(selectedLead.lead_id);
+      showToastMsg("Package configuration saved successfully!", "success");
     } catch (err: any) {
       console.error("Save package only failed:", err);
       setSaveErrorPopup({
@@ -6100,6 +6223,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         const cleanFinalAmt = Math.max(0, (cleanPkgCost || 0) + (cleanAdditional || 0) - (cleanDiscount || 0));
         const cleanPincode = wizardLeadData.pincode === "" || wizardLeadData.pincode == null ? null : wizardLeadData.pincode;
 
+        const effectiveSalesName = getEffectiveSalesStaffName();
+        const effectiveSalesMobile = getEffectiveSalesStaffMobile();
+
         await updateLead(selectedLead.lead_id, {
           budget: cleanPkgCost,
           package_price: cleanPkgCost,
@@ -6112,8 +6238,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           city: wizardLeadData.city,
           state: wizardLeadData.state,
           pincode: cleanPincode,
-          sales_staff_name: salesStaffName,
-          sales_staff_mobile: salesStaffMobile,
+          sales_staff_name: effectiveSalesName,
+          sales_staff_mobile: effectiveSalesMobile,
           Quotation_Discount: cleanDiscount,
           Additional_Services_Cost: cleanAdditional,
           Final_Quotation_Amount: cleanFinalAmt,
@@ -6148,8 +6274,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             city: wizardLeadData.city,
             state: wizardLeadData.state,
             pincode: wizardLeadData.pincode,
-            sales_staff_name: salesStaffName,
-            sales_staff_mobile: salesStaffMobile
+            sales_staff_name: effectiveSalesName,
+            sales_staff_mobile: effectiveSalesMobile
           };
         });
 
@@ -6758,9 +6884,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     try {
       await updateLead(selectedLead.lead_id, {
         status: 'Lost Lead',
+        current_status: 'Lost Lead',
         remarks: `Lost Reason: ${finalReason}. Notes: ${lostNotes}`,
         "Lost_Reason": finalReason,
-        "Lost_Notes": lostNotes
+        "Lost_Notes": lostNotes,
+        lost_reason: finalReason,
+        lost_notes: lostNotes,
+        follow_up_notes: finalReason
       } as any);
 
       await updateLeadFollowUp(
@@ -7473,7 +7603,213 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const renderEventDetailsSection = (isCrm: boolean) => {
     const eventsList = isCrm ? crmEvents : createEvents;
-    const isFormVisible = showEventForm || eventsList.length === 0;
+    const isNewFormVisible = !editingEventId && (showEventForm || eventsList.length === 0);
+
+    const renderFormFields = (isEditingThisEvent: boolean) => (
+      <div className="space-y-4">
+        {/* Event Type */}
+        <div className="text-left">
+          <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+            Event Type *
+          </label>
+          <select
+            id="input_event_type"
+            value={eventForm.event_type}
+            onChange={(e) => {
+              const val = e.target.value;
+              setEventForm(prev => ({
+                ...prev,
+                event_type: val,
+                event_name: prev.event_name || ''
+              }));
+            }}
+            className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all cursor-pointer font-bold"
+          >
+            <option value="">Select Event Type</option>
+            {EVENT_TYPES.map(type => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Conditional Event Details fields displayed only after Event Type is selected */}
+        {eventForm.event_type && eventForm.event_type !== '' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in">
+            {/* Event Name */}
+            <div className="sm:col-span-2 text-left">
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Event Name
+              </label>
+              <input
+                id="input_event_name"
+                type="text"
+                placeholder="e.g. Sangeet, Haldi, Reception"
+                value={eventForm.event_name}
+                onChange={(e) => setEventForm({ ...eventForm, event_name: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-600 focus:outline-none"
+              />
+            </div>
+
+            {/* Event Date */}
+            <div className="text-left">
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Event Date *
+              </label>
+              <input
+                id="input_event_date"
+                type="date"
+                required
+                value={eventForm.event_date}
+                onChange={(e) => setEventForm({ ...eventForm, event_date: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono"
+              />
+            </div>
+
+            {/* Event Start Time */}
+            <div className="text-left">
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Event Start Time
+              </label>
+              <input
+                id="input_event_start_time"
+                type="time"
+                value={convertTo24Hour(eventForm.event_start_time)}
+                onChange={(e) => {
+                  const val24 = e.target.value;
+                  const val12 = convertTo12Hour(val24);
+                  setEventForm({ ...eventForm, event_start_time: val12 });
+                }}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono cursor-pointer"
+              />
+            </div>
+
+            {/* Event End Date */}
+            <div className="text-left">
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Event End Date
+              </label>
+              <input
+                id="input_event_end_date"
+                type="date"
+                value={eventForm.event_end_date || ''}
+                onChange={(e) => setEventForm({ ...eventForm, event_end_date: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono cursor-pointer"
+              />
+            </div>
+
+            {/* Event End Time */}
+            <div className="text-left">
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Event End Time
+              </label>
+              <input
+                id="input_event_end_time"
+                type="time"
+                value={convertTo24Hour(eventForm.event_end_time)}
+                onChange={(e) => {
+                  const val24 = e.target.value;
+                  const val12 = convertTo12Hour(val24);
+                  setEventForm({ ...eventForm, event_end_time: val12 });
+                }}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono cursor-pointer"
+              />
+              {(() => {
+                const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);
+                return dateTimeErrMsg ? (
+                  <p className="text-[11px] text-rose-400 mt-1 animate-fade-in font-medium">
+                    {dateTimeErrMsg}
+                  </p>
+                ) : null;
+              })()}
+            </div>
+
+            {/* Event Location - Multiline Address */}
+            <div className="sm:col-span-2 text-left">
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Event Location * (Venue Address)
+              </label>
+              <textarea
+                required
+                rows={3}
+                placeholder="Enter the full event location and venue address details"
+                value={eventForm.event_location}
+                onChange={(e) => setEventForm({ ...eventForm, event_location: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none"
+              />
+            </div>
+
+            {/* Google Maps Link */}
+            <div className="sm:col-span-2 text-left">
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Google Maps Location Link (Optional)
+              </label>
+              <input
+                type="url"
+                placeholder="e.g. https://maps.app.goo.gl/..."
+                value={eventForm.google_maps_link}
+                onChange={(e) => setEventForm({ ...eventForm, google_maps_link: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-600 focus:outline-none"
+              />
+            </div>
+
+            {/* Guest Pax */}
+            <div className="sm:col-span-2 text-left">
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Guest Pax
+              </label>
+              <input
+                type="number"
+                min="0"
+                placeholder="e.g. 150"
+                value={eventForm.guest_pax}
+                onChange={(e) => setEventForm({ ...eventForm, guest_pax: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0) })}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono"
+              />
+            </div>
+
+            {/* Save Event Buttons */}
+            <div className="sm:col-span-2 flex flex-wrap justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEventForm(false);
+                  setEditingEventId(null);
+                }}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-2 rounded-lg text-xs transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              {isEditingThisEvent ? (
+                <button
+                  type="button"
+                  onClick={() => handleSaveEventForm(isCrm, false)}
+                  className="bg-cyan-600 hover:bg-cyan-500 text-slate-100 font-bold px-4 py-2 rounded-lg text-xs transition-colors shadow-sm cursor-pointer"
+                >
+                  Update Event
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveEventForm(isCrm, false)}
+                    className="bg-slate-700 hover:bg-slate-600 text-slate-100 font-bold px-4 py-2 rounded-lg text-xs transition-colors shadow-sm cursor-pointer"
+                  >
+                    Save Event
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveEventForm(isCrm, true)}
+                    className="bg-cyan-600 hover:bg-cyan-500 text-slate-100 font-bold px-4 py-2 rounded-lg text-xs transition-colors shadow-sm cursor-pointer"
+                  >
+                    Save & Add Another Event
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
 
     return (
       <div className="space-y-4">
@@ -7485,12 +7821,36 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </h4>
             <div className="grid grid-cols-1 gap-3">
               {eventsList.map((ev, idx) => {
+                const isEditingThisEvent = editingEventId === ev.id;
                 const isCollapsed = collapsedEventIds[ev.id] ?? false;
                 const startDateStr = formatDDMMYYYY(ev.event_start_date || ev.event_date);
                 const endDateRaw = ev.event_end_date || (ev as any).Event_End_Date || '';
                 const endDateStr = endDateRaw ? formatDDMMYYYY(endDateRaw) : 'N/A';
                 const startTimeStr = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A';
                 const endTimeStr = ev.event_end_time ? convertTo12Hour(ev.event_end_time) : 'N/A';
+
+                if (isEditingThisEvent) {
+                  return (
+                    <div key={ev.id} className="bg-slate-900 border border-cyan-500/50 rounded-xl p-4 space-y-4 shadow-lg animate-fade-in text-left">
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <span className="text-xs font-bold text-cyan-400 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                          <Edit className="w-3.5 h-3.5" /> Edit Event {idx + 1}: {ev.event_name || ev.event_type}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingEventId(null);
+                            setShowEventForm(false);
+                          }}
+                          className="text-slate-400 hover:text-slate-200 text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      {renderFormFields(true)}
+                    </div>
+                  );
+                }
 
                 return (
                   <div key={ev.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm transition-all duration-200">
@@ -7519,7 +7879,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         <button
                           type="button"
                           onClick={() => handleEditEvent(ev)}
-                          className="p-1.5 hover:bg-slate-800 rounded text-slate-300 hover:text-cyan-400 transition-colors"
+                          className="p-1.5 hover:bg-slate-800 rounded text-slate-300 hover:text-cyan-400 transition-colors cursor-pointer"
                           title="Edit Event"
                         >
                           <Edit className="w-3.5 h-3.5" />
@@ -7527,7 +7887,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         <button
                           type="button"
                           onClick={() => handleDeleteEvent(ev.id, isCrm)}
-                          className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-rose-400 transition-colors"
+                          className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
                           title="Remove Event"
                         >
                           <Trash className="w-3.5 h-3.5" />
@@ -7535,7 +7895,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         <button
                           type="button"
                           onClick={() => setCollapsedEventIds(prev => ({ ...prev, [ev.id]: !isCollapsed }))}
-                          className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors"
+                          className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
                         >
                           {isCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
                         </button>
@@ -7598,12 +7958,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           </div>
         )}
 
-        {/* Inline Event Form */}
-        {isFormVisible ? (
+        {/* Inline Event Form for New Event */}
+        {isNewFormVisible ? (
           <div className="bg-slate-900/60 border border-slate-850 rounded-xl p-4 space-y-4 animate-fade-in text-left">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2">
               <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">
-                {editingEventId ? 'Edit Event Details' : 'Event Details'}
+                Event Details
               </span>
               {eventsList.length > 0 && (
                 <button
@@ -7612,218 +7972,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     setShowEventForm(false);
                     setEditingEventId(null);
                   }}
-                  className="text-slate-400 hover:text-slate-200 text-xs"
+                  className="text-slate-400 hover:text-slate-200 text-xs cursor-pointer"
                 >
                   Cancel
                 </button>
               )}
             </div>
-
-            <div className="space-y-4">
-              {/* Event Type */}
-              <div className="text-left">
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                  Event Type *
-                </label>
-                <select
-                  id="input_event_type"
-                  value={eventForm.event_type}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setEventForm(prev => ({
-                      ...prev,
-                      event_type: val,
-                      event_name: prev.event_name || ''
-                    }));
-                  }}
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all cursor-pointer font-bold"
-                >
-                  <option value="">Select Event Type</option>
-                  {EVENT_TYPES.map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Conditional Event Details fields displayed only after Event Type is selected */}
-              {eventForm.event_type && eventForm.event_type !== '' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in">
-                  {/* Event Name */}
-                  <div className="sm:col-span-2 text-left">
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                      Event Name
-                    </label>
-                    <input
-                      id="input_event_name"
-                      type="text"
-                      placeholder="e.g. Sangeet, Haldi, Reception"
-                      value={eventForm.event_name}
-                      onChange={(e) => setEventForm({ ...eventForm, event_name: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-600 focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Event Date */}
-                  <div className="text-left">
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                      Event Date *
-                    </label>
-                    <input
-                      id="input_event_date"
-                      type="date"
-                      required
-                      value={eventForm.event_date}
-                      onChange={(e) => setEventForm({ ...eventForm, event_date: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono"
-                    />
-                  </div>
-
-                  {/* Event Start Time */}
-                  <div className="text-left">
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                      Event Start Time
-                    </label>
-                    <input
-                      id="input_event_start_time"
-                      type="time"
-                      value={convertTo24Hour(eventForm.event_start_time)}
-                      onChange={(e) => {
-                        const val24 = e.target.value;
-                        const val12 = convertTo12Hour(val24);
-                        setEventForm({ ...eventForm, event_start_time: val12 });
-                      }}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono cursor-pointer"
-                    />
-                  </div>
-
-                  {/* Event End Date */}
-                  <div className="text-left">
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                      Event End Date
-                    </label>
-                    <input
-                      id="input_event_end_date"
-                      type="date"
-                      value={eventForm.event_end_date || ''}
-                      onChange={(e) => setEventForm({ ...eventForm, event_end_date: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono cursor-pointer"
-                    />
-                  </div>
-
-                  {/* Event End Time */}
-                  <div className="text-left">
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                      Event End Time
-                    </label>
-                    <input
-                      id="input_event_end_time"
-                      type="time"
-                      value={convertTo24Hour(eventForm.event_end_time)}
-                      onChange={(e) => {
-                        const val24 = e.target.value;
-                        const val12 = convertTo12Hour(val24);
-                        setEventForm({ ...eventForm, event_end_time: val12 });
-                      }}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono cursor-pointer"
-                    />
-                    {(() => {
-                      const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);
-                      return dateTimeErrMsg ? (
-                        <p className="text-[11px] text-rose-400 mt-1 animate-fade-in font-medium">
-                          {dateTimeErrMsg}
-                        </p>
-                      ) : null;
-                    })()}
-                  </div>
-
-                  {/* Event Location - Multiline Address */}
-                  <div className="sm:col-span-2 text-left">
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                      Event Location * (Venue Address)
-                    </label>
-                    <textarea
-                      required
-                      rows={3}
-                      placeholder="Enter the full event location and venue address details"
-                      value={eventForm.event_location}
-                      onChange={(e) => setEventForm({ ...eventForm, event_location: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Google Maps Link */}
-                  <div className="sm:col-span-2 text-left">
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                      Google Maps Location Link (Optional)
-                    </label>
-                    <input
-                      type="url"
-                      placeholder="e.g. https://maps.app.goo.gl/..."
-                      value={eventForm.google_maps_link}
-                      onChange={(e) => setEventForm({ ...eventForm, google_maps_link: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-600 focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Guest Pax */}
-                  <div className="sm:col-span-2 text-left">
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                      Guest Pax
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="e.g. 150"
-                      value={eventForm.guest_pax}
-                      onChange={(e) => setEventForm({ ...eventForm, guest_pax: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0) })}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono"
-                    />
-                  </div>
-
-                  {/* Save Event Buttons */}
-                  <div className="sm:col-span-2 flex flex-wrap justify-end gap-2 pt-2">
-                    {eventsList.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowEventForm(false);
-                          setEditingEventId(null);
-                        }}
-                        className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-2 rounded-lg text-xs transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    )}
-                    {editingEventId ? (
-                      <button
-                        type="button"
-                        onClick={() => handleSaveEventForm(isCrm, false)}
-                        className="bg-cyan-600 hover:bg-cyan-500 text-slate-100 font-bold px-4 py-2 rounded-lg text-xs transition-colors shadow-sm"
-                      >
-                        Update Event
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => handleSaveEventForm(isCrm, false)}
-                          className="bg-slate-700 hover:bg-slate-600 text-slate-100 font-bold px-4 py-2 rounded-lg text-xs transition-colors shadow-sm"
-                        >
-                          Save Event
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSaveEventForm(isCrm, true)}
-                          className="bg-cyan-600 hover:bg-cyan-500 text-slate-100 font-bold px-4 py-2 rounded-lg text-xs transition-colors shadow-sm"
-                        >
-                          Save & Add Another Event
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+            {renderFormFields(false)}
           </div>
         ) : (
           /* Add Another Event Button */
@@ -7831,7 +7986,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             <button
               type="button"
               onClick={() => handleAddNewEventClick(isCrm)}
-              className="flex items-center gap-1.5 border border-dashed border-slate-700 hover:border-cyan-500 text-slate-300 hover:text-cyan-400 bg-slate-900/30 px-4 py-2.5 rounded-lg text-xs transition-all"
+              className="flex items-center gap-1.5 border border-dashed border-slate-700 hover:border-cyan-500 text-slate-300 hover:text-cyan-400 bg-slate-900/30 px-4 py-2.5 rounded-lg text-xs transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>+ Add Another Event</span>
@@ -8916,7 +9071,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       {/* Header Bar */}
       {activeTab !== 'create' && activeTab !== 'custom_package_master' && !selectedLead && (
-        <div hidden={activeTab === 'calendar'} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div 
+          className={`${activeTab === 'calendar' ? 'hidden' : 'flex'} flex-col sm:flex-row sm:items-center justify-between gap-4`}
+          style={activeTab === 'calendar' ? { display: 'none' } : undefined}
+        >
           <div>
             <h2 className="text-xl font-black text-white flex items-center gap-2">
               <span className="p-1 px-2.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-mono rounded tracking-widest">SALES</span>
@@ -10807,7 +10965,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         <div className="space-y-4">
 
           {/* Sales Performance Dashboard Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-5 gap-3 mt-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mt-2">
             {[
               { label: 'Create Quote', val: statCreatedQuotation, theme: 'blue' as CameraLensTheme, filterValue: 'Create Quote', chartPoints: [10, 15, 12, 18, 14, 20, 16], trendText: 'Initial Lead' },
               { label: 'Quote Sent', val: statQuotesSent, theme: 'purple' as CameraLensTheme, filterValue: 'Quote Sent', chartPoints: [12, 14, 18, 15, 21, 25, 22], trendText: 'Quotation Saved' },
@@ -12264,18 +12422,29 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
 
             {/* If Lost Lead, display Lost Details */}
-            {selectedLead && selectedLead.status === 'Lost Lead' && (
-              <div className="mx-4 sm:mx-5 mt-2 bg-rose-950/25 border border-rose-500/20 p-2.5 rounded-xl flex items-start gap-3 text-left shadow-lg">
-                <span className="text-rose-500 text-base mt-0.5">❌</span>
-                <div>
-                  <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wide">Lost Lead Information</h4>
-                  <p className="text-[11px] text-zinc-400 leading-relaxed mt-0.5">
-                    <strong>Reason:</strong> {selectedLead.Lost_Reason || 'N/A'} <br />
-                    <strong>Notes:</strong> {selectedLead.Lost_Notes || 'N/A'}
-                  </p>
+            {selectedLead && ['Lost Lead', 'Lead Lost', 'Lost'].includes(selectedLead.status || (selectedLead as any).current_status || '') && (() => {
+              const { reason: lostReasonText, notes: lostNotesText } = getLostReasonAndNotes(selectedLead, statusHistory);
+              return (
+                <div className="mx-4 sm:mx-5 mt-2 bg-rose-950/25 border border-rose-500/20 p-2.5 rounded-xl flex items-start gap-3 text-left shadow-lg">
+                  <span className="text-rose-500 text-base mt-0.5">❌</span>
+                  <div className="w-full">
+                    <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wide">Lost Lead Information</h4>
+                    <div className="text-[11px] text-zinc-300 leading-relaxed mt-1 space-y-0.5">
+                      <div>
+                        <strong className="text-slate-400 font-mono uppercase tracking-wider text-[10px]">Lost Reason:</strong>{' '}
+                        <span className="text-rose-300 font-semibold">{lostReasonText}</span>
+                      </div>
+                      {lostNotesText && lostNotesText !== 'Not provided' && (
+                        <div>
+                          <strong className="text-slate-400 font-mono uppercase tracking-wider text-[10px]">Notes:</strong>{' '}
+                          <span className="text-zinc-300">{lostNotesText}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Content container with horizontal padding */}
             <div id="crm-wizard-scroll-container" className="flex-1 overflow-y-auto p-2.5 sm:p-3">
@@ -12490,7 +12659,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               </div>
 
                               {/* Single Package Base Price (₹) Field (Hidden visually per request) */}
-                              <div className="hidden">
+                              <div className="hidden" style={{ display: 'none' }}>
                                 <label className="block text-[11px] font-bold text-amber-400 uppercase tracking-wide font-mono flex items-center gap-1.5">
                                   <span>💰</span> Package Base Price (₹) *
                                 </label>
