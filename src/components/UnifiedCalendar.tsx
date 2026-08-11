@@ -746,7 +746,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
       
       {/* 1. Header Navigation Bar (Controls only) */}
       {role !== 'operations' && (
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-zinc-950/40 border border-zinc-900 p-4 rounded-2xl shadow-xl">
+      <div hidden={role === 'sales'} className="flex flex-wrap items-center justify-between gap-3 bg-zinc-950/40 border border-zinc-900 p-4 rounded-2xl shadow-xl">
         {calendarError && (
           <div className="w-full p-2.5 bg-red-950/60 border border-red-500/30 rounded-lg text-xs text-red-200 flex items-center justify-between gap-2">
             <span>{calendarError}</span>

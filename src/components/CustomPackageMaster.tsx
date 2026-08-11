@@ -233,6 +233,9 @@ export const CustomPackageMaster: React.FC = () => {
     setRoleDescription('');
     setRoleError('');
     setShowRoleModal(true);
+    setTimeout(() => {
+      document.getElementById('role-modal-container')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   };
 
   const handleOpenEditRole = (role: CustomRole) => {
@@ -382,6 +385,9 @@ export const CustomPackageMaster: React.FC = () => {
     setDeliverableDescription('');
     setDeliverableError('');
     setShowDeliverableModal(true);
+    setTimeout(() => {
+      document.getElementById('deliverable-modal-container')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   };
 
   const handleOpenEditDeliverable = (deliverable: CustomDeliverable) => {
@@ -566,7 +572,7 @@ export const CustomPackageMaster: React.FC = () => {
         
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
+            <div className="hidden items-center gap-2 mb-1">
               <span className="p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400">
                 <Layers className="w-4 h-4" />
               </span>
@@ -574,10 +580,10 @@ export const CustomPackageMaster: React.FC = () => {
                 Studio Master Configuration
               </span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+            <h2 className="hidden text-xl sm:text-2xl font-black text-white tracking-tight">
               Custom Package Master
             </h2>
-            <p className="text-xs text-zinc-400 mt-1 max-w-2xl leading-relaxed">
+            <p className="hidden text-xs text-zinc-400 mt-1 max-w-2xl leading-relaxed">
               Manage custom staff roles and deliverable master items. Active roles and deliverables automatically populate Step 3 quotation package dropdowns across all deals.
             </p>
           </div>
@@ -594,17 +600,17 @@ export const CustomPackageMaster: React.FC = () => {
 
             <button
               onClick={handleOpenAddRole}
-              className="w-full sm:w-auto justify-center px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 transition-all text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-lg shadow-amber-500/10"
+              className="justify-center px-2 py-1 rounded border border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 transition-all text-[10px] font-bold font-mono uppercase tracking-wider flex items-center gap-1 cursor-pointer"
             >
-              <Plus className="w-4 h-4 stroke-[3]" />
+              <Plus className="w-3 h-3 stroke-[3]" />
               <span>+ Add Custom Role</span>
             </button>
 
             <button
               onClick={handleOpenAddDeliverable}
-              className="w-full sm:w-auto justify-center px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 transition-all text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-500/10"
+              className="justify-center px-2 py-1 rounded border border-emerald-500/50 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 transition-all text-[10px] font-bold font-mono uppercase tracking-wider flex items-center gap-1 cursor-pointer"
             >
-              <Plus className="w-4 h-4 stroke-[3]" />
+              <Plus className="w-3 h-3 stroke-[3]" />
               <span>+ Add Custom Deliverable</span>
             </button>
           </div>
@@ -799,7 +805,7 @@ export const CustomPackageMaster: React.FC = () => {
                       <thead>
                         <tr className="bg-zinc-950/80 text-zinc-400 font-mono uppercase text-[10px] tracking-wider border-b border-zinc-850">
                           <th className="py-3 px-4">Role Name</th>
-                          <th className="py-3 px-4">Description</th>
+                          <th className="hidden py-3 px-4">Description</th>
                           <th className="py-3 px-4">Status</th>
                           <th className="py-3 px-4">Created Date</th>
                           <th className="py-3 px-4 text-right">Actions</th>
@@ -819,7 +825,7 @@ export const CustomPackageMaster: React.FC = () => {
                                   </span>
                                 )}
                               </td>
-                              <td className="py-3 px-4 text-zinc-400 max-w-xs truncate">
+                              <td className="hidden py-3 px-4 text-zinc-400 max-w-xs truncate">
                                 {role.description || <span className="italic text-zinc-600 text-[11px]">No description</span>}
                               </td>
                               <td className="py-3 px-4 font-mono">
@@ -1028,7 +1034,7 @@ export const CustomPackageMaster: React.FC = () => {
                                   </span>
                                 )}
                               </td>
-                              <td className="py-3 px-4 text-zinc-400 max-w-xs truncate">
+                              <td className="hidden py-3 px-4 text-zinc-400 max-w-xs truncate">
                                 {del.description || <span className="italic text-zinc-600 text-[11px]">No description</span>}
                               </td>
                               <td className="py-3 px-4 font-mono">
@@ -1100,7 +1106,7 @@ export const CustomPackageMaster: React.FC = () => {
       {/* MODAL: ADD / EDIT ROLE */}
       {showRoleModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md w-full shadow-2xl overflow-hidden p-6 space-y-5 relative">
+          <div id="role-modal-container" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md w-full shadow-2xl overflow-hidden p-6 space-y-5 relative">
             <div className="flex items-center justify-between border-b border-zinc-850 pb-4">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
@@ -1144,7 +1150,7 @@ export const CustomPackageMaster: React.FC = () => {
                 />
               </div>
 
-              <div>
+              <div className="hidden">
                 <label className="block text-xs font-mono uppercase font-bold text-zinc-300 mb-1.5">
                   Description <span className="text-zinc-500 font-normal">(Optional)</span>
                 </label>
@@ -1191,7 +1197,7 @@ export const CustomPackageMaster: React.FC = () => {
       {/* MODAL: ADD / EDIT DELIVERABLE */}
       {showDeliverableModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md w-full shadow-2xl overflow-hidden p-6 space-y-5 relative">
+          <div id="deliverable-modal-container" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md w-full shadow-2xl overflow-hidden p-6 space-y-5 relative">
             <div className="flex items-center justify-between border-b border-zinc-850 pb-4">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -1235,7 +1241,7 @@ export const CustomPackageMaster: React.FC = () => {
                 />
               </div>
 
-              <div>
+              <div className="hidden">
                 <label className="block text-xs font-mono uppercase font-bold text-zinc-300 mb-1.5">
                   Description <span className="text-zinc-500 font-normal">(Optional)</span>
                 </label>

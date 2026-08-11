@@ -4546,7 +4546,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           </div>
 
           {/* Sales Executive Details */}
-          <div className="bg-slate-900/50 border border-slate-805/40 rounded-lg p-3 space-y-2.5 shadow-sm mt-3">
+          <div className="hidden bg-slate-900/50 border border-slate-805/40 rounded-lg p-3 space-y-2.5 shadow-sm mt-3">
             <h4 className="text-[11px] font-bold text-indigo-400 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-1">
               <span>👤</span> Sales Executive Details
             </h4>
@@ -5399,6 +5399,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
 
     const activeEvents = activeTab === 'create' ? createEvents : crmEvents;
+    
+    // Auto save by logged in sales user
+    if (currentUser) {
+      setSalesStaffName(currentUser.name || '');
+      setSalesStaffMobile(currentUser.mobile || '');
+    }
     
     if (!packageId) {
       setWizardLeadData((prev) => ({
@@ -8885,7 +8891,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       {/* Header Bar */}
       {activeTab !== 'create' && activeTab !== 'custom_package_master' && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div hidden={activeTab === 'calendar'} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-black text-white flex items-center gap-2">
               <span className="p-1 px-2.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-mono rounded tracking-widest">SALES</span>
@@ -12472,7 +12478,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           return (
                             <div className="space-y-4 animate-fade-in">
                               {/* Sales Executive Details */}
-                              <div className="bg-slate-900/50 border border-slate-805/40 rounded-lg p-3 space-y-2.5 shadow-sm mt-3">
+                              <div className="hidden bg-slate-900/50 border border-slate-805/40 rounded-lg p-3 space-y-2.5 shadow-sm mt-3">
                                 <h4 className="text-[11px] font-bold text-indigo-400 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-1">
                                   <span>👤</span> Sales Executive Details
                                 </h4>

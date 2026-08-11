@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, User, Phone, MessageSquare, Mail, MapPin, Calendar, Clock, Package, ShieldCheck, Video, Camera, Award, FileText, CheckCircle2 } from 'lucide-react';
+import { X, User, Phone, MessageSquare, Mail, MapPin, Calendar, Clock, Package, ShieldCheck, Video, Camera, Award, FileText, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useRole } from '../RoleContext';
 import { deserializeLeadEvents } from '../../utils';
 
@@ -32,6 +32,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
     leadEquipmentHistory
   } = useRole();
 
+  const [isCustomerDetailsOpen, setIsCustomerDetailsOpen] = useState(false);
   if (!isOpen || (!orderId && !booking)) return null;
 
   const isStaff = isStaffView || currentRole === 'Staff';
@@ -248,27 +249,33 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
           
           {/* Section 1: Customer Details */}
           <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4 sm:p-5 space-y-4">
-            <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-2 border-b border-zinc-800 pb-2">
-              <User className="w-4 h-4 text-indigo-400" /> Customer Details
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60">
-                <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-1">Customer Name</span>
-                <span className="text-xs font-bold text-white">{customerName}</span>
+            <button
+              onClick={() => setIsCustomerDetailsOpen(!isCustomerDetailsOpen)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 text-[10px] font-bold font-mono uppercase tracking-wider transition-colors cursor-pointer"
+            >
+              <User className="w-3.5 h-3.5" /> Customer Details
+              {isCustomerDetailsOpen ? <ChevronUp className="w-3.5 h-3.5 ml-1" /> : <ChevronDown className="w-3.5 h-3.5 ml-1" />}
+            </button>
+            {isCustomerDetailsOpen && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 animate-fade-in border-t border-zinc-800/50 pt-2 mt-2">
+                <div className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60">
+                  <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-1">Customer Name</span>
+                  <span className="text-xs font-bold text-white">{customerName}</span>
+                </div>
+                <div className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60">
+                  <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-1">Mobile Number</span>
+                  <span className="text-xs font-semibold text-zinc-200">{mobileNumber}</span>
+                </div>
+                <div className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60">
+                  <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-1">WhatsApp Number</span>
+                  <span className="text-xs font-semibold text-zinc-200">{whatsappNumber}</span>
+                </div>
+                <div className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60">
+                  <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-1">Alternate Mobile</span>
+                  <span className="text-xs font-semibold text-zinc-200">{alternateMobile}</span>
+                </div>
               </div>
-              <div className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60">
-                <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-1">Mobile Number</span>
-                <span className="text-xs font-semibold text-zinc-200">{mobileNumber}</span>
-              </div>
-              <div className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60">
-                <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-1">WhatsApp Number</span>
-                <span className="text-xs font-semibold text-zinc-200">{whatsappNumber}</span>
-              </div>
-              <div className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60">
-                <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-1">Alternate Mobile</span>
-                <span className="text-xs font-semibold text-zinc-200">{alternateMobile}</span>
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Section 2: Event Details */}
