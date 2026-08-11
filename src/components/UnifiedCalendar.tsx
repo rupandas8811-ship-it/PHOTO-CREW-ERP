@@ -775,58 +775,16 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   return (
     <div id="unified_calendar_container" className="space-y-6 text-zinc-100 pb-10">
       
-      {/* 1. Header Navigation Bar (Controls only) */}
-      {role !== 'operations' && (
-      <div 
-        className={`${role === 'sales' ? 'hidden' : 'flex'} flex-wrap items-center justify-between gap-3 bg-zinc-950/40 border border-zinc-900 p-4 rounded-2xl shadow-xl`}
-        style={role === 'sales' ? { display: 'none' } : undefined}
-      >
-        {calendarError && (
-          <div className="w-full p-2.5 bg-red-950/60 border border-red-500/30 rounded-lg text-xs text-red-200 flex items-center justify-between gap-2">
-            <span>{calendarError}</span>
-            <button 
-              onClick={() => setCalendarError(null)}
-              className="text-red-400 hover:text-white font-bold"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
-
-        {/* View selection controls replaced with title */}
-        <div className="flex items-center gap-2">
-          <CalendarIcon className="w-5 h-5 text-yellow-500" />
-          <span className="text-sm font-black font-mono tracking-tight text-white uppercase">Calendar Timeline</span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            id="btn_cal_today"
-            onClick={handleSetToday}
-            className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-xs font-mono text-zinc-300 transition-all cursor-pointer"
+      {calendarError && (
+        <div className="p-3 bg-red-950/60 border border-red-500/35 rounded-xl text-xs text-red-200 flex items-center justify-between gap-2 shadow-lg">
+          <span>{calendarError}</span>
+          <button 
+            onClick={() => setCalendarError(null)}
+            className="text-red-400 hover:text-white font-bold px-2 py-1 rounded hover:bg-red-900/40 transition-colors"
           >
-            Today
+            Dismiss
           </button>
-
-          {selectedDate && (
-            <button
-              id="btn_add_memo"
-              onClick={() => {
-                setEditingMemoId(null);
-                setNewMemoTitle('');
-                setNewMemoMessage('');
-                setShowAddMemo(true);
-              }}
-              className="hidden"
-              style={{ display: 'none' }}
-            >
-              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-              Assign Memo
-            </button>
-          )}
         </div>
-      </div>
-
       )}
       {/* 3. Filtering and Custom Parameters Console */}
       <div className="bg-zinc-900/20 border border-zinc-900 p-3 sm:p-4 rounded-2xl flex flex-col gap-3">
@@ -1009,30 +967,76 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
             </div>
           )}
           
-          {/* Calendar Controller Month Toggle Banner (Desktop) */}
-          <div className="hidden md:flex justify-between items-center border-b border-zinc-900 pb-4">
-            <h2 className="text-base font-bold text-white flex items-center gap-1.5">
-              <span className="text-yellow-500 font-mono tracking-tight text-lg">
-                {monthNames[currentMonth]}
-              </span>
-              <span className="text-zinc-500 text-lg font-light">{currentYear}</span>
-            </h2>
+          {/* Calendar Section Header */}
+          <div className="flex items-center justify-between pb-1 border-b border-zinc-900/40">
+            <div className="flex items-center gap-2">
+              <CalendarIcon className="w-4 h-4 text-yellow-500" />
+              <h3 className="text-xs font-mono font-bold uppercase tracking-widest text-zinc-300">
+                {role === 'operations' ? 'Operations Staff Calendar' : role === 'production' ? 'Production Staff Calendar' : 'Unified Calendar'}
+              </h3>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">Live Sync</span>
+            </div>
+          </div>
 
-            <div className="flex items-center gap-1">
+          {/* Unified Premium Calendar Toolbar */}
+          <div id="unified_calendar_toolbar" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-900/60 pb-5">
+            {/* Left Column: Month Navigation & Today Button */}
+            <div className="flex items-center justify-between sm:justify-start gap-4">
+              <div className="flex items-center gap-2 bg-zinc-950/80 p-1 rounded-xl border border-zinc-900">
+                <button
+                  id="btn_cal_prev_month"
+                  onClick={handlePrevMonth}
+                  className="p-1.5 hover:bg-zinc-900 text-zinc-400 hover:text-white rounded-lg transition-all duration-150 cursor-pointer active:scale-95"
+                  aria-label="Previous Month"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                
+                <h2 id="calendar_current_period" className="text-xs font-mono font-bold tracking-wider text-zinc-300 px-3 min-w-[120px] text-center select-none">
+                  <span className="text-yellow-500 font-extrabold mr-1.5">{monthNames[currentMonth]}</span>
+                  <span className="text-zinc-500 font-light">{currentYear}</span>
+                </h2>
+
+                <button
+                  id="btn_cal_next_month"
+                  onClick={handleNextMonth}
+                  className="p-1.5 hover:bg-zinc-900 text-zinc-400 hover:text-white rounded-lg transition-all duration-150 cursor-pointer active:scale-95"
+                  aria-label="Next Month"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="hidden sm:block h-6 w-[1px] bg-zinc-900" />
+
               <button
-                id="btn_cal_prev_month"
-                onClick={handlePrevMonth}
-                className="p-2 hover:bg-zinc-900 rounded-xl border border-zinc-850 hover:border-zinc-700 transition cursor-pointer"
+                id="btn_cal_today"
+                onClick={handleSetToday}
+                className="px-4 py-2 bg-zinc-950/80 hover:bg-zinc-900 border border-zinc-900 hover:border-zinc-800 rounded-xl text-xs font-mono font-bold text-zinc-300 hover:text-white transition-all duration-150 cursor-pointer active:scale-95"
               >
-                <ChevronLeft className="w-4 h-4 text-zinc-350" />
+                Today
               </button>
-              <button
-                id="btn_cal_next_month"
-                onClick={handleNextMonth}
-                className="p-2 hover:bg-zinc-900 rounded-xl border border-zinc-850 hover:border-zinc-700 transition cursor-pointer"
-              >
-                <ChevronRight className="w-4 h-4 text-zinc-350" />
-              </button>
+            </div>
+
+            {/* Right Column: Month/Week/Day/Agenda Segmented Control */}
+            <div id="calendar_view_selectors" className="flex bg-zinc-950/80 p-1 rounded-xl border border-zinc-900 select-none self-stretch sm:self-auto justify-between sm:justify-start">
+              {(['month', 'week', 'day', 'agenda'] as const).map((view) => (
+                <button
+                  key={view}
+                  id={`btn_view_${view}`}
+                  onClick={() => setCalendarView(view)}
+                  className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-mono font-bold capitalize transition-all duration-150 cursor-pointer text-center ${
+                    calendarView === view
+                      ? 'bg-zinc-900 text-yellow-500 shadow-inner border border-zinc-850/60'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40'
+                  }`}
+                >
+                  {view}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -1213,41 +1217,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
               </div>
 
               {/* MOBILE MONTH VIEW (md:hidden) */}
-              <div className="md:hidden space-y-4">
-                {/* 1. Mobile Month Header */}
-                <div className="flex items-center justify-between bg-zinc-900/80 border border-zinc-800 p-2.5 rounded-xl">
-                  <button
-                    id="btn_mobile_cal_prev"
-                    onClick={handlePrevMonth}
-                    className="w-10 h-10 flex items-center justify-center rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-300 hover:text-white active:bg-zinc-800 shrink-0 cursor-pointer"
-                    aria-label="Previous Month"
-                  >
-                    <ChevronLeft className="w-5 h-5" />
-                  </button>
-
-                  <div className="flex flex-col items-center">
-                    <span className="text-sm font-bold text-white tracking-wide font-mono">
-                      {monthNames[currentMonth]} {currentYear}
-                    </span>
-                    <button
-                      id="btn_mobile_cal_today"
-                      onClick={handleSetToday}
-                      className="text-[10px] font-mono font-bold uppercase text-yellow-500 hover:text-yellow-400 mt-0.5 px-2.5 py-0.5 rounded bg-yellow-500/10 border border-yellow-500/20 active:scale-95 transition cursor-pointer"
-                    >
-                      TODAY
-                    </button>
-                  </div>
-
-                  <button
-                    id="btn_mobile_cal_next"
-                    onClick={handleNextMonth}
-                    className="w-10 h-10 flex items-center justify-center rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-300 hover:text-white active:bg-zinc-800 shrink-0 cursor-pointer"
-                    aria-label="Next Month"
-                  >
-                    <ChevronRight className="w-5 h-5" />
-                  </button>
-                </div>
-
+              <div className="md:hidden space-y-3">
                 {/* 2. Mobile Weekday Header */}
                 <div className="grid grid-cols-7 text-center font-mono text-[10px] sm:text-[11px] font-extrabold uppercase text-zinc-400 py-1">
                   {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((d) => (
