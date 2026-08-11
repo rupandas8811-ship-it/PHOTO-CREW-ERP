@@ -7,7 +7,7 @@ import { formatINR } from '../../utils';
 import { CameraLensStatsCard } from '../CameraLensStatsCard';
 import { 
   DollarSign, TrendingUp, AlertTriangle, ShieldCheck, Briefcase, Calendar, Users, 
-  HelpCircle, ChevronRight, Activity, Percent, Sparkles, PieChart, FileText
+  HelpCircle, ChevronRight, Activity, Percent, Sparkles, PieChart, FileText, Filter
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, 
@@ -22,6 +22,7 @@ export const BusinessOverviewAnalytics: React.FC = () => {
 
   // Active Date Bounds are the global range from context
   const activeRange = globalDateRange;
+  const [showFilters, setShowFilters] = useState(false);
 
   // Filtered Datasets based on dates
   const filteredOrders = useMemo(() => {
@@ -149,11 +150,13 @@ export const BusinessOverviewAnalytics: React.FC = () => {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <button
-            onClick={() => setSelectedCard('Complete Business Overview')}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 hover:bg-amber-500/20 hover:border-amber-500/40 transition-all font-mono text-[10px] uppercase font-bold tracking-wider cursor-pointer h-9 shadow-md shadow-black/10"
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 border rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              showFilters ? 'border-amber-500/40 text-amber-400 bg-amber-500/5' : 'border-zinc-800 text-zinc-400'
+            }`}
           >
-            <FileText className="w-4 h-4" />
-            <span>Download Report</span>
+            <Filter className="w-3.5 h-3.5" />
+            <span>Filter / Download</span>
           </button>
           <div className="p-2 py-1.5 rounded-xl bg-zinc-900 border border-zinc-850/80 flex items-center gap-2.5 h-9">
             <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
@@ -163,6 +166,18 @@ export const BusinessOverviewAnalytics: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {showFilters && (
+        <div className="flex justify-end bg-zinc-950/20 border border-zinc-900 p-3 rounded-xl animate-in fade-in duration-200">
+          <button
+            onClick={() => setSelectedCard('Complete Business Overview')}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 hover:bg-amber-500/20 hover:border-amber-500/40 transition-all font-mono text-[10px] uppercase font-bold tracking-wider cursor-pointer h-9 shadow-md shadow-black/10"
+          >
+            <FileText className="w-4 h-4" />
+            <span>Download Report</span>
+          </button>
+        </div>
+      )}
 
       {/* 4 Dedicated Sections Bento-Grid */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
