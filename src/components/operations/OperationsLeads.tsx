@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Order, CurrentStage, Staff, Equipment } from '../../types';
 import { StatusText } from '../ui/StatusText';
+import { SafeProofImage } from '../ui/SafeProofImage';
 import { ProjectDetailModal } from '../ProjectDetailModal';
 import { ViewDetailsModal } from './ViewDetailsModal';
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
@@ -2057,15 +2058,9 @@ export const OperationsLeads: React.FC = () => {
 
                           // 1. When Current Status = Confirm Order
                           if (isConfirmOrder || (assignedStaffNames.length === 0 && !isEventStarted && !isEventEnded && !isFootageHandover && !isVerifiedFootage)) {
-                            if (!hasWorkStarted) {
-                              actionItems.push({
-                                label: 'Assign Crew',
-                                onClick: handleAssignCrew
-                              });
-                            }
                             actionItems.push({
-                              label: 'View CRM',
-                              onClick: handleViewDetails
+                              label: 'Assign Crew',
+                              onClick: handleAssignCrew
                             });
                           }
                           // 2. When Current Status = Assigned Crew
@@ -3420,14 +3415,7 @@ export const OperationsLeads: React.FC = () => {
                         )}
                       </div>
                       {assetCollectionProof.photoUrl ? (
-                        <div className="space-y-1">
-                          <a href={assetCollectionProof.photoUrl} target="_blank" rel="noreferrer" className="block relative group overflow-hidden rounded-lg border border-zinc-800 h-28 bg-zinc-900">
-                            <img src={assetCollectionProof.photoUrl} alt="Asset Collection" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity">
-                              View Full Photo ↗
-                            </div>
-                          </a>
-                        </div>
+                        <SafeProofImage url={assetCollectionProof.photoUrl} alt="Asset Collection" label="View Full Photo ↗" />
                       ) : (
                         <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
                           No proof photo found
@@ -3446,14 +3434,7 @@ export const OperationsLeads: React.FC = () => {
                         )}
                       </div>
                       {eventStartProof.photoUrl ? (
-                        <div className="space-y-1">
-                          <a href={eventStartProof.photoUrl} target="_blank" rel="noreferrer" className="block relative group overflow-hidden rounded-lg border border-zinc-800 h-28 bg-zinc-900">
-                            <img src={eventStartProof.photoUrl} alt="Event Start" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity">
-                              View Full Photo ↗
-                            </div>
-                          </a>
-                        </div>
+                        <SafeProofImage url={eventStartProof.photoUrl} alt="Event Start" label="View Full Photo ↗" />
                       ) : (
                         <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
                           No proof photo found
@@ -3472,14 +3453,7 @@ export const OperationsLeads: React.FC = () => {
                         )}
                       </div>
                       {eventCompletionProof.photoUrl ? (
-                        <div className="space-y-1">
-                          <a href={eventCompletionProof.photoUrl} target="_blank" rel="noreferrer" className="block relative group overflow-hidden rounded-lg border border-zinc-800 h-28 bg-zinc-900">
-                            <img src={eventCompletionProof.photoUrl} alt="Event Completion" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity">
-                              View Full Photo ↗
-                            </div>
-                          </a>
-                        </div>
+                        <SafeProofImage url={eventCompletionProof.photoUrl} alt="Event Completion" label="View Full Photo ↗" />
                       ) : (
                         <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
                           No proof photo found
@@ -3498,14 +3472,7 @@ export const OperationsLeads: React.FC = () => {
                         )}
                       </div>
                       {equipmentHandoverProof.photoUrl ? (
-                        <div className="space-y-1">
-                          <a href={equipmentHandoverProof.photoUrl} target="_blank" rel="noreferrer" className="block relative group overflow-hidden rounded-lg border border-zinc-800 h-28 bg-zinc-900">
-                            <img src={equipmentHandoverProof.photoUrl} alt="Equipment Handover" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity">
-                              View Full Photo ↗
-                            </div>
-                          </a>
-                        </div>
+                        <SafeProofImage url={equipmentHandoverProof.photoUrl} alt="Equipment Handover" label="View Full Photo ↗" />
                       ) : (
                         <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex flex-col items-center justify-center text-[11px] text-zinc-500 p-2 text-center">
                           <span>Equipment Not Handover</span>

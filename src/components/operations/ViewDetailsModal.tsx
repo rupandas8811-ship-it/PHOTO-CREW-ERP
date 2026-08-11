@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, User, Phone, MessageSquare, Mail, MapPin, Calendar, Clock, Package, ShieldCheck, Video, Camera, Award, FileText, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useRole } from '../RoleContext';
 import { deserializeLeadEvents } from '../../utils';
+import { SafeProofImage } from '../ui/SafeProofImage';
 
 interface ViewDetailsModalProps {
   isOpen: boolean;
@@ -392,17 +393,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
                     </div>
 
                     {rec.photoUrl && (
-                      <a 
-                        href={rec.photoUrl} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="block relative rounded-lg overflow-hidden border border-zinc-800 group h-32 bg-zinc-900"
-                      >
-                        <img src={rec.photoUrl} alt={rec.equipmentName} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                        <span className="absolute bottom-1 right-1 bg-black/80 text-[9px] font-bold text-zinc-200 px-1.5 py-0.5 rounded backdrop-blur">
-                          View Full Image
-                        </span>
-                      </a>
+                      <SafeProofImage url={rec.photoUrl} alt={rec.equipmentName} label="View Full Image" />
                     )}
 
                     {rec.rawFootageLink && (
