@@ -3328,8 +3328,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   // Fetch from Supabase directly for the JSON columns
   React.useEffect(() => {
     const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
-    if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD' && pkgId && supabaseClient) {
-      const currentKey = `${selectedLead.lead_id}_${pkgId}_${crmEvents?.length || 0}_${crmWizardStep}_${wizardStep}`;
+    if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD' && supabaseClient) {
+      const currentKey = `${selectedLead.lead_id}`;
       if (lastLoadedLeadIdRef.current === currentKey) {
         return;
       }
@@ -3348,15 +3348,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
             const cleanCost = data.package_price ?? data.budget;
             if (cleanCost != null && !isNaN(Number(cleanCost))) {
-              setWizardLeadData(prev => ({
-                ...prev,
-                package_cost: Number(cleanCost),
-                package_price: Number(cleanCost),
-                budget: Number(cleanCost),
-                notes: data.notes_special_customizations ?? prev.notes,
-                Select_Package_Option: data.Select_Package_Option || prev.Select_Package_Option,
-                selected_package_id: data.Select_Package_Option || prev.selected_package_id,
-              }));
+              setWizardLeadData(prev => {
+                const existingPkg = prev.selected_package_id || prev.Select_Package_Option;
+                const finalPkg = (existingPkg && existingPkg.trim() !== '') ? existingPkg : (data.Select_Package_Option || 'Custom Package');
+                return {
+                  ...prev,
+                  package_cost: Number(cleanCost),
+                  package_price: Number(cleanCost),
+                  budget: Number(cleanCost),
+                  notes: data.notes_special_customizations ?? prev.notes,
+                  Select_Package_Option: finalPkg,
+                  selected_package_id: finalPkg,
+                };
+              });
             }
             if (data.Quotation_Discount != null) {
               setQuoteDiscount(Number(data.Quotation_Discount));
@@ -3512,8 +3516,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           status: dbLead.status || dbLead.current_status || prev.status,
           budget: dbLead.budget ?? prev.budget ?? 0,
           package_price: dbLead.package_price ?? prev.package_price ?? 0,
-          Select_Package_Option: dbLead.Select_Package_Option || prev.Select_Package_Option || '',
-          selected_package_id: dbLead.Select_Package_Option || prev.selected_package_id || '',
+          Select_Package_Option: prev.Select_Package_Option || prev.selected_package_id || dbLead.Select_Package_Option || '',
+          selected_package_id: prev.selected_package_id || prev.Select_Package_Option || dbLead.Select_Package_Option || '',
         }));
 
         // Keep selectedLead object in sync with fresh database values
@@ -3570,7 +3574,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           pincode: leadData.pincode || prev.pincode || selectedLead.pincode || '',
           client_residence_address: leadData.client_residence_address || prev.client_residence_address || selectedLead.client_residence_address || '',
           desired_event_shoot_type: leadData.desired_event_shoot_type || prev.desired_event_shoot_type || selectedLead.desired_event_shoot_type || '',
-          Select_Package_Option: leadData.Select_Package_Option || prev.Select_Package_Option || selectedLead.Select_Package_Option || '',
+          Select_Package_Option: prev.Select_Package_Option || prev.selected_package_id || leadData.Select_Package_Option || selectedLead.Select_Package_Option || '',
           status: leadData.status || leadData.current_status || prev.status || selectedLead.status || '',
         }));
       } catch (err) {
@@ -5345,9 +5349,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       lead_source: fullLead.lead_source || '',
       Specify_Custom_Lead_Source_Name: fullLead.Specify_Custom_Lead_Source_Name || '',
       shoot_type: evShootType,
-      // Step 3 (Always initialize as empty per requirements)
-      selected_package_id: '',
-      Select_Package_Option: '',
+      // Step 3
+      selected_package_id: matchedPkgId || 'Custom Package',
+      Select_Package_Option: matchedPkgId || 'Custom Package',
       package_cost: '',
       package_price: '',
       deliverables: '',
@@ -5445,6 +5449,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       setEditableInclusions(newInclusions);
       setEditableDeliverables(newDeliverables);
+      if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD') {
+        saveStep3DataRealtime(newInclusions, newDeliverables, customPkgVal);
+      }
       return;
     }
 
@@ -5496,12 +5503,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       setEditableInclusions(newInclusions);
       setEditableDeliverables(newDeliverables);
+      if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD') {
+        saveStep3DataRealtime(newInclusions, newDeliverables, pkgIdStr);
+      }
     } else {
       setWizardLeadData((prev) => ({
         ...prev,
         selected_package_id: targetPkgId,
         Select_Package_Option: targetPkgId,
       }));
+      if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD') {
+        saveStep3DataRealtime(editableInclusions, editableDeliverables, targetPkgId);
+      }
     }
   };
 
@@ -6416,8 +6429,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
 
       if (isCreateFlow) {
-        setSelectedPkgIds([]);
-        setWizardLeadData(prev => ({ ...prev, selected_package_id: '', Select_Package_Option: '' }));
+        setSelectedPkgIds(['Custom Package']);
+        setWizardLeadData(prev => ({ ...prev, selected_package_id: 'Custom Package', Select_Package_Option: 'Custom Package' }));
         setWizardStep(3);
       } else {
         const newCompleted = Math.max(crmHighestStep, 2);
@@ -6657,8 +6670,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       if (isCreateFlow) {
         setSalesStatus(targetStatus as CurrentStage);
-        setSelectedPkgIds([]);
-        setWizardLeadData(prev => ({ ...prev, selected_package_id: '', Select_Package_Option: '' }));
+        setSelectedPkgIds(['Custom Package']);
+        setWizardLeadData(prev => ({ ...prev, selected_package_id: 'Custom Package', Select_Package_Option: 'Custom Package' }));
         setWizardStep(3);
       } else {
         const newCompleted = Math.max(crmHighestStep, 2);
