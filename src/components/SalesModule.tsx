@@ -3748,40 +3748,56 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   }, [wizardStep, crmWizardStep, activeQuoteNum]);
 
   const getSelectedPkgsInfo = (isEdit: boolean) => {
-  // ... inserted dynamically ...
+    const finalPkgId = (isEdit
+      ? (wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead?.Select_Package_Option)
+      : (wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedPkgIds[0])) || 'Custom Package';
 
-    if (isEdit) {
-      const finalPkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead?.Select_Package_Option || '';
-      const primaryPkg = packages.find(p => p.package_id === finalPkgId);
+    if (finalPkgId === 'Custom Package' || finalPkgId === 'custom_package') {
       return [{
-        package_name: primaryPkg?.package_name || 'Selected Package',
-        package_id: finalPkgId || 'selected_pkg',
-        package_cost: Number(wizardLeadData.package_cost) || Number(primaryPkg?.price) || 0,
-        deliverables: wizardLeadData.deliverables || primaryPkg?.deliverables || '',
-        inclusions: primaryPkg?.package_includes || '',
-        team_members: primaryPkg?.team_members || '',
-        seasonal_offer: primaryPkg?.seasonal_offer || '',
-        terms_conditions: primaryPkg?.terms_conditions || '',
-        event_type: primaryPkg?.event_type || '',
-        duration: primaryPkg?.duration || '',
-        category: primaryPkg?.category || ''
+        package_name: 'Custom Package',
+        package_id: 'Custom Package',
+        package_cost: Number(wizardLeadData.package_cost) || 0,
+        deliverables: wizardLeadData.deliverables || '',
+        inclusions: '',
+        team_members: '',
+        seasonal_offer: '',
+        terms_conditions: '',
+        event_type: '',
+        duration: '',
+        category: ''
       }];
-    } else {
-      const selectedPkgs = (packages || []).filter(item => selectedPkgIds.includes(item.package_id));
-      return selectedPkgs.map(p => ({
-        package_name: p.package_name,
-        package_id: p.package_id,
-        package_cost: pkgPrices[p.package_id] !== undefined ? pkgPrices[p.package_id] : p.price,
-        deliverables: pkgDeliverables[p.package_id] || p.deliverables || '',
-        inclusions: p.package_includes || '',
-        team_members: p.team_members || '',
-        seasonal_offer: p.seasonal_offer || '',
-        terms_conditions: p.terms_conditions || '',
-        event_type: p.event_type || '',
-        duration: p.duration || '',
-        category: p.category || ''
-      }));
     }
+
+    const primaryPkg = (packages || []).find(p => String(p.package_id) === String(finalPkgId) || String(p.package_name) === String(finalPkgId));
+    if (primaryPkg) {
+      return [{
+        package_name: primaryPkg.package_name,
+        package_id: primaryPkg.package_id,
+        package_cost: pkgPrices[primaryPkg.package_id] !== undefined ? Number(pkgPrices[primaryPkg.package_id]) : (Number(wizardLeadData.package_cost) || Number(primaryPkg.price) || 0),
+        deliverables: wizardLeadData.deliverables || pkgDeliverables[primaryPkg.package_id] || primaryPkg.deliverables || '',
+        inclusions: primaryPkg.package_includes || '',
+        team_members: primaryPkg.team_members || '',
+        seasonal_offer: primaryPkg.seasonal_offer || '',
+        terms_conditions: primaryPkg.terms_conditions || '',
+        event_type: primaryPkg.event_type || '',
+        duration: primaryPkg.duration || '',
+        category: primaryPkg.category || ''
+      }];
+    }
+
+    return [{
+      package_name: wizardLeadData.package_name || 'Custom Package',
+      package_id: finalPkgId || 'Custom Package',
+      package_cost: Number(wizardLeadData.package_cost) || 0,
+      deliverables: wizardLeadData.deliverables || '',
+      inclusions: '',
+      team_members: '',
+      seasonal_offer: '',
+      terms_conditions: '',
+      event_type: '',
+      duration: '',
+      category: ''
+    }];
   };
 
   const dynamicBaseSum = getSelectedPkgsInfo(crmWizardStep > 0).reduce((sum, p) => sum + Number(p.package_cost || 0), 0);
@@ -4473,20 +4489,24 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const renderStep3Workspace = (isEdit: boolean) => {
     const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
-    const currentPkgId = isEdit ? (wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || '') : (selectedPkgIds[0] || '');
-    let selectedPkg = availablePkgs.find(p => String(p.package_id) === String(currentPkgId));
+    const rawPkgId = isEdit
+      ? (wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead?.Select_Package_Option || '')
+      : (wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedPkgIds[0] || '');
+    const currentPkgId = (rawPkgId && rawPkgId.trim() !== '') ? rawPkgId : 'Custom Package';
+
+    let selectedPkg = availablePkgs.find(p => String(p.package_id) === String(currentPkgId) || String(p.package_name) === String(currentPkgId));
     if (!selectedPkg && currentPkgId) {
       selectedPkg = {
         package_id: currentPkgId,
-        package_name: (currentPkgId === 'custom_package' || currentPkgId === 'Custom Package') ? 'Custom Package' : `Package ${currentPkgId} (Legacy)`,
+        package_name: (currentPkgId === 'custom_package' || currentPkgId === 'Custom Package') ? 'Custom Package' : `Package ${currentPkgId}`,
         price: wizardLeadData.package_cost || 0,
         deliverables: wizardLeadData.deliverables || "",
         status: "Active"
       } as any;
     }
-    const selectedPkgId = selectedPkg?.package_id || '';
-    const inclusionsList = editableInclusions[selectedPkgId] || [];
-    const deliverablesList = editableDeliverables[selectedPkgId] || [];
+    const selectedPkgId = selectedPkg?.package_id || 'Custom Package';
+    const inclusionsList = editableInclusions[selectedPkgId] || editableInclusions['Custom Package'] || [];
+    const deliverablesList = editableDeliverables[selectedPkgId] || editableDeliverables['Custom Package'] || [];
     const currentEvents = isEdit ? crmEvents : createEvents;
 
     return (
@@ -4499,50 +4519,34 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               value={currentPkgId}
               onChange={(e) => {
                 const val = e.target.value;
-                if (!isEdit) {
-                  setSelectedPkgIds(val ? [val] : []);
-                }
+                setSelectedPkgIds([val]);
                 handlePackageDropdownChange(val);
               }}
-              className={`w-full bg-slate-955 border focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer ${
-                !currentPkgId
-                  ? 'border-rose-500/40 focus:border-rose-500 text-rose-200'
-                  : 'border-slate-800 focus:border-indigo-500 text-white'
-              }`}
+              className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 text-white focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer"
             >
-              <option value="">── Choose configuration package ──</option>
+              <option value="Custom Package">Custom Package</option>
               {(() => {
-                const activePkgs = availablePkgs.filter(p => (!p.status || p.status.toLowerCase() === 'active') && String(p.package_id) !== 'Custom Package' && String(p.package_id) !== 'custom_package' && String(p.package_name) !== 'Custom Package');
-                if (currentPkgId && !activePkgs.some(p => String(p.package_id) === String(currentPkgId))) {
+                const activePkgs = availablePkgs.filter(p => {
+                  if (p.status && p.status.toLowerCase() !== 'active') return false;
+                  const pId = String(p.package_id || '');
+                  const pName = String(p.package_name || '');
+                  if (pId === 'Custom Package' || pId === 'custom_package' || pName === 'Custom Package') return false;
+                  if (pName.toLowerCase().includes('legacy') || pName.toLowerCase().includes('₹0')) return false;
+                  return true;
+                });
+                if (currentPkgId && currentPkgId !== 'Custom Package' && currentPkgId !== 'custom_package' && !activePkgs.some(p => String(p.package_id) === String(currentPkgId))) {
                   const matched = availablePkgs.find(p => String(p.package_id) === String(currentPkgId));
-                  if (matched) {
+                  if (matched && !String(matched.package_name || '').toLowerCase().includes('legacy')) {
                     activePkgs.unshift(matched);
-                  } else {
-                    activePkgs.unshift({
-                      package_id: currentPkgId,
-                      package_name: `Package ${currentPkgId} (Legacy)`,
-                      price: wizardLeadData.package_cost || selectedLead?.Final_Quotation_Amount || 0,
-                      status: 'Active'
-                    } as any);
                   }
                 }
-                return (
-                  <>
-                    {activePkgs.map((pkg) => (
-                      <option key={pkg.package_id} value={pkg.package_id}>
-                        {pkg.package_name} (₹{Number(pkg.price).toLocaleString('en-IN')})
-                      </option>
-                    ))}
-                    <option value="Custom Package">Custom Package</option>
-                  </>
-                );
+                return activePkgs.map((pkg) => (
+                  <option key={pkg.package_id} value={pkg.package_id}>
+                    {pkg.package_name} (₹{Number(pkg.price).toLocaleString('en-IN')})
+                  </option>
+                ));
               })()}
             </select>
-            {!currentPkgId && (
-              <p className="text-rose-450 font-bold text-xs mt-1 font-mono animate-pulse flex items-center gap-1.5">
-                ⚠️ Please select a package before continuing.
-              </p>
-            )}
           </div>
 
           {/* Sales Executive Details */}
@@ -4582,8 +4586,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
           </div>
 
-          {/* Single Package Base Price (₹) Field */}
-          <div className="bg-slate-900/50 border border-slate-800/80 rounded-lg p-3 space-y-2 shadow-sm">
+          {/* Single Package Base Price (₹) Field (Hidden visually per request, keeping value intact internally) */}
+          <div className="hidden">
             <label className="block text-[11px] font-bold text-amber-400 uppercase tracking-wide font-mono flex items-center gap-1.5">
               <span>💰</span> Package Base Price (₹) *
             </label>
@@ -5406,25 +5410,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setSalesStaffMobile(currentUser.mobile || '');
     }
     
-    if (!packageId) {
-      setWizardLeadData((prev) => ({
-        ...prev,
-        selected_package_id: '',
-        Select_Package_Option: '',
-        package_name: '',
-        package_cost: 0,
-        package_price: 0,
-        budget: 0,
-        final_quoted_amount: 0,
-        deliverables: '',
-        notes: '',
-      }));
-      setEditableInclusions((prev) => ({ ...prev, '': [] }));
-      setEditableDeliverables((prev) => ({ ...prev, '': [] }));
-      return;
-    }
+    const targetPkgId = packageId || 'Custom Package';
+    setSelectedPkgIds([targetPkgId]);
 
-    if (packageId === 'Custom Package' || packageId === 'custom_package') {
+    if (targetPkgId === 'Custom Package' || targetPkgId === 'custom_package') {
       const customPkgVal = 'Custom Package';
       const existingPrice = wizardLeadData.package_cost || wizardLeadData.package_price || selectedLead?.package_price || selectedLead?.budget || 0;
       setWizardLeadData((prev) => ({
@@ -5440,21 +5429,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       const newInclusions = { ...editableInclusions };
       if (!newInclusions[customPkgVal]) newInclusions[customPkgVal] = [];
+      const newDeliverables = { ...editableDeliverables };
+      if (!newDeliverables[customPkgVal]) newDeliverables[customPkgVal] = [];
+
       if (activeEvents && activeEvents.length > 0) {
         activeEvents.forEach((ev) => {
           const k1 = `${customPkgVal}_${ev.id}`;
           const k2 = `${customPkgVal}_${ev.event_name || ev.event_type || 'Unnamed Event'}`;
           if (!newInclusions[k1]) newInclusions[k1] = [];
           if (!newInclusions[k2]) newInclusions[k2] = [];
-        });
-      }
-
-      const newDeliverables = { ...editableDeliverables };
-      if (!newDeliverables[customPkgVal]) newDeliverables[customPkgVal] = [];
-      if (activeEvents && activeEvents.length > 0) {
-        activeEvents.forEach((ev) => {
-          const k1 = `${customPkgVal}_${ev.id}`;
-          const k2 = `${customPkgVal}_${ev.event_name || ev.event_type || 'Unnamed Event'}`;
           if (!newDeliverables[k1]) newDeliverables[k1] = [];
           if (!newDeliverables[k2]) newDeliverables[k2] = [];
         });
@@ -5466,18 +5449,21 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
 
     const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
-    const pkg = availablePkgs.find((p) => String(p.package_id) === String(packageId));
+    const pkg = availablePkgs.find((p) => String(p.package_id) === String(targetPkgId) || String(p.package_name) === String(targetPkgId));
     if (pkg) {
+      const pkgIdStr = String(pkg.package_id);
+      const pkgPrice = Number(pkg.price) || 0;
       setWizardLeadData((prev) => ({
         ...prev,
-        selected_package_id: packageId,
-        Select_Package_Option: packageId,
+        selected_package_id: pkgIdStr,
+        Select_Package_Option: pkgIdStr,
         package_name: pkg.package_name,
-        package_cost: Number(pkg.price),
+        package_cost: pkgPrice,
+        package_price: pkgPrice,
         deliverables: pkg.deliverables || '',
         notes: pkg.seasonal_offer ? `Seasonal Offer: ${pkg.seasonal_offer}` : prev.notes,
-        budget: Number(pkg.price),
-        final_quoted_amount: Number(pkg.price),
+        budget: pkgPrice,
+        final_quoted_amount: pkgPrice,
       }));
       
       const incList = parseTeamMembers(pkg.team_members);
@@ -5487,18 +5473,24 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const defaultDel = delList.length > 0 ? delList : ['High Resolution Edited Photos'];
 
       const newInclusions = { ...editableInclusions };
-      newInclusions[packageId] = defaultInc;
+      newInclusions[pkgIdStr] = [...defaultInc];
+      newInclusions[targetPkgId] = [...defaultInc];
       
       const newDeliverables = { ...editableDeliverables };
-      newDeliverables[packageId] = defaultDel;
+      newDeliverables[pkgIdStr] = [...defaultDel];
+      newDeliverables[targetPkgId] = [...defaultDel];
 
       if (activeEvents && activeEvents.length > 0) {
         activeEvents.forEach((ev) => {
-          newInclusions[`${packageId}_${ev.id}`] = [...defaultInc];
-          newInclusions[`${packageId}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [...defaultInc];
+          newInclusions[`${pkgIdStr}_${ev.id}`] = [...defaultInc];
+          newInclusions[`${pkgIdStr}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [...defaultInc];
+          newInclusions[`${targetPkgId}_${ev.id}`] = [...defaultInc];
+          newInclusions[`${targetPkgId}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [...defaultInc];
           
-          newDeliverables[`${packageId}_${ev.id}`] = [...defaultDel];
-          newDeliverables[`${packageId}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [...defaultDel];
+          newDeliverables[`${pkgIdStr}_${ev.id}`] = [...defaultDel];
+          newDeliverables[`${pkgIdStr}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [...defaultDel];
+          newDeliverables[`${targetPkgId}_${ev.id}`] = [...defaultDel];
+          newDeliverables[`${targetPkgId}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [...defaultDel];
         });
       }
 
@@ -5507,8 +5499,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     } else {
       setWizardLeadData((prev) => ({
         ...prev,
-        selected_package_id: packageId || '',
-        Select_Package_Option: packageId || '',
+        selected_package_id: targetPkgId,
+        Select_Package_Option: targetPkgId,
       }));
     }
   };
@@ -12514,8 +12506,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 </div>
                               </div>
 
-                              {/* Single Package Base Price (₹) Field */}
-                              <div className="bg-slate-900/50 border border-slate-800/80 rounded-lg p-3 space-y-2 shadow-sm">
+                              {/* Single Package Base Price (₹) Field (Hidden visually per request) */}
+                              <div className="hidden">
                                 <label className="block text-[11px] font-bold text-amber-400 uppercase tracking-wide font-mono flex items-center gap-1.5">
                                   <span>💰</span> Package Base Price (₹) *
                                 </label>

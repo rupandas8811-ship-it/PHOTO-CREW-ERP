@@ -783,7 +783,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                 setNewMemoMessage('');
                 setShowAddMemo(true);
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500 hover:bg-yellow-450 border border-yellow-600 rounded-xl text-xs text-zinc-950 font-bold transition-all cursor-pointer"
+              className="hidden flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500 hover:bg-yellow-450 border border-yellow-600 rounded-xl text-xs text-zinc-950 font-bold transition-all cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
               Assign Memo
@@ -865,7 +865,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         
         {/* LEFT COLUMN: Main viewport calendar area */}
-        <div className="lg:col-span-2 bg-zinc-950/45 border border-zinc-905 p-3 sm:p-4 md:p-6 rounded-2xl shadow-xl space-y-4 md:space-y-6 relative">
+        <div className="lg:col-span-3 bg-zinc-950/45 border border-zinc-905 p-3 sm:p-4 md:p-6 rounded-2xl shadow-xl space-y-4 md:space-y-6 relative">
           {isDataLoading && (
             <div className="absolute inset-0 bg-zinc-950/70 backdrop-blur-[1px] flex items-center justify-center rounded-2xl z-50">
               <div className="flex flex-col items-center gap-3 bg-zinc-900 border border-zinc-800 p-6 rounded-xl shadow-2xl animate-fade-in">
@@ -1569,8 +1569,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
 
         </div>
 
-        {/* RIGHT COLUMN: Workspace Memos Board */}
-        <div className="lg:col-span-1 space-y-6">
+        {/* RIGHT COLUMN: Workspace Memos Board (Hidden per user request) */}
+        <div className="hidden lg:col-span-1 space-y-6">
           <div className="bg-zinc-950/45 border border-zinc-905 p-4 md:p-6 rounded-2xl shadow-xl space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-850 pb-3">
               <div className="flex items-center gap-2">
