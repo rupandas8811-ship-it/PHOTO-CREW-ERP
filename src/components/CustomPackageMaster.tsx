@@ -588,32 +588,7 @@ export const CustomPackageMaster: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full sm:w-auto">
-            <button
-              onClick={handleManualRefresh}
-              disabled={isRefreshing}
-              className="w-full sm:w-auto justify-center px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 hover:text-white transition-all text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span>Refresh</span>
-            </button>
-
-            <button
-              onClick={handleOpenAddRole}
-              className="justify-center px-2 py-1 rounded border border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 transition-all text-[10px] font-bold font-mono uppercase tracking-wider flex items-center gap-1 cursor-pointer"
-            >
-              <Plus className="w-3 h-3 stroke-[3]" />
-              <span>+ Add Custom Role</span>
-            </button>
-
-            <button
-              onClick={handleOpenAddDeliverable}
-              className="justify-center px-2 py-1 rounded border border-emerald-500/50 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 transition-all text-[10px] font-bold font-mono uppercase tracking-wider flex items-center gap-1 cursor-pointer"
-            >
-              <Plus className="w-3 h-3 stroke-[3]" />
-              <span>+ Add Custom Deliverable</span>
-            </button>
-          </div>
+          {/* Header Action Bar Hidden per requirements */}
         </div>
 
         {/* Filter and View Toggles Bar */}
@@ -703,13 +678,15 @@ export const CustomPackageMaster: React.FC = () => {
                   </div>
                 </div>
 
-                <button
-                  onClick={handleOpenAddRole}
-                  className="w-full sm:w-auto justify-center px-3.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-400 transition-all text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+ Add Custom Role</span>
-                </button>
+                {activeTab === 'roles' && (
+                  <button
+                    onClick={handleOpenAddRole}
+                    className="w-full sm:w-auto justify-center px-3.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-400 transition-all text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Add Custom Role</span>
+                  </button>
+                )}
               </div>
 
               {filteredRoles.length === 0 ? (
@@ -912,13 +889,15 @@ export const CustomPackageMaster: React.FC = () => {
                   </div>
                 </div>
 
-                <button
-                  onClick={handleOpenAddDeliverable}
-                  className="w-full sm:w-auto justify-center px-3.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 transition-all text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+ Add Custom Deliverable</span>
-                </button>
+                {activeTab === 'deliverables' && (
+                  <button
+                    onClick={handleOpenAddDeliverable}
+                    className="w-full sm:w-auto justify-center px-3.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 transition-all text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Add Custom Deliverable</span>
+                  </button>
+                )}
               </div>
 
               {filteredDeliverables.length === 0 ? (
