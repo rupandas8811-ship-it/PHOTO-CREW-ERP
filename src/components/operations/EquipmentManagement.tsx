@@ -72,6 +72,7 @@ export const EquipmentManagement: React.FC = () => {
   
   // Search, filter, and sort states
   const [searchQuery, setSearchQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
     type: 'All',
     status: 'All',
@@ -439,7 +440,7 @@ export const EquipmentManagement: React.FC = () => {
 
       {/* Search & Global Filters Bar */}
       <div className="bg-zinc-900/40 border border-zinc-850 rounded-2xl p-4 space-y-3.5">
-        <div className="flex flex-col md:flex-row gap-3 items-center">
+        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
           <div className="relative flex-1 w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
             <input
@@ -452,64 +453,86 @@ export const EquipmentManagement: React.FC = () => {
             {searchQuery && (
               <button 
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-zinc-800 rounded-full text-zinc-400"
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-zinc-800 rounded-full text-zinc-400 cursor-pointer"
               >
                 <X className="w-3 h-3" />
               </button>
             )}
           </div>
           
-          <div className="flex flex-wrap gap-2 w-full md:w-auto shrink-0">
-            <div className="flex items-center gap-1.5 bg-zinc-950 border border-zinc-850 rounded-xl px-2.5 py-1.5">
-              <Filter className="w-3 h-3 text-zinc-500" />
-              <span className="text-[10px] text-zinc-400 font-mono">Filters:</span>
-            </div>
-
-            <select
-              value={filters.type}
-              onChange={(e) => setFilters({...filters, type: e.target.value})}
-              className="bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-1.5 text-[10px] font-mono text-zinc-300 focus:outline-none"
-            >
-              <option value="All">All Categories</option>
-              {['Camera', 'Lens', 'Drone', 'Gimbal', 'Tripod', 'Light', 'Audio Equipment', 'Memory Cards', 'Batteries', 'Other'].map(t => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters({...filters, status: e.target.value})}
-              className="bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-1.5 text-[10px] font-mono text-zinc-300 focus:outline-none"
-            >
-              <option value="All">All Status</option>
-              {['Available', 'Assigned', 'In Use', 'Under Maintenance', 'Damaged', 'Lost', 'Retired'].map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-
-            <select
-              value={filters.condition}
-              onChange={(e) => setFilters({...filters, condition: e.target.value})}
-              className="bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-1.5 text-[10px] font-mono text-zinc-300 focus:outline-none"
-            >
-              <option value="All">All Conditions</option>
-              {['Excellent', 'Good', 'Fair', 'Needs Repair', 'Damaged', 'Retired'].map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-
-            <select
-              value={filters.brand}
-              onChange={(e) => setFilters({...filters, brand: e.target.value})}
-              className="bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-1.5 text-[10px] font-mono text-zinc-300 focus:outline-none"
-            >
-              <option value="All">All Brands</option>
-              {uniqueBrands.map(b => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
-          </div>
+          <button
+            type="button"
+            id="btn_equipment_filter_toggle"
+            onClick={() => setShowFilters(!showFilters)}
+            className={`px-3.5 py-2.5 rounded-xl border text-xs font-bold font-mono flex items-center justify-center gap-2 transition-all cursor-pointer shrink-0 w-full sm:w-auto ${
+              showFilters 
+                ? 'bg-amber-500/10 border-amber-500/50 text-amber-400' 
+                : 'bg-zinc-950 border-zinc-850 text-zinc-300 hover:bg-zinc-900'
+            }`}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            <span>FILTER</span>
+            {(filters.type !== 'All' || filters.status !== 'All' || filters.condition !== 'All' || filters.brand !== 'All') && (
+              <span className="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>
+            )}
+          </button>
         </div>
+
+        {/* Collapsible Filter Panel */}
+        {showFilters && (
+          <div className="pt-3 border-t border-zinc-850/80 space-y-3 animate-fade-in">
+            <div className="flex flex-wrap gap-2 w-full">
+              <div className="flex items-center gap-1.5 bg-zinc-950 border border-zinc-850 rounded-xl px-2.5 py-1.5">
+                <Filter className="w-3 h-3 text-zinc-500" />
+                <span className="text-[10px] text-zinc-400 font-mono">Filters:</span>
+              </div>
+
+              <select
+                value={filters.type}
+                onChange={(e) => setFilters({...filters, type: e.target.value})}
+                className="bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-1.5 text-[10px] font-mono text-zinc-300 focus:outline-none"
+              >
+                <option value="All">All Categories</option>
+                {['Camera', 'Lens', 'Drone', 'Gimbal', 'Tripod', 'Light', 'Audio Equipment', 'Memory Cards', 'Batteries', 'Other'].map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+
+              <select
+                value={filters.status}
+                onChange={(e) => setFilters({...filters, status: e.target.value})}
+                className="bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-1.5 text-[10px] font-mono text-zinc-300 focus:outline-none"
+              >
+                <option value="All">All Status</option>
+                {['Available', 'Assigned', 'In Use', 'Under Maintenance', 'Damaged', 'Lost', 'Retired'].map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+
+              <select
+                value={filters.condition}
+                onChange={(e) => setFilters({...filters, condition: e.target.value})}
+                className="bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-1.5 text-[10px] font-mono text-zinc-300 focus:outline-none"
+              >
+                <option value="All">All Conditions</option>
+                {['Excellent', 'Good', 'Fair', 'Needs Repair', 'Damaged', 'Retired'].map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+
+              <select
+                value={filters.brand}
+                onChange={(e) => setFilters({...filters, brand: e.target.value})}
+                className="bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-1.5 text-[10px] font-mono text-zinc-300 focus:outline-none"
+              >
+                <option value="All">All Brands</option>
+                {uniqueBrands.map(b => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
 
         {/* Sorting Controller Row */}
         <div className="flex justify-between items-center border-t border-zinc-850/60 pt-3 text-[11px]">

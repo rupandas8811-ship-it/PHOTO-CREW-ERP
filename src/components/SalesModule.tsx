@@ -8896,7 +8896,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       )}
 
       {/* Header Bar */}
-      {activeTab !== 'create' && activeTab !== 'custom_package_master' && (
+      {activeTab !== 'create' && activeTab !== 'custom_package_master' && !selectedLead && (
         <div hidden={activeTab === 'calendar'} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-black text-white flex items-center gap-2">
@@ -10507,22 +10507,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             id="create_lead_form"
             className="bg-[#030303] border border-slate-800 rounded-2xl w-full shadow-2xl flex flex-col overflow-hidden relative h-[calc(100vh-220px)] min-h-[500px]"
           >
-            {/* Header: Sticky */}
-            <div className="border-b border-slate-800/80 py-2.5 px-4 sm:px-5 flex items-center justify-between shrink-0 bg-slate-950/40 backdrop-blur-md">
-              <div className="space-y-0.5">
-                <h3 className="text-xs sm:text-sm font-bold text-slate-100 flex items-center gap-2">
-                  <span className="text-emerald-400">✍️</span> Create New Inbound Quotation
-                </h3>
-              </div>
-              <button 
-                type="button"
-                onClick={() => { resetForm(); setActiveTab('list'); }}
-                className="p-1 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-lg transition-all cursor-pointer inline-flex items-center justify-center border border-transparent hover:border-slate-700/50"
-                title="Close Modal"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+            <button 
+              type="button"
+              onClick={() => { resetForm(); setActiveTab('list'); }}
+              className="absolute top-2 right-3 z-20 p-1 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-lg transition-all cursor-pointer inline-flex items-center justify-center border border-transparent hover:border-slate-700/50 bg-slate-950/80"
+              title="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
 
             {crmToast && (
               <div id="crm-create-toast-container" className={`mx-4 mt-4 p-3 rounded-xl shadow-lg flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2 duration-200 shrink-0 ${
