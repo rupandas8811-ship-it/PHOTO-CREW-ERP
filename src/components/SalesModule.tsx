@@ -484,8 +484,9 @@ const generateQuotationPDF = (
       const eventName = event.event_name || event.event_type || 'Unnamed Event';
 
       orderedEventInclusions.push({
+        eventData: event,
         eventName,
-        eventDate: event.event_date || "",
+        eventDate: event.event_start_date || event.event_date || "",
         eventLocation: event.event_location || "N/A",
         members: (eventInclusions || []).filter(Boolean)
       });
