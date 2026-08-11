@@ -13,7 +13,7 @@ export const AppLogo: React.FC<AppLogoProps> = ({
   showTextOnFallback = true 
 }) => {
   const [hasError, setHasError] = useState(false);
-  const logoUrl = 'https://aqifyxsimhqayfjwzzwj.supabase.co/storage/v1/object/public/img/logo.png';
+  const logoUrl = 'https://aqifyxsimhqayfjwzzwj.supabase.co/storage/v1/object/public/img/logo%20(4)%20(1).png';
 
   // Responsive class configurations
   let imageSizeClass = 'h-10 w-auto';

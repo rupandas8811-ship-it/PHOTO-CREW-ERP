@@ -193,7 +193,7 @@ export const StudioLoader: React.FC<StudioLoaderProps> = ({
                   className="absolute inset-0 flex items-center justify-center p-8 z-30"
                 >
                   <img
-                    src="https://aqifyxsimhqayfjwzzwj.supabase.co/storage/v1/object/public/img/logo.png"
+                    src="https://aqifyxsimhqayfjwzzwj.supabase.co/storage/v1/object/public/img/logo%20(4)%20(1).png"
                     alt="Photocrew Pictures Logo"
                     referrerPolicy="no-referrer"
                     className="w-16 h-16 object-contain filter drop-shadow-[0_0_12px_rgba(245,158,11,0.4)]"

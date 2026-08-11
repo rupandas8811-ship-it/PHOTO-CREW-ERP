@@ -433,7 +433,7 @@ const generateQuotationPDF = (
   };
 
     // NEW PREP FOR TEAM MEMBERS (INCLUSIONS) AND DELIVERABLES
-  const orderedEventInclusions: { eventName: string; eventDate: string; eventLocation: string; members: string[] }[] = [];
+  const orderedEventInclusions: { eventData?: any; eventName: string; eventDate: string; eventLocation: string; members: string[] }[] = [];
   const orderedEventDeliverables: { eventName: string; pkgName: string; items: string[] }[] = [];
   let generalInclusions: string[] = [];
   const generalDeliverables: { pkgName: string; items: string[] }[] = [];
@@ -1738,7 +1738,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   React.useEffect(() => {
     const preloadLogo = async () => {
       try {
-        const logoUrl = 'https://aqifyxsimhqayfjwzzwj.supabase.co/storage/v1/object/public/img/logo.png';
+        const logoUrl = 'https://aqifyxsimhqayfjwzzwj.supabase.co/storage/v1/object/public/img/logo%20(4)%20(1).png';
         const result = await getLogoBase64FromUrl(logoUrl);
         setLogoBase64(result.base64);
         setLogoAspectRatio(result.aspect);
@@ -4242,7 +4242,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       let currentLogo = logoBase64;
       let currentAspect = logoAspectRatio;
       try {
-        const logoUrl = 'https://aqifyxsimhqayfjwzzwj.supabase.co/storage/v1/object/public/img/logo.png';
+        const logoUrl = 'https://aqifyxsimhqayfjwzzwj.supabase.co/storage/v1/object/public/img/logo%20(4)%20(1).png';
         const result = await getLogoBase64FromUrl(logoUrl);
         currentLogo = result.base64;
         currentAspect = result.aspect;

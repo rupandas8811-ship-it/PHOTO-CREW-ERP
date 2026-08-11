@@ -168,7 +168,7 @@ export const OperationsModule: React.FC<OperationsModuleProps> = ({
         return {
           badge: 'Gears Registry',
           title: 'Equipment & Asset Logistics',
-          desc: 'Register high-end cameras, primes, drones, audios, and accessories. Track equipment states and maintenance lifecycles.'
+          desc: ''
         };
       case 'operations_staff':
         return {
@@ -231,9 +231,11 @@ export const OperationsModule: React.FC<OperationsModuleProps> = ({
               </span>
               <span>{meta.title}</span>
             </h2>
-            <p className="text-xs text-zinc-400 mt-1 max-w-4xl">
-              {meta.desc}
-            </p>
+            {meta.desc && (
+              <p className="text-xs text-zinc-400 mt-1 max-w-4xl">
+                {meta.desc}
+              </p>
+            )}
           </div>
         </div>
 
