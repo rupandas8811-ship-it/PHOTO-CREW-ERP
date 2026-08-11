@@ -4403,15 +4403,34 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           </h4>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Package Amount (Read-only Display representing Base Price) */}
+            {/* Package Amount (Editable Package Base Price) */}
             <div>
               <label className="block text-xs font-semibold text-slate-400 mb-1.5">
                 Package Base Price (₹)
               </label>
-              <div className="w-full bg-slate-950/60 border border-slate-850/50 rounded-lg py-2 px-3 text-xs text-slate-400 font-mono flex items-center justify-between">
-                <span className="break-words max-w-[200px]">{pkgNames}</span>
-                <span className="font-bold text-slate-200">₹{basePkgSum.toLocaleString('en-IN')}</span>
-              </div>
+              <input
+                type="number"
+                id={isEdit ? "input_section2_package_base_price" : "create_section2_package_base_price"}
+                value={wizardLeadData.package_cost !== undefined && wizardLeadData.package_cost !== null && wizardLeadData.package_cost !== '' ? wizardLeadData.package_cost : basePkgSum}
+                onChange={(e) => {
+                  const rawVal = e.target.value;
+                  const numVal = rawVal === '' ? '' : Math.max(0, parseInt(rawVal) || 0);
+                  const parsedNum = rawVal === '' ? 0 : Number(numVal);
+                  const currentPkg = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || 'Custom Package';
+                  setWizardLeadData(prev => ({
+                    ...prev,
+                    package_cost: numVal,
+                    package_price: numVal,
+                    budget: parsedNum,
+                    final_quoted_amount: parsedNum
+                  }));
+                  if (currentPkg) {
+                    setPkgPrices(prev => ({ ...prev, [currentPkg]: parsedNum }));
+                  }
+                }}
+                placeholder="0"
+                className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-2 px-3 text-xs text-amber-300 font-mono font-bold focus:outline-none focus:ring-1 focus:ring-amber-500/20 transition-all"
+              />
             </div>
 
             {/* Discount */}
@@ -5420,17 +5439,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     if (targetPkgId === 'Custom Package' || targetPkgId === 'custom_package') {
       const customPkgVal = 'Custom Package';
-      const existingPrice = wizardLeadData.package_cost || wizardLeadData.package_price || selectedLead?.package_price || selectedLead?.budget || 0;
       setWizardLeadData((prev) => ({
         ...prev,
         selected_package_id: customPkgVal,
         Select_Package_Option: customPkgVal,
         package_name: 'Custom Package',
-        package_cost: prev.package_cost || existingPrice,
-        package_price: prev.package_price || existingPrice,
-        budget: prev.budget || existingPrice,
-        final_quoted_amount: prev.final_quoted_amount || existingPrice,
+        package_cost: 0,
+        package_price: 0,
+        budget: 0,
+        final_quoted_amount: 0,
       }));
+      setPkgPrices(prev => ({ ...prev, [customPkgVal]: 0, 'custom_package': 0 }));
 
       const newInclusions = { ...editableInclusions };
       if (!newInclusions[customPkgVal]) newInclusions[customPkgVal] = [];
@@ -11082,7 +11101,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     <th className="p-3.5">Customer Name</th>
                     <th className="p-3.5">Mobile Number</th>
                     <th className="p-3.5">Event</th>
-                    <th className="p-3.5">Current Stage</th>
                     <th className="p-3.5">Current Status</th>
                     <th className="p-3.5">Created Date</th>
                     <th className="p-3.5 text-right pr-5 w-[160px] min-w-max">Action</th>
@@ -11114,16 +11132,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </td>
                           <td className="p-3.5 text-zinc-300 font-sans">
                             <UnifiedEventDropdownCell lead={lead} />
-                          </td>
-                          <td className="p-3.5">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
-                              currentStage === 'Sales' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
-                              currentStage === 'Operations' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' :
-                              currentStage === 'Production' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
-                              'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                            }`}>
-                              {currentStage}
-                            </span>
                           </td>
                           <td className="p-3.5">
                             <StatusText status={leadStatus} />
