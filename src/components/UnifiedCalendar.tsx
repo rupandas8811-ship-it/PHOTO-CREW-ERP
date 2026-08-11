@@ -953,6 +953,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                     <th className="p-3">Order ID</th>
                     <th className="p-3">Event Time</th>
                     <th className="p-3">Current Status</th>
+                    <th className="p-3 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900">
@@ -968,6 +969,14 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-zinc-300 border border-zinc-700 inline-block">
                           {ev.currentStage || ev.eventClass || 'N/A'}
                         </span>
+                      </td>
+                      <td className="p-3 text-right">
+                        <button
+                          onClick={() => setPopupLeadId(ev.raw?.lead_id || ev.orderId)}
+                          className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] rounded-md transition-all shadow-sm cursor-pointer whitespace-nowrap"
+                        >
+                          Details
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -1878,11 +1887,9 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                     <th className="p-3.5">Customer Name</th>
                     <th className="p-3.5">Event Name</th>
                     <th className="p-3.5">Current Status</th>
-                    <th className="p-3.5">Assigned Staff</th>
-                    <th className="p-3.5">Assigned Editor</th>
                     <th className="p-3.5">Payment Status</th>
                     <th className="p-3.5 text-right">Outstanding Balance</th>
-                    <th className="p-3.5 text-right pr-5 w-[100px]">Action</th>
+                    <th className="p-3.5 text-right pr-5 w-[80px]">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900/60">
@@ -1900,7 +1907,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                     if (leadsToShow.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={9} className="p-8 text-center text-zinc-500 font-mono">No specific event data found.</td>
+                          <td colSpan={7} className="p-8 text-center text-zinc-500 font-mono">No specific event data found.</td>
                         </tr>
                       );
                     }
@@ -1935,12 +1942,6 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                               {currentStatus}
                             </span>
                           </td>
-                          <td className="p-3.5 text-zinc-300 text-[11px]">
-                            {staffNames}
-                          </td>
-                          <td className="p-3.5 text-amber-300 font-medium text-[11px]">
-                            {editorName}
-                          </td>
                           <td className="p-3.5 font-mono text-[11px]">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                               paymentStatus === "Fully Paid" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
@@ -1960,7 +1961,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                                 setPopupDate(null);
                                 setPopupLeadId(null);
                               }}
-                              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs rounded transition shadow whitespace-nowrap"
+                              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] rounded-md transition-all shadow-sm cursor-pointer whitespace-nowrap"
                             >
                               Details
                             </button>
