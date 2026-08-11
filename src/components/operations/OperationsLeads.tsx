@@ -232,6 +232,7 @@ export const OperationsLeads: React.FC = () => {
     staff: { staff_role: string, staff_id: string, staff_name: string }[];
   }>>({});
   const [collapsedAssignEvents, setCollapsedAssignEvents] = useState<Record<string, boolean>>({});
+  const [collapsedCustomerDetails, setCollapsedCustomerDetails] = useState<boolean>(true);
   const [assignValidationError, setAssignValidationError] = useState<string | null>(null);
   const [validationAttempted, setValidationAttempted] = useState(false);
   const [busyRosterStaff, setBusyRosterStaff] = useState<string | null>(null);
@@ -2172,7 +2173,7 @@ export const OperationsLeads: React.FC = () => {
       {/* Slide-over or Inline modal for Crew and Equipment Assignment */}
       {assigningOrderId && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div id="assign_staff_modal" className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-4xl shadow-2xl relative animate-in zoom-in duration-200 overflow-hidden">
+          <div id="assign_staff_modal" className="bg-zinc-900 border border-zinc-800 rounded-3xl w-[96vw] sm:w-full sm:max-w-4xl h-auto max-h-[90vh] sm:max-h-[85vh] flex flex-col shadow-2xl relative animate-in zoom-in duration-200 overflow-hidden">
             <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/40">
               <div className="flex items-center gap-2">
                 <span className="p-1 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-500 text-xs font-bold font-mono">Operations</span>
@@ -2188,69 +2189,80 @@ export const OperationsLeads: React.FC = () => {
                 ✕
               </button>
             </div>
-            <form onSubmit={handleAssignSubmit} className="flex flex-col">
-              <div className="p-5 overflow-y-auto max-h-[75vh] space-y-6">
+            <form onSubmit={handleAssignSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-5 overflow-y-auto flex-1 min-h-0 space-y-6">
                 
                 {/* 1. Customer Information */}
-                <div className="bg-zinc-950/45 border border-zinc-850 p-4 rounded-2xl space-y-3 relative overflow-hidden">
-                  {/* CUSTOMER label hidden as requested */}
-                  {false && (
-                  <div className="absolute top-0 right-0 p-3 text-[10px] text-zinc-655 select-none">
-                    👤 CUSTOMER
-                  </div>
+                <div className="bg-zinc-950/45 border border-zinc-850 rounded-2xl overflow-hidden transition-all duration-300">
+                  <button
+                    type="button"
+                    onClick={() => setCollapsedCustomerDetails(!collapsedCustomerDetails)}
+                    className="w-full p-4 flex items-center justify-between text-left hover:bg-zinc-900/20 transition-colors focus:outline-none"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs">👤</span>
+                      <h4 className="text-[11px] sm:text-xs font-mono font-bold uppercase text-amber-500 tracking-wider">
+                        Customer Details
+                      </h4>
+                    </div>
+                    <span className={`text-zinc-500 text-xs transition-transform duration-300 ${collapsedCustomerDetails ? '' : 'rotate-180'}`}>
+                      ▼
+                    </span>
+                  </button>
+
+                  {!collapsedCustomerDetails && (
+                    <div className="p-4 pt-1 border-t border-zinc-900/50 space-y-3 relative overflow-hidden">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                        <div>
+                          <span className="text-[10px] text-zinc-500 block uppercase font-mono">Customer Name</span>
+                          <span className="font-bold text-white font-sans text-xs block">
+                            {activeOrderInstance?.customer_name || parentLeadInstance?.customer_name || 'N/A'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-zinc-500 block uppercase font-mono">Mobile Number</span>
+                          <span className="font-mono text-zinc-200 font-medium block">
+                            {activeOrderInstance?.mobile || parentLeadInstance?.mobile || 'N/A'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-zinc-505 block uppercase font-mono">Alt / WhatsApp</span>
+                          <span className="font-mono text-zinc-200 font-medium flex items-center gap-1">
+                            {parentLeadInstance?.whatsapp_number || 'N/A'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-zinc-505 block uppercase font-mono">Email</span>
+                          <span className="font-sans text-zinc-200 font-medium block">
+                            {parentLeadInstance?.email || 'N/A'}
+                          </span>
+                        </div>
+                        <div className="col-span-1 sm:col-span-2 md:col-span-4">
+                          <span className="text-[10px] text-zinc-505 block uppercase font-mono">Event Address</span>
+                          <span className="text-zinc-200 font-sans text-[11px] block leading-tight">
+                            {parentLeadInstance?.event_location || activeOrderInstance?.event_location || parentLeadInstance?.address || 'N/A'}
+                          </span>
+                        </div>
+                        <div className="col-span-1 sm:col-span-2 md:col-span-4">
+                          <span className="text-[10px] text-zinc-505 block uppercase font-mono">Google Maps Location Link</span>
+                          {googleMapsLocationLink ? (
+                            <a 
+                              href={googleMapsLocationLink} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-400 hover:text-blue-300 font-sans text-[11px] break-all block underline mt-0.5"
+                            >
+                              {googleMapsLocationLink}
+                            </a>
+                          ) : (
+                            <span className="text-zinc-500 font-sans text-[11px] block mt-0.5">
+                              No Google Maps Location Available.
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   )}
-                  <h4 className="text-[11px] font-mono font-bold uppercase text-amber-500 tracking-wider">
-                    Customer Information
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                    <div>
-                      <span className="text-[10px] text-zinc-500 block uppercase font-mono">Customer Name</span>
-                      <span className="font-bold text-white font-sans text-xs block">
-                        {activeOrderInstance?.customer_name || parentLeadInstance?.customer_name || 'N/A'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-zinc-500 block uppercase font-mono">Mobile Number</span>
-                      <span className="font-mono text-zinc-200 font-medium block">
-                        {activeOrderInstance?.mobile || parentLeadInstance?.mobile || 'N/A'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-zinc-505 block uppercase font-mono">Alt / WhatsApp</span>
-                      <span className="font-mono text-zinc-200 font-medium flex items-center gap-1">
-                        {parentLeadInstance?.whatsapp_number || 'N/A'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-zinc-505 block uppercase font-mono">Email</span>
-                      <span className="font-sans text-zinc-200 font-medium block">
-                        {parentLeadInstance?.email || 'N/A'}
-                      </span>
-                    </div>
-                    <div className="col-span-1 sm:col-span-2 md:col-span-4">
-                      <span className="text-[10px] text-zinc-505 block uppercase font-mono">Event Address</span>
-                      <span className="text-zinc-200 font-sans text-[11px] block leading-tight">
-                        {parentLeadInstance?.event_location || activeOrderInstance?.event_location || parentLeadInstance?.address || 'N/A'}
-                      </span>
-                    </div>
-                    <div className="col-span-1 sm:col-span-2 md:col-span-4">
-                      <span className="text-[10px] text-zinc-505 block uppercase font-mono">Google Maps Location Link</span>
-                      {googleMapsLocationLink ? (
-                        <a 
-                          href={googleMapsLocationLink} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-blue-400 hover:text-blue-300 font-sans text-[11px] break-all block underline mt-0.5"
-                        >
-                          {googleMapsLocationLink}
-                        </a>
-                      ) : (
-                        <span className="text-zinc-500 font-sans text-[11px] block mt-0.5">
-                          No Google Maps Location Available.
-                        </span>
-                      )}
-                    </div>
-                  </div>
                 </div>
 
                 {/* Multiple Events Iteration */}
@@ -2288,7 +2300,8 @@ export const OperationsLeads: React.FC = () => {
                     }
                     const includedRoles = eventRoles?.length > 0 ? eventRoles : [];
 
-                    const isCollapsed = collapsedAssignEvents[evId] === undefined ? index !== 0 : collapsedAssignEvents[evId];
+                    const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+                    const isCollapsed = collapsedAssignEvents[evId] === undefined ? (isMobile ? true : index !== 0) : collapsedAssignEvents[evId];
                     const eventNameDisplay = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');
 
                     return (
@@ -2391,58 +2404,54 @@ export const OperationsLeads: React.FC = () => {
                         </div>
                         
                         <div className="border border-zinc-900 rounded-xl overflow-hidden bg-zinc-950">
-                          <div className="overflow-x-auto w-full">
-                            <table className="w-full text-left border-collapse min-w-max">
-                              <thead>
-                                <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[9px] text-zinc-500 uppercase tracking-wider">
-                                  <th className="px-3.5 py-2 font-bold w-[35%]">Team Member</th>
-                                  <th className="px-3.5 py-2 font-bold w-[65%]">Assignments (Staff Type & Assigned Staff)</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-zinc-900">
-                                {includedRoles.length === 0 && (
-                                  <tr>
-                                    <td colSpan={2} className="text-center py-6 text-zinc-500 text-xs italic font-mono bg-zinc-900/10">
-                                      {loadError ? (
-                                        <div className="text-red-400 space-y-1">
-                                          <div>❌ Failed to load Team Members Included.</div>
-                                          <div className="text-[10px]">Reason: {loadError}</div>
-                                        </div>
-                                      ) : (
-                                        "No Team Members Included found for this event."
-                                      )}
-                                    </td>
-                                  </tr>
-                                )}
-                                {includedRoles.map((roleStr, roleIdx) => {
-                                  const assignedStaff = allocStaff.find((s: any) => s.role_index === roleIdx) || allocStaff[roleIdx] || { role_index: roleIdx, staff_role: roleStr, staff_name: '', staff_id: '', mobile: '', staff_type: 'In-House', equipment: [] };
-                                  const isEmpty = !assignedStaff.staff_name || assignedStaff.staff_name.trim() === '';
-                                  const currentStaffType = assignedStaff.staff_type || 'In-House';
+                          <div className="w-full text-left">
+                            {/* Header row - only visible on desktop */}
+                            <div className="hidden sm:grid grid-cols-12 bg-zinc-900/50 border-b border-zinc-900 font-mono text-[9px] text-zinc-500 uppercase tracking-wider py-2 px-3.5">
+                              <div className="col-span-4 font-bold">Team Member</div>
+                              <div className="col-span-8 font-bold">Assignments (Staff Type & Assigned Staff)</div>
+                            </div>
+                            <div className="divide-y divide-zinc-900">
+                                 {includedRoles.length === 0 && (
+                                   <div className="text-center py-6 text-zinc-500 text-xs italic font-mono bg-zinc-900/10">
+                                     {loadError ? (
+                                       <div className="text-red-400 space-y-1 p-4">
+                                         <div>❌ Failed to load Team Members Included.</div>
+                                         <div className="text-[10px]">Reason: {loadError}</div>
+                                       </div>
+                                     ) : (
+                                       "No Team Members Included found for this event."
+                                     )}
+                                   </div>
+                                 )}
+                                 {includedRoles.map((roleStr, roleIdx) => {
+                                   const assignedStaff = allocStaff.find((s: any) => s.role_index === roleIdx) || allocStaff[roleIdx] || { role_index: roleIdx, staff_role: roleStr, staff_name: '', staff_id: '', mobile: '', staff_type: 'In-House', equipment: [] };
+                                   const isEmpty = !assignedStaff.staff_name || assignedStaff.staff_name.trim() === '';
+                                   const currentStaffType = assignedStaff.staff_type || 'In-House';
 
-                                  return (
-                                    <tr 
-                                      key={`${evId}_${roleIdx}`}
-                                      id={`role-row-${evId}-${roleIdx}`}
-                                      className={`transition-colors align-top ${
-                                        validationAttempted && isEmpty
-                                          ? 'bg-rose-950/5 hover:bg-rose-950/10'
-                                          : 'hover:bg-zinc-900/10'
-                                      }`}
-                                    >
-                                      {/* Left Column: Team Member Name */}
-                                      <td className="px-3.5 py-2.5 font-sans border-r border-zinc-900/50">
-                                        <div className="flex items-center justify-between gap-2">
-                                          <div 
-                                            className="text-xs font-bold text-zinc-200 truncate pr-2 select-none"
-                                            title={roleStr as string}
-                                          >
-                                            ✔ {formatQtyItem(roleStr as string)}
-                                          </div>
-                                        </div>
-                                      </td>
+                                   return (
+                                     <div 
+                                       key={`${evId}_${roleIdx}`}
+                                       id={`role-row-${evId}-${roleIdx}`}
+                                       className={`grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-0 transition-colors p-3.5 sm:py-2.5 sm:px-3.5 items-start ${
+                                         validationAttempted && isEmpty
+                                           ? 'bg-rose-950/5 hover:bg-rose-950/10'
+                                           : 'hover:bg-zinc-900/10'
+                                       }`}
+                                     >
+                                       {/* Left Column: Team Member Name */}
+                                       <div className="col-span-1 sm:col-span-4 font-sans sm:border-r sm:border-zinc-900/50 sm:pr-4 flex items-center h-full min-h-[1.5rem]">
+                                         <div className="flex items-center justify-between gap-2 w-full">
+                                           <div 
+                                             className="text-xs font-bold text-zinc-200 truncate pr-2 select-none"
+                                             title={roleStr as string}
+                                           >
+                                             ✔ {formatQtyItem(roleStr as string)}
+                                           </div>
+                                         </div>
+                                       </div>
 
-                                      {/* Right Column: Multi-staff assignments */}
-                                      <td className="px-3.5 py-1.5">
+                                       {/* Right Column: Multi-staff assignments */}
+                                       <div className="col-span-1 sm:col-span-8 sm:pl-4">
                                         <div className="space-y-2">
                                           <div className="flex flex-col gap-1.5 bg-zinc-950/40 p-2 rounded-lg border border-zinc-900">
                                                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
@@ -2790,12 +2799,11 @@ export const OperationsLeads: React.FC = () => {
                                                 </div>
                                               )}
                                             </div>
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                              </tbody>
-                            </table>
+                                          </div>
+                                      </div>
+                                    );
+                                  })}
+                            </div>
                           </div>
                         </div>
 
