@@ -5704,48 +5704,51 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             <div className="space-y-6">
               {/* SECTION 1: ADD STAFF FORM (MODAL) */}
               {showStaffModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                  <div className="w-full max-w-md flex flex-col bg-zinc-950 border border-zinc-900 rounded-2xl p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-                    <button 
-                      type="button"
-                      onClick={() => {
-                        setEditingStaffId(null);
-                        setNewStaffName('');
-                        setNewStaffType('');
-                        setNewStaffMobile('');
-                        setNewStaffWhatsapp('');
-                        setNewStaffEmail('');
-                        setNewStaffPassword('');
-                        setNewStaffSkills([]);
-                        setShowStaffModal(false);
-                      }}
-                      className="absolute top-4 right-4 text-zinc-400 hover:text-white"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                <form onSubmit={handleSaveStaff} className="space-y-4">
-                  <div>
-                    <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
-                      <Plus className="w-4 h-4 text-purple-400" /> {editingStaffId ? 'Edit Staff Details' : 'Add Staff'}
-                    </h3>
-                    <p className="text-[11px] text-zinc-400 mt-1">
-                      {editingStaffId ? 'Update details of this production specialist.' : 'Onboard a new production specialist or update skills.'}
-                    </p>
-                  </div>
-
-                  {addStaffError && (
-                    <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs px-4 py-3 rounded-xl">
-                      {addStaffError}
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                  <div className="w-full max-w-md flex flex-col bg-zinc-950 border border-zinc-900 rounded-2xl shadow-2xl relative max-h-[90vh] overflow-hidden">
+                    <div className="flex items-start justify-between p-5 border-b border-zinc-850 bg-zinc-950 z-10 shrink-0">
+                      <div>
+                        <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                          <Plus className="w-4 h-4 text-purple-400" /> {editingStaffId ? 'Edit Staff Details' : 'Add Staff'}
+                        </h3>
+                        <p className="text-[11px] text-zinc-400 mt-1">
+                          {editingStaffId ? 'Update details of this production specialist.' : 'Onboard a new production specialist or update skills.'}
+                        </p>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setEditingStaffId(null);
+                          setNewStaffName('');
+                          setNewStaffType('');
+                          setNewStaffMobile('');
+                          setNewStaffWhatsapp('');
+                          setNewStaffEmail('');
+                          setNewStaffPassword('');
+                          setNewStaffSkills([]);
+                          setShowStaffModal(false);
+                        }}
+                        className="text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0 ml-4"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
                     </div>
-                  )}
 
-                  {addStaffSuccess && (
-                    <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs px-4 py-3 rounded-xl">
-                      {addStaffSuccess}
-                    </div>
-                  )}
+                    <div className="p-5 overflow-y-auto custom-scrollbar flex-1">
+                      <form onSubmit={handleSaveStaff} className="space-y-4">
+                        {addStaffError && (
+                          <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs px-4 py-3 rounded-xl">
+                            {addStaffError}
+                          </div>
+                        )}
 
-                  <div className="space-y-4">
+                        {addStaffSuccess && (
+                          <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs px-4 py-3 rounded-xl">
+                            {addStaffSuccess}
+                          </div>
+                        )}
+
+                        <div className="space-y-4">
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
                         Staff Full Name <span className="text-rose-500">*</span>
@@ -5936,7 +5939,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       Cancel Edit
                     </button>
                   )}
-                </form>
+                    </form>
+                    </div>
                   </div>
                 </div>
               )}

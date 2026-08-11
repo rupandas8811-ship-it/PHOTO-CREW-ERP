@@ -436,22 +436,25 @@ export const OperationsStaffManagement: React.FC = () => {
       {/* Roster form - Modal */}
       {showStaffModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto relative">
-            <button 
-              type="button"
-              onClick={handleCancel}
-              className="absolute top-4 right-4 text-zinc-400 hover:text-white"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <h3 className="text-xs font-mono font-black uppercase text-zinc-300 flex items-center gap-1.5 border-b border-zinc-850 pb-2.5">
-              <PlusCircle className="w-4 h-4 text-amber-500" />
-              <span>{editingId ? 'Edit Operative Profile' : 'Onboard Operation Staff'}</span>
-            </h3>
+          <div className="w-full max-w-md flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl relative max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-5 border-b border-zinc-800 shrink-0 bg-zinc-900 z-10">
+              <h3 className="text-xs font-mono font-black uppercase text-zinc-300 flex items-center gap-1.5">
+                <PlusCircle className="w-4 h-4 text-amber-500" />
+                <span>{editingId ? 'Edit Operative Profile' : 'Onboard Operation Staff'}</span>
+              </h3>
+              <button 
+                type="button"
+                onClick={handleCancel}
+                className="text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0 ml-4"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs flex-1 flex flex-col">
-          <fieldset disabled={!canEdit} className="space-y-4 flex-1">
-            <div className="min-w-0">
+            <div className="p-5 overflow-y-auto custom-scrollbar flex-1">
+              <form onSubmit={handleSubmit} className="space-y-4 text-xs flex flex-col">
+                <fieldset disabled={!canEdit} className="space-y-4 flex-1">
+                  <div className="min-w-0">
               <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
                 Staff Full Name *
               </label>
@@ -595,7 +598,8 @@ export const OperationsStaffManagement: React.FC = () => {
               🔒 Operations permissions required for editing.
             </div>
           )}
-        </form>
+              </form>
+            </div>
           </div>
         </div>
       )}
