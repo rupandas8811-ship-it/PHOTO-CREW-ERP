@@ -18,6 +18,7 @@ import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem, p
 import { AppLogo } from './AppLogo';
 import { StatusText } from './ui/StatusText';
 import { EventDropdownCell } from './EventDropdownCell';
+import { UnifiedEventDropdownCell } from './UnifiedEventDropdownCell';
 import { ProductionCalendar } from './ProductionCalendar';
 import { StaffManagementModule } from './StaffManagementModule';
 import { NotificationsModule } from './NotificationsModule';
@@ -2512,6 +2513,7 @@ _Please acknowledge receipt of this task assignment._`;
   }, [rosterStaffName, editorAssignments, production, orders, leads]);
 
   // Simplified Add Staff Form states
+  const [showStaffModal, setShowStaffModal] = useState(false);
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffType, setNewStaffType] = useState('');
   const [newStaffMobile, setNewStaffMobile] = useState('');
@@ -2524,6 +2526,7 @@ _Please acknowledge receipt of this task assignment._`;
   const [addStaffError, setAddStaffError] = useState('');
   const [addStaffSuccess, setAddStaffSuccess] = useState('');
   const [isSubmittingStaff, setIsSubmittingStaff] = useState(false);
+  const [showSmartFilter, setShowSmartFilter] = useState(false);
   const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
 
   // Editing timeline dates inside detailed modal
@@ -3147,9 +3150,21 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             />
           </div>
 
+          {/* Advanced Search & Filter Center Toggle */}
+          <div className="flex justify-start">
+            <button
+              type="button"
+              onClick={() => setShowSmartFilter(!showSmartFilter)}
+              className="px-4 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 font-mono text-xs font-bold rounded-xl transition-all uppercase tracking-wider flex items-center gap-2"
+            >
+              <span>[ FILTER ]</span>
+            </button>
+          </div>
+
           {/* Advanced Search & Filter Center */}
-          <div className="bg-zinc-950 border border-zinc-900 p-5 rounded-2xl space-y-4 shadow-xl">
-            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-zinc-900 pb-4">
+          {showSmartFilter && (
+            <div className="bg-zinc-950 border border-zinc-900 p-5 rounded-2xl space-y-4 shadow-xl">
+              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-zinc-900 pb-4">
               <div>
                 <h4 className="text-xs font-black text-zinc-300 uppercase tracking-widest font-mono">
                   🔍 Smart Filter & Report Center
@@ -3348,6 +3363,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               </div>
             </div>
           </div>
+          )}
 
           {/* Newly Arrived - Raw Footage Received Queue */}
           {(() => {
@@ -3380,8 +3396,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       <tr className="border-b border-zinc-900 bg-zinc-900/40 text-[9px] font-mono uppercase tracking-wider text-zinc-400">
                         <th className="p-3 font-bold">Order ID</th>
                         <th className="p-3 font-bold">Customer Name</th>
-                        <th className="p-3 font-bold">Event Name</th>
-                        <th className="p-3 font-bold">Event Date</th>
+                        <th className="p-3 font-bold">Event Details</th>
                         <th className="p-3 font-bold text-center">Assigned Team</th>
                         <th className="p-3 font-bold">Raw Footage Drive Link</th>
                         <th className="p-3 font-bold">Current Production Status</th>
@@ -3407,13 +3422,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             <td className="p-3 text-violet-400 font-bold">{order?.order_id}</td>
                             <td className="p-3 font-sans font-bold text-white">{order?.customer_name}</td>
                             <td className="p-3 text-zinc-300 font-sans">
-                              <EventDropdownCell 
-                                type="name" 
-                                items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || ev.event_type || 'Other') : [order?.event_type || 'Other']} 
-                                events={lead?.events}
-                              />
+                              <UnifiedEventDropdownCell lead={lead || order} />
                             </td>
-                            <td className="p-3 text-zinc-400">{order?.event_date || 'N/A'}</td>
                             <td className="p-3 font-sans text-center">
                               {editorsList.length > 0 ? (
                                 <span 
@@ -3505,9 +3515,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   <tr className="border-b border-zinc-900 bg-zinc-950/70 px-4 py-3 font-mono text-[9px] uppercase tracking-wider text-zinc-500">
                     <th className="p-4 font-black">Order ID</th>
                     <th className="p-4 font-black">Customer Name</th>
-                    <th className="p-4 font-black">Event Name</th>
-                    <th className="p-4 font-black">Event Date</th>
-                    <th className="p-4 font-black">Event Time</th>
+                    <th className="p-4 font-black">Event Details</th>
                     <th className="p-4 font-black">Raw Footage Link</th>
                     <th className="p-4 font-black text-center">Assigned Team</th>
                     <th className="p-4 font-black">Current Status</th>
@@ -3756,50 +3764,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                           {/* Event Type */}
                           <td className="p-4 text-left font-sans text-zinc-300">
-                            {(() => {
-                              const rowEvents = (prod.events && Array.isArray(prod.events) && prod.events.length > 0) ? prod.events : [];
-                              const eventNames = rowEvents.length > 0 
-                                ? rowEvents.map(e => e.event_name || e.event_type || 'Event') 
-                                : [prod.custom_event_name || 'Other'];
-                              return (
-                                <EventDropdownCell 
-                                  type="name" 
-                                  items={eventNames}
-                                  events={rowEvents} 
-                                />
-                              );
-                            })()}
-                          </td>
-
-                          {/* Event Date */}
-                          <td className="p-4 text-left font-sans text-zinc-350">
-                            {(() => {
-                              const rowEvents = (prod.events && Array.isArray(prod.events) && prod.events.length > 0) ? prod.events : [];
-                              const eventDates = rowEvents.length > 0 
-                                ? rowEvents.map(e => e.event_date || '—') 
-                                : [prod.event_date || '—'];
-                              return (
-                                <EventDropdownCell 
-                                  type="date" 
-                                  items={eventDates} 
-                                />
-                              );
-                            })()}
-                          </td>
-                          {/* Event Time */}
-                          <td className="p-4 text-left font-sans text-zinc-350">
-                            {(() => {
-                              const rowEvents = (prod.events && Array.isArray(prod.events) && prod.events.length > 0) ? prod.events : [];
-                              const eventTimes = rowEvents.length > 0 
-                                ? rowEvents.map(e => e.event_time ? convertTo12Hour(e.event_time) : (e.event_start_time ? convertTo12Hour(e.event_start_time) : '—')) 
-                                : [prod.event_time ? convertTo12Hour(prod.event_time) : '—'];
-                              return (
-                                <EventDropdownCell 
-                                  type="time" 
-                                  items={eventTimes} 
-                                />
-                              );
-                            })()}
+                            <UnifiedEventDropdownCell lead={foundLead || order} />
                           </td>
 
                             {/* Raw Footage Link */}
@@ -5688,6 +5653,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             setNewStaffWhatsapp('');
             setNewStaffSkills([]);
             setEditingStaffId(null);
+            setShowStaffModal(false);
           } catch (err: any) {
             setAddStaffError('❌ ' + (err.message || 'Failed to update staff details.'));
           } finally {
@@ -5735,10 +5701,29 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* SECTION 1: ADD STAFF FORM */}
-              <div className="lg:col-span-4">
-                <form onSubmit={handleSaveStaff} className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-4 shadow-xl">
+            <div className="space-y-6">
+              {/* SECTION 1: ADD STAFF FORM (MODAL) */}
+              {showStaffModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                  <div className="w-full max-w-md flex flex-col bg-zinc-950 border border-zinc-900 rounded-2xl p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setEditingStaffId(null);
+                        setNewStaffName('');
+                        setNewStaffType('');
+                        setNewStaffMobile('');
+                        setNewStaffWhatsapp('');
+                        setNewStaffEmail('');
+                        setNewStaffPassword('');
+                        setNewStaffSkills([]);
+                        setShowStaffModal(false);
+                      }}
+                      className="absolute top-4 right-4 text-zinc-400 hover:text-white"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                <form onSubmit={handleSaveStaff} className="space-y-4">
                   <div>
                     <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
                       <Plus className="w-4 h-4 text-purple-400" /> {editingStaffId ? 'Edit Staff Details' : 'Add Staff'}
@@ -5944,6 +5929,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         setNewStaffEmail('');
                         setNewStaffPassword('');
                         setNewStaffSkills([]);
+                        setShowStaffModal(false);
                       }}
                       className="w-full mt-2 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
                     >
@@ -5951,10 +5937,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     </button>
                   )}
                 </form>
-              </div>
+                  </div>
+                </div>
+              )}
 
               {/* SECTION 2: STAFF DIRECTORY */}
-              <div className="lg:col-span-8 bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-4 shadow-xl">
+              <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-4 shadow-xl">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-zinc-900 pb-4">
                   <div>
                     <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
@@ -5963,6 +5951,16 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     <p className="text-[11px] text-zinc-400 mt-1">
                       Displaying all production staff with their basic details, contact information, and current availability status.
                     </p>
+                  </div>
+                  <div>
+                    <button 
+                      type="button"
+                      onClick={() => setShowStaffModal(true)}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg"
+                    >
+                      <Plus className="w-4 h-4" />
+                      + Add Staff
+                    </button>
                   </div>
                 </div>
 
@@ -6145,6 +6143,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       setNewStaffEmail(member.email || '');
                                       setNewStaffPassword('');
                                       setNewStaffSkills(Array.isArray(member.Skill) ? member.Skill : member.Skill ? member.Skill.split(',').map((s: string) => s.trim()).filter(Boolean) : member.production_role_speciality ? member.production_role_speciality.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
+                                      setShowStaffModal(true);
                                     }}
                                     className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-amber-500 hover:text-amber-400 border border-zinc-850 rounded font-bold cursor-pointer transition-colors text-[10px] font-mono"
                                   >
@@ -6185,7 +6184,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
       {activeSubTab === 'staff_roster' && (
         <div className="space-y-6 animate-fade-in">
           {/* Header section with real-time sync badge */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-950/70 border border-zinc-900 p-5 rounded-2xl relative overflow-hidden">
+          <div className="hidden">
             <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-purple-500 to-pink-500" />
             <div>
               <h1 className="text-xl font-black text-white tracking-tight uppercase font-mono flex items-center gap-2">

@@ -18,6 +18,7 @@ export const OperationsStaffManagement: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [skills, setSkills] = useState<string[]>([]);
   const [newSkill, setNewSkill] = useState('');
+  const [showStaffModal, setShowStaffModal] = useState(false);
   const [form, setForm] = useState({
     name: '',
     role: 'Lead Photographer',
@@ -39,6 +40,7 @@ export const OperationsStaffManagement: React.FC = () => {
 
   const handleSelectEdit = (st: any) => {
     setEditingId(st.staff_id);
+    setShowStaffModal(true);
     setForm({
       name: st.name,
       role: st.role,
@@ -61,6 +63,7 @@ export const OperationsStaffManagement: React.FC = () => {
 
   const handleCancel = () => {
     setEditingId(null);
+    setShowStaffModal(false);
     setForm({
       name: '',
       role: 'Lead Photographer',
@@ -429,13 +432,22 @@ export const OperationsStaffManagement: React.FC = () => {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-      {/* Roster form - Left */}
-      <div className="lg:col-span-4 flex flex-col bg-zinc-900/40 border border-zinc-850 rounded-2xl p-5 shadow-xl space-y-4 overflow-hidden h-full">
-        <h3 className="text-xs font-mono font-black uppercase text-zinc-300 flex items-center gap-1.5 border-b border-zinc-850 pb-2.5">
-          <PlusCircle className="w-4 h-4 text-amber-500" />
-          <span>{editingId ? 'Edit Operative Profile' : 'Onboard Operation Staff'}</span>
-        </h3>
+    <div className="space-y-6">
+      {/* Roster form - Modal */}
+      {showStaffModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto relative">
+            <button 
+              type="button"
+              onClick={handleCancel}
+              className="absolute top-4 right-4 text-zinc-400 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h3 className="text-xs font-mono font-black uppercase text-zinc-300 flex items-center gap-1.5 border-b border-zinc-850 pb-2.5">
+              <PlusCircle className="w-4 h-4 text-amber-500" />
+              <span>{editingId ? 'Edit Operative Profile' : 'Onboard Operation Staff'}</span>
+            </h3>
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs flex-1 flex flex-col">
           <fieldset disabled={!canEdit} className="space-y-4 flex-1">
@@ -584,14 +596,31 @@ export const OperationsStaffManagement: React.FC = () => {
             </div>
           )}
         </form>
-      </div>
+          </div>
+        </div>
+      )}
 
-      {/* Roster table - Right */}
-      <div className="lg:col-span-8 flex flex-col bg-zinc-900/40 border border-zinc-850 rounded-2xl p-5 shadow-xl space-y-4 overflow-hidden h-full">
-        <h3 className="text-xs font-mono font-black uppercase text-zinc-300 flex items-center gap-1.5 border-b border-zinc-850 pb-2.5">
-          <Users className="w-4 h-4 text-amber-500" />
-          <span>ACTIVE ROSTER SUMMARY ({operationsCrew.length} registered)</span>
-        </h3>
+      {/* Roster table - Full Width */}
+      <div className="flex flex-col bg-zinc-900/40 border border-zinc-850 rounded-2xl p-5 shadow-xl space-y-4 overflow-hidden h-full">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-850 pb-2.5">
+          <h3 className="text-xs font-mono font-black uppercase text-zinc-300 flex items-center gap-1.5">
+            <Users className="w-4 h-4 text-amber-500" />
+            <span>ACTIVE ROSTER SUMMARY ({operationsCrew.length} registered)</span>
+          </h3>
+          {canEdit && (
+            <button 
+              type="button"
+              onClick={() => {
+                handleCancel();
+                setShowStaffModal(true);
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold rounded-lg transition-colors shadow-lg shadow-amber-500/20"
+            >
+              <PlusCircle className="w-4 h-4" />
+              + Add Staff
+            </button>
+          )}
+        </div>
 
         <div className="overflow-x-auto text-xs flex-1 bg-zinc-950/30 rounded-xl border border-zinc-850">
           <table className="w-full text-left border-collapse min-w-max">

@@ -4496,14 +4496,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Package Amount (Editable Package Base Price) */}
-            <div className="hidden" style={{ display: 'none' }}>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Package Base Price (₹)
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5 flex items-center gap-1.5 font-mono">
+                <span>💰</span> Package Base Price (₹)
               </label>
               <input
                 type="number"
                 id={isEdit ? "input_section2_package_base_price" : "create_section2_package_base_price"}
-                value={wizardLeadData.package_cost !== undefined && wizardLeadData.package_cost !== null && wizardLeadData.package_cost !== '' ? wizardLeadData.package_cost : basePkgSum}
+                value={wizardLeadData.package_cost !== undefined && wizardLeadData.package_cost !== null ? wizardLeadData.package_cost : (basePkgSum || 0)}
                 onChange={(e) => {
                   const rawVal = e.target.value;
                   const numVal = rawVal === '' ? '' : Math.max(0, parseInt(rawVal) || 0);
@@ -4736,11 +4736,43 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   ? editableDeliverables[eventKey]
                   : (editableDeliverables[nameKey] !== undefined ? editableDeliverables[nameKey] : deliverablesList);
 
+                const startDateStr = formatDDMMYYYY(event.event_start_date || event.event_date);
+                const endDateRaw = event.event_end_date || (event as any).Event_End_Date || '';
+                const endDateStr = endDateRaw ? formatDDMMYYYY(endDateRaw) : 'N/A';
+                const startTimeStr = event.event_start_time ? convertTo12Hour(event.event_start_time) : 'N/A';
+                const endTimeStr = event.event_end_time ? convertTo12Hour(event.event_end_time) : 'N/A';
+                const guestPaxVal = event.guest_pax !== '' && event.guest_pax !== null && event.guest_pax !== undefined ? event.guest_pax : 'N/A';
+
                 return (
                   <div key={event.id || eventIdx} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-4 mt-3 mb-4">
-                    <div className="border-b border-slate-800/40 pb-2">
-                      <div className="text-xs sm:text-sm font-bold text-indigo-300 uppercase tracking-wider font-mono flex items-center justify-between">
-                        <span>Event {eventIdx + 1}: {event.event_name || event.event_type || 'Unnamed Event'}</span>
+                    {/* VERY SMALL COMPACT EVENT SUMMARY */}
+                    <div className="bg-slate-950/60 border border-slate-800/70 p-2.5 sm:p-3 rounded-lg text-left font-mono">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <span className="text-xs sm:text-sm font-bold text-slate-100 font-sans">
+                          {event.event_name || `Event ${eventIdx + 1}`}
+                        </span>
+                        {event.event_type && (
+                          <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono font-bold border border-slate-700">
+                            [{event.event_type}]
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-300 leading-tight flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                        <span>
+                          Start: <span className="text-slate-100 font-semibold">{startDateStr}{startTimeStr !== 'N/A' ? ` | ${startTimeStr}` : ''}</span>
+                        </span>
+                        {(endDateRaw || endTimeStr !== 'N/A') && (
+                          <>
+                            <span className="text-slate-500">•</span>
+                            <span>
+                              End: <span className="text-slate-100 font-semibold">{endDateStr !== 'N/A' ? endDateStr : startDateStr}{endTimeStr !== 'N/A' ? ` | ${endTimeStr}` : ''}</span>
+                            </span>
+                          </>
+                        )}
+                        <span className="text-slate-500">•</span>
+                        <span>
+                          Guest Pax: <span className="text-slate-100 font-semibold">{guestPaxVal}</span>
+                        </span>
                       </div>
                     </div>
 
@@ -7822,12 +7854,25 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             <div className="grid grid-cols-1 gap-3">
               {eventsList.map((ev, idx) => {
                 const isEditingThisEvent = editingEventId === ev.id;
-                const isCollapsed = collapsedEventIds[ev.id] ?? false;
+                const isCollapsed = collapsedEventIds[ev.id] ?? true;
                 const startDateStr = formatDDMMYYYY(ev.event_start_date || ev.event_date);
                 const endDateRaw = ev.event_end_date || (ev as any).Event_End_Date || '';
                 const endDateStr = endDateRaw ? formatDDMMYYYY(endDateRaw) : 'N/A';
                 const startTimeStr = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A';
                 const endTimeStr = ev.event_end_time ? convertTo12Hour(ev.event_end_time) : 'N/A';
+
+                const guestPaxVal = ev.guest_pax !== '' && ev.guest_pax !== null && ev.guest_pax !== undefined ? ev.guest_pax : 'N/A';
+                const staffPaxVal = ev.staff_pax !== '' && ev.staff_pax !== null && ev.staff_pax !== undefined ? ev.staff_pax : 'N/A';
+
+                const dateTimeSummary = (() => {
+                  const startPart = `${startDateStr} • ${startTimeStr}`;
+                  if (endDateRaw && endDateStr !== 'N/A') {
+                    return `${startPart} → ${endDateStr} • ${endTimeStr}`;
+                  } else if (endTimeStr !== 'N/A') {
+                    return `${startPart} → ${endTimeStr}`;
+                  }
+                  return startPart;
+                })();
 
                 if (isEditingThisEvent) {
                   return (
@@ -7855,24 +7900,33 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 return (
                   <div key={ev.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm transition-all duration-200">
                     <div 
-                      className="flex items-center justify-between p-3.5 bg-slate-950/40 cursor-pointer select-none border-b border-slate-800/40"
+                      className="flex items-center justify-between p-3.5 bg-slate-950/40 cursor-pointer select-none border-b border-slate-800/40 hover:bg-slate-950/60 transition-colors"
                       onClick={() => setCollapsedEventIds(prev => ({ ...prev, [ev.id]: !isCollapsed }))}
                     >
                       <div className="flex items-center gap-2.5">
-                        <div className="bg-cyan-500/10 text-cyan-400 p-1.5 rounded-lg">
+                        <div className="bg-cyan-500/10 text-cyan-400 p-1.5 rounded-lg shrink-0">
                           <Calendar className="w-4 h-4" />
                         </div>
-                        <div className="text-left">
-                          <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-left space-y-0.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
                             <span className="text-xs font-bold text-slate-100">{ev.event_name || `Event ${idx + 1}`}</span>
+                            <span className="text-xs text-slate-500 font-mono">|</span>
                             <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono font-bold">
                               {ev.event_type}
                             </span>
                           </div>
-                          <p className="text-[11px] text-slate-400 mt-0.5 font-mono">
-                            Start: {startDateStr} {startTimeStr !== 'N/A' ? `| ${startTimeStr}` : ''}
-                            {endDateRaw ? ` • End: ${endDateStr} ${endTimeStr !== 'N/A' ? `| ${endTimeStr}` : ''}` : (endTimeStr !== 'N/A' ? ` • End Time: ${endTimeStr}` : '')}
-                          </p>
+
+                          {/* Show compact summary ONLY when COLLAPSED */}
+                          {isCollapsed && (
+                            <>
+                              <p className="text-[11px] text-slate-300 font-mono">
+                                {dateTimeSummary}
+                              </p>
+                              <p className="text-[11px] text-slate-400 font-mono">
+                                Guest Pax: <span className="text-slate-200 font-semibold">{guestPaxVal}</span>
+                              </p>
+                            </>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -7904,6 +7958,25 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                     {!isCollapsed && (
                       <div className="p-4 bg-slate-900/50 text-xs text-slate-300 space-y-3">
+                        {/* Event Name & Type Info Header if name differs */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 bg-slate-950/40 p-3 rounded-lg border border-slate-850/60 font-mono">
+                          <div>
+                            <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Event Name</span>
+                            <span className="text-slate-100 font-semibold">{ev.event_name || `Event ${idx + 1}`}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Event Type</span>
+                            <span className="text-slate-100 font-semibold">{ev.event_type}</span>
+                          </div>
+                          {(ev.event_shoot_type || (ev as any).shoot_type) && (
+                            <div>
+                              <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Event Shoot Type</span>
+                              <span className="text-slate-100 font-semibold">{ev.event_shoot_type || (ev as any).shoot_type}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Dates & Times Grid */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-slate-950/40 p-3 rounded-lg border border-slate-850/60 font-mono">
                           <div>
                             <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Start Date</span>
@@ -7923,20 +7996,47 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </div>
                         </div>
 
-                        <div>
-                          <span className="text-slate-400">Guest Pax:</span>
-                          <span className="ml-1.5 font-semibold text-slate-200">{ev.guest_pax !== '' && ev.guest_pax !== null && ev.guest_pax !== undefined ? ev.guest_pax : 'N/A'}</span>
+                        {/* Pax Info Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950/40 p-3 rounded-lg border border-slate-850/60 font-mono">
+                          <div>
+                            <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Guest Pax</span>
+                            <span className="text-slate-200 font-semibold">{guestPaxVal}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Staff Pax</span>
+                            <span className="text-slate-200 font-semibold">{staffPaxVal}</span>
+                          </div>
                         </div>
 
+                        {/* Reporting Info if present */}
+                        {(ev.reporting_date || ev.reporting_time) && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950/40 p-3 rounded-lg border border-slate-850/60 font-mono">
+                            {ev.reporting_date && (
+                              <div>
+                                <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Reporting Date</span>
+                                <span className="text-slate-200 font-semibold">{formatDDMMYYYY(ev.reporting_date)}</span>
+                              </div>
+                            )}
+                            {ev.reporting_time && (
+                              <div>
+                                <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Reporting Time</span>
+                                <span className="text-slate-200 font-semibold">{convertTo12Hour(ev.reporting_time)}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Venue Address */}
                         <div className="border-t border-slate-800/40 pt-2.5 text-left">
-                          <span className="text-slate-400 block mb-1">Venue Address:</span>
-                          <p className="text-slate-200 bg-slate-950/20 p-2 rounded border border-slate-850/50 whitespace-pre-wrap">
-                            {ev.event_location}
+                          <span className="text-slate-400 block mb-1 text-[10px] font-sans font-bold uppercase tracking-wider">Venue Address / Location:</span>
+                          <p className="text-slate-200 bg-slate-950/20 p-2 rounded border border-slate-850/50 whitespace-pre-wrap font-mono">
+                            {ev.event_location || 'N/A'}
                           </p>
                         </div>
 
+                        {/* Google Maps Link */}
                         {ev.google_maps_link && (
-                          <div className="flex items-center gap-1.5 text-cyan-400 text-left">
+                          <div className="flex items-center gap-1.5 text-cyan-400 text-left pt-1 font-mono text-[11px]">
                             <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
                             <a 
                               href={ev.google_maps_link} 
@@ -7947,6 +8047,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             >
                               {ev.google_maps_link}
                             </a>
+                          </div>
+                        )}
+
+                        {/* Assigned Staff if present */}
+                        {ev.assigned_staff_names && (
+                          <div className="border-t border-slate-800/40 pt-2 text-left font-mono">
+                            <span className="text-slate-400 block mb-0.5 text-[10px] font-sans font-bold uppercase tracking-wider">Assigned Staff:</span>
+                            <span className="text-slate-200">{ev.assigned_staff_names}</span>
                           </div>
                         )}
                       </div>
@@ -12355,37 +12463,39 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           className="bg-[#030303] border border-slate-800 rounded-2xl w-full shadow-2xl flex flex-col overflow-hidden relative animate-fade-in text-left font-sans text-slate-100"
         >
             {/* Header: Sticky */}
-            <div className="py-2.5 px-4 sm:px-5 border-b border-slate-850 flex items-center justify-between bg-slate-950/40 sticky top-0 z-10 backdrop-blur-sm shrink-0">
-              {crmWizardStep !== 3 ? (
-                <div className="flex items-center gap-2 text-left flex-wrap">
-                  <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5 font-mono uppercase tracking-wider">
-                    <span>💍</span> Digital Lead CRM Workspace — Client Board
-                  </h3>
-                  <span className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded font-mono font-bold">Code: {selectedLead.lead_id}</span>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
-                    getLeadCurrentStage(selectedLead) === 'Sales' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
-                    getLeadCurrentStage(selectedLead) === 'Operations' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' :
-                    getLeadCurrentStage(selectedLead) === 'Production' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
-                    'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                  }`}>
-                    Stage: {getLeadCurrentStage(selectedLead)}
-                  </span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight bg-zinc-800 text-zinc-300 border border-zinc-700">
-                    Status: {getLeadCurrentStatus(selectedLead)}
-                  </span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-200 font-mono uppercase tracking-wider">Step 3: Package Configuration</span>
-                </div>
-              )}
-              <button 
-                onClick={() => setSelectedLead(null)}
-                className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs rounded-xl border border-slate-700 font-bold uppercase tracking-wider transition-all cursor-pointer inline-flex items-center gap-1 shadow"
-              >
-                Back to Leads
-              </button>
-            </div>
+            {!['Create Quote', 'Created Quotation', 'New Lead'].includes(getLeadCurrentStatus(selectedLead)) && (
+              <div className="py-2.5 px-4 sm:px-5 border-b border-slate-850 flex items-center justify-between bg-slate-950/40 sticky top-0 z-10 backdrop-blur-sm shrink-0">
+                {crmWizardStep !== 3 ? (
+                  <div className="flex items-center gap-2 text-left flex-wrap">
+                    <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5 font-mono uppercase tracking-wider">
+                      <span>💍</span> Digital Lead CRM Workspace — Client Board
+                    </h3>
+                    <span className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded font-mono font-bold">Code: {selectedLead.lead_id}</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
+                      getLeadCurrentStage(selectedLead) === 'Sales' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
+                      getLeadCurrentStage(selectedLead) === 'Operations' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' :
+                      getLeadCurrentStage(selectedLead) === 'Production' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
+                      'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                    }`}>
+                      Stage: {getLeadCurrentStage(selectedLead)}
+                    </span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight bg-zinc-800 text-zinc-300 border border-zinc-700">
+                      Status: {getLeadCurrentStatus(selectedLead)}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-200 font-mono uppercase tracking-wider">Step 3: Package Configuration</span>
+                  </div>
+                )}
+                <button 
+                  onClick={() => setSelectedLead(null)}
+                  className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs rounded-xl border border-slate-700 font-bold uppercase tracking-wider transition-all cursor-pointer inline-flex items-center gap-1 shadow"
+                >
+                  Back to Leads
+                </button>
+              </div>
+            )}
 
             {/* Custom Toast Alert */}
             {crmToast && (
@@ -12395,29 +12505,37 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   : 'bg-red-950 border border-red-500/20 text-red-400'
               }`}>
                 <span>{crmToast.type === 'success' ? '⚡' : '⚠️'}</span>
-                <span className="text-[11px] font-mono font-bold whitespace-pre-wrap">{crmToast.message}</span>
+                <span className="text-[10px] font-mono font-bold whitespace-pre-wrap">{crmToast.message}</span>
               </div>
             )}
 
             {/* Progress Bar & Indicators */}
-            <div className="w-full bg-slate-950/20 border-b border-slate-850 py-1 px-4 sm:px-5 shrink-0 justify-start text-left">
+            <div className={`w-full bg-slate-950/20 border-b border-slate-850 py-1.5 px-4 sm:px-5 shrink-0 justify-start text-left ${['Create Quote', 'Created Quotation', 'New Lead'].includes(getLeadCurrentStatus(selectedLead)) ? 'sticky top-0 z-10 backdrop-blur-sm' : ''}`}>
               <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] sm:text-xs font-mono font-bold text-indigo-400 uppercase tracking-widest text-left">
+                <div className="flex flex-1 items-center gap-2">
+                  <span className="text-[10px] sm:text-xs font-mono font-bold text-indigo-400 uppercase tracking-widest text-left shrink-0">
                     Step {crmWizardStep} of 3:
                   </span>
-                  <span className="text-[10px] sm:text-xs font-semibold text-slate-300 bg-slate-800 py-0.5 px-2 rounded border border-slate-750">
+                  <span className="text-[10px] sm:text-xs font-semibold text-slate-300 bg-slate-800 py-0.5 px-2 rounded border border-slate-750 shrink-0">
                     {crmWizardStep === 1 ? 'Customer Details' :
                      crmWizardStep === 2 ? 'Event Details' :
                      'Quotation Workspace'}
                   </span>
+                  <div className="flex-1 max-w-xs h-1 bg-slate-950 rounded-full overflow-hidden hidden sm:block ml-4">
+                    <div 
+                      className="h-full bg-indigo-500 transition-all duration-300"
+                      style={{ width: `${(crmWizardStep / 3) * 100}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="flex-1 max-w-xs h-1 bg-slate-950 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-indigo-500 transition-all duration-300"
-                    style={{ width: `${(crmWizardStep / 3) * 100}%` }}
-                  />
-                </div>
+                {['Create Quote', 'Created Quotation', 'New Lead'].includes(getLeadCurrentStatus(selectedLead)) && (
+                  <button 
+                    onClick={() => setSelectedLead(null)}
+                    className="px-3 py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-[10px] sm:text-xs rounded border border-slate-700 font-bold uppercase tracking-wider transition-all cursor-pointer inline-flex items-center gap-1 shadow shrink-0"
+                  >
+                    Back to Leads
+                  </button>
+                )}
               </div>
             </div>
 
@@ -12698,11 +12816,43 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       ? editableDeliverables[eventKey]
                                       : (editableDeliverables[nameKey] !== undefined ? editableDeliverables[nameKey] : deliverablesList);
 
+                                    const startDateStr = formatDDMMYYYY(event.event_start_date || event.event_date);
+                                    const endDateRaw = event.event_end_date || (event as any).Event_End_Date || '';
+                                    const endDateStr = endDateRaw ? formatDDMMYYYY(endDateRaw) : 'N/A';
+                                    const startTimeStr = event.event_start_time ? convertTo12Hour(event.event_start_time) : 'N/A';
+                                    const endTimeStr = event.event_end_time ? convertTo12Hour(event.event_end_time) : 'N/A';
+                                    const guestPaxVal = event.guest_pax !== '' && event.guest_pax !== null && event.guest_pax !== undefined ? event.guest_pax : 'N/A';
+
                                     return (
                                       <div key={event.id || eventIdx} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-4 mt-3 mb-4">
-                                        <div className="border-b border-slate-800/40 pb-2">
-                                          <div className="text-xs sm:text-sm font-bold text-indigo-300 uppercase tracking-wider font-mono flex items-center justify-between">
-                                            <span>Event {eventIdx + 1}: {event.event_name || event.event_type || 'Unnamed Event'}</span>
+                                        {/* VERY SMALL COMPACT EVENT SUMMARY */}
+                                        <div className="bg-slate-950/60 border border-slate-800/70 p-2.5 sm:p-3 rounded-lg text-left font-mono">
+                                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                                            <span className="text-xs sm:text-sm font-bold text-slate-100 font-sans">
+                                              {event.event_name || `Event ${eventIdx + 1}`}
+                                            </span>
+                                            {event.event_type && (
+                                              <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono font-bold border border-slate-700">
+                                                [{event.event_type}]
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="text-[11px] text-slate-300 leading-tight flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                                            <span>
+                                              Start: <span className="text-slate-100 font-semibold">{startDateStr}{startTimeStr !== 'N/A' ? ` | ${startTimeStr}` : ''}</span>
+                                            </span>
+                                            {(endDateRaw || endTimeStr !== 'N/A') && (
+                                              <>
+                                                <span className="text-slate-500">•</span>
+                                                <span>
+                                                  End: <span className="text-slate-100 font-semibold">{endDateStr !== 'N/A' ? endDateStr : startDateStr}{endTimeStr !== 'N/A' ? ` | ${endTimeStr}` : ''}</span>
+                                                </span>
+                                              </>
+                                            )}
+                                            <span className="text-slate-500">•</span>
+                                            <span>
+                                              Guest Pax: <span className="text-slate-100 font-semibold">{guestPaxVal}</span>
+                                            </span>
                                           </div>
                                         </div>
 

@@ -1895,8 +1895,16 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                     <th className="p-3.5">Customer Name</th>
                     <th className="p-3.5">Event Name</th>
                     <th className="p-3.5">Current Status</th>
-                    <th className="p-3.5">Payment Status</th>
-                    <th className="p-3.5 text-right">Outstanding Balance</th>
+                    {role === 'operations' ? (
+                      <th className="p-3.5">Assigned Team</th>
+                    ) : role === 'production' ? (
+                      <th className="p-3.5">Assigned Editor</th>
+                    ) : (
+                      <>
+                        <th className="p-3.5">Payment Status</th>
+                        <th className="p-3.5 text-right">Outstanding Balance</th>
+                      </>
+                    )}
                     <th className="p-3.5 text-right pr-5 min-w-[100px] whitespace-nowrap">Action</th>
                   </tr>
                 </thead>
@@ -1950,17 +1958,29 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                               {currentStatus}
                             </span>
                           </td>
-                          <td className="p-3.5 font-mono text-[11px]">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              paymentStatus === "Fully Paid" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
-                              "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                            }`}>
-                              {paymentStatus}
-                            </span>
-                          </td>
-                          <td className="p-3.5 text-right font-mono text-[11px] font-bold text-zinc-200">
-                            ₹{Number(balanceDue).toLocaleString("en-IN")}
-                          </td>
+                          {role === 'operations' ? (
+                            <td className="p-3.5 font-mono text-[11px] text-indigo-300">
+                              {staffNames}
+                            </td>
+                          ) : role === 'production' ? (
+                            <td className="p-3.5 font-mono text-[11px] text-fuchsia-300">
+                              {editorName}
+                            </td>
+                          ) : (
+                            <>
+                              <td className="p-3.5 font-mono text-[11px]">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  paymentStatus === "Fully Paid" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                                  "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                }`}>
+                                  {paymentStatus}
+                                </span>
+                              </td>
+                              <td className="p-3.5 text-right font-mono text-[11px] font-bold text-zinc-200">
+                                ₹{Number(balanceDue).toLocaleString("en-IN")}
+                              </td>
+                            </>
+                          )}
                           <td className="p-3.5 text-right pr-5 whitespace-nowrap min-w-[100px]">
                             <button 
                               onClick={() => {
