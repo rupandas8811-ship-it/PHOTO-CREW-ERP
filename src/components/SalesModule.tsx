@@ -8,6 +8,7 @@ import {
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIVE_STAGE_GROUPS, LeadEvent } from '../types';
 import { StatusText } from './ui/StatusText';
 import { EventDropdownCell } from './EventDropdownCell';
+import { UnifiedEventDropdownCell } from './UnifiedEventDropdownCell';
 import { MultiSelectDropdown } from './ui/MultiSelectDropdown';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
 
@@ -11088,12 +11089,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     <th className="p-3.5">Order ID</th>
                     <th className="p-3.5">Customer Name</th>
                     <th className="p-3.5">Mobile Number</th>
-                    <th className="p-3.5">Event Name</th>
-                    <th className="p-3.5">Event Date</th>
-                    <th className="p-3.5">Event Time</th>
+                    <th className="p-3.5">Event</th>
                     <th className="p-3.5">Current Stage</th>
                     <th className="p-3.5">Current Status</th>
-                    <th className="p-3.5">Payment Status</th>
                     <th className="p-3.5">Created Date</th>
                     <th className="p-3.5 text-right pr-5 w-[160px] min-w-max">Action</th>
                   </tr>
@@ -11105,8 +11103,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       const currentStage = getLeadCurrentStage(lead);
                       const isActiveInSales = currentStage === 'Sales';
                       const linkedOrder = orders.find((o) => o.lead_id === lead.lead_id);
-                      const paymentRecord = linkedOrder ? payments.find((p) => p.order_id === linkedOrder.order_id) : null;
-                      const paymentLabel = paymentRecord ? paymentRecord.payment_status : 'N/A';
                       return (
                         <tr 
                           key={lead.lead_id} 
@@ -11125,23 +11121,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             {formatIndianPhoneNumber(lead.mobile)}
                           </td>
                           <td className="p-3.5 text-zinc-300 font-sans">
-                            <EventDropdownCell 
-                              type="name" 
-                              items={lead.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || '') : [lead.event_name || '']} 
-                              events={lead.events}
-                            />
-                          </td>
-                          <td className="p-3.5 font-mono text-zinc-350">
-                            <EventDropdownCell 
-                              type="date" 
-                              items={lead.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_date || '—') : []} 
-                            />
-                          </td>
-                          <td className="p-3.5 font-mono text-zinc-350">
-                            <EventDropdownCell 
-                              type="time" 
-                              items={lead.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—') : []} 
-                            />
+                            <UnifiedEventDropdownCell lead={lead} />
                           </td>
                           <td className="p-3.5">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
@@ -11155,16 +11135,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </td>
                           <td className="p-3.5">
                             <StatusText status={leadStatus} />
-                          </td>
-                          <td className="p-3.5">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                              paymentLabel === 'Fully Paid' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' :
-                              paymentLabel === 'Partially Paid' ? 'bg-amber-555/15 text-amber-400 border-amber-505/20' :
-                              paymentLabel === 'Pending' ? 'bg-rose-500/10 text-rose-455 border border-rose-500/20' :
-                              'bg-zinc-900 text-zinc-400 border-zinc-800'
-                            }`}>
-                              {paymentLabel}
-                            </span>
                           </td>
                           <td className="p-3.5 font-mono text-zinc-400">
                             {lead.created_date ? lead.created_date.split('T')[0] : 'N/A'}

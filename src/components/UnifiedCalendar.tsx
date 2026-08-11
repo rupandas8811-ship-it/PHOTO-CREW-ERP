@@ -128,7 +128,9 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   const [calendarView, setCalendarView] = useState<'month' | 'week' | 'day' | 'agenda'>('month');
   
   // Search and Filter states
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInputValue, setSearchInputValue] = useState('');
+  const [appliedSearchQuery, setAppliedSearchQuery] = useState('');
+  const [isSearchExecuted, setIsSearchExecuted] = useState(false);
   const [statusFilter, setStatusFilter] = useState('All');
   const [eventTypeFilter, setEventTypeFilter] = useState('All');
   const [showFilters, setShowFilters] = useState(false);
@@ -408,18 +410,44 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
     return allEvents;
   }, [allEvents, role]);
 
-  // Inline filter by search, type, and classes
+  // Search execution handlers
+  const handleExecuteSearch = () => {
+    const q = searchInputValue.trim();
+    setAppliedSearchQuery(q);
+    setIsSearchExecuted(true);
+  };
+
+  const handleClearSearch = () => {
+    setSearchInputValue('');
+    setAppliedSearchQuery('');
+    setIsSearchExecuted(false);
+  };
+
+  // Compute matching search results for search table display
+  const searchResultsEvents = useMemo(() => {
+    if (!isSearchExecuted) return [];
+    const q = appliedSearchQuery.toLowerCase().trim();
+    return roleFilteredEvents.filter(ev => {
+      if (ev.sourceType === 'memo') return false;
+      if (!q) return true; // If empty search submitted, match all non-memo events
+      const matchesName = (ev.customerName || '').toLowerCase().includes(q);
+      const matchesLoc = (ev.eventLocation || '').toLowerCase().includes(q);
+      const matchesType = (ev.eventType || '').toLowerCase().includes(q);
+      const matchesNotes = (ev.notes || '').toLowerCase().includes(q);
+      const matchesOrder = String(ev.orderId || '').toLowerCase().includes(q);
+      const matchesEventName = (ev.raw?.event_name || '').toLowerCase().includes(q);
+      const matchesDate = (ev.date || '').toLowerCase().includes(q);
+      const matchesStage = (ev.currentStage || '').toLowerCase().includes(q);
+      const matchesClass = (ev.eventClass || '').toLowerCase().includes(q);
+      return matchesName || matchesLoc || matchesType || matchesNotes || matchesOrder || matchesEventName || matchesDate || matchesStage || matchesClass;
+    });
+  }, [roleFilteredEvents, isSearchExecuted, appliedSearchQuery]);
+
+  // Inline filter by type and classes for calendar display
   const filteredEvents = useMemo(() => {
     return roleFilteredEvents.filter(ev => {
-      // Search text query
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        const matchesName = ev.customerName.toLowerCase().includes(query);
-        const matchesLoc = ev.eventLocation.toLowerCase().includes(query);
-        const matchesType = ev.eventType.toLowerCase().includes(query);
-        const matchesNotes = ev.notes?.toLowerCase().includes(query) || false;
-        if (!matchesName && !matchesLoc && !matchesType && !matchesNotes) return false;
-      }
+      // Exclude memos from calendar UI
+      if (ev.sourceType === 'memo') return false;
 
       // Event Status (Class) filter
       if (statusFilter !== 'All') {
@@ -433,7 +461,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
 
       return true;
     });
-  }, [roleFilteredEvents, searchQuery, statusFilter, eventTypeFilter]);
+  }, [roleFilteredEvents, statusFilter, eventTypeFilter]);
 
 
 
@@ -794,25 +822,51 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
 
       )}
       {/* 3. Filtering and Custom Parameters Console */}
-      <div className="bg-zinc-900/20 border border-zinc-900 p-4 rounded-2xl flex flex-col gap-4">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 w-full">
-          {/* Search Input */}
-          <div className="relative w-full sm:max-w-md">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
-            <input
-              id="cal_search_input"
-              type="text"
-              placeholder="Search client name, venue coordinates, or notes..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-zinc-950/50 hover:bg-zinc-950 border border-zinc-850 focus:border-yellow-500 h-9 pl-9 pr-4 rounded-xl text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none transition-all"
-            />
+      <div className="bg-zinc-900/20 border border-zinc-900 p-3 sm:p-4 rounded-2xl flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 w-full">
+          {/* Search Input Box + Search/OK Button */}
+          <div className="flex items-center gap-2 w-full sm:max-w-md">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+              <input
+                id="cal_search_input"
+                type="text"
+                placeholder="Search client name, order ID, event type..."
+                value={searchInputValue}
+                onChange={(e) => setSearchInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleExecuteSearch();
+                  }
+                }}
+                className="w-full bg-zinc-950/50 hover:bg-zinc-950 border border-zinc-850 focus:border-yellow-500 h-9 pl-9 pr-8 rounded-xl text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none transition-all"
+              />
+              {searchInputValue && (
+                <button
+                  onClick={handleClearSearch}
+                  className="absolute right-2.5 top-2.5 text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            <button
+              id="btn_cal_search_submit"
+              onClick={handleExecuteSearch}
+              className="px-3.5 h-9 bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-bold text-xs rounded-xl flex items-center gap-1.5 shrink-0 transition-all cursor-pointer shadow-sm"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>Search</span>
+            </button>
           </div>
 
           {/* Filter toggle button */}
           <button
+            id="btn_cal_filter_toggle"
             onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 border rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3.5 h-9 bg-zinc-900 hover:bg-zinc-850 border rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
               showFilters ? 'border-yellow-500/40 text-yellow-400 bg-yellow-500/5' : 'border-zinc-800 text-zinc-400'
             }`}
           >
@@ -860,6 +914,69 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
           </div>
         )}
       </div>
+
+      {/* Search Results Table View */}
+      {isSearchExecuted && (
+        <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-4 shadow-xl space-y-3 animate-fade-in">
+          <div className="flex items-center justify-between pb-3 border-b border-zinc-850">
+            <div className="flex items-center gap-2">
+              <Search className="w-4 h-4 text-yellow-500" />
+              <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-white">
+                Search Results {appliedSearchQuery ? <><span className="text-zinc-400">for</span> <span className="text-yellow-400">"{appliedSearchQuery}"</span></> : null}
+              </h3>
+              <span className="text-[10px] bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded font-mono font-bold border border-zinc-700">
+                {searchResultsEvents.length} {searchResultsEvents.length === 1 ? 'result' : 'results'}
+              </span>
+            </div>
+            <button
+              onClick={handleClearSearch}
+              className="text-xs text-zinc-400 hover:text-white flex items-center gap-1 bg-zinc-900 px-2.5 py-1 rounded-lg border border-zinc-800 transition-colors cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Clear Search</span>
+            </button>
+          </div>
+
+          {searchResultsEvents.length === 0 ? (
+            <div className="py-8 text-center text-zinc-500 text-xs font-mono italic">
+              No results found
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse min-w-max">
+                <thead>
+                  <tr className="bg-zinc-900/80 text-zinc-400 text-[10px] font-mono uppercase tracking-wider border-b border-zinc-800">
+                    <th className="p-3">Event Date</th>
+                    <th className="p-3">Event Name</th>
+                    <th className="p-3">Event Type</th>
+                    <th className="p-3">Customer Name</th>
+                    <th className="p-3">Order ID</th>
+                    <th className="p-3">Event Time</th>
+                    <th className="p-3">Current Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-900">
+                  {searchResultsEvents.map((ev, idx) => (
+                    <tr key={ev.id || idx} className="hover:bg-zinc-900/50 text-zinc-300 transition-colors">
+                      <td className="p-3 font-mono text-yellow-400 font-bold">{ev.date || 'N/A'}</td>
+                      <td className="p-3 font-bold text-white">{ev.raw?.event_name || ev.eventName || ev.eventType || 'Event Shoot'}</td>
+                      <td className="p-3 text-zinc-300">{ev.eventType || 'N/A'}</td>
+                      <td className="p-3 font-semibold text-zinc-200">{ev.customerName || 'N/A'}</td>
+                      <td className="p-3 font-mono text-indigo-400 font-bold">{ev.orderId || 'N/A'}</td>
+                      <td className="p-3 font-mono text-zinc-400">{ev.eventTime || 'N/A'}</td>
+                      <td className="p-3">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-zinc-300 border border-zinc-700 inline-block">
+                          {ev.currentStage || ev.eventClass || 'N/A'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 4. Secondary Row: Main Screen Split Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
