@@ -3394,14 +3394,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           const incList = parseTeamMembers(pkg.team_members);
           const defaultInc = incList.length > 0 ? incList : ['1 Candid Photographer'];
           
-          if (!prev[pkgId] || prev[pkgId].length === 0) {
+          if (!prev[pkgId]) {
             updated[pkgId] = defaultInc;
             changed = true;
           }
           if (crmEvents && crmEvents.length > 0) {
             crmEvents.forEach(ev => {
               const key = `${pkgId}_${ev.id}`;
-              if (!prev[key] || prev[key].length === 0) {
+              if (!prev[key]) {
                 updated[key] = [...defaultInc];
                 changed = true;
               }
@@ -3416,7 +3416,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           const delList = parseTeamMembers(pkg.deliverables);
           const defaultDel = delList.length > 0 ? delList : ['High Resolution Edited Photos'];
 
-          if (!prev[pkgId] || prev[pkgId].length === 0) {
+          if (!prev[pkgId]) {
             updated[pkgId] = defaultDel;
             changed = true;
           }
@@ -6297,12 +6297,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           if (!prev) return null;
           return {
             ...prev,
-            budget: Number(wizardLeadData.package_cost),
-            package_price: Number(wizardLeadData.package_cost),
-            deliverables_description: wizardLeadData.deliverables,
+            budget: cleanPkgCost ?? prev.budget,
+            package_price: cleanPkgCost ?? prev.package_price,
+            deliverables_description: deliverablesText,
+            Team_Members: teamMembersText,
             notes_special_customizations: wizardLeadData.notes,
             remarks: updatedRemarks,
-            Select_Package_Option: wizardLeadData.selected_package_id,
+            Select_Package_Option: pkgId,
             client_residence_address: wizardLeadData.client_residence_address,
             city: wizardLeadData.city,
             state: wizardLeadData.state,
