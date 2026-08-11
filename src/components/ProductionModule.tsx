@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useRole } from './RoleContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabaseClient } from '../supabaseClient';
@@ -5703,8 +5704,23 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
             <div className="space-y-6">
               {/* SECTION 1: ADD STAFF FORM (MODAL) */}
-              {showStaffModal && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+              {showStaffModal && typeof document !== 'undefined' && createPortal(
+                <div 
+                  className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+                  onClick={(e) => { 
+                    if (e.target === e.currentTarget) {
+                      setEditingStaffId(null);
+                      setNewStaffName('');
+                      setNewStaffType('');
+                      setNewStaffMobile('');
+                      setNewStaffWhatsapp('');
+                      setNewStaffEmail('');
+                      setNewStaffPassword('');
+                      setNewStaffSkills([]);
+                      setShowStaffModal(false);
+                    }
+                  }}
+                >
                   <div className="w-full max-w-md flex flex-col bg-zinc-950 border border-zinc-900 rounded-2xl shadow-2xl relative max-h-[90vh] overflow-hidden">
                     <div className="flex items-start justify-between p-5 border-b border-zinc-850 bg-zinc-950 z-10 shrink-0">
                       <div>
@@ -5942,7 +5958,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     </form>
                     </div>
                   </div>
-                </div>
+                </div>,
+                document.body
               )}
 
               {/* SECTION 2: STAFF DIRECTORY */}

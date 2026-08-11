@@ -434,8 +434,11 @@ export const OperationsStaffManagement: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Roster form - Modal */}
-      {showStaffModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      {showStaffModal && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) handleCancel(); }}
+        >
           <div className="w-full max-w-md flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl relative max-h-[90vh] overflow-hidden">
             <div className="flex items-center justify-between p-5 border-b border-zinc-800 shrink-0 bg-zinc-900 z-10">
               <h3 className="text-xs font-mono font-black uppercase text-zinc-300 flex items-center gap-1.5">
@@ -601,7 +604,8 @@ export const OperationsStaffManagement: React.FC = () => {
               </form>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Roster table - Full Width */}
