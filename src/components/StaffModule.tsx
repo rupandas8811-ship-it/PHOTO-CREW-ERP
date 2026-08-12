@@ -572,10 +572,6 @@ export const StaffModule: React.FC = () => {
               });
             }
 
-            if (assignedEqItems.length === 0) {
-              assignedEqItems = [{ name: 'Standard Event Camera Kit', assetId: 'EQ-KIT-STD' }];
-            }
-
             // Role
             const staffObj = staff?.find(s => s.name.toLowerCase() === staffName.toLowerCase());
             let assignedRole = staffObj ? staffObj.role : 'Crew Member';
@@ -668,9 +664,6 @@ export const StaffModule: React.FC = () => {
                 assetId: match?.equipment_id || match?.serial_number || `EQ-ASSET-${Math.floor(1000 + Math.random() * 9000)}`
               };
             });
-          }
-          if (assignedEqItems.length === 0) {
-            assignedEqItems = [{ name: 'Standard Event Camera Kit', assetId: 'EQ-KIT-STD' }];
           }
 
           const uniqueKey = `${orderId}_gen_${staffName.toLowerCase()}`;
@@ -1810,6 +1803,7 @@ export const StaffModule: React.FC = () => {
                     <th className="py-4 px-6">Event Name & Shoot</th>
                     <th className="py-4 px-6">Event Date & Time</th>
                     <th className="py-4 px-6">Assigned Role</th>
+                    <th className="py-4 px-6">Equipment Status</th>
                     <th className="py-4 px-6">Status</th>
                     <th className="py-4 px-6 text-right">Actions</th>
                   </tr>
@@ -1846,6 +1840,22 @@ export const StaffModule: React.FC = () => {
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-bold">
                             {b.assignedRole}
                           </span>
+                        </td>
+                        <td className="py-4 px-6">
+                          {b.equipmentItems && b.equipmentItems.length > 0 ? (
+                            <div className="flex flex-col gap-1">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold font-mono">
+                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Assigned ({b.equipmentItems.length})
+                              </span>
+                              <span className="text-[10px] text-zinc-400 max-w-[150px] truncate font-mono" title={b.equipmentItems.map((e: any) => e.name).join(', ')}>
+                                {b.equipmentItems.map((e: any) => e.name).join(', ')}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-zinc-800/80 text-zinc-400 border border-zinc-700 text-xs font-bold font-mono">
+                              Not Assigned
+                            </span>
+                          )}
                         </td>
                         <td className="py-4 px-6 flex flex-col gap-2 items-start">
                           {b.taskStatus === 'Footage Handover' || b.taskStatus === 'Verified Footage' ? (

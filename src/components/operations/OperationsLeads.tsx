@@ -605,6 +605,10 @@ export const OperationsLeads: React.FC = () => {
             const mobileNum = mobilesList[nameIdx] || st?.mobile || '';
             const staffTaskStatus = getStaffTaskStatus(ord.order_id, ev.id, evIdx, name, ord);
 
+            const memberEquipment = (staffEquipments[nameIdx] && Array.isArray(staffEquipments[nameIdx]))
+              ? staffEquipments[nameIdx]
+              : (mobilesRaw.includes(' || EQUIPMENT: ') && nameIdx === 0 ? assignedEquipment : []);
+
             staffDetailsList.push({
               staff_name: name,
               staff_role: assignedTask,
@@ -619,7 +623,7 @@ export const OperationsLeads: React.FC = () => {
               status: isStaffBusyOnDate(name, ev.event_date || ord.event_date || '', ord.order_id) ? 'Busy' : 'Available',
               staff_status: staffTaskStatus,
               google_maps_link: ev.google_maps_link || lead.google_maps_link || '',
-              assigned_equipment: assignedEquipment,
+              assigned_equipment: memberEquipment,
               event_time: ev.event_start_time || ord.event_time || ''
             });
           });
@@ -3979,9 +3983,12 @@ export const OperationsLeads: React.FC = () => {
                                 }
 
                                 // 2. Equipment Status Text
-                                let equipmentStatusText = '❌ Pending';
-                                if (eqHandover && getRecordMeta(eqHandover).url) equipmentStatusText = '✅ Handed Over';
-                                else if (assetCollection && getRecordMeta(assetCollection).url) equipmentStatusText = '✅ Received';
+                                const hasEqAssigned = member.assigned_equipment && member.assigned_equipment.length > 0;
+                                let equipmentStatusText = hasEqAssigned ? '❌ Pending' : 'Not Assigned';
+                                if (hasEqAssigned) {
+                                  if (eqHandover && getRecordMeta(eqHandover).url) equipmentStatusText = '✅ Handed Over';
+                                  else if (assetCollection && getRecordMeta(assetCollection).url) equipmentStatusText = '✅ Received';
+                                }
 
                                 // 3. Event Image Status Text
                                 let eventImageStatusText = '❌ Pending';
@@ -4060,12 +4067,18 @@ export const OperationsLeads: React.FC = () => {
                                       </span>
                                     </td>
                                     <td className="py-3 px-3.5 text-center whitespace-nowrap">
-                                      <span 
-                                        onClick={() => setSelectedEquipmentStatus({ staffName: member.staff_name, eqReceived: assetCollection, eqHandover })}
-                                        className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline font-bold text-xs"
-                                      >
-                                        {equipmentStatusText}
-                                      </span>
+                                      {hasEqAssigned ? (
+                                        <span 
+                                          onClick={() => setSelectedEquipmentStatus({ staffName: member.staff_name, eqReceived: assetCollection, eqHandover })}
+                                          className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline font-bold text-xs"
+                                        >
+                                          {equipmentStatusText}
+                                        </span>
+                                      ) : (
+                                        <span className="text-zinc-500 font-semibold text-xs font-mono">
+                                          Not Assigned
+                                        </span>
+                                      )}
                                     </td>
                                     <td className="py-3 px-3.5 text-center whitespace-nowrap">
                                       <span 
