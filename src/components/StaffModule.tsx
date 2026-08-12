@@ -1399,69 +1399,59 @@ export const StaffModule: React.FC = () => {
       )}
 
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-zinc-900 via-zinc-900/90 to-zinc-950 border border-zinc-800 rounded-3xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-xl">
-        <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-mono font-bold uppercase tracking-widest mb-2">
-            <User className="w-3.5 h-3.5" /> Operative Portal
+      <div className="bg-gradient-to-r from-zinc-900 via-zinc-900/90 to-zinc-950 border border-zinc-800 rounded-2xl md:rounded-3xl p-3.5 sm:p-5 md:p-6 flex flex-row justify-between items-center gap-2 md:gap-4 shadow-xl">
+        <div className="min-w-0 flex-1">
+          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 sm:px-3 sm:py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider mb-1 sm:mb-2">
+            <User className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" /> Operative Portal
           </div>
-          <h2 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">Operation Staff Dashboard</h2>
-          <p className="text-zinc-400 font-mono text-xs mt-1">Logged in as: <span className="text-amber-400 font-bold">{staffName}</span> {staffMobile && `(${staffMobile})`}</p>
+          <h2 className="text-base sm:text-xl md:text-3xl font-black text-white uppercase tracking-tight leading-tight">Operation Staff Dashboard</h2>
+          <p className="text-zinc-400 font-mono text-[10px] sm:text-xs mt-0.5 sm:mt-1 truncate">Logged in as: <span className="text-amber-400 font-bold">{staffName}</span> {staffMobile && `(${staffMobile})`}</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="bg-zinc-800/80 border border-zinc-700/60 rounded-2xl px-4 py-2 text-right">
-            <span className="text-[10px] font-mono text-zinc-400 uppercase block">Assigned Tasks</span>
-            <span className="text-xl font-black text-white">{activeBookings.length} Active</span>
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="bg-zinc-800/80 border border-zinc-700/60 rounded-xl md:rounded-2xl px-2.5 py-1 sm:px-4 sm:py-2 text-right">
+            <span className="text-[9px] sm:text-[10px] font-mono text-zinc-400 uppercase block leading-none">Assigned Tasks</span>
+            <span className="text-xs sm:text-base md:text-xl font-black text-white leading-tight block mt-0.5">{activeBookings.length} Active</span>
           </div>
         </div>
       </div>
 
       {/* Navigation View Switcher */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-zinc-900/90 border border-zinc-800 p-2 rounded-2xl shadow-lg">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 md:gap-4 bg-zinc-900/90 border border-zinc-800 p-1.5 md:p-2 rounded-xl md:rounded-2xl shadow-lg">
+        <div className="grid grid-cols-2 gap-1.5 sm:flex sm:items-center sm:gap-2 w-full sm:w-auto">
           <button
             onClick={() => setActiveTab('calendar')}
-            className={`px-5 py-2.5 rounded-xl font-extrabold text-xs transition-all flex items-center gap-2 ${
+            className={`px-2.5 py-1.5 md:px-5 md:py-2.5 rounded-lg md:rounded-xl font-extrabold text-[10px] sm:text-xs md:text-xs transition-all flex items-center justify-center gap-1.5 ${
               activeTab === 'calendar'
-                ? 'bg-amber-500 text-zinc-950 shadow-lg shadow-amber-500/20'
+                ? 'bg-amber-500 text-zinc-950 shadow-md md:shadow-lg shadow-amber-500/20'
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
             }`}
           >
-            <Calendar className="w-4 h-4" />
-            My Event Calendar
+            <Calendar className="w-3.5 h-3.5 md:w-4 md:h-4 shrink-0" />
+            <span className="truncate">My Event Calendar</span>
           </button>
           <button
             onClick={() => setActiveTab('tasks')}
-            className={`px-5 py-2.5 rounded-xl font-extrabold text-xs transition-all flex items-center gap-2 ${
+            className={`px-2.5 py-1.5 md:px-5 md:py-2.5 rounded-lg md:rounded-xl font-extrabold text-[10px] sm:text-xs md:text-xs transition-all flex items-center justify-center gap-1.5 ${
               activeTab === 'tasks'
-                ? 'bg-amber-500 text-zinc-950 shadow-lg shadow-amber-500/20'
+                ? 'bg-amber-500 text-zinc-950 shadow-md md:shadow-lg shadow-amber-500/20'
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
             }`}
           >
-            <Briefcase className="w-4 h-4" />
-            Assigned Orders List ({activeBookings.length})
+            <Briefcase className="w-3.5 h-3.5 md:w-4 md:h-4 shrink-0" />
+            <span className="truncate">Assigned Orders List ({activeBookings.length})</span>
           </button>
         </div>
 
-        <div className="text-xs font-mono text-zinc-400 px-3 py-1 bg-zinc-800/60 rounded-xl border border-zinc-700/50">
+        <div className="text-[10px] sm:text-xs font-mono text-zinc-400 px-2.5 py-1 sm:px-3 sm:py-1 bg-zinc-800/60 rounded-lg md:rounded-xl border border-zinc-700/50 self-end sm:self-auto text-right">
           Personalized for: <strong className="text-amber-400">{staffName}</strong>
         </div>
       </div>
 
       {/* PERSONAL EVENT CALENDAR VIEW */}
       {activeTab === 'calendar' && (
-        <div className="bg-zinc-900/90 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl p-6 space-y-6">
-          {/* Calendar Header with Navigation */}
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 border-b border-zinc-800 pb-5">
-            <div>
-              <h3 className="text-xl font-black text-white uppercase tracking-wider flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-amber-500" />
-                Personal Event Calendar
-              </h3>
-              <p className="text-zinc-400 text-xs mt-0.5">
-                Showing assigned events specifically for <strong className="text-amber-400">{staffName}</strong> • Click any date/event to view full details
-              </p>
-            </div>
-
+        <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl p-3.5 sm:p-5 md:p-6 space-y-4 md:space-y-6">
+          {/* Calendar Header Navigation */}
+          <div className="flex justify-end items-center gap-2.5 md:gap-4 border-b border-zinc-800 pb-3 md:pb-5">
             <div className="flex items-center gap-3">
               <button
                 onClick={handleToday}
@@ -1492,18 +1482,19 @@ export const StaffModule: React.FC = () => {
           </div>
 
           {/* Days of week header */}
-          <div className="grid grid-cols-7 gap-2 text-center text-xs font-mono font-bold uppercase text-zinc-400">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-              <div key={day} className="py-2 bg-zinc-950/60 rounded-xl border border-zinc-800/80">
+          <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center text-[10px] sm:text-xs font-mono font-bold uppercase text-zinc-500 py-1">
+            {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(day => (
+              <div key={day} className="py-2 bg-zinc-950/60 rounded-xl border border-zinc-850">
                 {day}
               </div>
             ))}
           </div>
 
           {/* Calendar Month Grid */}
-          <div className="grid grid-cols-7 gap-2">
+          <div className="grid grid-cols-7 gap-1 sm:gap-2 w-full max-w-full">
             {calendarGrid.map((cell, idx) => {
               const hasEvents = cell.events.length > 0;
+              const isSelected = cell.dateStr === calendarModalDate;
 
               return (
                 <div
@@ -1512,60 +1503,186 @@ export const StaffModule: React.FC = () => {
                     setCalendarModalDate(cell.dateStr);
                     setCalendarModalEvents(cell.events);
                   }}
-                  className={`min-h-[110px] p-2 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between group ${
-                    !cell.isCurrentMonth
-                      ? 'bg-zinc-950/20 border-zinc-900 text-zinc-600 opacity-40'
+                  className={`aspect-square p-1.5 sm:p-2.5 rounded-xl border flex flex-col items-center justify-between cursor-pointer select-none touch-manipulation relative transition-all duration-150 ${
+                    isSelected
+                      ? 'bg-zinc-900 border-amber-500 ring-1 ring-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.2)]'
                       : cell.isToday
                       ? 'bg-amber-500/10 border-amber-500/60 text-white shadow-lg shadow-amber-500/5'
-                      : hasEvents
-                      ? 'bg-zinc-900/90 border-amber-500/40 hover:border-amber-400 hover:bg-amber-500/10'
-                      : 'bg-zinc-950/60 border-zinc-800/80 hover:border-zinc-700 text-zinc-300'
+                      : cell.isCurrentMonth
+                      ? 'bg-zinc-950/80 border-zinc-850 hover:border-zinc-700 hover:bg-zinc-900/40 text-zinc-200'
+                      : 'bg-zinc-950/20 border-transparent text-zinc-800 opacity-20 pointer-events-none'
                   }`}
                 >
-                  {/* Date number header */}
-                  <div className="flex justify-between items-center">
-                    <span
-                      className={`text-xs font-mono font-bold rounded-lg px-2 py-0.5 ${
-                        cell.isToday
-                          ? 'bg-amber-500 text-zinc-950 font-black'
-                          : cell.isCurrentMonth
-                          ? 'text-zinc-200'
-                          : 'text-zinc-600'
-                      }`}
-                    >
-                      {cell.dayNum}
-                    </span>
+                  {/* Date Number Display */}
+                  <span
+                    className={`text-xs sm:text-sm font-mono font-extrabold ${
+                      isSelected
+                        ? 'text-amber-400 font-black'
+                        : cell.isToday
+                        ? 'text-amber-500 font-extrabold'
+                        : cell.isCurrentMonth
+                        ? 'text-zinc-200'
+                        : 'text-zinc-700'
+                    }`}
+                  >
+                    {cell.dayNum}
+                  </span>
 
-                    {hasEvents && (
-                      <span className="text-[10px] font-mono font-extrabold px-2 py-0.5 rounded-full bg-amber-500 text-zinc-950 shadow-sm">
-                        {cell.events.length} {cell.events.length === 1 ? 'Event' : 'Events'}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Event Badges inside Cell */}
-                  <div className="mt-1 space-y-1">
-                    {cell.events.slice(0, 2).map((ev, eIdx) => (
-                      <div
-                        key={eIdx}
-                        className="bg-amber-500/20 border border-amber-500/30 rounded-lg p-1 text-[10px] text-amber-300 font-medium truncate group-hover:bg-amber-500/30 transition-colors"
-                      >
-                        <div className="font-bold truncate text-white">{ev.eventName}</div>
-                        <div className="text-[9px] font-mono text-amber-400 opacity-90 truncate">
-                          {ev.eventStartTime} • {ev.assignedRole}
-                        </div>
-                      </div>
-                    ))}
-
-                    {cell.events.length > 2 && (
-                      <div className="text-[9px] font-mono font-bold text-amber-400 text-center">
-                        +{cell.events.length - 2} more...
-                      </div>
-                    )}
-                  </div>
+                  {/* Event Dots ONLY (No event names, badges, times, or crew text) */}
+                  {cell.isCurrentMonth && hasEvents && (
+                    <div className="flex items-center justify-center gap-1 mt-0.5 max-w-full overflow-hidden">
+                      {cell.events.slice(0, 4).map((ev, eIdx) => (
+                        <span
+                          key={ev.key || eIdx}
+                          className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"
+                        />
+                      ))}
+                      {cell.events.length > 4 && (
+                        <span className="w-1 h-1 rounded-full bg-zinc-500 shrink-0" />
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
+          </div>
+
+          {/* Selected Date Events Section below Calendar Grid */}
+          <div className="mt-6 pt-5 border-t border-zinc-800 space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-amber-500 block font-extrabold">
+                  SELECTED DATE
+                </span>
+                <h4 className="text-base sm:text-lg font-black text-white font-mono mt-0.5">
+                  {calendarModalDate || 'Select a date'}
+                </h4>
+              </div>
+              {calendarModalDate && (
+                <span className="text-xs font-mono text-zinc-400">
+                  {calendarModalEvents.length} Event(s) Scheduled
+                </span>
+              )}
+            </div>
+
+            {!calendarModalDate ? (
+              <div className="p-6 text-center bg-zinc-950/40 border border-dashed border-zinc-800 rounded-2xl text-zinc-500 text-xs font-mono">
+                Click or tap any date on the calendar above to view scheduled events.
+              </div>
+            ) : calendarModalEvents.length === 0 ? (
+              <div className="p-6 text-center bg-zinc-950/40 border border-dashed border-zinc-800 rounded-2xl text-zinc-500 text-xs font-mono">
+                No events assigned on {calendarModalDate}.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Desktop Table View */}
+                <div className="hidden md:block overflow-x-auto w-full border border-zinc-800 rounded-2xl bg-zinc-950/60">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-zinc-800 bg-zinc-950/90 text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400">
+                        <th className="p-4">ORDER & EVENT</th>
+                        <th className="p-4">CUSTOMER</th>
+                        <th className="p-4">DATE & TIME</th>
+                        <th className="p-4">ASSIGNED TASK</th>
+                        <th className="p-4">STATUS</th>
+                        <th className="p-4 text-right">ACTION</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800/60 text-xs font-sans">
+                      {calendarModalEvents.map((ev, idx) => (
+                        <tr key={ev.key || idx} className="hover:bg-zinc-800/30 transition-colors">
+                          <td className="p-4">
+                            <span className="text-[10px] font-mono font-bold text-amber-400 block">
+                              ORDER: {ev.orderId}
+                            </span>
+                            <span className="text-sm font-bold text-white block mt-0.5">{ev.eventName}</span>
+                            {ev.venue && <span className="text-[11px] text-zinc-400 block mt-0.5">{ev.venue}</span>}
+                          </td>
+                          <td className="p-4">
+                            <span className="font-bold text-zinc-200 block">{ev.customerName}</span>
+                            <a href={`tel:${ev.customerMobile}`} className="text-[11px] font-mono text-amber-400 hover:underline">
+                              {ev.customerMobile}
+                            </a>
+                          </td>
+                          <td className="p-4 font-mono text-zinc-300">
+                            <div>Start: {ev.eventStartTime}</div>
+                            <div className="text-zinc-500 text-[10px]">End: {ev.eventEndTime || 'N/A'}</div>
+                          </td>
+                          <td className="p-4">
+                            <span className="px-2.5 py-1 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-bold uppercase text-[10px]">
+                              {ev.assignedRole}
+                            </span>
+                          </td>
+                          <td className="p-4">
+                            <span className="px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold uppercase text-[10px]">
+                              {ev.taskStatus}
+                            </span>
+                          </td>
+                          <td className="p-4 text-right">
+                            <button
+                              onClick={() => setSelectedBookingDetails(ev)}
+                              className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> Details
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Card View */}
+                <div className="block md:hidden space-y-3">
+                  {calendarModalEvents.map((ev, idx) => (
+                    <div
+                      key={ev.key || idx}
+                      className="p-4 rounded-2xl bg-zinc-950/80 border border-zinc-800 space-y-3"
+                    >
+                      <div className="flex justify-between items-start gap-2">
+                        <div>
+                          <span className="text-[10px] font-mono font-bold text-amber-400 uppercase block">
+                            ORDER: {ev.orderId}
+                          </span>
+                          <h5 className="text-base font-bold text-white mt-0.5">{ev.eventName}</h5>
+                          <p className="text-xs text-zinc-300 font-semibold mt-0.5">{ev.customerName}</p>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-bold uppercase text-[9px] shrink-0">
+                          {ev.assignedRole}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-2 border-t border-zinc-850 text-zinc-400">
+                        <div>
+                          <span className="text-[9px] text-zinc-500 block uppercase">TIME</span>
+                          <span className="text-zinc-200">{ev.eventStartTime}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-zinc-500 block uppercase">STATUS</span>
+                          <span className="text-amber-400 font-bold">{ev.taskStatus}</span>
+                        </div>
+                      </div>
+
+                      {ev.venue && (
+                        <div className="text-xs text-zinc-400 font-mono pt-2 border-t border-zinc-850">
+                          <span className="text-[9px] text-zinc-500 block uppercase">VENUE</span>
+                          <span>{ev.venue}</span>
+                        </div>
+                      )}
+
+                      <div className="pt-2 flex justify-end">
+                        <button
+                          onClick={() => setSelectedBookingDetails(ev)}
+                          className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1"
+                        >
+                          <Eye className="w-3.5 h-3.5" /> View Details
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1895,153 +2012,7 @@ export const StaffModule: React.FC = () => {
         </div>
       )}
 
-      {/* PERSONAL CALENDAR EVENT POPUP MODAL */}
-      {calendarModalDate && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-zinc-800 bg-zinc-950/60 flex justify-between items-start">
-              <div>
-                <span className="text-xs font-mono font-bold text-amber-400 uppercase tracking-widest block mb-1">
-                  Assigned Event Details • {calendarModalDate}
-                </span>
-                <h3 className="text-2xl font-black text-white">
-                  Events for {staffName}
-                </h3>
-                <p className="text-zinc-400 text-xs mt-0.5">
-                  Showing {calendarModalEvents.length} event(s) assigned to you on this date
-                </p>
-              </div>
-              <button
-                onClick={() => setCalendarModalDate(null)}
-                className="p-2 text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-full transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-6 overflow-y-auto space-y-6 text-sm">
-              {calendarModalEvents.length === 0 ? (
-                <div className="py-12 text-center">
-                  <Calendar className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
-                  <h4 className="text-base font-bold text-white mb-1">No Events Assigned</h4>
-                  <p className="text-zinc-400 text-xs">
-                    You have no events or shoots assigned to you on {calendarModalDate}.
-                  </p>
-                </div>
-              ) : (
-                calendarModalEvents.map((ev, idx) => (
-                  <div
-                    key={ev.key || idx}
-                    className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-5 space-y-4 shadow-lg hover:border-zinc-700 transition-colors"
-                  >
-                    {/* Header badge row */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
-                      <div>
-                        <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider block">
-                          Order ID: {ev.orderId}
-                        </span>
-                        <h4 className="text-xl font-black text-white">{ev.eventName}</h4>
-                      </div>
-                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-bold uppercase">
-                        <Briefcase className="w-3.5 h-3.5" />
-                        Task: {ev.assignedRole}
-                      </span>
-                    </div>
-
-                    {/* All required event details */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                      <div>
-                        <span className="text-[10px] font-mono uppercase text-zinc-500 block mb-1">Customer Name</span>
-                        <div className="font-bold text-white text-sm">{ev.customerName}</div>
-                      </div>
-
-                      <div>
-                        <span className="text-[10px] font-mono uppercase text-zinc-500 block mb-1">Customer Mobile Number</span>
-                        <a
-                          href={`tel:${ev.customerMobile}`}
-                          className="inline-flex items-center gap-1.5 text-amber-400 hover:text-amber-300 font-bold"
-                        >
-                          <Phone className="w-3.5 h-3.5" />
-                          {ev.customerMobile}
-                        </a>
-                      </div>
-
-                      <div>
-                        <span className="text-[10px] font-mono uppercase text-zinc-500 block mb-1">Event Date</span>
-                        <div className="flex items-center gap-1.5 font-semibold text-zinc-200">
-                          <Calendar className="w-3.5 h-3.5 text-amber-500" />
-                          {ev.eventDate}
-                        </div>
-                      </div>
-
-                      <div>
-                        <span className="text-[10px] font-mono uppercase text-zinc-500 block mb-1">Event Start & End Time</span>
-                        <div className="flex items-center gap-1.5 font-semibold text-zinc-200">
-                          <Clock className="w-3.5 h-3.5 text-amber-500" />
-                          Start: {ev.eventStartTime} | End: {ev.eventEndTime || 'N/A'}
-                        </div>
-                      </div>
-
-                      <div className="sm:col-span-2">
-                        <span className="text-[10px] font-mono uppercase text-zinc-500 block mb-1">Event Location / Google Maps</span>
-                        <div className="flex items-start gap-1.5 text-zinc-300 font-medium">
-                          <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
-                          <span>{ev.venue}</span>
-                        </div>
-                        {ev.googleMapsLink && ev.googleMapsLink !== 'N/A' && (
-                          <a
-                            href={ev.googleMapsLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-amber-400 hover:text-amber-300 font-bold mt-1 text-[11px]"
-                          >
-                            Open in Google Maps ↗
-                          </a>
-                        )}
-                      </div>
-
-                      <div>
-                        <span className="text-[10px] font-mono uppercase text-zinc-500 block mb-1">Assigned Task</span>
-                        <div className="font-bold text-indigo-400">{ev.assignedRole}</div>
-                      </div>
-
-                      <div>
-                        <span className="text-[10px] font-mono uppercase text-zinc-500 block mb-1">Current Status</span>
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold uppercase text-[10px]">
-                          <Clock className="w-3 h-3" />
-                          {ev.taskStatus}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="pt-3 border-t border-zinc-800 flex justify-end gap-2">
-                      <button
-                        onClick={() => {
-                          setCalendarModalDate(null);
-                          setSelectedBookingDetails(ev);
-                        }}
-                        className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold rounded-xl text-xs transition-colors flex items-center gap-1.5"
-                      >
-                        <Eye className="w-3.5 h-3.5" /> View Full Order Details
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="p-4 border-t border-zinc-800 bg-zinc-950/80 text-right">
-              <button
-                onClick={() => setCalendarModalDate(null)}
-                className="px-5 py-2 bg-zinc-800 hover:bg-zinc-700 text-white font-bold rounded-xl text-xs transition-colors"
-              >
-                Close Calendar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Inline Selected Date Event Details are rendered directly below calendar grid */}
     </div>
   );
 };
