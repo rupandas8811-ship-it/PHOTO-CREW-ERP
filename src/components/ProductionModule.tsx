@@ -4073,8 +4073,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   </div>
 
                   <div className="flex flex-col gap-0.5">
-                    {/* 1. Assign Editor */}
-                    {!isLocked && (
+                    {/* Assign Editor */}
+                    {(displayStatus === "Raw Footage Received" || displayStatus === "Verified Footage" || displayStatus === "Footage Handover Verified" || displayStatus === "Pending") && (
                       <button
                         type="button"
                         onClick={() => {
@@ -4084,11 +4084,71 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-purple-300 hover:text-white hover:bg-purple-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                       >
                         <span className="text-sm">👤</span>
-                        <span>{isEditorAssigned ? 'Assign / Reassign Editor' : 'Assign Editor'}</span>
+                        <span>Assign Editor</span>
                       </button>
                     )}
 
-                    {/* 2. View Details / Edit Full Dossier */}
+                    {/* Reassign Editor */}
+                    {(displayStatus === "Assigned Editor" || displayStatus === "Editing Started" || displayStatus === "Customer Review") && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenActionDropdown(null);
+                          handleOpenAssignEditor(prod);
+                        }}
+                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-purple-300 hover:text-white hover:bg-purple-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                      >
+                        <span className="text-sm">👤</span>
+                        <span>Reassign Editor</span>
+                      </button>
+                    )}
+
+                    {/* Send Review Link */}
+                    {(displayStatus === "Customer Review" || displayStatus === "Editing Completed") && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenActionDropdown(null);
+                          handleOpenResendReviewPopup(prod);
+                        }}
+                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-cyan-300 hover:text-white hover:bg-cyan-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                      >
+                        <span className="text-sm">📤</span>
+                        <span>Send Review Link</span>
+                      </button>
+                    )}
+
+                    {/* Client Acceptance */}
+                    {displayStatus === "Editing Completed" && currentRole !== "Production Staff" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenActionDropdown(null);
+                          handleOpenClientAcceptance(prod);
+                        }}
+                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-emerald-300 hover:text-white hover:bg-emerald-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                      >
+                        <span className="text-sm">✓</span>
+                        <span>Client Acceptance</span>
+                      </button>
+                    )}
+
+                    {/* Share via WhatsApp */}
+                    {isEditorAssigned && hasSavedAssignments && isStatusActive && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenActionDropdown(null);
+                          prepareEditorWhatsappData(prod.production_id);
+                        }}
+                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-green-300 hover:text-white hover:bg-green-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                      >
+                        <span className="text-sm">💬</span>
+                        <span>Share</span>
+                      </button>
+                    )}
+
+                    {/* Edit Full Dossier */}
                     <button
                       type="button"
                       onClick={() => {
@@ -4132,120 +4192,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         setLeadClientReviewDate(toInputDateFormat((prod as any).client_review_upload_date || (crLog ? crLog.timestamp : null)));
                         setLeadClientApprovalDate(toInputDateFormat((prod as any).client_approval_date || (caLog ? caLog.timestamp : null)));
                       }}
-                      className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-zinc-200 hover:text-white hover:bg-zinc-800/90 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                      className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-zinc-300 hover:text-white hover:bg-zinc-800/90 rounded-lg transition-colors flex items-center gap-2 cursor-pointer border-t border-zinc-800/80 mt-0.5 pt-1.5"
                     >
-                      <span className="text-sm">👁️</span>
-                      <span>View Details / Dossier</span>
+                      <span className="text-sm">✎</span>
+                      <span>Edit Full Dossier</span>
                     </button>
-
-                    {/* 3. Send Review Link */}
-                    {!isLocked && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenActionDropdown(null);
-                          handleOpenResendReviewPopup(prod);
-                        }}
-                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-cyan-300 hover:text-white hover:bg-cyan-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                      >
-                        <span className="text-sm">📤</span>
-                        <span>Send Review Link</span>
-                      </button>
-                    )}
-
-                    {/* 4. Delivery Checklist */}
-                    {!isLocked && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenActionDropdown(null);
-                          setActiveWorkflowProd(prod);
-                          setWorkflowActionType('delivery_checklist');
-                        }}
-                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-amber-300 hover:text-white hover:bg-amber-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                      >
-                        <span className="text-sm">📋</span>
-                        <span>Delivery Checklist</span>
-                      </button>
-                    )}
-
-                    {/* 5. Request Revision */}
-                    {!isLocked && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenActionDropdown(null);
-                          setActiveWorkflowProd(prod);
-                          setWorkflowActionType('request_revision');
-                        }}
-                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-orange-300 hover:text-white hover:bg-orange-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                      >
-                        <span className="text-sm">🔄</span>
-                        <span>Request Revision</span>
-                      </button>
-                    )}
-
-                    {/* 6. Client Acceptance / Deliver */}
-                    {!isLocked && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenActionDropdown(null);
-                          handleOpenClientAcceptance(prod);
-                        }}
-                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-emerald-300 hover:text-white hover:bg-emerald-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                      >
-                        <span className="text-sm">✓</span>
-                        <span>Client Acceptance / Deliver</span>
-                      </button>
-                    )}
-
-                    {/* 7. Manage CRM Status */}
-                    {!isLocked && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenActionDropdown(null);
-                          setActiveWorkflowProd(prod);
-                          setWorkflowActionType('manage_status');
-                        }}
-                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-indigo-300 hover:text-white hover:bg-indigo-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                      >
-                        <span className="text-sm">⚙️</span>
-                        <span>Manage CRM Status</span>
-                      </button>
-                    )}
-
-                    {/* 8. Manage Payment & Close */}
-                    {!isLocked && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenActionDropdown(null);
-                          setActiveWorkflowProd(prod);
-                          setWorkflowActionType('manage_payment_close');
-                        }}
-                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-rose-300 hover:text-white hover:bg-rose-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                      >
-                        <span className="text-sm">💳</span>
-                        <span>Manage Payment & Close</span>
-                      </button>
-                    )}
-
-                    {/* 9. Share via WhatsApp */}
-                    {isEditorAssigned && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenActionDropdown(null);
-                          prepareEditorWhatsappData(prod.production_id);
-                        }}
-                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-green-300 hover:text-white hover:bg-green-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                      >
-                        <span className="text-sm">💬</span>
-                        <span>Share via WhatsApp</span>
-                      </button>
-                    )}
                   </div>
                 </div>
               </>
