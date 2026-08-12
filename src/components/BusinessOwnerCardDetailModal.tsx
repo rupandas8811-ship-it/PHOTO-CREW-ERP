@@ -50,10 +50,19 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
 
   useEffect(() => {
     if (!isOpen) return;
-    const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
     return () => {
-      document.body.style.overflow = prevOverflow;
+      document.body.style.overflow = '';
+      document.body.style.height = '';
+      document.body.style.minHeight = '';
+      document.body.style.position = '';
+      document.body.style.padding = '';
+      document.body.style.margin = '';
+      document.body.style.width = '';
+      document.documentElement.style.overflow = '';
+      document.documentElement.style.height = '';
+      document.documentElement.style.minHeight = '';
     };
   }, [isOpen]);
 
