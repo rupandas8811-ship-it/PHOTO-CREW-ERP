@@ -43,6 +43,7 @@ export const UnifiedEventDropdownCell: React.FC<UnifiedEventDropdownCellProps> =
     event_start_time?: string;
     event_end_date?: string;
     event_end_time?: string;
+    shoot_type?: string;
   }> = [];
 
   if (lead?.events && Array.isArray(lead.events) && lead.events.length > 0) {
@@ -52,20 +53,23 @@ export const UnifiedEventDropdownCell: React.FC<UnifiedEventDropdownCellProps> =
       event_start_time: ev.event_start_time || ev.event_time || ev.Event_Start_Time || '',
       event_end_date: ev.event_end_date || ev.Event_End_Date || '',
       event_end_time: ev.event_end_time || '',
+      shoot_type: ev.event_shoot_type || ev.shoot_type || lead?.shoot_type || '',
     }));
   } else if (lead?.event_name || lead?.Event_Name || lead?.event_date || lead?.Event_Date || lead?.event_type) {
     eventsList = [{
       event_name: lead.event_name || lead.Event_Name || lead.event_type || 'Event 1',
       event_date: lead.event_date || lead.Event_Date || '—',
       event_start_time: lead.event_start_time || lead.event_time || lead.Event_Start_Time || '',
-      event_end_date: lead.event_end_date || lead.Event_End_Date || '',
-      event_end_time: lead.event_end_time || '',
+      event_end_date: lead?.event_end_date || lead?.Event_End_Date || '',
+      event_end_time: lead?.event_end_time || '',
+      shoot_type: lead?.shoot_type || lead?.event_shoot_type || '',
     }];
   } else {
     eventsList = [{
       event_name: 'Event 1',
       event_date: '—',
       event_start_time: '',
+      shoot_type: lead?.shoot_type || '',
     }];
   }
 
@@ -84,39 +88,52 @@ export const UnifiedEventDropdownCell: React.FC<UnifiedEventDropdownCellProps> =
   const formattedStartTime = activeEvent.event_start_time ? convertTo12Hour(activeEvent.event_start_time) : '';
 
   return (
-    <div className="relative inline-block text-left w-full max-w-[200px]" ref={containerRef}>
+    <div className="relative inline-block text-left w-full max-w-[220px]" ref={containerRef}>
       <button
         type="button"
         onClick={(e) => {
+          if (isSingle) return;
           e.stopPropagation();
           setIsOpen(!isOpen);
         }}
-        className="w-full text-left px-2.5 py-1.5 bg-zinc-900/90 hover:bg-zinc-850 border border-zinc-800 hover:border-indigo-500/50 rounded-xl transition-all font-sans cursor-pointer group shadow-sm flex flex-col gap-0.5"
+        className={`w-full text-left px-2.5 py-1.5 rounded-xl transition-all font-sans group shadow-sm flex flex-col gap-0.5 ${
+          isSingle 
+            ? 'bg-transparent border-0 p-0 shadow-none cursor-default' 
+            : 'bg-zinc-900/90 hover:bg-zinc-850 border border-zinc-800 hover:border-indigo-500/50 cursor-pointer'
+        }`}
         title={buttonTitle}
       >
         <div className="flex items-center justify-between w-full gap-1">
           <span className="text-xs font-bold text-indigo-300 group-hover:text-indigo-200 truncate flex items-center gap-1.5">
-            <span className="text-[10px] text-indigo-400 shrink-0">{isOpen ? '▲' : '▾'}</span>
+            {!isSingle && (
+              <span className="text-[10px] text-indigo-400 shrink-0">{isOpen ? '▲' : '▾'}</span>
+            )}
             <span className="truncate">{buttonTitle}</span>
           </span>
         </div>
 
-        <div className="text-[10.5px] font-mono text-zinc-400 truncate flex items-center gap-1 pl-3.5">
+        <div className="text-[10.5px] font-mono text-zinc-400 truncate flex items-center gap-1">
           <span>{activeEvent.event_date || '—'}</span>
           {formattedStartTime && <span className="text-zinc-500">• {formattedStartTime}</span>}
         </div>
+
+        {activeEvent.shoot_type && (
+          <div className="text-[10px] font-mono uppercase text-zinc-500 truncate">
+            {activeEvent.shoot_type}
+          </div>
+        )}
       </button>
 
-      {isOpen && (
+      {isOpen && !isSingle && (
         <div
-          className={`absolute left-0 z-[150] min-w-full w-[200px] max-w-[calc(100vw-32px)] rounded-xl bg-zinc-950 border border-zinc-800 shadow-2xl p-1.5 space-y-1 select-none max-h-56 overflow-y-auto ${
+          className={`absolute left-0 z-[150] min-w-full w-[220px] max-w-[calc(100vw-32px)] rounded-xl bg-zinc-950 border border-zinc-800 shadow-2xl p-1.5 space-y-1 select-none max-h-60 overflow-y-auto ${
             openUpward ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
           }`}
           onClick={(e) => e.stopPropagation()}
         >
           {eventsList.map((ev, idx) => {
             const startTimeStr = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '';
-            const isSelected = selectedIndex === idx || (isSingle && idx === 0);
+            const isSelected = selectedIndex === idx;
 
             return (
               <div
@@ -135,7 +152,7 @@ export const UnifiedEventDropdownCell: React.FC<UnifiedEventDropdownCellProps> =
                   <span className="text-xs font-bold text-indigo-300 truncate">
                     {ev.event_name || `Event ${idx + 1}`}
                   </span>
-                  {!isSingle && isSelected && (
+                  {isSelected && (
                     <span className="text-[10px] text-indigo-400 font-mono shrink-0">✓</span>
                   )}
                 </div>
@@ -143,6 +160,11 @@ export const UnifiedEventDropdownCell: React.FC<UnifiedEventDropdownCellProps> =
                   <span>{ev.event_date || '—'}</span>
                   {startTimeStr && <span className="text-zinc-500"> • {startTimeStr}</span>}
                 </div>
+                {ev.shoot_type && (
+                  <div className="text-[10px] font-mono uppercase text-zinc-500 truncate mt-0.5">
+                    {ev.shoot_type}
+                  </div>
+                )}
               </div>
             );
           })}

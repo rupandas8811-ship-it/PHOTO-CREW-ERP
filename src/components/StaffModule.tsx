@@ -1806,7 +1806,6 @@ export const StaffModule: React.FC = () => {
                     <th className="py-4 px-6">Order ID</th>
                     <th className="py-4 px-6">Customer Name</th>
                     <th className="py-4 px-6">Event Name & Shoot</th>
-                    <th className="py-4 px-6">Event Date & Time</th>
                     <th className="py-4 px-6">Assigned Role</th>
                     <th className="py-4 px-6">Equipment Status</th>
                     <th className="py-4 px-6">Status</th>
@@ -1828,18 +1827,18 @@ export const StaffModule: React.FC = () => {
                         <td className="py-4 px-6 font-mono font-bold text-amber-400">{b.orderId}</td>
                         <td className="py-4 px-6 font-bold text-white">{b.customerName}</td>
                         <td className="py-4 px-6">
-                          <div className="font-semibold text-zinc-200">{b.eventName}</div>
-                          <span className="text-[10px] font-mono uppercase text-zinc-500">{b.shootType}</span>
-                        </td>
-                        <td className="py-4 px-6 text-zinc-300">
-                          <div className="flex items-center gap-1.5 font-medium">
-                            <Calendar className="w-3.5 h-3.5 text-zinc-400" />
-                            {b.eventDate}
+                          <div className="font-bold text-zinc-100">{b.eventName}</div>
+                          <div className="text-xs text-zinc-400 font-mono mt-0.5 flex items-center gap-1 flex-wrap">
+                            <span>{b.eventDate}</span>
+                            {b.eventStartTime && b.eventStartTime !== 'N/A' && (
+                              <span className="text-zinc-500">• {b.eventStartTime}</span>
+                            )}
                           </div>
-                          <div className="flex items-center gap-1.5 text-xs text-zinc-400 mt-1">
-                            <Clock className="w-3 h-3 text-zinc-500" />
-                            {b.eventStartTime}
-                          </div>
+                          {b.shootType && b.shootType !== 'N/A' && (
+                            <div className="text-[10px] font-mono uppercase text-zinc-500 mt-0.5">
+                              {b.shootType}
+                            </div>
+                          )}
                         </td>
                         <td className="py-4 px-6">
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-bold">
