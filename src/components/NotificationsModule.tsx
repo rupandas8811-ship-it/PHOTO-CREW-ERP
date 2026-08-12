@@ -93,6 +93,9 @@ export const NotificationsModule: React.FC = () => {
     return 'Medium';
   };
 
+  // Hide Notification UI for this project
+  return null;
+
   return (
     <div id="notifications_module" className="space-y-6 animate-fade-in font-sans">
       

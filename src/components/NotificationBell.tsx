@@ -101,6 +101,9 @@ export const NotificationBell: React.FC = () => {
     }
   };
 
+  // Hide Notification UI for this project
+  return null;
+
   return (
     <div id="notification_bell_wrapper" className="relative font-sans" ref={dropdownRef}>
       {/* Bell Trigger Button */}

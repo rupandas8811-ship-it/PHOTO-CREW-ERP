@@ -537,6 +537,7 @@ const MainAppContent: React.FC = () => {
               { id: 'resources', label: 'Resources Audit', icon: Play },
               { id: 'analytics', label: 'Studio Analytics', icon: BarChart3 }
             ].filter(tab => {
+              if (tab.id === 'notifications') return false;
               if (currentRole === 'Production Team') {
                 return ['production_leads', 'production_calendar', 'crew_roster', 'staff_roster'].includes(tab.id);
               }

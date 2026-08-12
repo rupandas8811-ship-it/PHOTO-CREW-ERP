@@ -26,6 +26,9 @@ export const OperationsNotifications: React.FC = () => {
     alert('All relevant operations notifications marked as read.');
   };
 
+  // Hide Notification UI for this project
+  return null;
+
   return (
     <div className="bg-zinc-900/40 border border-zinc-850 rounded-2xl p-5 shadow-xl space-y-4">
       {/* Notifications Header */}

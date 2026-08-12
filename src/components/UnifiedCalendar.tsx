@@ -88,6 +88,23 @@ const parseLocalDate = (dateStr: string | Date | null | undefined): Date => {
   return new Date(dateStr);
 };
 
+const parseEventTimes = (timeStr: string) => {
+  if (!timeStr) return { start: '10:00 AM', end: '--' };
+  // Check if it contains a range delimiter ' - ', '-', or ' to '
+  const delimiter = timeStr.includes(' - ') ? ' - ' : timeStr.includes('-') ? '-' : timeStr.includes(' to ') ? ' to ' : null;
+  if (delimiter) {
+    const parts = timeStr.split(delimiter);
+    return {
+      start: parts[0]?.trim() || timeStr,
+      end: parts[1]?.trim() || '--'
+    };
+  }
+  return {
+    start: timeStr,
+    end: '--'
+  };
+};
+
 export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   const { 
     leads, 
@@ -968,34 +985,34 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
           )}
           
           {/* Calendar Section Header */}
-          <div className="flex items-center justify-between pb-1 border-b border-zinc-900/40">
+          <div className="flex items-center justify-between pb-2 border-b border-zinc-900/40">
             <div className="flex items-center gap-2">
-              <CalendarIcon className="w-4 h-4 text-yellow-500" />
-              <h3 className="text-xs font-mono font-bold uppercase tracking-widest text-zinc-300">
-                {role === 'operations' ? 'Operations Staff Calendar' : role === 'production' ? 'Production Staff Calendar' : 'Unified Calendar'}
+              <CalendarIcon className="w-4 h-4 text-yellow-500 shrink-0" />
+              <h3 className="text-xs sm:text-sm font-mono font-extrabold tracking-widest text-zinc-100 uppercase">
+                {role === 'operations' ? 'OPERATIONS CALENDAR' : role === 'production' ? 'PRODUCTION CALENDAR' : 'UNIFIED CALENDAR'}
               </h3>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">Live Sync</span>
+            <div className="flex items-center gap-1.5 bg-emerald-950/20 px-2 py-0.5 rounded-full border border-emerald-500/10">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
+              <span className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-wider">LIVE SYNC</span>
             </div>
           </div>
 
           {/* Unified Premium Calendar Toolbar */}
-          <div id="unified_calendar_toolbar" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-900/60 pb-5">
+          <div id="unified_calendar_toolbar" className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-900/60 pb-5">
             {/* Left Column: Month Navigation & Today Button */}
-            <div className="flex items-center justify-between sm:justify-start gap-4">
-              <div className="flex items-center gap-2 bg-zinc-950/80 p-1 rounded-xl border border-zinc-900">
+            <div className="flex items-center justify-between sm:justify-start gap-3 w-full sm:w-auto">
+              <div className="flex items-center gap-4 bg-zinc-950 border border-zinc-900 rounded-xl px-3.5 py-2 w-full sm:w-auto select-none">
                 <button
                   id="btn_cal_prev_month"
                   onClick={handlePrevMonth}
-                  className="p-1.5 hover:bg-zinc-900 text-zinc-400 hover:text-white rounded-lg transition-all duration-150 cursor-pointer active:scale-95"
+                  className="px-2 py-1 text-zinc-500 hover:text-white transition duration-150 cursor-pointer active:scale-90 font-mono font-bold text-xs"
                   aria-label="Previous Month"
                 >
-                  <ChevronLeft className="w-4 h-4" />
+                  [ &lt; ]
                 </button>
                 
-                <h2 id="calendar_current_period" className="text-xs font-mono font-bold tracking-wider text-zinc-300 px-3 min-w-[120px] text-center select-none">
+                <h2 id="calendar_current_period" className="text-xs sm:text-sm font-mono font-bold tracking-wider text-center flex items-center justify-center flex-1 sm:flex-none sm:min-w-[140px]">
                   <span className="text-yellow-500 font-extrabold mr-1.5">{monthNames[currentMonth]}</span>
                   <span className="text-zinc-500 font-light">{currentYear}</span>
                 </h2>
@@ -1003,105 +1020,62 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                 <button
                   id="btn_cal_next_month"
                   onClick={handleNextMonth}
-                  className="p-1.5 hover:bg-zinc-900 text-zinc-400 hover:text-white rounded-lg transition-all duration-150 cursor-pointer active:scale-95"
+                  className="px-2 py-1 text-zinc-500 hover:text-white transition duration-150 cursor-pointer active:scale-90 font-mono font-bold text-xs"
                   aria-label="Next Month"
                 >
-                  <ChevronRight className="w-4 h-4" />
+                  [ &gt; ]
                 </button>
               </div>
-
-              <div className="hidden sm:block h-6 w-[1px] bg-zinc-900" />
 
               <button
                 id="btn_cal_today"
                 onClick={handleSetToday}
-                className="px-4 py-2 bg-zinc-950/80 hover:bg-zinc-900 border border-zinc-900 hover:border-zinc-800 rounded-xl text-xs font-mono font-bold text-zinc-300 hover:text-white transition-all duration-150 cursor-pointer active:scale-95"
+                className="px-4 py-2.5 bg-zinc-950 hover:bg-zinc-900 border border-zinc-900 hover:border-zinc-800 rounded-xl text-xs font-mono font-bold text-zinc-300 hover:text-white transition-all duration-150 cursor-pointer active:scale-95 shadow-md shrink-0"
               >
-                Today
+                [ Today ]
               </button>
             </div>
 
             {/* Right Column: Month/Week/Day/Agenda Segmented Control */}
-            <div id="calendar_view_selectors" className="flex bg-zinc-950/80 p-1 rounded-xl border border-zinc-900 select-none self-stretch sm:self-auto justify-between sm:justify-start">
-              {(['month', 'week', 'day', 'agenda'] as const).map((view) => (
-                <button
-                  key={view}
-                  id={`btn_view_${view}`}
-                  onClick={() => setCalendarView(view)}
-                  className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-mono font-bold capitalize transition-all duration-150 cursor-pointer text-center ${
-                    calendarView === view
-                      ? 'bg-zinc-900 text-yellow-500 shadow-inner border border-zinc-850/60'
-                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40'
-                  }`}
-                >
-                  {view}
-                </button>
-              ))}
+            <div id="calendar_view_selectors" className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-900 select-none w-full sm:w-auto justify-between sm:justify-start gap-1 sm:min-w-[320px]">
+              {(['month', 'week', 'day', 'agenda'] as const).map((view) => {
+                const isSelected = calendarView === view;
+                return (
+                  <button
+                    key={view}
+                    id={`btn_view_${view}`}
+                    onClick={() => setCalendarView(view)}
+                    className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-mono font-bold capitalize transition-all duration-150 cursor-pointer text-center ${
+                      isSelected
+                        ? 'border border-yellow-500 text-yellow-500 bg-transparent shadow-md font-black'
+                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40 border border-transparent'
+                    }`}
+                  >
+                    {view}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {/* RENDERING VIEWS */}
           {calendarView === 'month' && (
             <div className="animate-fade-in space-y-4">
-              {/* DESKTOP MONTH VIEW (hidden md:block) */}
-              <div className="hidden md:block space-y-2">
-                {/* Days header row */}
-                <div className="grid grid-cols-7 text-center border-b border-zinc-900 pb-2">
-                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => (
-                    <span key={i} className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
-                      {d}
-                    </span>
+              {/* COMPACT UNIFIED MONTH VIEW (Fully responsive Google Calendar layout) */}
+              <div className="space-y-3">
+                {/* SUN / MON / TUE / WED / THU / FRI / SAT headers */}
+                <div className="grid grid-cols-7 text-center font-mono text-[10px] sm:text-xs font-bold uppercase text-zinc-500 py-2 border-b border-zinc-900/40">
+                  {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((d) => (
+                    <span key={d} className="tracking-widest">{d}</span>
                   ))}
                 </div>
 
-                {/* Month Boxes Matrix Grid - 42 Squares */}
-                <div className="grid grid-cols-7 gap-1 md:gap-1.5 h-[500px]">
+                {/* 7-Column Grid */}
+                <div className="grid grid-cols-7 gap-1 sm:gap-2 w-full max-w-full">
                   {gridDays.map((cell, idx) => {
                     const evs = filteredEvents.filter(ev => ev.date === cell.dateString);
                     const isSelected = selectedDate === cell.dateString;
                     const isTodayStr = cell.dateString === todayStr;
-                    const isTomorrowStr = cell.dateString === tomorrowStr;
-
-                    // Check if there are events on this date
-                    const hasEvents = evs.length > 0;
-                    // Get highest urgency highlight status
-                    const dayHighlight = hasEvents ? getCellUrgencyHighlight(evs) : null;
-
-                    // Define background & styling classes
-                    let cellClasses = "relative flex flex-col justify-between p-1.5 md:p-2 rounded-xl border transition-all cursor-pointer select-none overflow-hidden h-full group";
-                    
-                    if (hasEvents && dayHighlight) {
-                      cellClasses += ` ${dayHighlight.cellBg} ${dayHighlight.glow}`;
-                    } else {
-                      cellClasses += cell.isCurrentMonth ? ' bg-zinc-950/40' : ' bg-zinc-950/5 text-zinc-650 opacity-40';
-                    }
-
-                    // Border styling hierarchy
-                    if (isSelected) {
-                      cellClasses += ' border-yellow-500 ring-2 ring-yellow-500/20';
-                    } else if (isTomorrowStr && hasEvents) {
-                      // Tomorrow has orange border
-                      cellClasses += ' border-orange-500 border-2 shadow-[0_0_12px_rgba(249,115,22,0.2)] bg-orange-950/10';
-                    } else if (isTodayStr && hasEvents) {
-                      // Today glows
-                      cellClasses += ' border-emerald-500 border shadow-[0_0_18px_rgba(34,197,94,0.35)] ring-1 ring-emerald-500/30';
-                    } else if (hasEvents && dayHighlight) {
-                      if (dayHighlight.name === 'Overdue Event') {
-                        cellClasses += ' border-red-500/40';
-                      } else if (dayHighlight.name === 'Event Tomorrow') {
-                        cellClasses += ' border-orange-500/30';
-                      } else if (dayHighlight.name === 'Event Today') {
-                        cellClasses += ' border-emerald-500/30';
-                      } else if (dayHighlight.name === 'Event In Progress') {
-                        cellClasses += ' border-cyan-500/35';
-                      } else if (dayHighlight.name === 'Event Completed') {
-                        cellClasses += ' border-green-950';
-                      } else {
-                        cellClasses += ' border-blue-500/35';
-                      }
-                    } else {
-                      cellClasses += ' border-zinc-900 hover:border-zinc-800 hover:bg-zinc-900/30';
-                    }
 
                     return (
                       <div
@@ -1110,170 +1084,37 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                         onClick={() => {
                           if (cell.dateString) {
                             setSelectedDate(cell.dateString);
-                            const evsForDate = filteredEvents.filter(e => e.date === cell.dateString);
-                            if (evsForDate.length > 0) {
-                              setPopupDate(cell.dateString);
-                            }
                           }
                         }}
-                        className={cellClasses}
+                        className={`flex flex-col items-center justify-between p-2 sm:p-3 rounded-xl aspect-square border transition-all duration-150 cursor-pointer select-none touch-manipulation relative ${
+                          isSelected
+                            ? "bg-zinc-900 border-yellow-500 shadow-[0_0_12px_rgba(234,179,8,0.18)]"
+                            : isTodayStr
+                            ? "bg-[#0d0d0e] border-emerald-500/40"
+                            : cell.isCurrentMonth
+                            ? "bg-[#0d0d0e] border-zinc-900/80 hover:border-zinc-800 hover:bg-zinc-900/30"
+                            : "bg-[#040405] border-transparent opacity-15 pointer-events-none text-zinc-900"
+                        }`}
                       >
-                        {/* Day number cell badge */}
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-1.5">
-                            <span className={`text-[11px] font-mono font-bold w-5 h-5 flex items-center justify-center rounded-full ${
-                              isTodayStr 
-                                ? 'bg-yellow-500 text-zinc-950 font-black shadow-[0_0_10px_rgba(234,179,8,0.4)]' 
-                                : isSelected ? 'text-yellow-500' : 'text-zinc-400 group-hover:text-zinc-100'
-                            }`}>
-                              {cell.dayNumber}
-                            </span>
-
-                            {isTodayStr && (
-                              <span className="text-[7px] font-mono font-bold leading-none uppercase bg-emerald-500/20 text-emerald-400 px-1 py-0.5 rounded border border-emerald-500/30 animate-pulse shrink-0">
-                                TODAY
-                              </span>
-                            )}
-
-                            {isTomorrowStr && (
-                              <span className="text-[7px] font-mono font-bold leading-none uppercase bg-orange-500/20 text-orange-400 px-1 py-0.5 rounded border border-orange-500/30 shrink-0">
-                                TOMORROW
-                              </span>
-                            )}
-                          </div>
-
-                          {evs.length > 0 && (
-                            <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded-md border font-extrabold ${
-                              isTodayStr 
-                                ? 'bg-emerald-950 text-emerald-400 border-emerald-800/40' 
-                                : isTomorrowStr 
-                                  ? 'bg-orange-950 text-orange-400 border-orange-850/40'
-                                  : 'bg-zinc-900 text-zinc-350 border-zinc-800'
-                            }`}>
-                              {evs.length} {evs.length === 1 ? 'Ev' : 'Evs'}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Display Customer/Event Name immediately without clicking (visible on desktop) */}
-                        <div className="space-y-1.5 mt-1.5 overflow-hidden max-h-[84px]">
-                          {evs.slice(0, 3).map((ev) => {
-                            const h = getEventHighlights(ev);
-                            return (
-                              <div
-                                key={ev.id}
-                                id={`micro_evt_${ev.id}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (ev.sourceType === 'memo') {
-                                    setNewMemoTitle(ev.customerName);
-                                    setNewMemoMessage(ev.notes || '');
-                                    setEditingMemoId(ev.id);
-                                    setSelectedDate(ev.date);
-                                    setShowAddMemo(true);
-                                  } else {
-                                    setPopupLeadId(ev.raw?.lead_id || ev.orderId);
-                                  }
-                                }}
-                                className={`${h.bg} ${h.glow} text-[9px] p-1.5 rounded-lg border transition-all duration-150 hover:scale-[1.03] flex flex-col gap-0.5 cursor-pointer`}
-                              >
-                                <div className="flex justify-between items-center gap-1">
-                                  <span className="font-extrabold text-zinc-100 break-words max-w-[65%]">
-                                    {ev.customerName}
-                                  </span>
-                                  <span className="text-[7px] font-mono leading-none font-bold uppercase py-0.5 px-1 bg-zinc-950/80 rounded border border-zinc-850 text-yellow-500 shrink-0 break-words max-w-[35%]">
-                                    {ev.currentStage || ev.eventClass}
-                                  </span>
-                                </div>
-                                {role === 'production' ? (
-                                  <>
-                                    {ev.orderId && (
-                                      <div className="text-[7px] font-mono text-zinc-400">Order ID: {ev.orderId}</div>
-                                    )}
-                                    <div className="text-[7.5px] opacity-75 font-mono flex items-center justify-between gap-1">
-                                      <span className="break-words max-w-[60%]">{ev.eventType}</span>
-                                      <span className="text-pink-400 font-bold shrink-0">{ev.targetDeliveryDate || ev.date}</span>
-                                    </div>
-                                  </>
-                                ) : (
-                                  <div className="text-[7.5px] opacity-75 font-mono flex items-center justify-between gap-1">
-                                    <span className="break-words max-w-[60%]">{ev.eventType}</span>
-                                    <span className="text-zinc-400 font-bold shrink-0">{ev.eventTime}</span>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                          {evs.length > 3 && (
-                            <div className="text-[8px] font-mono text-zinc-400 pl-1 font-bold animate-pulse">
-                              ● +{evs.length - 3} more scheduled
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* MOBILE MONTH VIEW (md:hidden) */}
-              <div className="md:hidden space-y-3">
-                {/* 2. Mobile Weekday Header */}
-                <div className="grid grid-cols-7 text-center font-mono text-[10px] sm:text-[11px] font-extrabold uppercase text-zinc-400 py-1">
-                  {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((d) => (
-                    <span key={d}>{d}</span>
-                  ))}
-                </div>
-
-                {/* 3. Mobile 7-Column Grid */}
-                <div className="grid grid-cols-7 gap-1 w-full max-w-full">
-                  {gridDays.map((cell, idx) => {
-                    const evs = filteredEvents.filter(ev => ev.date === cell.dateString);
-                    const isSelected = selectedDate === cell.dateString;
-                    const isTodayStr = cell.dateString === todayStr;
-
-                    let cellStyle = "flex flex-col items-center justify-start py-1.5 px-0.5 rounded-xl border min-h-[46px] transition-all cursor-pointer select-none touch-manipulation relative";
-
-                    if (isSelected) {
-                      cellStyle += " bg-zinc-900 border-yellow-500 ring-2 ring-yellow-500/30";
-                    } else if (isTodayStr) {
-                      cellStyle += " bg-emerald-950/20 border-emerald-500/50";
-                    } else if (cell.isCurrentMonth) {
-                      cellStyle += " bg-zinc-950/50 border-zinc-900 active:bg-zinc-850";
-                    } else {
-                      cellStyle += " bg-zinc-950/20 border-zinc-900/50 opacity-30 text-zinc-600";
-                    }
-
-                    return (
-                      <div
-                        key={idx}
-                        id={`mobile_cell_${cell.dateString || idx}`}
-                        onClick={() => {
-                          if (cell.dateString) {
-                            setSelectedDate(cell.dateString);
-                          }
-                        }}
-                        className={cellStyle}
-                      >
-                        {/* Date Number Badge */}
+                        {/* Date Number Display */}
                         <span
-                          className={`text-xs font-mono font-extrabold w-6 h-6 flex items-center justify-center rounded-full transition-all ${
-                            isTodayStr
-                              ? "bg-yellow-500 text-zinc-950 font-black shadow-[0_0_8px_rgba(234,179,8,0.5)]"
-                              : isSelected
+                          className={`text-sm sm:text-base font-mono font-extrabold ${
+                            isSelected
                               ? "text-yellow-500 font-black"
+                              : isTodayStr
+                              ? "text-emerald-400 font-bold"
                               : cell.isCurrentMonth
                               ? "text-zinc-200"
-                              : "text-zinc-600"
+                              : "text-zinc-800"
                           }`}
                         >
                           {cell.dayNumber}
                         </span>
 
-                        {/* Event Dots/Indicators */}
-                        {evs.length > 0 && (
-                          <div className="flex items-center justify-center gap-1 mt-1 flex-wrap max-w-full">
-                            {evs.slice(0, 3).map((ev) => {
+                        {/* Event Dots/Indicators under the number */}
+                        {cell.isCurrentMonth && evs.length > 0 && (
+                          <div className="flex items-center justify-center gap-1 mt-1 max-w-full overflow-hidden">
+                            {evs.slice(0, 4).map((ev) => {
                               const h = getEventHighlights(ev);
                               return (
                                 <span
@@ -1282,10 +1123,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                                 />
                               );
                             })}
-                            {evs.length > 3 && (
-                              <span className="text-[8px] font-mono font-bold text-yellow-500 leading-none">
-                                +{evs.length - 3}
-                              </span>
+                            {evs.length > 4 && (
+                              <span className="w-1 h-1 rounded-full bg-zinc-500 shrink-0" />
                             )}
                           </div>
                         )}
@@ -1294,14 +1133,14 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                   })}
                 </div>
 
-                {/* 4. Selected Date Events Section below Calendar */}
-                <div className="mt-4 pt-4 border-t border-zinc-850 space-y-3">
-                  <div className="flex items-center justify-between">
+                {/* Selected Date Events Section below Calendar */}
+                <div className="mt-6 pt-5 border-t border-zinc-900/60 space-y-3">
+                  <div className="flex items-center justify-between px-1">
                     <div>
-                      <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-400 block font-bold">
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 block font-bold">
                         SELECTED DATE
                       </span>
-                      <h3 className="text-sm font-extrabold text-white font-mono mt-0.5">
+                      <h3 className="text-sm sm:text-base font-extrabold text-zinc-200 font-mono mt-0.5">
                         {selectedDate
                           ? parseLocalDate(selectedDate).toLocaleDateString('en-US', {
                               weekday: 'short',
@@ -1313,72 +1152,134 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                       </h3>
                     </div>
                     {selectedDate && (
-                      <span className="text-xs font-mono font-bold px-2.5 py-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 rounded-lg">
+                      <span className="text-xs font-mono font-bold px-2.5 py-1 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 rounded-lg select-none">
                         {filteredEvents.filter(ev => ev.date === selectedDate).length} EVENTS
                       </span>
                     )}
                   </div>
 
-                  {/* Event Agenda Cards for Selected Date */}
-                  <div className="space-y-2.5">
+                  {/* Event Agenda Table for Selected Date */}
+                  <div className="space-y-3">
                     {(() => {
                       const selectedEvs = filteredEvents.filter(ev => ev.date === selectedDate);
                       if (selectedEvs.length === 0) {
                         return (
-                          <div className="p-4 text-center bg-zinc-900/30 border border-dashed border-zinc-800 rounded-xl text-zinc-500 text-xs font-mono">
+                          <div className="p-6 text-center bg-zinc-900/10 border border-dashed border-zinc-800/80 rounded-2xl text-zinc-500 text-xs font-mono">
                             No events scheduled for this date.
                           </div>
                         );
                       }
 
-                      return selectedEvs.map((ev) => {
-                        const col = getColorClasses(ev.eventClass);
-                        return (
-                          <div
-                            key={ev.id}
-                            id={`mobile_ev_card_${ev.id}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (ev.sourceType === 'memo') {
-                                setNewMemoTitle(ev.customerName);
-                                setNewMemoMessage(ev.notes || '');
-                                setEditingMemoId(ev.id);
-                                setSelectedDate(ev.date);
-                                setShowAddMemo(true);
-                              } else {
-                                setPopupLeadId(ev.raw?.lead_id || ev.orderId);
-                              }
-                            }}
-                            className={`p-3.5 rounded-xl border flex flex-col gap-2 transition active:scale-[0.98] cursor-pointer ${col.card}`}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-center gap-1.5 text-xs font-mono font-extrabold text-yellow-400">
-                                <Clock className="w-3.5 h-3.5 text-yellow-500 shrink-0" />
-                                <span>{ev.eventTime || (ev.targetDeliveryDate ? `Due: ${ev.targetDeliveryDate}` : '10:00 AM')}</span>
-                              </div>
-                              <span className={`text-[9px] font-mono px-2 py-0.5 border rounded-md font-bold uppercase ${col.badge}`}>
-                                {ev.currentStage || ev.eventClass}
-                              </span>
-                            </div>
-
-                            <div>
-                              <h4 className="text-sm font-bold text-white tracking-wide">
-                                {ev.customerName}
-                              </h4>
-                              <p className="text-xs text-zinc-400 font-mono mt-0.5">
-                                {ev.eventType} {ev.packageName ? `• ${ev.packageName}` : ''}
-                              </p>
-                            </div>
-
-                            {ev.eventLocation && (
-                              <div className="flex items-center gap-1.5 text-xs text-zinc-400 font-mono">
-                                <MapPin className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                                <span className="truncate">{ev.eventLocation}</span>
-                              </div>
-                            )}
+                      return (
+                        <>
+                          {/* Desktop/Tablet Table View */}
+                          <div className="hidden md:block overflow-x-auto w-full border border-zinc-900 rounded-xl bg-zinc-950/40">
+                            <table className="w-full text-left border-collapse">
+                              <thead>
+                                <tr className="border-b border-zinc-900 bg-zinc-950/80">
+                                  <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">EVENT NAME / CUSTOMER</th>
+                                  <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">EVENT TYPE</th>
+                                  <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">START</th>
+                                  <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">END</th>
+                                  <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">STATUS</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-zinc-900/60">
+                                {selectedEvs.map((ev) => {
+                                  const col = getColorClasses(ev.eventClass);
+                                  const times = parseEventTimes(ev.eventTime);
+                                  return (
+                                    <tr 
+                                      key={ev.id}
+                                      id={`table_ev_row_${ev.id}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (ev.sourceType === 'memo') {
+                                          setNewMemoTitle(ev.customerName);
+                                          setNewMemoMessage(ev.notes || '');
+                                          setEditingMemoId(ev.id);
+                                          setSelectedDate(ev.date);
+                                          setShowAddMemo(true);
+                                        } else {
+                                          setPopupLeadId(ev.raw?.lead_id || ev.orderId);
+                                        }
+                                      }}
+                                      className="hover:bg-zinc-900/30 transition cursor-pointer"
+                                    >
+                                      <td className="p-4">
+                                        <span className="text-xs sm:text-sm font-bold text-zinc-100 block">{ev.customerName}</span>
+                                        {ev.packageName && <span className="text-[9px] font-mono text-zinc-500 block mt-0.5">{ev.packageName}</span>}
+                                      </td>
+                                      <td className="p-4">
+                                        <span className="text-xs font-mono text-zinc-300">{ev.eventType}</span>
+                                      </td>
+                                      <td className="p-4">
+                                        <span className="text-xs font-mono text-zinc-400">{times.start}</span>
+                                      </td>
+                                      <td className="p-4">
+                                        <span className="text-xs font-mono text-zinc-400">{times.end}</span>
+                                      </td>
+                                      <td className="p-4">
+                                        <span className={`text-[10px] font-mono font-bold px-2 py-0.5 border rounded-md uppercase inline-block ${col.badge}`}>
+                                          {ev.currentStage || ev.eventClass}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
                           </div>
-                        );
-                      });
+
+                          {/* Mobile List View */}
+                          <div className="block md:hidden space-y-2.5">
+                            {selectedEvs.map((ev) => {
+                              const col = getColorClasses(ev.eventClass);
+                              const times = parseEventTimes(ev.eventTime);
+                              return (
+                                <div
+                                  key={ev.id}
+                                  id={`mobile_ev_row_${ev.id}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (ev.sourceType === 'memo') {
+                                      setNewMemoTitle(ev.customerName);
+                                      setNewMemoMessage(ev.notes || '');
+                                      setEditingMemoId(ev.id);
+                                      setSelectedDate(ev.date);
+                                      setShowAddMemo(true);
+                                    } else {
+                                      setPopupLeadId(ev.raw?.lead_id || ev.orderId);
+                                    }
+                                  }}
+                                  className={`p-3.5 rounded-xl border flex flex-col gap-2 transition active:scale-[0.99] cursor-pointer ${col.card}`}
+                                >
+                                  <div className="flex justify-between items-start gap-2">
+                                    <div>
+                                      <span className="text-[10px] font-mono uppercase text-zinc-500 block">EVENT NAME / CUSTOMER</span>
+                                      <span className="text-sm font-bold text-zinc-100">{ev.customerName}</span>
+                                    </div>
+                                    <span className={`text-[9px] font-mono px-2 py-0.5 border rounded-md font-bold uppercase shrink-0 ${col.badge}`}>
+                                      {ev.currentStage || ev.eventClass}
+                                    </span>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-2 mt-1 pt-2 border-t border-zinc-900/40 text-xs font-mono">
+                                    <div>
+                                      <span className="text-[9px] text-zinc-500 block">EVENT TYPE</span>
+                                      <span className="text-zinc-300">{ev.eventType}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-[9px] text-zinc-500 block">TIME</span>
+                                      <span className="text-zinc-300">{times.start} {times.end !== '--' ? `- ${times.end}` : ''}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      );
                     })()}
                   </div>
                 </div>
