@@ -135,6 +135,21 @@ async function startServer() {
   };
 
   // Helper to dynamically strip stale/missing columns that cause schema cache mismatch errors
+  const extractMissingColumnName = (errorMsg: string): string | null => {
+    if (!errorMsg || typeof errorMsg !== 'string') return null;
+    const p1 = errorMsg.match(/Could not find the ['"]([^'"]+)['"] column/i);
+    if (p1 && p1[1]) return p1[1];
+
+    const p2 = errorMsg.match(/column ['"]([^'"]+)['"] (of relation|does not exist)/i);
+    if (p2 && p2[1]) return p2[1];
+
+    const p3 = errorMsg.match(/column ['"]([^'"]+)['"]/i);
+    if (p3 && p3[1] && !['of', 'in', 'on', 'from'].includes(p3[1].toLowerCase())) {
+      return p3[1];
+    }
+    return null;
+  };
+
   const healPayload = (table: string, payload: any, errorMsg: string): any | null => {
     if (!payload || typeof payload !== 'object') return null;
     
@@ -163,33 +178,34 @@ async function startServer() {
       'state',
       'pincode',
       'desired_event_shoot_type',
-      'Select_Package_Option'
+      'Select_Package_Option',
+      'customer_communication_proof',
+      'client_communication_proof',
+      'confirmation_proof',
+      'proof_url',
+      'proof_image',
+      'uploaded_proof'
     ];
 
     // If the error explicitly mentions a column, remove it
-    const colMatch = errorMsg.match(/column '([^']+)'|column "([^"]+)"/i) || 
-                     errorMsg.match(/Could not find the '([^']+)' column/i) ||
-                     errorMsg.match(/Could not find the "([^"]+)" column/i);
+    const colName = extractMissingColumnName(errorMsg);
     
-    if (colMatch) {
-      const colName = colMatch[1] || colMatch[2];
-      if (colName && colName in nextPayload) {
-        console.warn(`[Server Self-Healing] Found specific stale column "${colName}". Stripping...`);
-        const val = nextPayload[colName];
-        delete nextPayload[colName];
-        
-        // Save the stripped value to remarks/notes
-        const currentRemarks = nextPayload.remarks || nextPayload.notes || '';
-        const annotation = `[System Fallback - ${colName}]: ${val}`;
-        if (nextPayload.remarks !== undefined) {
-          nextPayload.remarks = currentRemarks ? `${currentRemarks}\n${annotation}` : annotation;
-        } else if (nextPayload.notes !== undefined) {
-          nextPayload.notes = currentRemarks ? `${currentRemarks}\n${annotation}` : annotation;
-        } else if (['leads', 'orders', 'operations', 'production'].includes(table)) {
-          nextPayload.remarks = annotation;
-        }
-        healed = true;
+    if (colName && colName in nextPayload) {
+      console.warn(`[Server Self-Healing] Found specific stale column "${colName}" for table "${table}". Stripping...`);
+      const val = nextPayload[colName];
+      delete nextPayload[colName];
+      
+      // Save the stripped value to remarks/notes
+      const currentRemarks = nextPayload.remarks || nextPayload.notes || '';
+      const annotation = `[System Fallback - ${colName}]: ${val}`;
+      if (nextPayload.remarks !== undefined) {
+        nextPayload.remarks = currentRemarks ? `${currentRemarks}\n${annotation}` : annotation;
+      } else if (nextPayload.notes !== undefined) {
+        nextPayload.notes = currentRemarks ? `${currentRemarks}\n${annotation}` : annotation;
+      } else if (['leads', 'orders', 'operations', 'production'].includes(table)) {
+        nextPayload.remarks = annotation;
       }
+      healed = true;
     }
 
     // Also strip any known potential columns if mentioned in the general error message

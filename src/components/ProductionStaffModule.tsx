@@ -1017,18 +1017,13 @@ Thank you.`;
         }
       }
 
-      // 3. Save proof URL & status to production table
+      // 3. Save status and proof URL in remarks to production table
       const uniqueProdIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.prodObj?.production_id).filter(Boolean)));
       for (const prodId of uniqueProdIds as string[]) {
-        const resProd = await updateProduction(prodId, {
+        await updateProduction(prodId, {
           editing_status: 'Editing Completed' as any,
           production_status: 'Editing Completed' as any,
-          client_communication_proof: uploadedProofUrl,
-          customer_communication_proof: uploadedProofUrl,
-          confirmation_proof: uploadedProofUrl,
-          proof_url: uploadedProofUrl,
-          proof_image: uploadedProofUrl,
-          remarks: `Editing Completed & Customer Confirmation Proof uploaded by ${staffName} on ${new Date().toLocaleDateString()}`
+          remarks: `Editing Completed & Customer Confirmation Proof (${uploadedProofUrl}) uploaded by ${staffName} on ${new Date().toLocaleDateString()}`
         });
       }
 

@@ -1278,7 +1278,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'customer_review_status', 'delivery_date', 'remarks', 'project_priority',
         'target_delivery_date', 'actual_delivery_date', 'assigned_staff', 'project_notes',
         'internal_comments', 'raw_footage_status', 'production_status', 'approval_status',
-        'editing_progress', 'client_communication_proof', 'customer_communication_proof', 'confirmation_proof', 'proof_url', 'proof_image', 'uploaded_proof', 'order_id', 'lead_id', 'customer_name',
+        'editing_progress', 'order_id', 'lead_id', 'customer_name',
         'event_id', 'assigned_team', 'final_consolidated_drive_link', 'current_status'
       ],
       payments: [
@@ -1739,18 +1739,17 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           error.message.toLowerCase().includes('schema cache') ||
           error.message.toLowerCase().includes('column')
         )) {
-          const colMatch = error.message.match(/column '([^']+)'|column "([^"]+)"/i) || 
-                           error.message.match(/Could not find the '([^']+)' column/i) ||
-                           error.message.match(/Could not find the "([^"]+)" column/i);
-          if (colMatch) {
-            const colName = colMatch[1] || colMatch[2];
-            if (colName && colName in sanitized) {
-              console.warn(`[pushUpdate FALLBACK] Stripping non-existent column "${colName}" from ${table} update and retrying...`);
-              delete sanitized[colName];
-              const retryRes = await supabaseClient.from(table).update(sanitized).eq(matchColumn, finalMatchValue).select();
-              error = retryRes.error;
-              data = retryRes.data;
-            }
+          const p1 = error.message.match(/Could not find the ['"]([^'"]+)['"] column/i);
+          const p2 = error.message.match(/column ['"]([^'"]+)['"] (of relation|does not exist)/i);
+          const p3 = error.message.match(/column ['"]([^'"]+)['"]/i);
+          
+          let colName = p1?.[1] || p2?.[1] || (p3?.[1] && !['of', 'in', 'on', 'from'].includes(p3[1].toLowerCase()) ? p3[1] : null);
+          if (colName && colName in sanitized) {
+            console.warn(`[pushUpdate FALLBACK] Stripping non-existent column "${colName}" from ${table} update and retrying...`);
+            delete sanitized[colName];
+            const retryRes = await supabaseClient.from(table).update(sanitized).eq(matchColumn, finalMatchValue).select();
+            error = retryRes.error;
+            data = retryRes.data;
           }
         }
 

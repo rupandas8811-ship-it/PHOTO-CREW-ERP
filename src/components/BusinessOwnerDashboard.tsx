@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { supabaseClient } from '../supabaseClient';
 import { useRole } from './RoleContext';
 import { jsPDF } from 'jspdf';
@@ -1345,80 +1346,12 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
 
       {/* UNLOCK REQUEST REVIEW MODAL */}
       {unlockRequestModal && (
-        <div className="fixed inset-0 bg-black/85 z-[100] flex items-center justify-center p-4 backdrop-blur-md">
-          <div className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
-                <Ban className="w-4 h-4 text-amber-500" /> Review Quotation Unlock
-              </h4>
-              <button 
-                onClick={() => setUnlockRequestModal(null)}
-                className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div>
-                  <div className="text-slate-400 font-medium mb-1">Order ID / Lead ID</div>
-                  <div className="text-amber-400 font-mono font-bold">{unlockRequestModal.order_id || unlockRequestModal.project_id || '-'}</div>
-                  <div className="text-indigo-400 font-mono text-[10px]">{unlockRequestModal.lead_id || '-'}</div>
-                </div>
-                <div>
-                  <div className="text-slate-400 font-medium mb-1">Customer Name</div>
-                  <div className="text-white font-bold text-sm">{unlockRequestModal.customer_name || '-'}</div>
-                </div>
-                <div>
-                  <div className="text-slate-400 font-medium mb-1">Sales Staff</div>
-                  <div className="text-white font-medium">{unlockRequestModal.sales_staff_name || '-'}</div>
-                  <div className="text-slate-400 text-[10px] font-mono">{unlockRequestModal.sales_staff_mobile || '-'}</div>
-                </div>
-                <div>
-                  <div className="text-slate-400 font-medium mb-1">Request Date</div>
-                  <div className="text-slate-300 font-mono">{(unlockRequestModal.requested_at || unlockRequestModal.created_at) ? new Date(unlockRequestModal.requested_at || unlockRequestModal.created_at).toLocaleDateString() : '-'}</div>
-                </div>
-              </div>
-              
-              <div className="bg-slate-900 border border-slate-750 p-3 rounded-lg text-xs">
-                <div className="text-slate-400 font-medium mb-1 border-b border-slate-800 pb-1">Reason</div>
-                <div className="text-amber-300 font-bold mt-1.5">{unlockRequestModal.reason || unlockRequestModal.request_reason || unlockRequestModal.title || 'Quotation unlock requested'}</div>
-                {unlockRequestModal.custom_reason && (
-                  <div className="text-slate-300 mt-2 bg-slate-950 p-2 rounded border border-slate-800">
-                    <span className="text-slate-500 text-[10px] block mb-1">Custom Reason:</span>
-                    {unlockRequestModal.custom_reason}
-                  </div>
-                )}
-              </div>
-              
-              <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg text-[11px] text-amber-200/80">
-                Approving this request will move the project back to the <strong className="text-amber-400">Negotiation</strong> stage, allowing the sales staff to modify the quotation.
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 border-t border-slate-800 pt-4">
-              <button
-                onClick={() => setUnlockRequestModal(null)}
-                className="px-3 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs font-bold transition-colors border-0"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleRejectUnlock(unlockRequestModal)}
-                className="px-3 py-2 bg-rose-950 hover:bg-rose-900 text-rose-400 border border-rose-900/50 rounded-xl cursor-pointer text-xs font-bold transition-colors"
-              >
-                Reject
-              </button>
-              <button
-                onClick={() => handleApproveUnlock(unlockRequestModal)}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl cursor-pointer text-xs font-bold shadow-lg transition-colors border-0"
-              >
-                Approve Unlock
-              </button>
-            </div>
-          </div>
-        </div>
+        <UnlockRequestReviewModal 
+          unlockRequestModal={unlockRequestModal}
+          onClose={() => setUnlockRequestModal(null)}
+          onReject={(item) => handleRejectUnlock(item)}
+          onApprove={(item) => handleApproveUnlock(item)}
+        />
       )}
 
       {/* CALENDAR EVENT DETAIL MODAL */}
@@ -2193,6 +2126,20 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
     deliverableName: string;
   } | null>(null);
 
+  useEffect(() => {
+    const origOverflow = document.body.style.overflow;
+    const origHeight = document.body.style.height;
+    const origPosition = document.body.style.position;
+
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = origOverflow;
+      document.body.style.height = origHeight;
+      document.body.style.position = origPosition;
+    };
+  }, []);
+
   const lead = leads.find(l => l.lead_id === order.lead_id);
   const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id);
   const pay = payments.find(p => p.order_id === order.order_id || p.lead_id === order.lead_id);
@@ -2516,9 +2463,19 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
     return items;
   }, [order, prod, editorAssignments]);
 
-  return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-3xl w-full p-6 space-y-6 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div 
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4 overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div 
+        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-3xl p-6 space-y-6 shadow-2xl relative animate-in fade-in zoom-in duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-4 border-b border-zinc-850">
@@ -2848,7 +2805,121 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
           </div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
+  );
+};
+
+/* ============================================================================
+   UNLOCK REQUEST REVIEW MODAL
+   ============================================================================ */
+interface UnlockRequestReviewModalProps {
+  unlockRequestModal: any;
+  onClose: () => void;
+  onReject: (item: any) => void;
+  onApprove: (item: any) => void;
+}
+
+const UnlockRequestReviewModal: React.FC<UnlockRequestReviewModalProps> = ({
+  unlockRequestModal,
+  onClose,
+  onReject,
+  onApprove
+}) => {
+  useEffect(() => {
+    const origOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = origOverflow;
+    };
+  }, []);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div 
+      className="fixed inset-0 bg-black/85 z-[200] flex items-center justify-center p-4 backdrop-blur-md"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div 
+        className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
+            <Ban className="w-4 h-4 text-amber-500" /> Review Quotation Unlock
+          </h4>
+          <button 
+            onClick={onClose}
+            className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div>
+              <div className="text-slate-400 font-medium mb-1">Order ID / Lead ID</div>
+              <div className="text-amber-400 font-mono font-bold">{unlockRequestModal.order_id || unlockRequestModal.project_id || '-'}</div>
+              <div className="text-indigo-400 font-mono text-[10px]">{unlockRequestModal.lead_id || '-'}</div>
+            </div>
+            <div>
+              <div className="text-slate-400 font-medium mb-1">Customer Name</div>
+              <div className="text-white font-bold text-sm">{unlockRequestModal.customer_name || '-'}</div>
+            </div>
+            <div>
+              <div className="text-slate-400 font-medium mb-1">Sales Staff</div>
+              <div className="text-white font-medium">{unlockRequestModal.sales_staff_name || '-'}</div>
+              <div className="text-slate-400 text-[10px] font-mono">{unlockRequestModal.sales_staff_mobile || '-'}</div>
+            </div>
+            <div>
+              <div className="text-slate-400 font-medium mb-1">Request Date</div>
+              <div className="text-slate-300 font-mono">{(unlockRequestModal.requested_at || unlockRequestModal.created_at) ? new Date(unlockRequestModal.requested_at || unlockRequestModal.created_at).toLocaleDateString() : '-'}</div>
+            </div>
+          </div>
+          
+          <div className="bg-slate-900 border border-slate-750 p-3 rounded-lg text-xs">
+            <div className="text-slate-400 font-medium mb-1 border-b border-slate-800 pb-1">Reason</div>
+            <div className="text-amber-300 font-bold mt-1.5">{unlockRequestModal.reason || unlockRequestModal.request_reason || unlockRequestModal.title || 'Quotation unlock requested'}</div>
+            {unlockRequestModal.custom_reason && (
+              <div className="text-slate-300 mt-2 bg-slate-950 p-2 rounded border border-slate-800">
+                <span className="text-slate-500 text-[10px] block mb-1">Custom Reason:</span>
+                {unlockRequestModal.custom_reason}
+              </div>
+            )}
+          </div>
+          
+          <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg text-[11px] text-amber-200/80">
+            Approving this request will move the project back to the <strong className="text-amber-400">Negotiation</strong> stage, allowing the sales staff to modify the quotation.
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-slate-800 pt-4">
+          <button
+            onClick={onClose}
+            className="px-3 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs font-bold transition-colors border-0"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onReject(unlockRequestModal)}
+            className="px-3 py-2 bg-rose-950 hover:bg-rose-900 text-rose-400 border border-rose-900/50 rounded-xl cursor-pointer text-xs font-bold transition-colors"
+          >
+            Reject
+          </button>
+          <button
+            onClick={() => onApprove(unlockRequestModal)}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl cursor-pointer text-xs font-bold shadow-lg transition-colors border-0"
+          >
+            Approve Unlock
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 };
 
@@ -2866,6 +2937,14 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
   onClose,
   onReviewAndClose
 }) => {
+  useEffect(() => {
+    const origOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = origOverflow;
+    };
+  }, []);
+
   const isAwaitingApproval = [
     'Client Acceptance',
     'Business Owner Review',
@@ -2874,9 +2953,19 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
     'Final Approval'
   ].includes(event.currentStatus);
 
-  return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-md w-full p-6 space-y-5 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div 
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4 overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div 
+        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-md p-6 space-y-5 shadow-2xl relative animate-in fade-in zoom-in duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         
         <div className="flex items-center justify-between pb-3 border-b border-zinc-850">
           <div>
@@ -2948,6 +3037,120 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
         </div>
 
       </div>
-    </div>
+    </div>,
+    document.body
+  );
+};
+
+/* ============================================================================
+   UNLOCK REQUEST REVIEW MODAL
+   ============================================================================ */
+interface UnlockRequestReviewModalProps {
+  unlockRequestModal: any;
+  onClose: () => void;
+  onReject: (item: any) => void;
+  onApprove: (item: any) => void;
+}
+
+const UnlockRequestReviewModal: React.FC<UnlockRequestReviewModalProps> = ({
+  unlockRequestModal,
+  onClose,
+  onReject,
+  onApprove
+}) => {
+  useEffect(() => {
+    const origOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = origOverflow;
+    };
+  }, []);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div 
+      className="fixed inset-0 bg-black/85 z-[200] flex items-center justify-center p-4 backdrop-blur-md"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div 
+        className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
+            <Ban className="w-4 h-4 text-amber-500" /> Review Quotation Unlock
+          </h4>
+          <button 
+            onClick={onClose}
+            className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div>
+              <div className="text-slate-400 font-medium mb-1">Order ID / Lead ID</div>
+              <div className="text-amber-400 font-mono font-bold">{unlockRequestModal.order_id || unlockRequestModal.project_id || '-'}</div>
+              <div className="text-indigo-400 font-mono text-[10px]">{unlockRequestModal.lead_id || '-'}</div>
+            </div>
+            <div>
+              <div className="text-slate-400 font-medium mb-1">Customer Name</div>
+              <div className="text-white font-bold text-sm">{unlockRequestModal.customer_name || '-'}</div>
+            </div>
+            <div>
+              <div className="text-slate-400 font-medium mb-1">Sales Staff</div>
+              <div className="text-white font-medium">{unlockRequestModal.sales_staff_name || '-'}</div>
+              <div className="text-slate-400 text-[10px] font-mono">{unlockRequestModal.sales_staff_mobile || '-'}</div>
+            </div>
+            <div>
+              <div className="text-slate-400 font-medium mb-1">Request Date</div>
+              <div className="text-slate-300 font-mono">{(unlockRequestModal.requested_at || unlockRequestModal.created_at) ? new Date(unlockRequestModal.requested_at || unlockRequestModal.created_at).toLocaleDateString() : '-'}</div>
+            </div>
+          </div>
+          
+          <div className="bg-slate-900 border border-slate-750 p-3 rounded-lg text-xs">
+            <div className="text-slate-400 font-medium mb-1 border-b border-slate-800 pb-1">Reason</div>
+            <div className="text-amber-300 font-bold mt-1.5">{unlockRequestModal.reason || unlockRequestModal.request_reason || unlockRequestModal.title || 'Quotation unlock requested'}</div>
+            {unlockRequestModal.custom_reason && (
+              <div className="text-slate-300 mt-2 bg-slate-950 p-2 rounded border border-slate-800">
+                <span className="text-slate-500 text-[10px] block mb-1">Custom Reason:</span>
+                {unlockRequestModal.custom_reason}
+              </div>
+            )}
+          </div>
+          
+          <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg text-[11px] text-amber-200/80">
+            Approving this request will move the project back to the <strong className="text-amber-400">Negotiation</strong> stage, allowing the sales staff to modify the quotation.
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-slate-800 pt-4">
+          <button
+            onClick={onClose}
+            className="px-3 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs font-bold transition-colors border-0"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onReject(unlockRequestModal)}
+            className="px-3 py-2 bg-rose-950 hover:bg-rose-900 text-rose-400 border border-rose-900/50 rounded-xl cursor-pointer text-xs font-bold transition-colors"
+          >
+            Reject
+          </button>
+          <button
+            onClick={() => onApprove(unlockRequestModal)}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl cursor-pointer text-xs font-bold shadow-lg transition-colors border-0"
+          >
+            Approve Unlock
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 };

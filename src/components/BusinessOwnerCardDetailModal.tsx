@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Search, Calendar, Info } from 'lucide-react';
 import { formatINR } from '../utils';
 
@@ -47,7 +48,16 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
     });
   }, [data, searchTerm]);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen]);
+
+  if (!isOpen || typeof document === 'undefined') return null;
 
   // Determine colors based on accent type
   const colorMap = {
@@ -79,8 +89,13 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
 
   const activeColors = colorMap[accentColor] || colorMap.amber;
 
-  return (
-    <div className="fixed inset-0 bg-black/85 z-[150] flex items-center justify-center p-4 backdrop-blur-md">
+  return createPortal(
+    <div 
+      className="fixed inset-0 bg-black/85 z-[150] flex items-center justify-center p-4 backdrop-blur-md"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div 
         className={`bg-zinc-950 border ${activeColors.border} rounded-2xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-zinc-100 animate-in fade-in zoom-in-95 duration-200`}
         onClick={(e) => e.stopPropagation()}
@@ -230,6 +245,7 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
