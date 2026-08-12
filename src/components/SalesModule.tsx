@@ -433,11 +433,6 @@ const generateQuotationPDF = (
   };
 
     // NEW PREP FOR TEAM MEMBERS (INCLUSIONS) AND DELIVERABLES
-  const orderedEventInclusions: { eventData?: any; eventName: string; eventDate: string; eventLocation: string; members: string[] }[] = [];
-  const orderedEventDeliverables: { eventName: string; pkgName: string; items: string[] }[] = [];
-  let generalInclusions: string[] = [];
-  const generalDeliverables: { pkgName: string; items: string[] }[] = [];
-
   const pkg = activePkgs[0];
   const pkgId = pkg ? (pkg.package_id || pkg.id || 'default') : 'default';
   const pkgName = pkg ? (pkg.package_name || pkg.name || 'Base Package') : 'Base Package';
@@ -473,45 +468,56 @@ const generateQuotationPDF = (
 
   const deliverablesList = rawDelList.filter(Boolean).map(item => formatQtyItem(item));
 
+  const eventsToRender: {
+    eventName: string;
+    eventDate: string;
+    eventTime: string;
+    eventLocation: string;
+    guestPax: string;
+    members: string[];
+    deliverables: string[];
+  }[] = [];
+
   if (lead.events && lead.events.length > 0) {
     lead.events.forEach((event: any) => {
       const eventKey = `${pkgId}_${event.id}`;
       const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
+      
       const eventInclusions = editableInclusions?.[eventKey] !== undefined
         ? editableInclusions[eventKey]
         : (editableInclusions?.[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList);
 
       const eventName = event.event_name || event.event_type || 'Unnamed Event';
 
-      orderedEventInclusions.push({
-        eventData: event,
-        eventName,
-        eventDate: event.event_start_date || event.event_date || "",
-        eventLocation: event.event_location || "N/A",
-        members: (eventInclusions || []).filter(Boolean)
-      });
-
       const eventDeliverables = editableDeliverables?.[eventKey] !== undefined
         ? editableDeliverables[eventKey]
         : (editableDeliverables?.[nameKey] !== undefined ? editableDeliverables[nameKey] : null);
 
-      if (eventDeliverables && eventDeliverables.filter(Boolean).length > 0) {
-        orderedEventDeliverables.push({
-          eventName,
-          pkgName,
-          items: eventDeliverables.filter(Boolean).map((item: string) => formatQtyItem(item))
-        });
-      }
+      const items = eventDeliverables && eventDeliverables.filter(Boolean).length > 0
+        ? eventDeliverables.filter(Boolean).map((item: string) => formatQtyItem(item))
+        : deliverablesList;
+
+      eventsToRender.push({
+        eventName,
+        eventDate: event.event_start_date || event.event_date || "",
+        eventTime: event.event_time || event.event_start_time || "",
+        eventLocation: event.event_location || "N/A",
+        guestPax: event.guest_pax !== undefined && event.guest_pax !== null && event.guest_pax !== '' ? String(event.guest_pax) : (lead.guest_pax !== undefined && lead.guest_pax !== null && lead.guest_pax !== '' ? String(lead.guest_pax) : (lead.total_pax ? String(lead.total_pax) : 'N/A')),
+        members: (eventInclusions || []).filter(Boolean),
+        deliverables: items
+      });
     });
   } else {
-    generalInclusions = inclusionsList;
+    eventsToRender.push({
+      eventName: displayEventType,
+      eventDate: lead.event_date || "",
+      eventTime: lead.event_time || "",
+      eventLocation: lead.event_location || "N/A",
+      guestPax: lead.guest_pax !== undefined && lead.guest_pax !== null && lead.guest_pax !== '' ? String(lead.guest_pax) : (lead.total_pax ? String(lead.total_pax) : 'N/A'),
+      members: (inclusionsList || []).filter(Boolean),
+      deliverables: deliverablesList
+    });
   }
-  
-  // Deliverables are always per-package, not per-event
-  generalDeliverables.push({ pkgName, items: deliverablesList });
-
-  const hasEventsInclusions = orderedEventInclusions.length > 0;
-  const hasEventsDeliverables = orderedEventDeliverables.length > 0;
 
   const custRemarks = lead.remarks_raw || lead.remarks || '';
   const teamRemarks = lead.notes || ''; 
@@ -535,79 +541,57 @@ const generateQuotationPDF = (
     let simY = 49;
     let simPageCount = 1;
 
-    let simLeftY = 0;
-    simLeftY += (wrapCustName.length * cfg.textPadding);
-    simLeftY += cfg.textPadding;
-    simLeftY += (wrapEmail.length * cfg.textPadding);
-    simLeftY += cfg.textPadding;
-
-    let simRightY = 0;
-    if (lead.events && lead.events.length > 0) {
-      lead.events.forEach((ev: any, idx: number) => {
-        const wrapEvName = doc.splitTextToSize(`Event ${idx + 1}: ` + (ev.event_name || ev.event_type || 'Event'), 50);
-        const wrapEvLoc = doc.splitTextToSize(ev.event_location || 'N/A', 50);
-        simRightY += (wrapEvName.length * cfg.textPadding); 
-        simRightY += cfg.textPadding; // Event Date
-        simRightY += (wrapEvLoc.length * cfg.textPadding); 
-        if (idx < lead.events.length - 1) simRightY += 2;
-      });
-      simRightY += cfg.textPadding; // quotation date
-    } else {
-      simRightY += (wrapEventType.length * cfg.textPadding);
-      simRightY += cfg.textPadding;
-      simRightY += (wrapLocation.length * cfg.textPadding);
-      simRightY += cfg.textPadding;
-    }
-
-    const simBoxHeight = Math.max(simLeftY, simRightY) + cfg.boxPadding;
-    simY += simBoxHeight + cfg.secSpacing;
-
-    const getTableSimHeight = (items: any[]) => {
-      let h = 4 + 7.5; 
-      items.forEach((item) => {
-        const cleanedName = cleanText(item.name || '');
-        const wrappedName = doc.splitTextToSize(cleanedName, 166);
-        h += Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
-      });
-      return h;
-    };
-
-    const simTable = (items: any[]) => {
-      let tableH = 4 + 7.5; 
-      items.forEach((item) => {
+    const simTable = (itemsCount: number, hideHeader: boolean) => {
+      let tableH = hideHeader ? 4 : (4 + 7.5); 
+      for (let i = 0; i < itemsCount; i++) {
         tableH += Math.max(7.5, 1 * cfg.rowTextHeight + cfg.rowPadding);
-      });
+      }
       if (simY + tableH > 250 && tableH <= (250 - 52)) {
         simY = 52;
         simPageCount++;
       } else {
-        let currentTableY = simY + 4 + 7.5;
-        items.forEach((item) => {
+        let currentTableY = simY + (hideHeader ? 4 : (4 + 7.5));
+        for (let i = 0; i < itemsCount; i++) {
           const rowH = Math.max(7.5, 1 * cfg.rowTextHeight + cfg.rowPadding);
           if (currentTableY + rowH > 250) {
-            currentTableY = 52 + 7.5;
+            currentTableY = 52 + (hideHeader ? 0 : 7.5);
             simPageCount++;
           }
           currentTableY += rowH;
-        });
+        }
         simY = currentTableY;
       }
       simY += cfg.tableSpacing;
     };
 
-    if (hasEventsInclusions) {
-      orderedEventInclusions.forEach((data) => {
-         simY += 10.5;
-         simTable(data.members);
-      });
-    } else if (generalInclusions.length > 0) {
-      simTable(generalInclusions);
-    }
-    
-    if (hasEventsDeliverables) {
-      orderedEventDeliverables.forEach((data) => simTable(data.items));
-    } else if (generalDeliverables.length > 0) {
-      generalDeliverables.forEach((data) => simTable(data.items));
+    eventsToRender.forEach((evObj) => {
+      // Event Name / Title height (approx 10.5)
+      if (simY + 10.5 > 250) {
+        simY = 52;
+        simPageCount++;
+      }
+      simY += 10.5;
+
+      // Customer details card height (26)
+      if (simY + 26 > 250) {
+        simY = 52;
+        simPageCount++;
+      }
+      simY += 26 + cfg.secSpacing;
+
+      // Team members table (hide header)
+      if (evObj.members.length > 0) {
+        simTable(evObj.members.length, true);
+      }
+
+      // Deliverables table (show header)
+      if (evObj.deliverables.length > 0) {
+        simTable(evObj.deliverables.length, false);
+      }
+    });
+
+    if (additionalServices.length > 0) {
+      simTable(additionalServices.length, false);
     }
 
     const pricingH = 4.5 + cfg.pricingCardHeight;
@@ -616,13 +600,6 @@ const generateQuotationPDF = (
       simPageCount++;
     }
     simY += pricingH + cfg.secSpacing;
-
-    const paymentH = 4.5 + cfg.paymentCardHeight;
-    if (simY + paymentH > 250) {
-      simY = 52;
-      simPageCount++;
-    }
-    simY += paymentH + cfg.secSpacing;
 
     if (custRemarks || teamRemarks) {
       let simBoxH = 4;
@@ -846,91 +823,162 @@ const generateQuotationPDF = (
     return 52; 
   };
 
-  // 1. Render Customer Logistics Card
-  let clientY = 49;
+  let currentY = 49;
 
-  let leftColYOffset = 0;
-  let rightColYOffset = 0;
+  const drawTeamMembersTable = (title: string, members: string[]) => {
+    if (members.length === 0) return;
 
-  leftColYOffset += (wrapCustName.length * cfg.textPadding);
-  leftColYOffset += cfg.textPadding; 
-  leftColYOffset += (wrapEmail.length * cfg.textPadding);
-  leftColYOffset += cfg.textPadding; 
-  
-  if (lead.sales_staff_name) {
-    const wrapStaffName = doc.splitTextToSize(lead.sales_staff_name, 50);
-    leftColYOffset += (wrapStaffName.length * cfg.textPadding);
-  }
-  if (lead.sales_staff_mobile) {
-    leftColYOffset += cfg.textPadding;
-  }
+    let tableH = 4; // Title spacing
+    const mapped = members.map((m, i) => ({ id: String(i), name: m, qty: 1, price: 0 }));
 
-  // We add one more line for Quote Date to left column
-  leftColYOffset += cfg.textPadding;
+    mapped.forEach((item) => {
+      const cleanedItemName = cleanText(item.name || '');
+      const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
+      tableH += Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
+    });
 
-  const boxHeight = leftColYOffset + cfg.boxPadding;
-
-  let formattedEvDate = 'N/A';
-  if (lead.event_date) {
-    try {
-      const parts = lead.event_date.split('-');
-      if (parts.length === 3) {
-        const localDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-        formattedEvDate = localDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-      } else {
-        formattedEvDate = new Date(lead.event_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-      }
-    } catch(e) {}
-  }
-  const quoteDateStr = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-
-  doc.setFillColor(bgLightGrid[0], bgLightGrid[1], bgLightGrid[2]);
-  doc.roundedRect(15, clientY, 180, boxHeight, 1.5, 1.5, 'F');
-  doc.setDrawColor(226, 232, 240);
-  doc.setLineWidth(0.25);
-  doc.roundedRect(15, clientY, 180, boxHeight, 1.5, 1.5, 'D');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text('CUSTOMER DETAILS', 20, clientY + 6);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(71, 85, 105);
-
-  let curLeftY = clientY + 11.5;
-  const leftLabels = [
-    { label: 'Customer Name', val: wrapCustName, isWrapped: true },
-    { label: 'Mobile Number', val: lead.mobile || 'N/A' },
-    { label: 'Email Address', val: wrapEmail, isWrapped: true },
-    { label: 'Quotation Date', val: quoteDateStr }
-  ];
-  if (lead.sales_staff_name) {
-    leftLabels.push({ label: 'Sales Staff Name', val: doc.splitTextToSize(lead.sales_staff_name, 50), isWrapped: true });
-  }
-  if (lead.sales_staff_mobile) {
-    leftLabels.push({ label: 'Sales Staff Mobile', val: lead.sales_staff_mobile });
-  }
-
-  leftLabels.forEach((item) => {
-    doc.text(item.label, 20, curLeftY);
-    doc.text(':', 41, curLeftY);
-    if (item.isWrapped && Array.isArray(item.val)) {
-      item.val.forEach((line: string, i: number) => {
-        doc.text(line, 43, curLeftY + (i * cfg.textPadding));
-      });
-      curLeftY += (item.val.length * cfg.textPadding);
-    } else {
-      doc.text(String(item.val), 43, curLeftY);
-      curLeftY += cfg.textPadding;
+    if (currentY + tableH > 250 && tableH <= (250 - 52)) {
+      currentY = createNewPage();
     }
-  });
 
-  let currentY = clientY + boxHeight + cfg.secSpacing;
+    if (currentY + 4 > 250) {
+      currentY = createNewPage();
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+    doc.text(title, 15, currentY);
+    currentY += 4;
 
-  // Helper routine to render tables with autowrapping, dynamic heights, and smart page breaks
-  const drawTable = (title: string, items: { id: string; name: string; qty: number; price: number; isAdditional?: boolean }[]) => {
+    doc.setDrawColor(203, 213, 225); 
+    doc.setLineWidth(0.2);
+
+    // Draw top border line since we removed the header row
+    doc.line(15, currentY, 195, currentY);
+
+    mapped.forEach((item, index) => {
+      const cleanedItemName = cleanText(item.name || '');
+      const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
+      const rowHeight = Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
+
+      if (currentY + rowHeight > 250) {
+        doc.line(15, currentY, 195, currentY);
+        currentY = createNewPage();
+        doc.line(15, currentY, 195, currentY);
+      }
+
+      if (index % 2 === 1) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(15, currentY, 180, rowHeight, 'F');
+      }
+
+      doc.line(15, currentY, 15, currentY + rowHeight);
+      doc.line(195, currentY, 195, currentY + rowHeight);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(51, 65, 85);
+
+      doc.setFillColor(51, 65, 85);
+      doc.circle(20, currentY + 4.3 - 0.9, 0.6, 'F');
+
+      wrappedName.forEach((line: string, i: number) => {
+        doc.text(line, 23, currentY + 4.3 + (i * cfg.rowTextHeight));
+      });
+
+      doc.line(15, currentY + rowHeight, 195, currentY + rowHeight);
+      currentY += rowHeight;
+    });
+
+    currentY += cfg.tableSpacing; 
+  };
+
+  const drawEventDeliverablesTable = (title: string, deliverables: string[]) => {
+    if (deliverables.length === 0) return;
+
+    let tableH = 4 + 7.5; 
+    const mapped = deliverables.map((d, i) => ({ id: String(i), name: d }));
+
+    mapped.forEach((item) => {
+      const cleanedItemName = cleanText(item.name || '');
+      const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
+      tableH += Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
+    });
+
+    if (currentY + tableH > 250 && tableH <= (250 - 52)) {
+      currentY = createNewPage();
+    }
+
+    if (currentY + 4 > 250) {
+      currentY = createNewPage();
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+    doc.text(title, 15, currentY);
+    currentY += 4;
+
+    if (currentY + 7.5 > 250) {
+      currentY = createNewPage();
+    }
+    doc.setFillColor(30, 41, 59); // Slate-800
+    doc.rect(15, currentY, 180, 7.5, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(255, 255, 255);
+    doc.text('DELIVERABLES', 19, currentY + 4.8);
+
+    currentY += 7.5;
+
+    doc.setDrawColor(203, 213, 225); 
+    doc.setLineWidth(0.2);
+
+    mapped.forEach((item, index) => {
+      const cleanedItemName = cleanText(item.name || '');
+      const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
+      const rowHeight = Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
+
+      if (currentY + rowHeight > 250) {
+        doc.line(15, currentY, 195, currentY);
+        currentY = createNewPage();
+
+        doc.setFillColor(30, 41, 59);
+        doc.rect(15, currentY, 180, 7.5, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(255, 255, 255);
+        doc.text('DELIVERABLES (CONTINUED)', 19, currentY + 4.8);
+        currentY += 7.5;
+      }
+
+      if (index % 2 === 1) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(15, currentY, 180, rowHeight, 'F');
+      }
+
+      doc.line(15, currentY, 15, currentY + rowHeight);
+      doc.line(195, currentY, 195, currentY + rowHeight);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(51, 65, 85);
+
+      doc.setFillColor(51, 65, 85);
+      doc.circle(20, currentY + 4.3 - 0.9, 0.6, 'F');
+
+      wrappedName.forEach((line: string, i: number) => {
+        doc.text(line, 23, currentY + 4.3 + (i * cfg.rowTextHeight));
+      });
+
+      doc.line(15, currentY + rowHeight, 195, currentY + rowHeight);
+      currentY += rowHeight;
+    });
+
+    currentY += cfg.tableSpacing; 
+  };
+
+  const drawAdditionalTable = (title: string, items: { id: string; name: string; qty: number; price: number; isAdditional?: boolean }[]) => {
     let tableH = 4 + 7.5; 
     items.forEach((item) => {
       const cleanedItemName = cleanText(item.name || '');
@@ -967,18 +1015,6 @@ const generateQuotationPDF = (
     doc.setDrawColor(203, 213, 225); 
     doc.setLineWidth(0.2);
 
-    if (items.length === 0) {
-      doc.setFont('helvetica', 'italic');
-      doc.setFontSize(7.5);
-      doc.setTextColor(148, 163, 184);
-      doc.text('No specified deliverables or customized service items.', 19, currentY + 5);
-      doc.line(15, currentY, 15, currentY + 8);
-      doc.line(195, currentY, 195, currentY + 8);
-      doc.line(15, currentY + 8, 195, currentY + 8);
-      currentY += 8;
-      return;
-    }
-
     items.forEach((item, index) => {
       const cleanedItemName = cleanText(item.name || '');
       const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
@@ -1009,7 +1045,6 @@ const generateQuotationPDF = (
       doc.setFontSize(7.5);
       doc.setTextColor(51, 65, 85);
 
-      // Draw a clean bullet point for the first line of the item
       doc.setFillColor(51, 65, 85);
       doc.circle(20, currentY + 4.3 - 0.9, 0.6, 'F');
 
@@ -1024,292 +1059,93 @@ const generateQuotationPDF = (
     currentY += cfg.tableSpacing; 
   };
 
-  const drawDeliverablesTable = (title: string, list: { package: string; item: string }[]) => {
-    if (list.length === 0) return;
-
-    let tableH = 4 + 7.5; 
-    list.forEach((item) => {
-      const wrappedPkg = doc.splitTextToSize(item.package || '', 45);
-      const cleanedDetailName = cleanText(item.item || '');
-      const wrappedDetail = doc.splitTextToSize(cleanedDetailName, 114);
-      tableH += Math.max(7.5, Math.max(wrappedPkg.length, wrappedDetail.length) * cfg.rowTextHeight + cfg.rowPadding);
-    });
-
-    if (currentY + tableH > 250 && tableH <= (250 - 52)) {
+  // Now, iterate through events and draw the specified blocks
+  eventsToRender.forEach((evObj, idx) => {
+    // 1. EVENT NAME & META DETAILS
+    if (currentY + 11 > 250) {
       currentY = createNewPage();
     }
-
-    if (currentY + 4 > 250) {
-      currentY = createNewPage();
-    }
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
-    doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-    doc.text(title, 15, currentY);
-    currentY += 4;
-
-    if (currentY + 7.5 > 250) {
-      currentY = createNewPage();
-    }
-    doc.setFillColor(30, 41, 59); // Slate-800
-    doc.rect(15, currentY, 180, 7.5, 'F');
 
     doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
+    const eventHeading = eventsToRender.length === 1
+      ? `EVENT — ${evObj.eventName.toUpperCase()}`
+      : `EVENT ${idx + 1} — ${evObj.eventName.toUpperCase()}`;
+    doc.text(eventHeading, 15, currentY);
+    currentY += 4.5;
+
+    doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
-    doc.setTextColor(255, 255, 255);
-    doc.text('PACKAGE / CATEGORY', 19, currentY + 4.8);
-    doc.text('INCLUSION / DELIVERABLE DETAIL', 69, currentY + 4.8);
+    doc.setTextColor(slateGray[0], slateGray[1], slateGray[2]);
+    const formattedEvDate = formatDate(evObj.eventDate);
+    const metaDetailsStr = `Event Date: ${formattedEvDate}   |   Event Time: ${evObj.eventTime || 'N/A'}   |   Event Location: ${evObj.eventLocation || 'N/A'}`;
+    doc.text(metaDetailsStr, 15, currentY);
+    currentY += 6;
 
-    currentY += 7.5;
-
-    doc.setDrawColor(203, 213, 225); 
-    doc.setLineWidth(0.2);
-
-    list.forEach((item, index) => {
-      const wrappedPkg = doc.splitTextToSize(item.package || '', 45);
-      const cleanedDetailName = cleanText(item.item || '');
-      const wrappedDetail = doc.splitTextToSize(cleanedDetailName, 114);
-      const rowHeight = Math.max(7.5, Math.max(wrappedPkg.length, wrappedDetail.length) * cfg.rowTextHeight + cfg.rowPadding);
-
-      if (currentY + rowHeight > 250) {
-        doc.line(15, currentY, 195, currentY);
-        currentY = createNewPage();
-
-        doc.setFillColor(30, 41, 59);
-        doc.rect(15, currentY, 180, 7.5, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.5);
-        doc.setTextColor(255, 255, 255);
-        doc.text('PACKAGE / CATEGORY (CONTINUED)', 19, currentY + 4.8);
-        doc.text('INCLUSION / DELIVERABLE DETAIL', 69, currentY + 4.8);
-        currentY += 7.5;
-      }
-
-      if (index % 2 === 1) {
-        doc.setFillColor(248, 250, 252);
-        doc.rect(15, currentY, 180, rowHeight, 'F');
-      }
-
-      doc.line(15, currentY, 15, currentY + rowHeight);
-      doc.line(195, currentY, 195, currentY + rowHeight);
-      doc.line(65, currentY, 65, currentY + rowHeight);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.2);
-      doc.setTextColor(51, 65, 85);
-
-      wrappedPkg.forEach((line: string, i: number) => {
-        doc.text(line, 19, currentY + 4.3 + (i * cfg.rowTextHeight));
-      });
-
-      // Draw a clean bullet point for the first line of the detail
-      doc.setFillColor(51, 65, 85);
-      doc.circle(70, currentY + 4.3 - 0.9, 0.6, 'F');
-
-      wrappedDetail.forEach((line: string, i: number) => {
-        doc.text(line, 73, currentY + 4.3 + (i * cfg.rowTextHeight));
-      });
-
-      doc.line(15, currentY + rowHeight, 195, currentY + rowHeight);
-      currentY += rowHeight;
-    });
-
-    currentY += cfg.tableSpacing; 
-  };
-
-    // 2. Team Members Included section
-  const drawTeamMembers = (eventName: string | null, eventDate: string, eventLocation: string, members: string[]) => {
-    if (members.length === 0) return;
-    const mapped = members.map((m, i) => ({ id: String(i), name: m, qty: 1, price: 0 }));
-    
-    if (eventName) {
-       if (currentY + 30 > 250) {
-         currentY = createNewPage();
-       }
-
-       doc.setFont('helvetica', 'bold');
-       doc.setFontSize(9.5);
-       doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-       doc.text(`Event Name: ${eventName}`, 15, currentY);
-       currentY += 6;
-       
-       // Draw Event Details Box
-       let formattedEvDate = 'N/A';
-       if (eventDate) {
-         try {
-           const parts = eventDate.split('-');
-           if (parts.length === 3) {
-             const localDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-             formattedEvDate = localDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-           } else {
-             formattedEvDate = new Date(eventDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-           }
-         } catch(e) {}
-       }
-       
-       const wrapLoc = doc.splitTextToSize(eventLocation, 100);
-       const boxHeight = 12 + (wrapLoc.length * cfg.textPadding);
-
-       doc.setFillColor(bgLightGrid[0], bgLightGrid[1], bgLightGrid[2]);
-       doc.roundedRect(15, currentY, 180, boxHeight, 1.5, 1.5, 'F');
-       doc.setDrawColor(226, 232, 240);
-       doc.setLineWidth(0.25);
-       doc.roundedRect(15, currentY, 180, boxHeight, 1.5, 1.5, 'D');
-
-       doc.setFont('helvetica', 'bold');
-       doc.setFontSize(8.5);
-       doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-       doc.text('EVENT DETAILS / EVENT LOGISTICS', 20, currentY + 6);
-       
-       doc.setFont('helvetica', 'normal');
-       doc.setFontSize(7.5);
-       doc.setTextColor(71, 85, 105);
-       
-       doc.text('Event Date', 20, currentY + 11.5);
-       doc.text(':', 41, currentY + 11.5);
-       doc.text(formattedEvDate, 43, currentY + 11.5);
-
-       doc.text('Location', 20, currentY + 11.5 + cfg.textPadding);
-       doc.text(':', 41, currentY + 11.5 + cfg.textPadding);
-       wrapLoc.forEach((line: string, i: number) => {
-         doc.text(line, 43, currentY + 11.5 + cfg.textPadding + (i * cfg.textPadding));
-       });
-
-       currentY += boxHeight + 6;
-
-       drawTable('TEAM MEMBERS INCLUDED', mapped);
-    } else {
-       drawTable('TEAM MEMBERS INCLUDED', mapped);
+    // 2. CUSTOMER DETAILS CARD
+    if (currentY + 26 > 250) {
+      currentY = createNewPage();
     }
-  };
 
-  if (hasEventsInclusions) {
-    orderedEventInclusions.forEach((data) => {
-      drawTeamMembers(data.eventName, data.eventDate, data.eventLocation, data.members);
+    doc.setFillColor(bgLightGrid[0], bgLightGrid[1], bgLightGrid[2]);
+    doc.roundedRect(15, currentY, 180, 26, 1.5, 1.5, 'F');
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.25);
+    doc.roundedRect(15, currentY, 180, 26, 1.5, 1.5, 'D');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+    doc.text('CUSTOMER DETAILS', 20, currentY + 5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(71, 85, 105);
+
+    const col1 = [
+      { label: 'Customer Name', val: lead.customer_name || 'N/A' },
+      { label: 'Mobile Number', val: lead.mobile || 'N/A' },
+      { label: 'Email Address', val: lead.email || 'N/A' },
+      { label: 'Quotation Date', val: formatDate(lead.quotation_date || new Date().toISOString().split('T')[0]) }
+    ];
+
+    const col2 = [
+      { label: 'Sales Staff Name', val: lead.sales_staff_name || 'N/A' },
+      { label: 'Sales Staff Mobile', val: lead.sales_staff_mobile || 'N/A' },
+      { label: 'Guest Pax', val: evObj.guestPax || 'N/A' }
+    ];
+
+    col1.forEach((item, i) => {
+      const itemY = currentY + 9.5 + (i * 4.5);
+      doc.text(item.label, 20, itemY);
+      doc.text(':', 45, itemY);
+      doc.text(String(item.val), 47, itemY);
     });
-  } else if (generalInclusions.length > 0) {
-    drawTeamMembers(null, "", "", generalInclusions);
-  }
 
-  // 3. Additional services table
+    col2.forEach((item, i) => {
+      const itemY = currentY + 9.5 + (i * 4.5);
+      doc.text(item.label, 110, itemY);
+      doc.text(':', 135, itemY);
+      doc.text(String(item.val), 137, itemY);
+    });
+
+    currentY += 26 + cfg.secSpacing;
+
+    // 3. TEAM MEMBERS INCLUDED
+    if (evObj.members.length > 0) {
+      drawTeamMembersTable('TEAM MEMBERS INCLUDED', evObj.members);
+    }
+
+    // 4. DELIVERABLES
+    if (evObj.deliverables.length > 0) {
+      drawEventDeliverablesTable('DELIVERABLES', evObj.deliverables);
+    }
+  });
+
+  // 5. ADDITIONAL SPECIFICATIONS & SERVICE ADD-ONS (if any)
   if (additionalServices.length > 0) {
-    drawTable('ADDITIONAL SPECIFICATIONS & SERVICE ADD-ONS', additionalServices);
-  }
-
-  // 4. Deliverables table
-  const drawNewDeliverablesTable = (eventName: string | null, data: { pkgName: string, items: string[] }[]) => {
-    if (data.length === 0) return;
-    const title = eventName ? `${eventName} - PACKAGE INCLUSIONS & DELIVERABLES DETAILED LIST` : 'PACKAGE INCLUSIONS & DELIVERABLES DETAILED LIST';
-    
-    // Create flattened list
-    const list: { type: 'pkgName' | 'header' | 'item', text: string }[] = [];
-    data.forEach(d => {
-      if (d.items.length === 0) return;
-      list.push({ type: 'pkgName', text: `Package Name: ${d.pkgName}` });
-      list.push({ type: 'header', text: `Deliverables` });
-      d.items.forEach(item => {
-        list.push({ type: 'item', text: item });
-      });
-    });
-
-    if (list.length === 0) return;
-
-    let tableH = 4 + 7.5; 
-    list.forEach((item) => {
-      const wrapped = doc.splitTextToSize(cleanText(item.text), 166);
-      tableH += Math.max(7.5, wrapped.length * cfg.rowTextHeight + cfg.rowPadding);
-    });
-
-    if (currentY + tableH > 250 && tableH <= (250 - 52)) {
-      currentY = createNewPage();
-    }
-    if (currentY + 4 > 250) {
-      currentY = createNewPage();
-    }
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
-    doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-    doc.text(title, 15, currentY);
-    currentY += 4;
-
-    if (currentY + 7.5 > 250) {
-      currentY = createNewPage();
-    }
-    doc.setFillColor(30, 41, 59); // Slate-800
-    doc.rect(15, currentY, 180, 7.5, 'F');
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(255, 255, 255);
-    doc.text('DELIVERABLES', 19, currentY + 4.8);
-
-    currentY += 7.5;
-
-    doc.setDrawColor(203, 213, 225); 
-    doc.setLineWidth(0.2);
-
-    list.forEach((item, index) => {
-      const cleanedText = cleanText(item.text || '');
-      const wrappedText = doc.splitTextToSize(cleanedText, 166);
-      const rowHeight = Math.max(7.5, wrappedText.length * cfg.rowTextHeight + cfg.rowPadding);
-
-      if (currentY + rowHeight > 250) {
-        doc.line(15, currentY, 195, currentY);
-        currentY = createNewPage();
-
-        doc.setFillColor(30, 41, 59);
-        doc.rect(15, currentY, 180, 7.5, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.5);
-        doc.setTextColor(255, 255, 255);
-        doc.text('DELIVERABLES (CONTINUED)', 19, currentY + 4.8);
-        currentY += 7.5;
-      }
-
-      if (item.type === 'pkgName' || item.type === 'header') {
-        doc.setFillColor(248, 250, 252);
-        doc.rect(15, currentY, 180, rowHeight, 'F');
-      }
-
-      doc.line(15, currentY, 15, currentY + rowHeight);
-      doc.line(195, currentY, 195, currentY + rowHeight);
-
-      if (item.type === 'pkgName') {
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8.5);
-        doc.setTextColor(30, 41, 59);
-      } else if (item.type === 'header') {
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.5);
-        doc.setTextColor(15, 23, 42);
-      } else {
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7.5);
-        doc.setTextColor(51, 65, 85);
-        doc.setFillColor(51, 65, 85);
-        doc.circle(20, currentY + 4.3 - 0.9, 0.6, 'F');
-      }
-
-      wrappedText.forEach((line: string, i: number) => {
-        const xOffset = item.type === 'item' ? 23 : 19;
-        doc.text(line, xOffset, currentY + 4.3 + (i * cfg.rowTextHeight));
-      });
-
-      doc.line(15, currentY + rowHeight, 195, currentY + rowHeight);
-      currentY += rowHeight;
-    });
-
-    currentY += cfg.tableSpacing; 
-  };
-
-
-  if (hasEventsDeliverables) {
-    orderedEventDeliverables.forEach((data) => {
-      drawNewDeliverablesTable(data.eventName, [{ pkgName: data.pkgName, items: data.items }]);
-    });
-  } else if (generalDeliverables.length > 0) {
-    drawNewDeliverablesTable(null, generalDeliverables);
+    drawAdditionalTable('ADDITIONAL SPECIFICATIONS & SERVICE ADD-ONS', additionalServices);
   }
 
   // 5. PRICING SUMMARY CARD
@@ -1392,69 +1228,9 @@ const generateQuotationPDF = (
 
   currentY += cfg.pricingCardHeight + cfg.secSpacing;
 
-  // 6. PAYMENT DETAILS CARD
-  const paymentCardTotalH = 4.5 + cfg.paymentCardHeight;
-  if (currentY + paymentCardTotalH > 250) {
-    currentY = createNewPage();
-  }
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
-  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text('PAYMENT DETAILS', 15, currentY);
-  currentY += 4.5;
-  
-  doc.setFillColor(bgLightGrid[0], bgLightGrid[1], bgLightGrid[2]);
-  doc.roundedRect(15, currentY, 180, cfg.paymentCardHeight, 1.5, 1.5, 'F');
-  doc.setDrawColor(226, 232, 240);
-  doc.setLineWidth(0.25);
-  doc.roundedRect(15, currentY, 180, cfg.paymentCardHeight, 1.5, 1.5, 'D');
-
-  const col1Details = [
-    { label: 'Account Name', val: 'PHOTOCREW PICTURES' },
-    { label: 'Bank Name',    val: 'HDFC BANK' },
-    { label: 'Account No.',  val: '50200103134840' }
-  ];
-
-  const col2Details = [
-    { label: 'IFSC Code',    val: 'HDFC0000312' },
-    { label: 'Branch',       val: 'Vijayanagar, Bangalore' }
-  ];
-
-  // Draw Column 1
-  col1Details.forEach((item, idx) => {
-    const startOffset = cfg.paymentCardHeight === 29 ? 6.5 : 5.5;
-    const rowSpacing = cfg.paymentCardHeight === 29 ? 6.5 : 5.5;
-    const itemY = currentY + startOffset + (idx * rowSpacing);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(71, 85, 105);
-    doc.text(item.label, 20, itemY);
-    doc.text(':', 45, itemY);
-
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(15, 23, 42);
-    doc.text(item.val, 48, itemY);
-  });
-
-  // Draw Column 2
-  col2Details.forEach((item, idx) => {
-    const startOffset = cfg.paymentCardHeight === 29 ? 6.5 : 5.5;
-    const rowSpacing = cfg.paymentCardHeight === 29 ? 6.5 : 5.5;
-    const itemY = currentY + startOffset + (idx * rowSpacing);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(71, 85, 105);
-    doc.text(item.label, 110, itemY);
-    doc.text(':', 130, itemY);
-
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(15, 23, 42);
-    doc.text(item.val, 133, itemY);
-  });
-  
-  currentY += cfg.paymentCardHeight + cfg.secSpacing;
+  // 6. PAYMENT DETAILS CARD (Completely hidden/removed as requested)
+  // PAYMENT DETAILS section is hidden from the quotation PDF.
+  // We do not increment currentY or draw the section.
 
   // 8. TERMS AND CONDITIONS
   if (currentY + 4.5 > 250) {
