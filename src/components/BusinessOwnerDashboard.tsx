@@ -2148,97 +2148,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
   const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id);
   const pay = payments.find(p => p.order_id === order.order_id || p.lead_id === order.lead_id);
 
-  // Fetch Step 3 saved quotation matching this order / lead
-  const matchedQuotation = (quotations || []).find((q: any) =>
-    (order.order_id && q.order_id === order.order_id) ||
-    (order.lead_id && q.lead_id === order.lead_id) ||
-    (order.quotation_id && q.quotation_id === order.quotation_id) ||
-    (lead?.lead_id && q.lead_id === lead.lead_id)
-  );
-
-  // Financial Summary calculations (fetched directly from Sales Dashboard Step 3 quotation data)
-  const getPositiveVal = (...candidates: any[]): number => {
-    for (const val of candidates) {
-      if (val !== undefined && val !== null && val !== '') {
-        const num = Number(val);
-        if (!isNaN(num) && num > 0) {
-          return num;
-        }
-      }
-    }
-    return 0;
-  };
-
-  const quotationDiscount = getPositiveVal(
-    matchedQuotation?.discount_amount,
-    matchedQuotation?.discount,
-    (matchedQuotation as any)?.Quotation_Discount,
-    matchedQuotation?.quotation_discount,
-    (lead as any)?.Quotation_Discount,
-    (lead as any)?.quotation_discount,
-    (order as any)?.Quotation_Discount,
-    pay?.discount_amount
-  );
-
-  const additionalServicesCost = getPositiveVal(
-    matchedQuotation?.additional_services_cost,
-    (matchedQuotation as any)?.Additional_Services_Cost,
-    (lead as any)?.Additional_Services_Cost,
-    (lead as any)?.additional_services_cost,
-    order?.additional_services_cost,
-    (order as any)?.Additional_Services_Cost
-  );
-
-  // Package Base Price from Sales Quotation Section 2 (lead.package_price and matchedQuotation.package_price store base price)
-  const rawPkgPrice = getPositiveVal(
-    matchedQuotation?.package_price,
-    (lead as any)?.package_price,
-    (matchedQuotation as any)?.Package_Price,
-    (order as any)?.package_base_price,
-    (order as any)?.base_package_price,
-    (lead as any)?.budget
-  );
-
-  // Final Quotation Amount from Sales Quotation Section 2
-  const rawFinalQuotationAmount = getPositiveVal(
-    matchedQuotation?.final_quotation_amount,
-    matchedQuotation?.final_amount,
-    (matchedQuotation as any)?.Final_Quotation_Amount,
-    matchedQuotation?.quotation_amount,
-    (lead as any)?.Final_Quotation_Amount,
-    (lead as any)?.final_quotation_amount,
-    (lead as any)?.final_amount,
-    (order as any)?.Final_Quotation_Amount,
-    order?.quotation_amount,
-    order?.grand_total,
-    order?.total_amount
-  );
-
-  // If rawPkgPrice was recorded as final amount (e.g. on order.package_price), ensure packagePrice reflects base price
-  const packagePrice = (rawPkgPrice > 0 && (rawPkgPrice > rawFinalQuotationAmount || quotationDiscount === 0))
-    ? rawPkgPrice
-    : (rawFinalQuotationAmount > 0 ? rawFinalQuotationAmount + quotationDiscount - additionalServicesCost : rawPkgPrice);
-
-  const finalQuotationAmount = rawFinalQuotationAmount > 0
-    ? rawFinalQuotationAmount
-    : Math.max(0, packagePrice - quotationDiscount + additionalServicesCost);
-
-  const paymentReceived = pay
-    ? ((pay.advance_received || 0) + (pay.final_payment_received || 0))
-    : (order.advance_received || (lead as any)?.advance_collected || 0);
-
-  const pendingAmount = pay
-    ? pay.balance_due
-    : (order.balance_amount !== undefined && order.balance_amount !== null && order.balance_amount >= 0
-      ? order.balance_amount
-      : Math.max(0, finalQuotationAmount - paymentReceived));
-
-  const paymentStatus = pay?.payment_status || order.payment_status || (pendingAmount <= 0 ? 'Paid' : 'Pending Balance');
-
   const customerMobile = order.customer_phone || order.mobile || lead?.phone || lead?.mobile || pay?.customer_phone || 'N/A';
-  const assignedEditor = prod?.editor_assigned || 'Unassigned';
-  const clientAcceptanceStatus = prod?.editing_status || prod?.customer_review_status || order.current_stage || 'Client Acceptance';
-
   const isBusinessOwner = currentRole === 'Business Owner';
 
   // Extract ALL events separately for this order
@@ -2271,6 +2181,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
         const eDate = ev.event_date || order?.event_date || lead?.event_date || 'N/A';
         const eTime = ev.event_start_time || ev.event_time || order?.event_time || lead?.event_time || 'N/A';
         const eLocation = ev.venue || ev.location || order?.venue || order?.location || lead?.venue || lead?.location || 'N/A';
+        const eMapsLink = ev.google_maps_link || order?.google_maps_link || lead?.google_maps_link || null;
 
         // Deliverables assigned for this event
         const matchedAssignments = (editorAssignments || []).filter((a: any) =>
@@ -2297,6 +2208,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
           eventDate: eDate,
           eventTime: eTime,
           eventLocation: eLocation,
+          googleMapsLink: eMapsLink,
           deliverables: deliverablesList,
           assignments: matchedAssignments
         };
@@ -2309,6 +2221,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
     const eDate = order.event_date || lead?.event_date || 'N/A';
     const eTime = order.event_time || lead?.event_time || 'N/A';
     const eLocation = order.venue || order.location || lead?.venue || lead?.location || 'N/A';
+    const eMapsLink = order?.google_maps_link || lead?.google_maps_link || null;
 
     const orderAssignments = (editorAssignments || []).filter((a: any) =>
       a.production_id === prod?.production_id ||
@@ -2337,6 +2250,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
       eventDate: eDate,
       eventTime: eTime,
       eventLocation: eLocation,
+      googleMapsLink: eMapsLink,
       deliverables: delivs,
       assignments: orderAssignments
     }];
@@ -2471,43 +2385,43 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
 
   return createPortal(
     <div 
-      className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div 
-        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-3xl p-6 space-y-6 shadow-2xl relative animate-in fade-in zoom-in duration-200"
+        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-3xl shadow-2xl relative animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         
         {/* Modal Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-zinc-850">
+        <div className="flex items-start justify-between p-6 pb-4 border-b border-zinc-850 shrink-0">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mb-1">
               <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px] font-mono font-bold uppercase tracking-wider">
                 Business Owner Review
               </span>
-              <span className="text-xs font-mono text-zinc-500">Order ID: {order.order_id}</span>
+              <span className="text-xs font-mono text-zinc-500 truncate">Order ID: {order.order_id}</span>
             </div>
-            <h2 className="text-xl font-black text-white mt-1">
+            <h2 className="text-xl font-black text-white">
               Final Approval & Order Review
             </h2>
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-zinc-400 mt-0.5 hidden sm:block">
               Review completed workflow and client acceptance before closing this order.
             </p>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
+            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 cursor-pointer transition-colors shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Scrollable Modal Content */}
-        <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+        <div className="p-6 space-y-4 overflow-y-auto flex-1">
           
           {/* Section 1: Customer Details */}
           <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
@@ -2538,7 +2452,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
                 <CalendarIcon className="w-3.5 h-3.5" />
                 <span>Event Details ({resolvedEvents.length})</span>
               </h3>
-              <span className="text-[10px] font-mono text-zinc-500 uppercase">
+              <span className="text-[10px] font-mono text-zinc-500 uppercase hidden sm:block">
                 {resolvedEvents.length} Event{resolvedEvents.length > 1 ? 's' : ''} in Order
               </span>
             </div>
@@ -2553,8 +2467,8 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
                     <span className="text-xs font-bold text-zinc-200">{ev.eventName}</span>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                    <div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                    <div className="sm:col-span-2 md:col-span-1">
                       <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Event Name</span>
                       <span className="text-zinc-100 font-bold">{ev.eventName}</span>
                     </div>
@@ -2570,9 +2484,23 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
                       <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Event Time</span>
                       <span className="text-zinc-200 font-mono">{ev.eventTime}</span>
                     </div>
-                    <div className="col-span-2">
-                      <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Event Location</span>
-                      <span className="text-zinc-200 font-mono truncate block" title={ev.eventLocation}>{ev.eventLocation}</span>
+                    <div className="sm:col-span-2 md:col-span-3">
+                      <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold mb-1">Event Location / Google Maps Link</span>
+                      {ev.googleMapsLink ? (
+                        <a 
+                          href={ev.googleMapsLink} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[11px] font-mono font-bold transition-colors cursor-pointer"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span className="truncate max-w-[200px] sm:max-w-xs">Open Google Maps</span>
+                        </a>
+                      ) : (
+                        <span className="text-zinc-200 font-mono truncate block" title={ev.eventLocation}>
+                          {ev.eventLocation && ev.eventLocation !== 'N/A' ? ev.eventLocation : 'N/A'}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -2596,62 +2524,6 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
             </div>
           </div>
 
-          {/* Section 3: Financial Summary (ONCE PER ORDER) */}
-          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
-            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5 mb-3">
-              <DollarSign className="w-3.5 h-3.5" />
-              <span>Financial Summary</span>
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 text-xs">
-              <div>
-                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Package Price</span>
-                <span className="text-zinc-100 font-mono font-bold">{formatINR(packagePrice)}</span>
-              </div>
-              <div>
-                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Quotation Discount</span>
-                <span className="text-amber-400 font-mono font-bold">{formatINR(quotationDiscount)}</span>
-              </div>
-              <div>
-                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Additional Services Cost</span>
-                <span className="text-blue-400 font-mono font-bold">{formatINR(additionalServicesCost)}</span>
-              </div>
-              <div>
-                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Final Quotation Amount</span>
-                <span className="text-emerald-400 font-mono font-bold">{formatINR(finalQuotationAmount)}</span>
-              </div>
-              <div>
-                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Advance Collected / Payment Received</span>
-                <span className="text-emerald-400 font-mono font-bold">{formatINR(paymentReceived)}</span>
-              </div>
-              <div>
-                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Pending Amount</span>
-                <span className={`font-mono font-bold ${pendingAmount <= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {formatINR(pendingAmount)}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 4: Production Summary & Client Acceptance Status */}
-          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
-            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1.5 mb-3">
-              <PackageCheck className="w-3.5 h-3.5" />
-              <span>Production Summary</span>
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div>
-                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Assigned Editor / Staff</span>
-                <span className="text-zinc-100 font-bold">{assignedEditor}</span>
-              </div>
-              <div>
-                <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Client Acceptance Status</span>
-                <span className="inline-block mt-0.5 px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono text-[10px] font-bold">
-                  {clientAcceptanceStatus}
-                </span>
-              </div>
-            </div>
-          </div>
-
           {/* Section 5: Client Communication & Consent Proof */}
           <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-3">
             <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-teal-400 flex items-center gap-1.5">
@@ -2662,26 +2534,38 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
             {proofList.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {proofList.map((proof) => (
-                  <div key={proof.id} className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 flex items-center justify-between gap-3">
+                  <div key={proof.id} className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <span className="text-xs font-bold text-zinc-200 block truncate">{proof.label}</span>
                       <span className="text-[10px] font-mono text-zinc-400 block truncate">
                         Uploaded by: {proof.staffName}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setPreviewProof({
-                        imageUrl: proof.imageUrl,
-                        label: proof.label,
-                        staffName: proof.staffName,
-                        deliverableName: proof.deliverableName
-                      })}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-mono font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>VIEW IMAGE</span>
-                    </button>
+                    {proof.imageUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) || proof.imageUrl.includes('drive.google.com') ? (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewProof({
+                          imageUrl: proof.imageUrl,
+                          label: proof.label,
+                          staffName: proof.staffName,
+                          deliverableName: proof.deliverableName
+                        })}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-mono font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>VIEW IMAGE</span>
+                      </button>
+                    ) : (
+                      <a
+                        href={proof.imageUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 text-xs font-mono font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>OPEN PROOF</span>
+                      </a>
+                    )}
                   </div>
                 ))}
               </div>
@@ -2695,8 +2579,8 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
         </div>
 
         {/* Modal Action Bar */}
-        <div className="pt-4 border-t border-zinc-850 flex items-center justify-between gap-4">
-          <p className="text-xs text-zinc-500">
+        <div className="p-4 sm:p-6 pt-4 border-t border-zinc-850 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0 bg-zinc-950 rounded-b-2xl">
+          <p className="text-xs text-zinc-500 text-center sm:text-left">
             {isBusinessOwner ? (
               <>Confirms final verification. The order status will automatically update to <strong className="text-emerald-400">Order Closed</strong>.</>
             ) : (
@@ -2704,10 +2588,10 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
             )}
           </p>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-bold text-zinc-400 hover:text-white cursor-pointer"
+              className="px-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer text-center"
             >
               Cancel
             </button>
@@ -2715,7 +2599,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
             {isBusinessOwner && onReject && (
               <button
                 onClick={onReject}
-                className="px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 font-bold text-xs hover:bg-rose-500/20 transition-all cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 font-bold text-xs hover:bg-rose-500/20 transition-all cursor-pointer flex justify-center items-center gap-1.5"
               >
                 <span>Reject Back to Production</span>
               </button>
@@ -2724,7 +2608,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
             {isBusinessOwner && (
               <button
                 onClick={onApprove}
-                className="px-5 py-2.5 rounded-xl bg-amber-500 text-black font-black text-xs hover:bg-amber-400 transition-all cursor-pointer shadow-lg flex items-center gap-2"
+                className="px-5 py-2.5 rounded-xl bg-amber-500 text-black font-black text-xs hover:bg-amber-400 transition-all cursor-pointer shadow-lg flex justify-center items-center gap-2"
               >
                 <ShieldCheck className="w-4 h-4" />
                 <span>Approve & Close Order</span>
