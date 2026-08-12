@@ -1004,21 +1004,16 @@ Thank you.`;
 
       const deliverablesToUpdate = b.deliverables.filter((d: any) => editingCompletedForm.selectedIds.includes(d.assignmentId));
 
-      // 2. Save proof URL & status to editor_assignments table
+      // 2. Save status to editor_assignments table
       for (const deliv of deliverablesToUpdate) {
         await updateEditorAssignmentStatus(deliv.assignmentId, 'Editing Completed' as any);
 
         const resAssign = await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, {
-          customer_communication_proof: uploadedProofUrl,
-          client_communication_proof: uploadedProofUrl,
-          confirmation_proof: uploadedProofUrl,
-          proof_url: uploadedProofUrl,
-          proof_image: uploadedProofUrl,
           status: 'Editing Completed'
         });
 
         if (resAssign && resAssign.success === false) {
-          throw new Error(`Failed to save proof to editor assignment (${deliv.assignmentId}): ${resAssign.error || 'Database save failed'}`);
+          throw new Error(`Failed to update editor assignment (${deliv.assignmentId}): ${resAssign.error || 'Database update failed'}`);
         }
       }
 

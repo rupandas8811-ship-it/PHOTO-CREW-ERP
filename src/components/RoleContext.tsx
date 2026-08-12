@@ -1311,8 +1311,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       editor_assignments: [
         'assignment_id', 'production_id', 'staff_id', 'staff_name', 'speciality', 
         'assigned_date', 'target_finish_date', 'status', 'created_at', 'event_id', 
-        'order_id', 'deliverable_id', 'Edited_Drive_Link', 'edited_drive_link',
-        'customer_communication_proof', 'client_communication_proof', 'confirmation_proof', 'proof_url', 'proof_image', 'uploaded_proof'
+        'order_id', 'deliverable_id', 'Edited_Drive_Link', 'edited_drive_link'
       ],
       operations_staff: [
         'staff_id', 'name', 'mobile', 'whatsapp_number', 'email', 'role', 'department', 'status', 'joining_date', 
@@ -1734,7 +1733,27 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       try {
         let { error, data } = await supabaseClient.from(table).update(sanitized).eq(matchColumn, finalMatchValue).select();
         
-        // Automatic unified fallback for database check constraints or value exceptions
+        // Automatic unified fallback for missing column errors, database check constraints or value exceptions
+        if (error && (
+          error.message.toLowerCase().includes('could not find the') ||
+          error.message.toLowerCase().includes('schema cache') ||
+          error.message.toLowerCase().includes('column')
+        )) {
+          const colMatch = error.message.match(/column '([^']+)'|column "([^"]+)"/i) || 
+                           error.message.match(/Could not find the '([^']+)' column/i) ||
+                           error.message.match(/Could not find the "([^"]+)" column/i);
+          if (colMatch) {
+            const colName = colMatch[1] || colMatch[2];
+            if (colName && colName in sanitized) {
+              console.warn(`[pushUpdate FALLBACK] Stripping non-existent column "${colName}" from ${table} update and retrying...`);
+              delete sanitized[colName];
+              const retryRes = await supabaseClient.from(table).update(sanitized).eq(matchColumn, finalMatchValue).select();
+              error = retryRes.error;
+              data = retryRes.data;
+            }
+          }
+        }
+
         if (error && (
           error.message.toLowerCase().includes('constraint') || 
           error.message.toLowerCase().includes('check') || 
