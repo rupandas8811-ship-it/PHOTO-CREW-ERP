@@ -1149,7 +1149,7 @@ Thank you.`;
                                   }}
                                   className="w-full text-left px-4 py-3 text-xs text-zinc-200 hover:bg-purple-600/20 hover:text-purple-300 font-bold flex items-center gap-2 transition-colors cursor-pointer"
                                 >
-                                  <Eye className="w-4 h-4 text-purple-400" /> View Details
+                                  <Eye className="w-4 h-4 text-purple-400" /> {expandedOrderIds.includes(grp.orderId) ? 'Hide Details' : 'View Details'}
                                 </button>
                               </div>
                             )}
@@ -1160,7 +1160,8 @@ Thank you.`;
                     </div>
 
                     {/* ASSIGNED DELIVERABLES PANEL */}
-                    <div className="p-4 bg-zinc-950/90 w-full max-w-full">
+                    {expandedOrderIds.includes(grp.orderId) && (
+                      <div className="p-4 bg-zinc-950/90 w-full max-w-full border-t border-zinc-800 animate-in fade-in duration-200">
                       <div className="text-[11px] font-mono font-bold text-zinc-400 uppercase tracking-wider mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <span className="flex items-center gap-2">
                           <span>📦 Assigned Deliverables</span>
@@ -1556,8 +1557,8 @@ Thank you.`;
                           );
                         })}
                       </div>
-
                     </div>
+                    )}
                   </div>
                 );
               })}

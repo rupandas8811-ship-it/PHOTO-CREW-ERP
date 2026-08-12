@@ -1345,13 +1345,72 @@ ${coordinatorName}`;
     return status;
   };
 
+  const isProductionStaffAssignment = (a: any) => {
+    if (!a) return false;
+    const sName = (a.staff_name || a.name || '').trim();
+    const sId = (a.staff_id || '').trim();
+
+    // Look up in productionStaff
+    const prodStaffRec = (productionStaff || []).find(s => 
+      (sId && s.staff_id === sId) ||
+      (sName && s.name && s.name.toLowerCase() === sName.toLowerCase())
+    );
+
+    // Look up in general staff
+    const genStaffRec = (staff || []).find(s => 
+      (sId && s.staff_id === sId) ||
+      (sName && s.name && s.name.toLowerCase() === sName.toLowerCase())
+    );
+
+    const dept = (prodStaffRec?.department || genStaffRec?.department || a.department || '').trim().toLowerCase();
+    const role = (prodStaffRec?.role || prodStaffRec?.production_role_speciality || genStaffRec?.role || a.staff_role || a.speciality || '').trim().toLowerCase();
+
+    // Explicit Non-Production Roles & Departments
+    const nonProdRoles = [
+      'photographer', 'cinematographer', 'drone operator', 'dop', 'camera', 'camera operator',
+      'operation staff', 'operations executive', 'operation manager', 'venue manager', 'operations',
+      'sales', 'sales executive', 'sales staff', 'sales manager', 'accountant'
+    ];
+
+    if (dept === 'operations' || dept === 'operation' || dept === 'sales' || dept === 'accounts' || dept === 'hr') {
+      return false;
+    }
+
+    if (nonProdRoles.some(r => role.includes(r))) {
+      return false;
+    }
+
+    if (prodStaffRec) return true;
+    if (dept.includes('production') || dept.includes('editing') || dept.includes('post')) return true;
+
+    const prodRoles = [
+      'editor', 'editing', 'album', 'teaser', 'colorist', 'audio', 'sound', 'designer',
+      'quality', 'qa', 'promo', 'trailer', 'post production', 'production', 'retoucher'
+    ];
+    if (prodRoles.some(r => role.includes(r))) return true;
+
+    if (genStaffRec) {
+      const gDept = (genStaffRec.department || '').toLowerCase();
+      const gRole = (genStaffRec.role || '').toLowerCase();
+      if (gDept.includes('operation') || gDept.includes('sales') || nonProdRoles.some(r => gRole.includes(r))) {
+        return false;
+      }
+      if (gDept.includes('production') || prodRoles.some(r => gRole.includes(r))) {
+        return true;
+      }
+    }
+
+    return true;
+  };
+
   const getAssignedEditorsList = (prod: Production) => {
     const fromAssignments = (editorAssignments || []).filter(a => 
-      a.production_id === prod.production_id ||
-      a.production_id === (prod as any).order_id ||
-      a.production_id === prod.tracking_id ||
-      a.order_id === (prod as any).order_id ||
-      a.order_id === prod.tracking_id
+      (a.production_id === prod.production_id ||
+       a.production_id === (prod as any).order_id ||
+       a.production_id === prod.tracking_id ||
+       a.order_id === (prod as any).order_id ||
+       a.order_id === prod.tracking_id) &&
+      isProductionStaffAssignment(a)
     );
     if (fromAssignments.length > 0) {
       const grouped = new Map<string, any>();
@@ -9402,11 +9461,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     };
 
                     const rawAssignments = (editorAssignments || []).filter(a => 
-                      a.production_id === prod.production_id ||
-                      a.production_id === orderId ||
-                      a.order_id === orderId ||
-                      a.order_id === prod.tracking_id ||
-                      a.order_id === prod.production_id
+                      (a.production_id === prod.production_id ||
+                       a.production_id === orderId ||
+                       a.order_id === orderId ||
+                       a.order_id === prod.tracking_id ||
+                       a.order_id === prod.production_id) &&
+                      isProductionStaffAssignment(a)
                     );
 
                     if (rawAssignments.length === 0) {
