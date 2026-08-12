@@ -2637,13 +2637,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             : (updatedInclusions[nameKey] !== undefined ? updatedInclusions[nameKey] : inclusionsList);
           return {
             event_name: event.event_name || event.event_type || 'Unnamed Event',
-            team_members: list.filter(Boolean)
+            team_members: list.filter(item => item !== undefined && item !== null)
           };
         })
       : [
           {
             event_name: "General",
-            team_members: inclusionsList.filter(Boolean)
+            team_members: inclusionsList.filter(item => item !== undefined && item !== null)
           }
         ];
 
@@ -2659,13 +2659,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           return {
             event_id: event.id,
             event_name: event.event_name || event.event_type || 'Unnamed Event',
-            deliverables: list.filter(Boolean)
+            deliverables: list.filter(item => item !== undefined && item !== null)
           };
         })
       : [
           {
             event_name: "General",
-            deliverables: deliverablesList.filter(Boolean)
+            deliverables: deliverablesList.filter(item => item !== undefined && item !== null)
           }
         ];
     const deliverablesText = JSON.stringify(deliverablesJson);
@@ -5672,13 +5672,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList);
             return {
               event_name: event.event_name || event.event_type || 'Unnamed Event',
-              team_members: list.filter(Boolean)
+              team_members: list.filter(item => item !== undefined && item !== null)
             };
           })
         : [
             {
               event_name: "General",
-              team_members: inclusionsList.filter(Boolean)
+              team_members: inclusionsList.filter(item => item !== undefined && item !== null)
             }
           ];
       const teamMembersText = JSON.stringify(teamMembersJson);
@@ -5694,13 +5694,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             return {
               event_id: event.id,
               event_name: event.event_name || event.event_type || 'Unnamed Event',
-              deliverables: list.filter(Boolean)
+              deliverables: list.filter(item => item !== undefined && item !== null)
             };
           })
         : [
             {
               event_name: "General",
-              deliverables: deliverablesList.filter(Boolean)
+              deliverables: deliverablesList.filter(item => item !== undefined && item !== null)
             }
           ];
       const deliverablesText = JSON.stringify(deliverablesJson);
@@ -5986,13 +5986,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList);
               return {
                 event_name: event.event_name || event.event_type || 'Unnamed Event',
-                team_members: list.filter(Boolean)
+                team_members: list.filter(item => item !== undefined && item !== null)
               };
             })
           : [
               {
                 event_name: "General",
-                team_members: inclusionsList.filter(Boolean)
+                team_members: inclusionsList.filter(item => item !== undefined && item !== null)
               }
             ];
         const teamMembersText = JSON.stringify(teamMembersJson);
@@ -6008,13 +6008,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               return {
                 event_id: event.id,
                 event_name: event.event_name || event.event_type || 'Unnamed Event',
-                deliverables: list.filter(Boolean)
+                deliverables: list.filter(item => item !== undefined && item !== null)
               };
             })
           : [
               {
                 event_name: "General",
-                deliverables: deliverablesList.filter(Boolean)
+                deliverables: deliverablesList.filter(item => item !== undefined && item !== null)
               }
             ];
         const deliverablesText = JSON.stringify(deliverablesJson);
