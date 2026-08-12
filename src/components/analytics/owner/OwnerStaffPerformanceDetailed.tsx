@@ -32,6 +32,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'conversionRate', direction: 'desc' });
+  const [showFilters, setShowFilters] = useState(false);
 
   // Staff Detail Modal State
   const [selectedStaffDetail, setSelectedStaffDetail] = useState<{
@@ -735,81 +736,38 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
       {/* ---------------------------------------------------- */}
       <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-2xl space-y-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-zinc-900 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-600/10 border border-amber-500/30 text-amber-400 shadow-inner">
-              <Sparkles className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-black text-white tracking-tight">Staff Performance Ecosystem</h1>
-                <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[9px] font-mono font-bold uppercase">
-                  Executive Intelligence
-                </span>
-              </div>
-              <p className="text-xs text-zinc-400 mt-0.5 font-mono">
-                Real-time end-to-end performance analytics across Sales, Operations, and Production teams
-              </p>
-            </div>
-          </div>
-
           {/* ECOSYSTEM TAB SELECTOR */}
-          <div className="flex items-center bg-zinc-900/90 border border-zinc-800 p-1 rounded-xl shadow-inner overflow-x-auto">
-            <button
-              onClick={() => {
-                setActiveTab('sales');
+          <div className="w-full lg:w-64">
+            <select
+              value={activeTab}
+              onChange={(e) => {
+                const val = e.target.value as 'sales' | 'operations' | 'production';
+                setActiveTab(val);
                 setSelectedStaffFilter('All');
                 setCurrentPage(1);
-                setSortConfig({ key: 'conversionRate', direction: 'desc' });
+                setSortConfig({ key: val === 'sales' ? 'conversionRate' : 'completionRate', direction: 'desc' });
               }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold font-mono transition-all duration-200 cursor-pointer whitespace-nowrap ${
-                activeTab === 'sales'
-                  ? 'bg-amber-500 text-zinc-950 shadow-md scale-[1.02]'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-              }`}
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-xs font-bold font-mono text-white focus:outline-none focus:border-amber-500 transition-colors shadow-inner cursor-pointer"
             >
-              <DollarSign className="w-3.5 h-3.5" />
-              <span>TAB 1 — SALES</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setActiveTab('operations');
-                setSelectedStaffFilter('All');
-                setCurrentPage(1);
-                setSortConfig({ key: 'completionRate', direction: 'desc' });
-              }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold font-mono transition-all duration-200 cursor-pointer whitespace-nowrap ${
-                activeTab === 'operations'
-                  ? 'bg-amber-500 text-zinc-950 shadow-md scale-[1.02]'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-              }`}
-            >
-              <Briefcase className="w-3.5 h-3.5" />
-              <span>TAB 2 — OPERATIONS</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setActiveTab('production');
-                setSelectedStaffFilter('All');
-                setCurrentPage(1);
-                setSortConfig({ key: 'completionRate', direction: 'desc' });
-              }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold font-mono transition-all duration-200 cursor-pointer whitespace-nowrap ${
-                activeTab === 'production'
-                  ? 'bg-amber-500 text-zinc-950 shadow-md scale-[1.02]'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>TAB 3 — PRODUCTION</span>
-            </button>
+              <option value="sales">Sales Performance</option>
+              <option value="operations">Operations Performance</option>
+              <option value="production">Production Performance</option>
+            </select>
           </div>
+          
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs font-bold font-mono text-white hover:bg-zinc-800 transition-colors"
+          >
+            <Filter className="w-4 h-4" />
+            <span>Filter</span>
+          </button>
         </div>
 
         {/* GLOBAL FILTERS ROW */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-          {/* Quick Date Filters */}
+        {showFilters && (
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            {/* Quick Date Filters */}
           <div className="flex items-center gap-1.5 bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-1 overflow-x-auto">
             <span className="text-[10px] font-mono text-zinc-500 px-2 uppercase tracking-wider font-bold">Date Range:</span>
             {[
@@ -891,6 +849,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* ---------------------------------------------------- */}

@@ -1932,17 +1932,6 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         </div>
 
         <div 
-          onClick={() => setSelectedCard('summary_completed')}
-          className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5 hover:bg-zinc-900 hover:border-zinc-750 hover:scale-[1.02] cursor-pointer transition-all duration-200"
-        >
-          <div className="text-[10px] font-mono text-zinc-500 uppercase font-bold flex items-center justify-between">
-            <span>Completed Orders</span>
-            <span className="text-[9px] text-zinc-600">Details &rarr;</span>
-          </div>
-          <div className="text-lg font-black font-mono text-amber-400 mt-0.5">{completedCount} Projects</div>
-        </div>
-
-        <div 
           onClick={() => setSelectedCard('summary_closed')}
           className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5 col-span-2 sm:col-span-1 hover:bg-zinc-900 hover:border-zinc-750 hover:scale-[1.02] cursor-pointer transition-all duration-200"
         >
