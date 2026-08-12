@@ -2541,7 +2541,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
                         Uploaded by: {proof.staffName}
                       </span>
                     </div>
-                    {proof.imageUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) || proof.imageUrl.includes('drive.google.com') ? (
+                    {proof.imageUrl.startsWith('data:') || proof.imageUrl.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i) || proof.imageUrl.includes('drive.google.com') ? (
                       <button
                         type="button"
                         onClick={() => setPreviewProof({

@@ -68,7 +68,7 @@ export const OrderSearch: React.FC = () => {
           <Search className="w-5 h-5 text-slate-500 absolute left-3 top-3" />
           <input
             type="text"
-            placeholder="Search by Lead ID (e.g. LD-9005), Order ID (e.g. ORD-1005), Sophia Loren, or +1 (555) 123-4567..."
+            placeholder="Search by Lead ID (e.g. LD001), Order ID (e.g. OR001), Sophia Loren, or +1 (555) 123-4567..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-slate-900 border border-slate-750 rounded-xl pl-11 pr-4 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
@@ -223,7 +223,7 @@ export const OrderSearch: React.FC = () => {
               <ShieldAlert className="w-8 h-8 text-rose-500 mb-2" />
               <h4 className="text-sm font-semibold text-slate-300">No matching search query found</h4>
               <p className="text-xs max-w-sm mt-1">
-                We couldn't locate any records matching "{searchQuery}". Verify the Spelling or contract ID numbers. (e.g. Try typing: **Sophia** or **ORD-1005**).
+                We couldn't locate any records matching "{searchQuery}". Verify the Spelling or contract ID numbers. (e.g. Try typing: **Sophia** or **OR001**).
               </p>
             </div>
           )

@@ -679,7 +679,7 @@ export const ProductionStaffModule: React.FC = () => {
 
         individualDeliverables.push({
             assignmentId: assignment.assignment_id,
-            orderId: order?.order_id || prod?.order_id || prod?.tracking_id || assignment.order_id || assignment.production_id || 'ORD-ASSIGNED',
+            orderId: order?.order_id || prod?.order_id || prod?.tracking_id || assignment.order_id || assignment.production_id || 'OR-ASSIGNED',
             eventId,
             leadId: lead?.lead_id || order?.lead_id || prod?.lead_id,
             customerName,

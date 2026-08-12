@@ -509,7 +509,7 @@ export const StaffModule: React.FC = () => {
       const order = (orders || []).find(o => o.lead_id === lead.lead_id);
       const op = operations.find(o => o.order_id === (order?.order_id || lead.lead_id));
 
-      const orderId = order?.order_id || `ORD-${lead.lead_id}`;
+      const orderId = order?.order_id || `OR-${lead.lead_id.replace(/^LD-?/, '')}`;
 
       let hasEventAssignment = false;
 

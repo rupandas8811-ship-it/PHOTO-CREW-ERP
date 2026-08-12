@@ -7185,13 +7185,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   };
 
   // Handle repeat bookings (Pre-fills customized data and issues a Lead AND dynamic Order immediately)
-  const handleExecuteQuickReorder = (cust: any) => {
+  const handleExecuteQuickReorder = async (cust: any) => {
     if (!reorderForm.event_date) {
       alert('Please specify the event date for the repeat customer booking.');
       return;
     }
 
-    const newLeadId = addLead({
+    const newLeadId = await addLead({
       customer_name: cust.customer_name,
       mobile: cust.mobile,
       alternate_mobile: cust.alternate_mobile || undefined,
@@ -7213,7 +7213,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       remarks: `Dynamic Repeat reservation. [CUST_ID: ${cust.customer_id}]`
     });
 
-    const newOrderId = confirmOrder(
+    const newOrderId = await confirmOrder(
       newLeadId,
       reorderForm.package_name,
       Number(reorderForm.quotation_amount),
@@ -10162,7 +10162,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             return linkedProduction.map(prod => (
                               <div key={prod.production_id} className="bg-slate-900 border border-slate-800 p-3 rounded-lg text-xs flex justify-between items-center text-zinc-300">
                                 <div>
-                                  <span className="font-mono text-[10px] text-indigo-400 font-black">PROD-{prod.production_id} / ORD-{prod.order_id}</span>
+                                  <span className="font-mono text-[10px] text-indigo-400 font-black">PROD-{prod.production_id} / {prod.order_id}</span>
                                   <div className="text-[11px] text-slate-450 mt-0.5">
                                     Editor assigned: <strong className="text-slate-205">{prod.editor_assigned || 'Unassigned'}</strong>
                                   </div>

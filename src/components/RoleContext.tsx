@@ -3173,7 +3173,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }
     }
 
-    let maxLeadNum = 100;
+    let maxLeadNum = 0;
     existingLeadIds.forEach(id => {
       const match = id.match(/^LD(\d+)$/);
       if (match) {
@@ -3185,10 +3185,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     });
     nextLeadNum = maxLeadNum + 1;
 
-    while (existingLeadIds.has(`LD${nextLeadNum}`)) {
+    while (existingLeadIds.has(`LD${String(nextLeadNum).padStart(3, '0')}`)) {
       nextLeadNum++;
     }
-    const leadId = `LD${nextLeadNum}`;
+    const leadId = `LD${String(nextLeadNum).padStart(3, '0')}`;
     // We still keep notes_special_customizations plain without serialized events, 
     // or we can keep it as is for backward compatibility but save events to table anyway
     const serializedNotes = leadDetails.notes_special_customizations || '';
@@ -3531,16 +3531,16 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       if (existingOrder && existingOrder.order_id) {
         masterOrderId = existingOrder.order_id;
       } else {
-        // Generate a new Order ID starting with OR101
-        let nextOrderNum = 101;
+        // Generate a new Order ID starting with OR001
+        let nextOrderNum = 1;
         const existingOrderIds = new Set<string>();
         orders.forEach(o => { if (o.order_id) existingOrderIds.add(o.order_id); });
         augmentedOrders.forEach(o => { if (o.order_id) existingOrderIds.add(o.order_id); });
 
         if (supabaseClient) {
           try {
-            // Only fetch a few latest order IDs
-            const { data: dbOrders } = await supabaseClient.from('orders').select('order_id').order('created_at', { ascending: false }).limit(20);
+            // Fetch order IDs to prevent collisions
+            const { data: dbOrders } = await supabaseClient.from('orders').select('order_id');
             if (dbOrders) {
               dbOrders.forEach((o: any) => { if (o.order_id) existingOrderIds.add(o.order_id); });
             }
@@ -3549,7 +3549,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           }
         }
 
-        let maxOrderNum = 100;
+        let maxOrderNum = 0;
         existingOrderIds.forEach(id => {
           const match = id.match(/^OR(\d+)$/);
           if (match) {
@@ -3561,10 +3561,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         });
         nextOrderNum = maxOrderNum + 1;
 
-        while (existingOrderIds.has(`OR${nextOrderNum}`)) {
+        while (existingOrderIds.has(`OR${String(nextOrderNum).padStart(3, '0')}`)) {
           nextOrderNum++;
         }
-        masterOrderId = `OR${nextOrderNum}`;
+        masterOrderId = `OR${String(nextOrderNum).padStart(3, '0')}`;
       }
     }
 

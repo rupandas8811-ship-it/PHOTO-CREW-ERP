@@ -6319,7 +6319,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   type="text"
                   value={rosterSearch}
                   onChange={(e) => setRosterSearch(e.target.value)}
-                  placeholder="e.g. Rahul, ORD-1234, Editing..."
+                  placeholder="e.g. Rahul, OR001, Editing..."
                   className="w-full bg-zinc-950 border border-zinc-850 hover:border-zinc-800 text-xs text-white rounded-lg px-3 py-1.5 focus:outline-none focus:border-purple-500"
                 />
               </div>
@@ -10945,8 +10945,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       if (caCommunicationProof && caCommunicationProof.trim()) {
                         try {
                           uploadedProofUrl = await uploadProofToStorage(caCommunicationProof, 'client_acceptance');
-                        } catch (uErr) {
-                          console.warn("Proof storage upload warning in Client Acceptance:", uErr);
+                        } catch (uErr: any) {
+                          alert(`Proof upload failed: ${uErr.message}`);
+                          setIsSaving(false);
+                          return;
                         }
                       }
 
@@ -11116,9 +11118,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     <div className="space-y-3">
                       <div className="space-y-1">
                         <label className="block text-[10px] text-zinc-500 font-mono">
-                          Upload Screenshot (WhatsApp Chat, Email approval, or receipt)
+                          Upload Screenshot OR Provide Link (Google Drive, Docs, etc.)
                         </label>
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-col gap-3">
                           <label className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 hover:border-zinc-700 bg-zinc-900/20 hover:bg-zinc-900/40 rounded-xl py-4 px-4 cursor-pointer transition-all">
                             <span className="text-xs text-zinc-400 font-semibold mb-1">
                               {caUploadingProof ? 'Processing image...' : 'Click to upload proof screenshot'}
@@ -11132,13 +11134,23 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               className="hidden"
                             />
                           </label>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-zinc-500 font-bold uppercase">OR</span>
+                            <input
+                              type="url"
+                              placeholder="Paste proof link here..."
+                              value={!caCommunicationProof.startsWith('data:') && !caCommunicationProof.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? caCommunicationProof : ''}
+                              onChange={(e) => setCaCommunicationProof(e.target.value)}
+                              className="flex-1 bg-zinc-950 border border-zinc-850 rounded-lg p-2.5 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                            />
+                          </div>
                         </div>
                       </div>
 
                       {caCommunicationProof ? (
                         <div className="p-3 bg-zinc-900 border border-zinc-850 rounded-xl space-y-2">
                           <div className="text-[10px] text-zinc-500 font-mono uppercase flex justify-between items-center">
-                            <span>Proof Preview:</span>
+                            <span>Proof Provided:</span>
                             <button
                               type="button"
                               onClick={() => setCaCommunicationProof('')}
@@ -11147,16 +11159,25 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               Remove Proof
                             </button>
                           </div>
-                          <img
-                            src={caCommunicationProof}
-                            alt="Communication Proof"
-                            referrerPolicy="no-referrer"
-                            className="max-h-[140px] rounded-lg object-contain mx-auto border border-zinc-800 bg-black/40"
-                          />
+                          {caCommunicationProof.startsWith('data:') || caCommunicationProof.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i) ? (
+                            <img
+                              src={caCommunicationProof}
+                              alt="Communication Proof"
+                              referrerPolicy="no-referrer"
+                              className="max-h-[140px] rounded-lg object-contain mx-auto border border-zinc-800 bg-black/40"
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center justify-center p-4 bg-zinc-950 border border-zinc-850 rounded-lg">
+                              <ExternalLink className="w-6 h-6 text-blue-400 mb-2" />
+                              <a href={caCommunicationProof} target="_blank" rel="noopener noreferrer" className="text-xs font-mono text-blue-400 hover:underline break-all text-center">
+                                {caCommunicationProof}
+                              </a>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="text-[10px] text-zinc-500 font-mono italic text-center p-3 border border-zinc-900 bg-zinc-900/10 rounded-xl">
-                          No screenshot uploaded yet. A backup receipt image or screenshot of chat is recommended.
+                          No screenshot or link provided yet. A backup receipt image or screenshot of chat is recommended.
                         </div>
                       )}
                     </div>
