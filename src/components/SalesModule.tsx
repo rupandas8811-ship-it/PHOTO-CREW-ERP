@@ -3385,6 +3385,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   // Auto-load package details into Step 3 if a package is selected but inclusions/deliverables are empty
   React.useEffect(() => {
     const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
+    if (pkgId === 'Custom Package' || pkgId === 'custom_package') return;
     if (pkgId && packages && packages.length > 0) {
       const pkg = packages.find((p) => String(p.package_id) === String(pkgId));
       if (pkg) {
