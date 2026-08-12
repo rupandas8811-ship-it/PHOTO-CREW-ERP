@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useRole } from './RoleContext';
 import { 
   Calendar, Clock, CheckCircle2, Eye, FileVideo, Play, UserCheck, 
@@ -9,6 +10,135 @@ import { supabaseClient } from '../supabaseClient';
 import { EditorAssignment } from '../types';
 import { ProjectDetailModal } from './ProjectDetailModal';
 import { parseQtyAndText, formatQtyItem, deserializeLeadEvents, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl } from '../utils';
+
+// Floating Action Menu Dropdown using React Portal
+interface ActionMenuDropdownProps {
+  buttonContent: React.ReactNode;
+  buttonClassName?: string;
+  dropdownId: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  children: React.ReactNode;
+}
+
+const ActionMenuDropdown: React.FC<ActionMenuDropdownProps> = ({
+  buttonContent,
+  buttonClassName,
+  dropdownId,
+  isOpen,
+  onToggle,
+  onClose,
+  children
+}) => {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const [coords, setCoords] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+  }>({ left: 0, width: 220 });
+
+  const updatePosition = useCallback(() => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+
+    // Desired dropdown width: 220px max, or screen width minus 24px padding on small screens
+    const dropdownWidth = Math.min(230, windowWidth - 24);
+
+    // Calculate vertical positioning (upward vs downward)
+    const spaceBelow = windowHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const estimatedHeight = 220; // estimated max height of dropdown menu
+
+    let top: number | undefined = undefined;
+    let bottom: number | undefined = undefined;
+
+    if (spaceBelow < estimatedHeight && spaceAbove > spaceBelow) {
+      // Open upward
+      bottom = windowHeight - rect.top + 6;
+    } else {
+      // Open downward
+      top = rect.bottom + 6;
+    }
+
+    // Calculate horizontal positioning
+    // Default right-aligned to button, clamped within screen margins
+    let leftCandidate = rect.right - dropdownWidth;
+    let left = Math.max(12, Math.min(leftCandidate, windowWidth - dropdownWidth - 12));
+
+    setCoords({ top, bottom, left, width: dropdownWidth });
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      updatePosition();
+
+      const handleScrollOrResize = (e: Event) => {
+        if (dropdownRef.current && dropdownRef.current.contains(e.target as Node)) {
+          return;
+        }
+        updatePosition();
+      };
+
+      const handleClickOutside = (e: MouseEvent) => {
+        if (
+          buttonRef.current && !buttonRef.current.contains(e.target as Node) &&
+          dropdownRef.current && !dropdownRef.current.contains(e.target as Node)
+        ) {
+          onClose();
+        }
+      };
+
+      window.addEventListener('scroll', handleScrollOrResize, true);
+      window.addEventListener('resize', handleScrollOrResize);
+      document.addEventListener('mousedown', handleClickOutside);
+
+      return () => {
+        window.removeEventListener('scroll', handleScrollOrResize, true);
+        window.removeEventListener('resize', handleScrollOrResize);
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [isOpen, updatePosition, onClose]);
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={onToggle}
+        className={buttonClassName}
+      >
+        {buttonContent}
+      </button>
+
+      {isOpen && createPortal(
+        <div
+          ref={dropdownRef}
+          id={dropdownId}
+          style={{
+            position: 'fixed',
+            top: coords.top !== undefined ? `${coords.top}px` : 'auto',
+            bottom: coords.bottom !== undefined ? `${coords.bottom}px` : 'auto',
+            left: `${coords.left}px`,
+            width: `${coords.width}px`,
+            maxHeight: 'calc(100vh - 32px)',
+            zIndex: 99999,
+          }}
+          className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl overflow-y-auto divide-y divide-zinc-800 animate-in fade-in zoom-in-95 text-left font-sans text-xs"
+        >
+          {children}
+        </div>,
+        document.body
+      )}
+    </>
+  );
+};
 
 // Image compression helper
 const compressImage = (file: File): Promise<string> => {
@@ -390,15 +520,14 @@ export const ProductionStaffModule: React.FC = () => {
   const [editingCompletedModal, setEditingCompletedModal] = useState<{group: any, actionItem: any} | null>(null);
   const [editingCompletedForm, setEditingCompletedForm] = useState<{confirmation_proof: string, selectedIds: string[]}>({ confirmation_proof: '', selectedIds: [] });
 
-  // Auto-scroll popup/modal into view whenever ANY popup is opened from Production Staff Dashboard
+  // Auto-scroll popup/modal into view whenever ANY modal popup is opened from Production Staff Dashboard
   useEffect(() => {
     if (
       editingStartedModal ||
       customerReviewModal ||
       whatsappModal ||
       editingCompletedModal ||
-      selectedProjectForDetail ||
-      activeDropdownId
+      selectedProjectForDetail
     ) {
       const timer = setTimeout(() => {
         let activeEl: HTMLElement | null = null;
@@ -413,8 +542,6 @@ export const ProductionStaffModule: React.FC = () => {
           activeEl = document.getElementById('editing_completed_modal_card');
         } else if (selectedProjectForDetail) {
           activeEl = document.getElementById('project_detail_modal_card') || document.getElementById('project_detail_master_modal');
-        } else if (activeDropdownId) {
-          activeEl = document.getElementById(`action_dropdown_menu_${activeDropdownId}`);
         }
 
         // Fallback search for any active popup/dialog
@@ -454,8 +581,7 @@ export const ProductionStaffModule: React.FC = () => {
     customerReviewModal,
     whatsappModal,
     editingCompletedModal,
-    selectedProjectForDetail,
-    activeDropdownId
+    selectedProjectForDetail
   ]);
 
 
@@ -1242,115 +1368,115 @@ Thank you.`;
                                   </td>
 
                                   {/* Action Dropdown */}
-                                  <td className="px-3.5 py-3 text-center relative">
-                                    <div className="relative inline-block text-left">
+                                  <td className="px-3.5 py-3 text-center">
+                                    <ActionMenuDropdown
+                                      dropdownId={`action_dropdown_menu_${delivItem.assignmentId}`}
+                                      isOpen={activeDropdownId === delivItem.assignmentId}
+                                      onToggle={() => setActiveDropdownId(activeDropdownId === delivItem.assignmentId ? null : delivItem.assignmentId)}
+                                      onClose={() => setActiveDropdownId(null)}
+                                      buttonClassName="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-purple-600 hover:bg-purple-500 text-white transition-all flex items-center gap-1.5 shadow-md cursor-pointer mx-auto"
+                                      buttonContent={
+                                        <>
+                                          <span>⚡ Action</span>
+                                          <ChevronDown className="w-3.5 h-3.5" />
+                                        </>
+                                      }
+                                    >
+                                      {/* View Details */}
                                       <button
                                         type="button"
-                                        onClick={() => setActiveDropdownId(activeDropdownId === delivItem.assignmentId ? null : delivItem.assignmentId)}
-                                        className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-purple-600 hover:bg-purple-500 text-white transition-all flex items-center gap-1.5 shadow-md cursor-pointer mx-auto"
+                                        onClick={() => {
+                                          setActiveDropdownId(null);
+                                          if (!expandedOrderIds.includes(grp.orderId)) {
+                                            toggleOrderDetails(grp.orderId);
+                                          }
+                                          setSelectedProjectForDetail({ orderId: grp.orderId, eventId: grp.eventId });
+                                        }}
+                                        className="w-full text-left px-4 py-2.5 text-xs text-zinc-200 hover:bg-purple-600/20 hover:text-purple-300 font-bold flex items-center gap-2 transition-colors cursor-pointer"
                                       >
-                                        <span>⚡ Action</span>
-                                        <ChevronDown className="w-3.5 h-3.5" />
+                                        <Eye className="w-4 h-4 text-purple-400" /> View Details
                                       </button>
 
-                                      {/* DROPDOWN MENU */}
-                                      {activeDropdownId === delivItem.assignmentId && (
-                                        <div id={`action_dropdown_menu_${delivItem.assignmentId}`} className="absolute right-0 mt-2 w-56 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden divide-y divide-zinc-800 animate-in fade-in zoom-in-95 text-left">
-                                          
-                                          {/* View Details */}
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setActiveDropdownId(null);
-                                              setSelectedProjectForDetail({ orderId: grp.orderId, eventId: grp.eventId });
-                                            }}
-                                            className="w-full text-left px-4 py-2.5 text-xs text-zinc-200 hover:bg-purple-600/20 hover:text-purple-300 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                          >
-                                            <Eye className="w-4 h-4 text-purple-400" /> View Details
-                                          </button>
+                                      {/* Locked State Notification */}
+                                      {isDelivLocked ? (
+                                        <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-[11px] font-bold flex items-center gap-2">
+                                          <Lock className="w-3.5 h-3.5" /> Editing Completed
+                                        </div>
+                                      ) : (
+                                        <>
+                                          {/* Workflow Step 1: Editing Started */}
+                                          {(delivItem.status === 'Assigned Editor' || delivItem.status === 'Editor Assigned' || delivItem.status === 'Assigned' || delivItem.status === 'Raw Footage Received') && (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setActiveDropdownId(null);
+                                                setEditingStartedModal({ group: grp, actionItem: delivItem });
+                                                setEditingStartedForm({
+                                                  expected_delivery_date: delivItem.targetFinishDate || new Date().toISOString().split('T')[0],
+                                                  estimated_completion_date: delivItem.targetFinishDate || new Date().toISOString().split('T')[0],
+                                                  estimated_completion_time: '18:00',
+                                                  selectedIds: [delivItem.assignmentId]
+                                                });
+                                              }}
+                                              className="w-full text-left px-4 py-2.5 text-xs text-sky-400 hover:bg-sky-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                            >
+                                              <Play className="w-4 h-4" /> Start Editing
+                                            </button>
+                                          )}
 
-                                          {/* Locked State Notification */}
-                                          {isDelivLocked ? (
-                                            <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-[11px] font-bold flex items-center gap-2">
-                                              <Lock className="w-3.5 h-3.5" /> Editing Completed
-                                            </div>
-                                          ) : (
+                                          {/* Workflow Step 2: Customer Review */}
+                                          {delivItem.status === 'Editing Started' && (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setActiveDropdownId(null);
+                                                setCustomerReviewModal({ group: grp, actionItem: delivItem });
+                                                setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '', selectedIds: [delivItem.assignmentId] });
+                                              }}
+                                              className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                            >
+                                              <UserCheck className="w-4 h-4" /> Upload Review
+                                            </button>
+                                          )}
+
+                                          {/* Workflow Step 3: Re-send Customer Review & Upload Confirmation Proof */}
+                                          {delivItem.status === 'Customer Review' && (
                                             <>
-                                              {/* Workflow Step 1: Editing Started */}
-                                              {(delivItem.status === 'Assigned Editor' || delivItem.status === 'Editor Assigned' || delivItem.status === 'Assigned' || delivItem.status === 'Raw Footage Received') && (
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    setActiveDropdownId(null);
-                                                    setEditingStartedModal({ group: grp, actionItem: delivItem });
-                                                    setEditingStartedForm({
-                                                      expected_delivery_date: delivItem.targetFinishDate || new Date().toISOString().split('T')[0],
-                                                      estimated_completion_date: delivItem.targetFinishDate || new Date().toISOString().split('T')[0],
-                                                      estimated_completion_time: '18:00',
-                                                      selectedIds: [delivItem.assignmentId]
-                                                    });
-                                                  }}
-                                                  className="w-full text-left px-4 py-2.5 text-xs text-sky-400 hover:bg-sky-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                                >
-                                                  <Play className="w-4 h-4" /> Start Editing
-                                                </button>
-                                              )}
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setActiveDropdownId(null);
+                                                  setCustomerReviewModal({ group: grp, actionItem: delivItem });
+                                                  setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '', selectedIds: [delivItem.assignmentId] });
+                                                }}
+                                                className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                              >
+                                                <RefreshCw className="w-4 h-4" /> Re-send Review Link
+                                              </button>
 
-                                              {/* Workflow Step 2: Customer Review */}
-                                              {delivItem.status === 'Editing Started' && (
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    setActiveDropdownId(null);
-                                                    setCustomerReviewModal({ group: grp, actionItem: delivItem });
-                                                    setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '', selectedIds: [delivItem.assignmentId] });
-                                                  }}
-                                                  className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                                >
-                                                  <UserCheck className="w-4 h-4" /> Upload Review
-                                                </button>
-                                              )}
-
-                                              {/* Workflow Step 3: Re-send Customer Review & Upload Confirmation Proof */}
-                                              {delivItem.status === 'Customer Review' && (
-                                                <>
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                      setActiveDropdownId(null);
-                                                      setCustomerReviewModal({ group: grp, actionItem: delivItem });
-                                                      setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '', selectedIds: [delivItem.assignmentId] });
-                                                    }}
-                                                    className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                                  >
-                                                    <RefreshCw className="w-4 h-4" /> Re-send Review Link
-                                                  </button>
-
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                      setActiveDropdownId(null);
-                                                      setEditingCompletedModal({ group: grp, actionItem: delivItem });
-                                                      setEditingCompletedForm({ confirmation_proof: '', selectedIds: [delivItem.assignmentId] });
-                                                    }}
-                                                    className="w-full text-left px-4 py-2.5 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                                  >
-                                                    <CheckCircle2 className="w-4 h-4" /> Upload Confirmation Proof
-                                                  </button>
-                                                </>
-                                              )}
-
-                                              {/* Workflow Step 4: Editing Completed */}
-                                              {(delivItem.status === 'Editing Completed' || delivItem.status === 'Editing Complete' || delivItem.status === 'Completed') && (
-                                                <div className="px-4 py-2.5 bg-emerald-500/10 text-emerald-400 text-xs font-bold flex items-center gap-2 border-t border-zinc-800">
-                                                  <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Editing Completed
-                                                </div>
-                                              )}
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setActiveDropdownId(null);
+                                                  setEditingCompletedModal({ group: grp, actionItem: delivItem });
+                                                  setEditingCompletedForm({ confirmation_proof: '', selectedIds: [delivItem.assignmentId] });
+                                                }}
+                                                className="w-full text-left px-4 py-2.5 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                              >
+                                                <CheckCircle2 className="w-4 h-4" /> Upload Confirmation Proof
+                                              </button>
                                             </>
                                           )}
-                                        </div>
+
+                                          {/* Workflow Step 4: Editing Completed */}
+                                          {(delivItem.status === 'Editing Completed' || delivItem.status === 'Editing Complete' || delivItem.status === 'Completed') && (
+                                            <div className="px-4 py-2.5 bg-emerald-500/10 text-emerald-400 text-xs font-bold flex items-center gap-2 border-t border-zinc-800">
+                                              <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Editing Completed
+                                            </div>
+                                          )}
+                                        </>
                                       )}
-                                    </div>
+                                    </ActionMenuDropdown>
                                   </td>
                                 </tr>
                               );
@@ -1438,114 +1564,114 @@ Thank you.`;
 
                               {/* Action Button */}
                               <div className="pt-2 border-t border-zinc-800/80">
-                                <div className="relative">
+                                <ActionMenuDropdown
+                                  dropdownId={`action_dropdown_menu_mobile_${delivItem.assignmentId}`}
+                                  isOpen={activeDropdownId === delivItem.assignmentId}
+                                  onToggle={() => setActiveDropdownId(activeDropdownId === delivItem.assignmentId ? null : delivItem.assignmentId)}
+                                  onClose={() => setActiveDropdownId(null)}
+                                  buttonClassName="w-full py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-purple-600 hover:bg-purple-500 text-white transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer"
+                                  buttonContent={
+                                    <>
+                                      <span>⚡ Action Menu</span>
+                                      <ChevronDown className="w-4 h-4" />
+                                    </>
+                                  }
+                                >
+                                  {/* View Details */}
                                   <button
                                     type="button"
-                                    onClick={() => setActiveDropdownId(activeDropdownId === delivItem.assignmentId ? null : delivItem.assignmentId)}
-                                    className="w-full py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-purple-600 hover:bg-purple-500 text-white transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer"
+                                    onClick={() => {
+                                      setActiveDropdownId(null);
+                                      if (!expandedOrderIds.includes(grp.orderId)) {
+                                        toggleOrderDetails(grp.orderId);
+                                      }
+                                      setSelectedProjectForDetail({ orderId: grp.orderId, eventId: grp.eventId });
+                                    }}
+                                    className="w-full text-left px-4 py-3 text-xs text-zinc-200 hover:bg-purple-600/20 hover:text-purple-300 font-bold flex items-center gap-2 transition-colors cursor-pointer"
                                   >
-                                    <span>⚡ Action Menu</span>
-                                    <ChevronDown className="w-4 h-4" />
+                                    <Eye className="w-4 h-4 text-purple-400" /> View Details
                                   </button>
 
-                                  {/* DROPDOWN MENU */}
-                                  {activeDropdownId === delivItem.assignmentId && (
-                                    <div id={`action_dropdown_menu_mobile_${delivItem.assignmentId}`} className="absolute right-0 left-0 mt-2 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden divide-y divide-zinc-800 animate-in fade-in zoom-in-95 text-left">
-                                      
-                                      {/* View Details */}
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setActiveDropdownId(null);
-                                          setSelectedProjectForDetail({ orderId: grp.orderId, eventId: grp.eventId });
-                                        }}
-                                        className="w-full text-left px-4 py-3 text-xs text-zinc-200 hover:bg-purple-600/20 hover:text-purple-300 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                      >
-                                        <Eye className="w-4 h-4 text-purple-400" /> View Details
-                                      </button>
+                                  {/* Locked State Notification */}
+                                  {isDelivLocked ? (
+                                    <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-[11px] font-bold flex items-center gap-2">
+                                      <Lock className="w-3.5 h-3.5" /> Editing Completed
+                                    </div>
+                                  ) : (
+                                    <>
+                                      {/* Workflow Step 1: Editing Started */}
+                                      {(delivItem.status === 'Assigned Editor' || delivItem.status === 'Editor Assigned' || delivItem.status === 'Assigned' || delivItem.status === 'Raw Footage Received') && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveDropdownId(null);
+                                            setEditingStartedModal({ group: grp, actionItem: delivItem });
+                                            setEditingStartedForm({
+                                              expected_delivery_date: delivItem.targetFinishDate || new Date().toISOString().split('T')[0],
+                                              estimated_completion_date: delivItem.targetFinishDate || new Date().toISOString().split('T')[0],
+                                              estimated_completion_time: '18:00',
+                                              selectedIds: [delivItem.assignmentId]
+                                            });
+                                          }}
+                                          className="w-full text-left px-4 py-3 text-xs text-sky-400 hover:bg-sky-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                        >
+                                          <Play className="w-4 h-4" /> Start Editing
+                                        </button>
+                                      )}
 
-                                      {/* Locked State Notification */}
-                                      {isDelivLocked ? (
-                                        <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-[11px] font-bold flex items-center gap-2">
-                                          <Lock className="w-3.5 h-3.5" /> Editing Completed
-                                        </div>
-                                      ) : (
+                                      {/* Workflow Step 2: Customer Review */}
+                                      {delivItem.status === 'Editing Started' && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveDropdownId(null);
+                                            setCustomerReviewModal({ group: grp, actionItem: delivItem });
+                                            setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '', selectedIds: [delivItem.assignmentId] });
+                                          }}
+                                          className="w-full text-left px-4 py-3 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                        >
+                                          <UserCheck className="w-4 h-4" /> Upload Review
+                                        </button>
+                                      )}
+
+                                      {/* Workflow Step 3: Re-send Customer Review & Upload Confirmation Proof */}
+                                      {delivItem.status === 'Customer Review' && (
                                         <>
-                                          {/* Workflow Step 1: Editing Started */}
-                                          {(delivItem.status === 'Assigned Editor' || delivItem.status === 'Editor Assigned' || delivItem.status === 'Assigned' || delivItem.status === 'Raw Footage Received') && (
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                setActiveDropdownId(null);
-                                                setEditingStartedModal({ group: grp, actionItem: delivItem });
-                                                setEditingStartedForm({
-                                                  expected_delivery_date: delivItem.targetFinishDate || new Date().toISOString().split('T')[0],
-                                                  estimated_completion_date: delivItem.targetFinishDate || new Date().toISOString().split('T')[0],
-                                                  estimated_completion_time: '18:00',
-                                                  selectedIds: [delivItem.assignmentId]
-                                                });
-                                              }}
-                                              className="w-full text-left px-4 py-3 text-xs text-sky-400 hover:bg-sky-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                            >
-                                              <Play className="w-4 h-4" /> Start Editing
-                                            </button>
-                                          )}
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setActiveDropdownId(null);
+                                              setCustomerReviewModal({ group: grp, actionItem: delivItem });
+                                              setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '', selectedIds: [delivItem.assignmentId] });
+                                            }}
+                                            className="w-full text-left px-4 py-3 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                          >
+                                            <RefreshCw className="w-4 h-4" /> Re-send Review Link
+                                          </button>
 
-                                          {/* Workflow Step 2: Customer Review */}
-                                          {delivItem.status === 'Editing Started' && (
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                setActiveDropdownId(null);
-                                                setCustomerReviewModal({ group: grp, actionItem: delivItem });
-                                                setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '', selectedIds: [delivItem.assignmentId] });
-                                              }}
-                                              className="w-full text-left px-4 py-3 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                            >
-                                              <UserCheck className="w-4 h-4" /> Upload Review
-                                            </button>
-                                          )}
-
-                                          {/* Workflow Step 3: Re-send Customer Review & Upload Confirmation Proof */}
-                                          {delivItem.status === 'Customer Review' && (
-                                            <>
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  setActiveDropdownId(null);
-                                                  setCustomerReviewModal({ group: grp, actionItem: delivItem });
-                                                  setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '', selectedIds: [delivItem.assignmentId] });
-                                                }}
-                                                className="w-full text-left px-4 py-3 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                              >
-                                                <RefreshCw className="w-4 h-4" /> Re-send Review Link
-                                              </button>
-
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  setActiveDropdownId(null);
-                                                  setEditingCompletedModal({ group: grp, actionItem: delivItem });
-                                                  setEditingCompletedForm({ confirmation_proof: '', selectedIds: [delivItem.assignmentId] });
-                                                }}
-                                                className="w-full text-left px-4 py-3 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
-                                              >
-                                                <CheckCircle2 className="w-4 h-4" /> Upload Confirmation Proof
-                                              </button>
-                                            </>
-                                          )}
-
-                                          {/* Workflow Step 4: Editing Completed */}
-                                          {(delivItem.status === 'Editing Completed' || delivItem.status === 'Editing Complete' || delivItem.status === 'Completed') && (
-                                            <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-xs font-bold flex items-center gap-2 border-t border-zinc-800">
-                                              <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Editing Completed
-                                            </div>
-                                          )}
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setActiveDropdownId(null);
+                                              setEditingCompletedModal({ group: grp, actionItem: delivItem });
+                                              setEditingCompletedForm({ confirmation_proof: '', selectedIds: [delivItem.assignmentId] });
+                                            }}
+                                            className="w-full text-left px-4 py-3 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                          >
+                                            <CheckCircle2 className="w-4 h-4" /> Upload Confirmation Proof
+                                          </button>
                                         </>
                                       )}
-                                    </div>
+
+                                      {/* Workflow Step 4: Editing Completed */}
+                                      {(delivItem.status === 'Editing Completed' || delivItem.status === 'Editing Complete' || delivItem.status === 'Completed') && (
+                                        <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-xs font-bold flex items-center gap-2 border-t border-zinc-800">
+                                          <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Editing Completed
+                                        </div>
+                                      )}
+                                    </>
                                   )}
-                                </div>
+                                </ActionMenuDropdown>
                               </div>
                             </div>
                           );
