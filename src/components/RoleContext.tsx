@@ -1061,7 +1061,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
       if (!prodExists) {
         const parentLeadForO = leads.find(l => l.lead_id === o.lead_id);
-        const defaultTargetDate = parentLeadForO?.delivery_target_date || (o.event_date ? new Date(new Date(o.event_date).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : '');
+        const defaultTargetDate = parentLeadForO?.delivery_target_date || '';
         list.push({
           production_id: `PRD-${o.lead_id}`,
           tracking_id: o.order_id,

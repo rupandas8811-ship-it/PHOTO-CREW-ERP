@@ -897,13 +897,15 @@ ${coordinatorName}`;
       const evtDate = hasMultipleEvents ? (eventsList.map((e: any) => e.event_date).filter(Boolean).join(', ') || 'Multiple Dates') : (primaryEvent ? primaryEvent.event_date : (order?.event_date || l?.event_date || ''));
       const evtTime = hasMultipleEvents ? 'Multiple Times' : (primaryEvent ? (primaryEvent.event_time || primaryEvent.event_start_time || '') : (order?.event_time || l?.event_time || ''));
 
-      const defaultTargetDate = (primaryEvent && primaryEvent.event_date) ? new Date(new Date(primaryEvent.event_date).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : '';
+      const defaultTargetDate = '';
 
-      let computedTargetDate = defaultTargetDate;
+      let computedTargetDate = '';
       if (cand.assignments && cand.assignments.length > 0 && cand.assignments[0].target_finish_date) {
         computedTargetDate = cand.assignments[0].target_finish_date;
       } else if (prod?.target_delivery_date) {
         computedTargetDate = prod.target_delivery_date;
+      } else if (prod?.expected_delivery_date) {
+        computedTargetDate = prod.expected_delivery_date;
       } else if ((l as any)?.delivery_target_date) {
         computedTargetDate = (l as any)?.delivery_target_date;
       }
@@ -1580,44 +1582,55 @@ ${coordinatorName}`;
 
   const getTargetDeliveryDateFromAssignments = (prod: Production): string | null => {
     if (!prod) return null;
-    if (!editorAssignments || editorAssignments.length === 0) return null;
 
-    const prodOrderId = (prod as any).order_id || prod.tracking_id || prod.production_id;
+    if (editorAssignments && editorAssignments.length > 0) {
+      const prodOrderId = (prod as any).order_id || prod.tracking_id || prod.production_id;
 
-    const matching = editorAssignments.filter(a =>
-      a.production_id === prod.production_id ||
-      a.production_id === prod.tracking_id ||
-      a.production_id === prodOrderId ||
-      a.order_id === prodOrderId ||
-      a.order_id === prod.tracking_id ||
-      a.order_id === prod.production_id
-    );
+      const matching = editorAssignments.filter(a =>
+        a.production_id === prod.production_id ||
+        a.production_id === prod.tracking_id ||
+        a.production_id === prodOrderId ||
+        a.order_id === prodOrderId ||
+        a.order_id === prod.tracking_id ||
+        a.order_id === prod.production_id
+      );
 
-    if (!matching || matching.length === 0) return null;
+      if (matching && matching.length > 0) {
+        let refined = matching;
+        if (prod.event_id && prod.event_id !== 'MULTIPLE') {
+          const eventSpecific = matching.filter(a => a.event_id === prod.event_id);
+          if (eventSpecific.length > 0) {
+            refined = eventSpecific;
+          }
+        }
 
-    let refined = matching;
-    if (prod.event_id) {
-      const eventSpecific = matching.filter(a => a.event_id === prod.event_id);
-      if (eventSpecific.length > 0) {
-        refined = eventSpecific;
+        const validDates = refined
+          .map(a => a.target_finish_date)
+          .filter((d): d is string => !!d && typeof d === 'string' && d.trim() !== '' && d.trim() !== 'N/A' && d.trim() !== '—' && d.trim() !== 'Pending' && d.trim() !== 'Not Set');
+
+        if (validDates.length > 0) return validDates[0];
+
+        const anyValidDates = matching
+          .map(a => a.target_finish_date)
+          .filter((d): d is string => !!d && typeof d === 'string' && d.trim() !== '' && d.trim() !== 'N/A' && d.trim() !== '—' && d.trim() !== 'Pending' && d.trim() !== 'Not Set');
+
+        if (anyValidDates.length > 0) return anyValidDates[0];
       }
     }
 
-    const validDates = refined
-      .map(a => a.target_finish_date)
-      .filter((d): d is string => !!d && typeof d === 'string' && d.trim() !== '' && d.trim() !== 'N/A' && d.trim() !== '—');
+    if (prod.target_delivery_date && typeof prod.target_delivery_date === 'string' && prod.target_delivery_date.trim() !== '' && prod.target_delivery_date.trim() !== 'N/A' && prod.target_delivery_date.trim() !== '—' && prod.target_delivery_date.trim() !== 'Pending' && prod.target_delivery_date.trim() !== 'Not Set') {
+      return prod.target_delivery_date;
+    }
 
-    if (validDates.length > 0) return validDates[0];
+    if (prod.expected_delivery_date && typeof prod.expected_delivery_date === 'string' && prod.expected_delivery_date.trim() !== '' && prod.expected_delivery_date.trim() !== 'N/A' && prod.expected_delivery_date.trim() !== '—' && prod.expected_delivery_date.trim() !== 'Pending' && prod.expected_delivery_date.trim() !== 'Not Set') {
+      return prod.expected_delivery_date;
+    }
 
-    const anyValidDates = matching
-      .map(a => a.target_finish_date)
-      .filter((d): d is string => !!d && typeof d === 'string' && d.trim() !== '' && d.trim() !== 'N/A' && d.trim() !== '—');
-
-    return anyValidDates.length > 0 ? anyValidDates[0] : null;
+    return null;
   };
 
   const formatDisplayDate = (dateStr?: string | null): string => {
-    if (!dateStr || dateStr.trim() === '' || dateStr.trim() === 'N/A' || dateStr.trim() === '—') return '—';
+    if (!dateStr || dateStr.trim() === '' || dateStr.trim() === 'N/A' || dateStr.trim() === '—' || dateStr.trim() === 'Pending' || dateStr.trim() === 'Not Set') return 'Pending';
     const cleanStr = dateStr.trim().split('T')[0];
     const parts = cleanStr.split('-');
     if (parts.length === 3) {
@@ -2161,8 +2174,7 @@ Production Team`;
     setWfError('');
     
     // Parse target delivery date
-    const expected = prod.expected_delivery_date ? new Date(prod.expected_delivery_date) : null;
-    const existingDate = prod.target_delivery_date || (expected ? expected.toISOString().split('T')[0] : '');
+    const existingDate = getTargetDeliveryDateFromAssignments(prod) || prod.target_delivery_date || '';
     setWfTargetDeliveryDate(existingDate);
     
     const { order, lead } = resolveOrderAndLead(prod);
@@ -2742,8 +2754,9 @@ _Please acknowledge receipt of this task assignment._`;
               if (error) throw error;
               const loadedAssignments = dbAssignments || [];
 
-              // 2. Set target delivery date to empty (do not prefill)
-              setWfTargetDeliveryDate('');
+              // 2. Set target delivery date from existing saved date if available
+              const savedDate = loadedAssignments.map(a => a.target_finish_date).find(d => d && d.trim() !== '' && d !== 'Pending' && d !== 'Not Set') || activeWorkflowProd?.target_delivery_date || '';
+              setWfTargetDeliveryDate(savedDate);
 
               // 3. Find deliverables from confirmed quotation or order
               let parsedDeliverables: string[] = [];
@@ -3822,7 +3835,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                           {/* Target Delivery Date */}
                           <td className="p-4 text-zinc-350 font-mono">
-                            {formatDisplayDate(targetDeliveryDate)}
+                            {targetDeliveryDate && targetDeliveryDate !== 'Pending' && targetDeliveryDate !== 'Not Set' ? (
+                              formatDisplayDate(targetDeliveryDate)
+                            ) : (
+                              <span className="text-zinc-600 italic">Pending</span>
+                            )}
                           </td>
 
                           {/* Remaining Days */}
