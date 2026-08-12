@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useRole } from './RoleContext';
 import { 
@@ -39,18 +39,25 @@ const ActionMenuDropdown: React.FC<ActionMenuDropdownProps> = ({
     bottom?: number;
     left: number;
     width: number;
-  }>({ left: 0, width: 220 });
+  } | null>(null);
 
   const updatePosition = useCallback(() => {
-    if (!buttonRef.current) return;
+    if (!buttonRef.current) return false;
     const rect = buttonRef.current.getBoundingClientRect();
+
+    // CRITICAL: If button is inside a display:none container (e.g. desktop vs mobile view toggle),
+    // rect.width & rect.height will be 0. Do NOT compute coordinates or render portal for hidden buttons!
+    if (rect.width === 0 || rect.height === 0) {
+      setCoords(null);
+      return false;
+    }
+
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
 
-    // Desired dropdown width: 220px max, or screen width minus 24px padding on small screens
+    // Desired dropdown width: max 230px, or screen width minus 24px padding
     const dropdownWidth = Math.min(230, windowWidth - 24);
 
-    // Calculate vertical positioning (upward vs downward)
     const spaceBelow = windowHeight - rect.bottom;
     const spaceAbove = rect.top;
     const estimatedHeight = 220; // estimated max height of dropdown menu
@@ -66,18 +73,29 @@ const ActionMenuDropdown: React.FC<ActionMenuDropdownProps> = ({
       top = rect.bottom + 6;
     }
 
-    // Calculate horizontal positioning
+    // Calculate horizontal positioning:
     // Default right-aligned to button, clamped within screen margins
     let leftCandidate = rect.right - dropdownWidth;
     let left = Math.max(12, Math.min(leftCandidate, windowWidth - dropdownWidth - 12));
 
     setCoords({ top, bottom, left, width: dropdownWidth });
+    return true;
   }, []);
 
-  useEffect(() => {
+  // Compute position synchronously BEFORE paint when isOpen changes
+  useLayoutEffect(() => {
     if (isOpen) {
-      updatePosition();
+      const isVisible = updatePosition();
+      if (!isVisible) {
+        setCoords(null);
+      }
+    } else {
+      setCoords(null);
+    }
+  }, [isOpen, updatePosition]);
 
+  useEffect(() => {
+    if (isOpen && coords) {
       const handleScrollOrResize = (e: Event) => {
         if (dropdownRef.current && dropdownRef.current.contains(e.target as Node)) {
           return;
@@ -104,20 +122,23 @@ const ActionMenuDropdown: React.FC<ActionMenuDropdownProps> = ({
         document.removeEventListener('mousedown', handleClickOutside);
       };
     }
-  }, [isOpen, updatePosition, onClose]);
+  }, [isOpen, coords, updatePosition, onClose]);
 
   return (
     <>
       <button
         ref={buttonRef}
         type="button"
-        onClick={onToggle}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
         className={buttonClassName}
       >
         {buttonContent}
       </button>
 
-      {isOpen && createPortal(
+      {isOpen && coords !== null && createPortal(
         <div
           ref={dropdownRef}
           id={dropdownId}
@@ -475,7 +496,6 @@ export const ProductionStaffModule: React.FC = () => {
     setTimeout(() => setToastMessage(null), 4000);
   };
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
-  const [activeSummaryDropdownId, setActiveSummaryDropdownId] = useState<string | null>(null);
   const [expandedOrderIds, setExpandedOrderIds] = useState<string[]>([]);
 
   const toggleOrderDetails = (orderId: string) => {
