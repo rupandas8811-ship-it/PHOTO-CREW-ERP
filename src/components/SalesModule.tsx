@@ -3272,7 +3272,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       newInclusions[`${pkgId}_${eventName}`] = members;
                     }
                   });
-                  setEditableInclusions(newInclusions);
+                  setEditableInclusions(prev => {
+                    const merged = { ...prev, ...newInclusions };
+                    Object.keys(prev).forEach(k => {
+                      if (prev[k] && prev[k].length > 0) {
+                        if (!newInclusions[k] || newInclusions[k].length === 0) {
+                          merged[k] = prev[k];
+                        } else {
+                          const combined = Array.from(new Set([...newInclusions[k], ...prev[k]]));
+                          merged[k] = combined;
+                        }
+                      }
+                    });
+                    return merged;
+                  });
                 }
               } catch (e) {
                 console.error('Error parsing Team_Members from leads:', e);
@@ -3313,7 +3326,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       newDeliverables[pkgId] = allDel.length > 0 ? Array.from(new Set(allDel)) : [];
                     }
                   }
-                  setEditableDeliverables(newDeliverables);
+                  setEditableDeliverables(prev => {
+                    const merged = { ...prev, ...newDeliverables };
+                    Object.keys(prev).forEach(k => {
+                      if (prev[k] && prev[k].length > 0) {
+                        if (!newDeliverables[k] || newDeliverables[k].length === 0) {
+                          merged[k] = prev[k];
+                        } else {
+                          const combined = Array.from(new Set([...newDeliverables[k], ...prev[k]]));
+                          merged[k] = combined;
+                        }
+                      }
+                    });
+                    return merged;
+                  });
                 }
               } catch (e) {
                 // Not JSON, handle as comma/newline separated list
@@ -3322,7 +3348,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   : [];
                 if (delList.length > 0) {
                   newDeliverables[pkgId] = delList;
-                  setEditableDeliverables(newDeliverables);
+                  setEditableDeliverables(prev => {
+                    const merged = { ...prev, ...newDeliverables };
+                    Object.keys(prev).forEach(k => {
+                      if (prev[k] && prev[k].length > 0) {
+                        if (!newDeliverables[k] || newDeliverables[k].length === 0) {
+                          merged[k] = prev[k];
+                        } else {
+                          const combined = Array.from(new Set([...newDeliverables[k], ...prev[k]]));
+                          merged[k] = combined;
+                        }
+                      }
+                    });
+                    return merged;
+                  });
                 }
               }
             }
