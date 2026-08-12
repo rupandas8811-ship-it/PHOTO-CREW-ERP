@@ -17,8 +17,8 @@ import { getCalculatedOrderStage, getStageRank } from '../../utils/orderStageCal
 
 const OperationsActionColumn = ({ ord, actionItems, isOpen, setActiveMenuOrderId, setMenuCoords, setActiveMenuItems }: any) => {
   return (
-    <div className="flex items-center justify-end relative actions-menu-container">
-      <div className="relative inline-block text-left">
+    <div className="flex items-center justify-end actions-menu-container">
+      <div className="inline-block text-left">
         <button
           type="button"
           onClick={(e) => {
@@ -26,11 +26,28 @@ const OperationsActionColumn = ({ ord, actionItems, isOpen, setActiveMenuOrderId
               setActiveMenuOrderId(null);
             } else {
               const rect = e.currentTarget.getBoundingClientRect();
-              const spaceBelow = window.innerHeight - rect.bottom;
-              const openUpward = spaceBelow < 280;
+              const viewportWidth = window.innerWidth;
+              const viewportHeight = window.innerHeight;
+
+              const menuWidth = Math.min(220, viewportWidth - 24);
+              const spaceBelow = viewportHeight - rect.bottom;
+              const spaceAbove = rect.top;
+              const openUpward = spaceBelow < 220 && spaceAbove > spaceBelow;
+
+              const left = Math.min(
+                Math.max(12, rect.right - menuWidth),
+                viewportWidth - menuWidth - 12
+              );
+              const top = openUpward ? rect.top - 6 : rect.bottom + 6;
+              const maxHeight = openUpward
+                ? Math.min(280, rect.top - 16)
+                : Math.min(280, viewportHeight - rect.bottom - 16);
+
               setMenuCoords({
-                x: rect.right,
-                y: openUpward ? rect.top : rect.bottom,
+                left,
+                top,
+                width: menuWidth,
+                maxHeight,
                 openUpward
               });
               setActiveMenuItems(actionItems);
@@ -138,7 +155,7 @@ export const OperationsLeads: React.FC = () => {
   const [selectedEventImages, setSelectedEventImages] = useState<{ staffName: string, assetCollection: any, evStart: any, evEnd: any } | null>(null);
   const [imagePreviewModal, setImagePreviewModal] = useState<{ url: string, date: string, time: string, staffName: string, stage: string } | null>(null);
   const [activeMenuItems, setActiveMenuItems] = useState<{ label: string; onClick: () => void }[]>([]);
-  const [menuCoords, setMenuCoords] = useState<{ x: number, y: number, openUpward: boolean }>({ x: 0, y: 0, openUpward: false });
+  const [menuCoords, setMenuCoords] = useState<{ left: number, top: number, width: number, maxHeight: number, openUpward: boolean }>({ left: 0, top: 0, width: 220, maxHeight: 280, openUpward: false });
 
   useEffect(() => {
     const handleStaffUpdate = () => {
@@ -4239,11 +4256,13 @@ export const OperationsLeads: React.FC = () => {
       {/* Floating Action Menu */}
       {activeMenuOrderId && createPortal(
         <div 
-          className="fixed z-[9999] min-w-max max-w-[260px] w-[220px] bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 rounded-2xl shadow-2xl p-2 text-left animate-in fade-in zoom-in-95 duration-150 flex flex-col overflow-hidden actions-menu-container"
+          className="fixed z-[9999] bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 rounded-2xl shadow-2xl p-2 text-left animate-in fade-in zoom-in-95 duration-150 flex flex-col overflow-hidden actions-menu-container"
           style={{
-            left: `${menuCoords.x}px`,
-            transform: `translateX(-100%) ${menuCoords.openUpward ? 'translateY(-100%)' : ''}`,
-            top: menuCoords.openUpward ? `${menuCoords.y - 4}px` : `${menuCoords.y + 4}px`
+            left: `${menuCoords.left}px`,
+            top: `${menuCoords.top}px`,
+            width: `${menuCoords.width}px`,
+            maxHeight: `${menuCoords.maxHeight}px`,
+            transform: menuCoords.openUpward ? 'translateY(-100%)' : 'none',
           }}
         >
           <div className="px-3 py-1.5 border-b border-zinc-800/60 mb-1.5 flex justify-between items-center flex-shrink-0">
@@ -4257,7 +4276,7 @@ export const OperationsLeads: React.FC = () => {
               ✕
             </button>
           </div>
-          <div className="max-h-64 overflow-y-auto space-y-1 pr-0.5">
+          <div className="overflow-y-auto space-y-1 pr-0.5" style={{ maxHeight: `${(menuCoords.maxHeight || 280) - 40}px` }}>
             {activeMenuItems.map((act, aIdx) => (
               <button
                 key={aIdx}

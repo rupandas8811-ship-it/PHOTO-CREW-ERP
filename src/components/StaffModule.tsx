@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useRole } from './RoleContext';
 import { MapPin, Calendar, Clock, Briefcase, Camera, User, Phone, MessageSquare, Eye, CheckCircle, AlertCircle, Upload, X, Play, ShieldCheck, ChevronRight, ChevronLeft, Video } from 'lucide-react';
 import { Lead, Order, Operation, StaffAssignment, EquipmentHandover } from '../types';
@@ -24,21 +25,84 @@ const StaffActionDropdown: React.FC<{
   onOpenPhotoModal
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [menuPosition, setMenuPosition] = useState<{
+    top: number;
+    left: number;
+    openUpward: boolean;
+    maxHeight: number;
+    width: number;
+  } | null>(null);
 
-  // Close dropdown on click outside
+  const handleToggle = () => {
+    if (isOpen) {
+      setIsOpen(false);
+      return;
+    }
+
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      const dropdownWidth = Math.min(220, viewportWidth - 24);
+      const spaceBelow = viewportHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const openUpward = spaceBelow < 200 && spaceAbove > spaceBelow;
+
+      const calculatedLeft = Math.min(
+        Math.max(12, rect.right - dropdownWidth),
+        viewportWidth - dropdownWidth - 12
+      );
+
+      const calculatedTop = openUpward ? rect.top - 6 : rect.bottom + 6;
+      const maxHeight = openUpward
+        ? Math.min(280, rect.top - 16)
+        : Math.min(280, viewportHeight - rect.bottom - 16);
+
+      setMenuPosition({
+        top: calculatedTop,
+        left: calculatedLeft,
+        openUpward,
+        maxHeight,
+        width: dropdownWidth,
+      });
+      setIsOpen(true);
+    }
+  };
+
   useEffect(() => {
     if (!isOpen) return;
-    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+
+    const handleOutside = (e: MouseEvent | TouchEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest(`.staff-action-dropdown-${booking.orderId || booking.key}`)) {
+      if (
+        buttonRef.current &&
+        !buttonRef.current.contains(target) &&
+        !target.closest(`.staff-action-dropdown-menu-${booking.orderId || booking.key}`)
+      ) {
         setIsOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('touchstart', handleClickOutside);
+
+    const handleScrollOrResize = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (target && target.closest && target.closest(`.staff-action-dropdown-menu-${booking.orderId || booking.key}`)) {
+        return;
+      }
+      setIsOpen(false);
+    };
+
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside);
+    window.addEventListener('scroll', handleScrollOrResize, { capture: true, passive: true });
+    window.addEventListener('resize', handleScrollOrResize);
+
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+      window.removeEventListener('scroll', handleScrollOrResize, { capture: true });
+      window.removeEventListener('resize', handleScrollOrResize);
     };
   }, [isOpen, booking]);
 
@@ -100,34 +164,60 @@ const StaffActionDropdown: React.FC<{
   }
 
   return (
-    <div className={`relative inline-block text-left staff-action-dropdown-${booking.orderId || booking.key}`}>
+    <div className="inline-block text-left">
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleToggle}
         className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold border border-indigo-500/30 shadow-md cursor-pointer transition-all inline-flex items-center gap-1.5 outline-none"
       >
         <span>🎯 Action</span>
         <span className={`text-[9px] text-indigo-200 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : ''}`}>▼</span>
       </button>
 
-      {isOpen && (
+      {isOpen && menuPosition && createPortal(
         <div 
-          className="absolute right-0 top-full mt-1.5 w-48 rounded-xl bg-zinc-950 border border-zinc-800 shadow-2xl z-[9999] p-1.5 space-y-1 text-left animate-in fade-in zoom-in-95 duration-100"
+          className={`fixed z-[9999] bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 shadow-2xl rounded-2xl p-2 text-left animate-in fade-in zoom-in-95 duration-100 flex flex-col overflow-hidden staff-action-dropdown-menu-${booking.orderId || booking.key}`}
+          style={{
+            top: `${menuPosition.top}px`,
+            left: `${menuPosition.left}px`,
+            width: `${menuPosition.width}px`,
+            maxHeight: `${menuPosition.maxHeight}px`,
+            transform: menuPosition.openUpward ? 'translateY(-100%)' : 'none',
+          }}
         >
-          <div className="px-2.5 py-1 border-b border-zinc-900 mb-0.5">
-            <span className="text-[9px] font-mono uppercase tracking-widest text-zinc-500 font-bold">Select Action</span>
-          </div>
-          {actionOptions.map((opt, idx) => (
+          <div className="px-2.5 py-1.5 border-b border-zinc-800 mb-1 flex items-center justify-between shrink-0">
+            <span className="text-[9px] font-mono uppercase tracking-widest text-indigo-400 font-extrabold flex items-center gap-1">
+              <span>🎯</span> Available Actions
+            </span>
             <button
-              key={idx}
-              onClick={opt.onClick}
-              className="w-full text-left px-3 py-2 text-xs text-zinc-200 hover:bg-indigo-600/20 hover:text-indigo-300 rounded-lg transition-all cursor-pointer font-sans font-semibold flex items-center justify-start gap-2"
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="text-zinc-500 hover:text-white text-xs p-0.5 rounded cursor-pointer"
             >
-              <span className="text-indigo-400 text-xs shrink-0">⚡</span>
-              <span className="truncate">{opt.label}</span>
+              ✕
             </button>
-          ))}
-        </div>
+          </div>
+          <div className="overflow-y-auto space-y-1 pr-0.5" style={{ maxHeight: `${menuPosition.maxHeight - 40}px` }}>
+            {actionOptions.map((opt, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={opt.onClick}
+                className="w-full text-left px-3 py-2 text-xs text-zinc-200 hover:bg-indigo-600/20 hover:text-indigo-300 rounded-lg transition-all cursor-pointer font-sans font-semibold flex items-center justify-start gap-2"
+              >
+                <span className="text-indigo-400 text-xs shrink-0">⚡</span>
+                <span className="truncate">{opt.label}</span>
+              </button>
+            ))}
+            {actionOptions.length === 0 && (
+              <div className="px-3 py-2 text-xs text-zinc-500 italic font-mono text-center">
+                No actions available
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
