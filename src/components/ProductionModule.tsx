@@ -1305,14 +1305,21 @@ ${coordinatorName}`;
 
   useEffect(() => {
     if (!openActionDropdown) return;
-    const handleScrollOrResize = () => {
+    const handleResize = () => {
       setOpenActionDropdown(null);
     };
-    window.addEventListener('scroll', handleScrollOrResize, true);
-    window.addEventListener('resize', handleScrollOrResize);
+    const handleScroll = (e: Event) => {
+      const dropdownEl = document.getElementById('production-action-dropdown');
+      if (dropdownEl && dropdownEl.contains(e.target as Node)) {
+        return;
+      }
+      setOpenActionDropdown(null);
+    };
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleResize);
     return () => {
-      window.removeEventListener('scroll', handleScrollOrResize, true);
-      window.removeEventListener('resize', handleScrollOrResize);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleResize);
     };
   }, [openActionDropdown]);
 
@@ -4017,16 +4024,24 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           {openActionDropdown && (() => {
             const { id, rect, prod, order, displayStatus, isEditorAssigned, hasSavedAssignments, isStatusActive } = openActionDropdown;
             
-            const menuHeightEstimate = 220;
+            const menuWidth = 224; // w-56
+            const menuHeightEstimate = 320;
             const spaceBelow = window.innerHeight - rect.bottom;
             const spaceAbove = rect.top;
-            const openUp = spaceBelow < menuHeightEstimate && spaceAbove > menuHeightEstimate;
+            const openUp = spaceBelow < menuHeightEstimate && spaceAbove > spaceBelow;
 
             const topPos = openUp ? undefined : rect.bottom + 6;
             const bottomPos = openUp ? window.innerHeight - rect.top + 6 : undefined;
+            const maxHeight = openUp ? Math.max(160, rect.top - 16) : Math.max(160, window.innerHeight - rect.bottom - 16);
 
-            const spaceRight = window.innerWidth - rect.right;
-            const rightPos = Math.max(12, spaceRight);
+            let leftCalc = rect.right - menuWidth;
+            if (leftCalc < 12) leftCalc = rect.left;
+            if (leftCalc < 12) leftCalc = 12;
+            if (leftCalc + menuWidth > window.innerWidth - 12) {
+              leftCalc = window.innerWidth - menuWidth - 12;
+            }
+
+            const isLocked = isProjectLocked(displayStatus) || isProjectLocked(prod.editing_status);
 
             return (
               <>
@@ -4038,14 +4053,16 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                 {/* Floating Action Dropdown Panel */}
                 <div
+                  id="production-action-dropdown"
                   style={{
                     top: topPos !== undefined ? `${topPos}px` : undefined,
                     bottom: bottomPos !== undefined ? `${bottomPos}px` : undefined,
-                    right: `${rightPos}px`,
+                    left: `${leftCalc}px`,
+                    maxHeight: `${maxHeight}px`,
                   }}
-                  className="fixed z-50 w-52 bg-zinc-900/95 backdrop-blur-md border border-zinc-700/80 rounded-xl shadow-2xl p-1.5 text-zinc-200 text-xs font-sans ring-1 ring-white/10 animate-in fade-in zoom-in-95 duration-150"
+                  className="fixed z-50 w-56 overflow-y-auto bg-zinc-900/98 backdrop-blur-md border border-zinc-700/80 rounded-xl shadow-2xl p-1.5 text-zinc-200 text-xs font-sans ring-1 ring-white/10 animate-in fade-in zoom-in-95 duration-150"
                 >
-                  <div className="px-2.5 py-1.5 text-[9px] font-black uppercase font-mono tracking-wider text-zinc-400 border-b border-zinc-800/80 mb-1 flex items-center justify-between">
+                  <div className="px-2.5 py-1.5 text-[9px] font-black uppercase font-mono tracking-wider text-zinc-400 border-b border-zinc-800/80 mb-1 flex items-center justify-between sticky top-0 bg-zinc-900/95 z-10 pb-1.5">
                     <span className="flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
                       <span>Action Menu</span>
@@ -4056,8 +4073,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   </div>
 
                   <div className="flex flex-col gap-0.5">
-                    {/* Assign Editor */}
-                    {(displayStatus === "Raw Footage Received" || displayStatus === "Verified Footage" || displayStatus === "Footage Handover Verified" || displayStatus === "Pending") && (
+                    {/* 1. Assign Editor */}
+                    {!isLocked && (
                       <button
                         type="button"
                         onClick={() => {
@@ -4067,71 +4084,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-purple-300 hover:text-white hover:bg-purple-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                       >
                         <span className="text-sm">👤</span>
-                        <span>Assign Editor</span>
+                        <span>{isEditorAssigned ? 'Assign / Reassign Editor' : 'Assign Editor'}</span>
                       </button>
                     )}
 
-                    {/* Reassign Editor */}
-                    {(displayStatus === "Assigned Editor" || displayStatus === "Editing Started" || displayStatus === "Customer Review") && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenActionDropdown(null);
-                          handleOpenAssignEditor(prod);
-                        }}
-                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-purple-300 hover:text-white hover:bg-purple-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                      >
-                        <span className="text-sm">👤</span>
-                        <span>Reassign Editor</span>
-                      </button>
-                    )}
-
-                    {/* Send Review Link */}
-                    {(displayStatus === "Customer Review" || displayStatus === "Editing Completed") && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenActionDropdown(null);
-                          handleOpenResendReviewPopup(prod);
-                        }}
-                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-cyan-300 hover:text-white hover:bg-cyan-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                      >
-                        <span className="text-sm">📤</span>
-                        <span>Send Review Link</span>
-                      </button>
-                    )}
-
-                    {/* Client Acceptance */}
-                    {displayStatus === "Editing Completed" && currentRole !== "Production Staff" && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenActionDropdown(null);
-                          handleOpenClientAcceptance(prod);
-                        }}
-                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-emerald-300 hover:text-white hover:bg-emerald-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                      >
-                        <span className="text-sm">✓</span>
-                        <span>Client Acceptance</span>
-                      </button>
-                    )}
-
-                    {/* Share via WhatsApp */}
-                    {isEditorAssigned && hasSavedAssignments && isStatusActive && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenActionDropdown(null);
-                          prepareEditorWhatsappData(prod.production_id);
-                        }}
-                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-green-300 hover:text-white hover:bg-green-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                      >
-                        <span className="text-sm">💬</span>
-                        <span>Share</span>
-                      </button>
-                    )}
-
-                    {/* Edit Full Dossier */}
+                    {/* 2. View Details / Edit Full Dossier */}
                     <button
                       type="button"
                       onClick={() => {
@@ -4175,11 +4132,120 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         setLeadClientReviewDate(toInputDateFormat((prod as any).client_review_upload_date || (crLog ? crLog.timestamp : null)));
                         setLeadClientApprovalDate(toInputDateFormat((prod as any).client_approval_date || (caLog ? caLog.timestamp : null)));
                       }}
-                      className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-zinc-300 hover:text-white hover:bg-zinc-800/90 rounded-lg transition-colors flex items-center gap-2 cursor-pointer border-t border-zinc-800/80 mt-0.5 pt-1.5"
+                      className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-zinc-200 hover:text-white hover:bg-zinc-800/90 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                     >
-                      <span className="text-sm">✎</span>
-                      <span>Edit Full Dossier</span>
+                      <span className="text-sm">👁️</span>
+                      <span>View Details / Dossier</span>
                     </button>
+
+                    {/* 3. Send Review Link */}
+                    {!isLocked && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenActionDropdown(null);
+                          handleOpenResendReviewPopup(prod);
+                        }}
+                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-cyan-300 hover:text-white hover:bg-cyan-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                      >
+                        <span className="text-sm">📤</span>
+                        <span>Send Review Link</span>
+                      </button>
+                    )}
+
+                    {/* 4. Delivery Checklist */}
+                    {!isLocked && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenActionDropdown(null);
+                          setActiveWorkflowProd(prod);
+                          setWorkflowActionType('delivery_checklist');
+                        }}
+                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-amber-300 hover:text-white hover:bg-amber-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                      >
+                        <span className="text-sm">📋</span>
+                        <span>Delivery Checklist</span>
+                      </button>
+                    )}
+
+                    {/* 5. Request Revision */}
+                    {!isLocked && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenActionDropdown(null);
+                          setActiveWorkflowProd(prod);
+                          setWorkflowActionType('request_revision');
+                        }}
+                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-orange-300 hover:text-white hover:bg-orange-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                      >
+                        <span className="text-sm">🔄</span>
+                        <span>Request Revision</span>
+                      </button>
+                    )}
+
+                    {/* 6. Client Acceptance / Deliver */}
+                    {!isLocked && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenActionDropdown(null);
+                          handleOpenClientAcceptance(prod);
+                        }}
+                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-emerald-300 hover:text-white hover:bg-emerald-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                      >
+                        <span className="text-sm">✓</span>
+                        <span>Client Acceptance / Deliver</span>
+                      </button>
+                    )}
+
+                    {/* 7. Manage CRM Status */}
+                    {!isLocked && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenActionDropdown(null);
+                          setActiveWorkflowProd(prod);
+                          setWorkflowActionType('manage_status');
+                        }}
+                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-indigo-300 hover:text-white hover:bg-indigo-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                      >
+                        <span className="text-sm">⚙️</span>
+                        <span>Manage CRM Status</span>
+                      </button>
+                    )}
+
+                    {/* 8. Manage Payment & Close */}
+                    {!isLocked && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenActionDropdown(null);
+                          setActiveWorkflowProd(prod);
+                          setWorkflowActionType('manage_payment_close');
+                        }}
+                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-rose-300 hover:text-white hover:bg-rose-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                      >
+                        <span className="text-sm">💳</span>
+                        <span>Manage Payment & Close</span>
+                      </button>
+                    )}
+
+                    {/* 9. Share via WhatsApp */}
+                    {isEditorAssigned && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenActionDropdown(null);
+                          prepareEditorWhatsappData(prod.production_id);
+                        }}
+                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-green-300 hover:text-white hover:bg-green-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                      >
+                        <span className="text-sm">💬</span>
+                        <span>Share via WhatsApp</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </>
