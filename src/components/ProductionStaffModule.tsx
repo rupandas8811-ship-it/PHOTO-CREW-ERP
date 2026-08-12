@@ -345,6 +345,14 @@ export const ProductionStaffModule: React.FC = () => {
     setTimeout(() => setToastMessage(null), 4000);
   };
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
+  const [activeSummaryDropdownId, setActiveSummaryDropdownId] = useState<string | null>(null);
+  const [expandedOrderIds, setExpandedOrderIds] = useState<string[]>([]);
+
+  const toggleOrderDetails = (orderId: string) => {
+    setExpandedOrderIds(prev => 
+      prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId]
+    );
+  };
 
   // Selected project for ProjectDetailModal
   const [selectedProjectForDetail, setSelectedProjectForDetail] = useState<{ orderId: string; eventId?: string } | string | null>(null);
@@ -1059,13 +1067,13 @@ Thank you.`;
 
                 return (
                   <div key={grp.groupId} className="bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl space-y-0 w-full max-w-full">
-                    {/* TASK HEADER PANEL */}
+                    {/* CUSTOMER / ORDER SUMMARY CARD HEADER */}
                     <div 
                       className="p-4 sm:p-5 bg-zinc-900/90 border-b border-zinc-800 flex flex-col xl:flex-row xl:items-center justify-between gap-5"
                     >
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 items-start flex-1 min-w-0">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 items-center flex-1 min-w-0">
                         
-                        {/* Customer */}
+                        {/* 1. Customer */}
                         <div className="space-y-0.5 col-span-2 sm:col-span-1 min-w-0">
                           <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Customer</div>
                           <div className="font-black text-white text-base leading-snug break-words" title={grp.customerName}>
@@ -1081,14 +1089,10 @@ Thank you.`;
                           )}
                         </div>
 
-                        {/* Order ID */}
+                        {/* 2. Order ID */}
                         <div className="space-y-0.5 min-w-0">
                           <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Order ID</div>
-                          <span 
-                            onClick={() => setSelectedProjectForDetail({ orderId: grp.orderId, eventId: grp.eventId })}
-                            className="font-mono font-bold text-violet-400 hover:text-violet-300 hover:underline cursor-pointer text-sm block truncate"
-                            title="Click to view full dossier"
-                          >
+                          <span className="font-mono font-bold text-violet-400 text-sm block truncate">
                             {grp.orderId}
                           </span>
                           {grp.leadId && grp.leadId !== grp.orderId && (
@@ -1096,7 +1100,7 @@ Thank you.`;
                           )}
                         </div>
 
-                        {/* Event count */}
+                        {/* 3. Event Count */}
                         <div className="space-y-0.5 min-w-0">
                           <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Event Count</div>
                           <div className="font-bold text-purple-300 text-sm">
@@ -1107,19 +1111,48 @@ Thank you.`;
                           </div>
                         </div>
 
-                        {/* Target Delivery Date */}
+                        {/* 4. Target Delivery Date */}
                         <div className="space-y-0.5 min-w-0">
                           <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Target Delivery Date</div>
                           <span className="font-mono text-xs text-zinc-200 font-bold block pt-1 truncate">{grp.targetFinishDate || 'Not set'}</span>
                         </div>
 
-                        {/* Overall Task Status Badge */}
-                        <div className="space-y-0.5 col-span-2 sm:col-span-1 min-w-0">
+                        {/* 5. Overall Task Status */}
+                        <div className="space-y-0.5 min-w-0">
                           <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Overall Task Status</div>
                           <div className="pt-1">
                             <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-mono font-bold border ${badge.color}`}>
                               {badge.label}
                             </span>
+                          </div>
+                        </div>
+
+                        {/* 6. ACTION DROPDOWN ON SUMMARY CARD */}
+                        <div className="space-y-0.5 min-w-0 relative flex items-center justify-end sm:justify-start col-span-2 sm:col-span-1">
+                          <div className="relative inline-block text-left w-full sm:w-auto">
+                            <button
+                              type="button"
+                              onClick={() => setActiveSummaryDropdownId(activeSummaryDropdownId === grp.groupId ? null : grp.groupId)}
+                              className="w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-purple-600 hover:bg-purple-500 text-white transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+                            >
+                              <span>⚡ ACTION</span>
+                              <ChevronDown className="w-4 h-4" />
+                            </button>
+
+                            {activeSummaryDropdownId === grp.groupId && (
+                              <div className="absolute right-0 mt-2 w-56 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden divide-y divide-zinc-800 animate-in fade-in zoom-in-95 text-left">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveSummaryDropdownId(null);
+                                    toggleOrderDetails(grp.orderId);
+                                  }}
+                                  className="w-full text-left px-4 py-3 text-xs text-zinc-200 hover:bg-purple-600/20 hover:text-purple-300 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                >
+                                  <Eye className="w-4 h-4 text-purple-400" /> View Details
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
 
