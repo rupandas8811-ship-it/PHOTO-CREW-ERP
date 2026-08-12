@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { EventDropdownCell } from '../EventDropdownCell';
+import { UnifiedEventDropdownCell } from '../UnifiedEventDropdownCell';
 import { useRole } from '../RoleContext';
 import { 
   X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin
@@ -1752,8 +1752,6 @@ export const OperationsLeads: React.FC = () => {
                 Customer Name {renderSortIndicator('customer_name')}
               </th>
               <th className="p-4 font-bold">Event Name</th>
-              <th className="p-4 font-bold">Event Date</th>
-              <th className="p-4 font-bold">Event Time</th>
               <th className="p-4 font-bold">Reporting Time</th>
               <th className="p-4 font-bold">Assigned Team</th>
               <th className="p-4 font-bold">Current Stage</th>
@@ -1767,7 +1765,7 @@ export const OperationsLeads: React.FC = () => {
               if (mainBoardList.length === 0) {
                 return (
                   <tr>
-                    <td colSpan={9} className="p-8 text-center text-zinc-500 italic">
+                    <td colSpan={7} className="p-8 text-center text-zinc-500 italic">
                       No matching operations leads found.
                     </td>
                   </tr>
@@ -1856,28 +1854,12 @@ export const OperationsLeads: React.FC = () => {
                       )}
                     </td>
                     <td className="p-4 text-zinc-300 font-sans">
-                      <EventDropdownCell 
-                        type="name" 
-                        items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_name || ev.event_type || 'Other') : [ord.event_type || 'Other']} 
-                        events={lead?.events}
-                      />
-                    </td>
-                    <td className="p-4 font-mono text-zinc-300">
-                      <EventDropdownCell 
-                        type="date" 
-                        items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_date || '—') : [ord.event_date || '—']} 
-                      />
+                      <UnifiedEventDropdownCell lead={lead || ord} />
                       {isCompletedEvent(ord) && (
                         <div className="text-[10px] text-emerald-400 mt-1 font-sans font-medium">
                           Done: {getCompletionDate(ord)}
                         </div>
                       )}
-                    </td>
-                    <td className="p-4 font-mono text-zinc-300">
-                      <EventDropdownCell 
-                        type="time" 
-                        items={lead?.events && lead.events.length > 0 ? lead.events.map((ev: any) => ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—') : [ord.event_start_time ? convertTo12Hour(ord.event_start_time) : '—']} 
-                      />
                     </td>
                     <td className="p-4 font-mono text-zinc-300">
                       {op?.reporting_time || <span className="text-zinc-600 italic">—</span>}
