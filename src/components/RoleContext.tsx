@@ -966,8 +966,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (postSalesStages.includes(ld.status)) {
         const orderExists = list.some(o => o.lead_id === ld.lead_id || o.order_id === ld.lead_id);
         if (!orderExists) {
-          const isNewFormat = ld.lead_id.match(/^(?:LD|LD-)?(\d+)$/i);
-          const ordId = isNewFormat ? `OR${isNewFormat[1].padStart(3, '0')}` : `ORD-${ld.lead_id.replace(/\D/g, '') || ld.lead_id}`;
+          const isNewFormat = ld.lead_id.match(/^LD(\d+)$/);
+          const ordId = isNewFormat ? `OR${isNewFormat[1]}` : `ORD-${ld.lead_id.replace(/\D/g, '') || ld.lead_id}`;
           list.push({
             order_id: ordId,
             lead_id: ld.lead_id,
@@ -3152,6 +3152,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }
     }
 
+    let nextLeadNum = 101;
     const existingLeadIds = new Set<string>();
     if (leads) {
       leads.forEach(ld => {
@@ -3174,29 +3175,24 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     let maxLeadNum = 0;
     existingLeadIds.forEach(id => {
-      const match = id.match(/^(?:LD|LD-|LEAD-?)?(\d+)$/i);
+      const match = id.match(/^LD(\d+)$/);
       if (match) {
         const num = parseInt(match[1], 10);
-        if (!isNaN(num) && num > maxLeadNum) {
+        if (num > maxLeadNum) {
           maxLeadNum = num;
         }
       }
     });
-    let nextLeadNum = maxLeadNum + 1;
+    nextLeadNum = maxLeadNum + 1;
 
-    while (
-      existingLeadIds.has(`LD${String(nextLeadNum).padStart(3, '0')}`) ||
-      existingLeadIds.has(`LD-${String(nextLeadNum).padStart(3, '0')}`) ||
-      existingLeadIds.has(`LD${nextLeadNum}`)
-    ) {
+    while (existingLeadIds.has(`LD${String(nextLeadNum).padStart(3, '0')}`)) {
       nextLeadNum++;
     }
-    let leadId = `LD${String(nextLeadNum).padStart(3, '0')}`;
-
+    const leadId = `LD${String(nextLeadNum).padStart(3, '0')}`;
     // We still keep notes_special_customizations plain without serialized events, 
     // or we can keep it as is for backward compatibility but save events to table anyway
     const serializedNotes = leadDetails.notes_special_customizations || '';
-    let newLead: Lead = {
+    const newLead: Lead = {
       ...leadDetails,
       email: leadDetails.email || '',
       lead_id: leadId,
@@ -3215,19 +3211,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     delete (newLead as any).events;
     
     console.log('Lead Payload', newLead);
-    let res = await pushInsert('leads', newLead);
-
-    // Concurrency safety retry loop: if duplicate lead_id error occurs, re-increment and retry
-    let retryAttempt = 0;
-    while (!res?.success && res?.error && (res.error.includes('duplicate key') || res.error.includes('already exists') || res.error.includes('unique')) && retryAttempt < 5) {
-      retryAttempt++;
-      nextLeadNum++;
-      leadId = `LD${String(nextLeadNum).padStart(3, '0')}`;
-      newLead.lead_id = leadId;
-      console.log(`[addLead] Retry attempt ${retryAttempt} with new leadId: ${leadId}`);
-      res = await pushInsert('leads', newLead);
-    }
-
+    const res = await pushInsert('leads', newLead);
     console.log('Lead Insert Result', res?.success ? 'success' : 'fail');
     console.log('Lead Insert Error', res?.error || null);
     
@@ -3532,7 +3516,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     // Step 3: Check Supabase directly for existing order
     let masterOrderId = '';
-    let nextOrderNum = 1;
     let existingOrder = augmentedOrders.find(o => o.lead_id === leadId);
     let orderExistsInDb = false;
 
@@ -3549,7 +3532,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         masterOrderId = existingOrder.order_id;
       } else {
         // Generate a new Order ID starting with OR001
-        nextOrderNum = 1;
+        let nextOrderNum = 1;
         const existingOrderIds = new Set<string>();
         orders.forEach(o => { if (o.order_id) existingOrderIds.add(o.order_id); });
         augmentedOrders.forEach(o => { if (o.order_id) existingOrderIds.add(o.order_id); });
@@ -3568,22 +3551,17 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
         let maxOrderNum = 0;
         existingOrderIds.forEach(id => {
-          const match = id.match(/^(?:OR|ORD|OR-|\bORDER-?)?(\d+)$/i);
+          const match = id.match(/^OR(\d+)$/);
           if (match) {
             const num = parseInt(match[1], 10);
-            if (!isNaN(num) && num > maxOrderNum) {
+            if (num > maxOrderNum) {
               maxOrderNum = num;
             }
           }
         });
         nextOrderNum = maxOrderNum + 1;
 
-        while (
-          existingOrderIds.has(`OR${String(nextOrderNum).padStart(3, '0')}`) ||
-          existingOrderIds.has(`OR-${String(nextOrderNum).padStart(3, '0')}`) ||
-          existingOrderIds.has(`ORD-${String(nextOrderNum).padStart(3, '0')}`) ||
-          existingOrderIds.has(`OR${nextOrderNum}`)
-        ) {
+        while (existingOrderIds.has(`OR${String(nextOrderNum).padStart(3, '0')}`)) {
           nextOrderNum++;
         }
         masterOrderId = `OR${String(nextOrderNum).padStart(3, '0')}`;
@@ -3663,16 +3641,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         quotation_discount: targetLead.quotation_discount || 0,
         additional_services_cost: targetLead.additional_services_cost || 0,
       };
-      let rOrd = await pushInsert('orders', newOrder);
-      let orderRetry = 0;
-      while (!rOrd?.success && rOrd?.error && (rOrd.error.includes('duplicate key') || rOrd.error.includes('already exists') || rOrd.error.includes('unique')) && orderRetry < 5) {
-        orderRetry++;
-        nextOrderNum++;
-        masterOrderId = `OR${String(nextOrderNum).padStart(3, '0')}`;
-        newOrder.order_id = masterOrderId;
-        console.log(`[confirmOrder] Retry attempt ${orderRetry} with new masterOrderId: ${masterOrderId}`);
-        rOrd = await pushInsert('orders', newOrder);
-      }
+      const rOrd = await pushInsert('orders', newOrder);
       if (!rOrd?.success) throw new Error("Failed to insert Order: " + rOrd?.error);
     }
 

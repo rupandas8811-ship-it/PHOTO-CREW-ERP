@@ -2616,25 +2616,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [editableInclusions, setEditableInclusions] = useState<Record<string, string[]>>({});
   const [editableDeliverables, setEditableDeliverables] = useState<Record<string, string[]>>({});
   
-  const [step3AutoSaveStatus, setStep3AutoSaveStatus] = useState<'saving' | 'saved' | 'error' | null>(null);
-
   const saveStep3DataRealtime = async (
     updatedInclusions: Record<string, string[]>,
     updatedDeliverables: Record<string, string[]>,
     activePkgId?: string
   ) => {
     if (isStep3Locked) return;
-    const pkgId = activePkgId || wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedPkgIds[0] || 'Custom Package';
-    const leadId = selectedLead?.lead_id || createdLeadId;
+    const pkgId = activePkgId || wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
+    const leadId = selectedLead?.lead_id;
     if (!leadId || leadId === 'DRAFT-LEAD' || !pkgId || !supabaseClient) return;
 
-    setStep3AutoSaveStatus('saving');
-
     // Generate JSON for Team_Members based on updatedInclusions
-    const inclusionsList = updatedInclusions[pkgId] || updatedInclusions['Custom Package'] || [];
-    const activeEventsList = (activeTab === 'create' && createEvents.length > 0) ? createEvents : (crmEvents && crmEvents.length > 0 ? crmEvents : []);
-    const teamMembersJson = (activeEventsList && activeEventsList.length > 0)
-      ? activeEventsList.map(event => {
+    const inclusionsList = updatedInclusions[pkgId] || [];
+    const teamMembersJson = (crmEvents && crmEvents.length > 0)
+      ? crmEvents.map(event => {
           const eventKey = `${pkgId}_${event.id}`;
           const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
           const list = updatedInclusions[eventKey] !== undefined 
@@ -2642,20 +2637,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             : (updatedInclusions[nameKey] !== undefined ? updatedInclusions[nameKey] : inclusionsList);
           return {
             event_name: event.event_name || event.event_type || 'Unnamed Event',
-            team_members: list.filter(item => item !== undefined && item !== null)
+            team_members: list.filter(Boolean)
           };
         })
       : [
           {
             event_name: "General",
-            team_members: inclusionsList.filter(item => item !== undefined && item !== null)
+            team_members: inclusionsList.filter(Boolean)
           }
         ];
 
     // Generate JSON for deliverables_description based on updatedDeliverables
-    const deliverablesList = updatedDeliverables[pkgId] || updatedDeliverables['Custom Package'] || [];
-    const deliverablesJson = (activeEventsList && activeEventsList.length > 0)
-      ? activeEventsList.map(event => {
+    const deliverablesList = updatedDeliverables[pkgId] || [];
+    const deliverablesJson = (crmEvents && crmEvents.length > 0)
+      ? crmEvents.map(event => {
           const eventKey = `${pkgId}_${event.id}`;
           const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
           const list = updatedDeliverables[eventKey] !== undefined 
@@ -2664,13 +2659,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           return {
             event_id: event.id,
             event_name: event.event_name || event.event_type || 'Unnamed Event',
-            deliverables: list.filter(item => item !== undefined && item !== null)
+            deliverables: list.filter(Boolean)
           };
         })
       : [
           {
             event_name: "General",
-            deliverables: deliverablesList.filter(item => item !== undefined && item !== null)
+            deliverables: deliverablesList.filter(Boolean)
           }
         ];
     const deliverablesText = JSON.stringify(deliverablesJson);
@@ -2702,20 +2697,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       if (updateError) {
         console.error("Error updating leads table via saveStep3DataRealtime:", updateError);
-        setStep3AutoSaveStatus('error');
       } else {
-        setStep3AutoSaveStatus('saved');
         // Update local React state to ensure 100% synchronization
-        if (selectedLead) {
-          setSelectedLead(prev => {
-            if (!prev) return null;
-            return {
-              ...prev,
-              Team_Members: teamMembersText,
-              deliverables_description: deliverablesText
-            };
-          });
-        }
+        setSelectedLead(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            Team_Members: teamMembersText,
+            deliverables_description: deliverablesText
+          };
+        });
 
         // Also sync wizardLeadData deliverables state
         setWizardLeadData(prev => ({
@@ -2726,7 +2717,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
     } catch (err) {
       console.error("Exception in saveStep3DataRealtime:", err);
-      setStep3AutoSaveStatus('error');
     }
   };
 
@@ -3077,9 +3067,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   // Auto-initialize spec editor state when selecting a lead
   React.useEffect(() => {
-    if (!selectedLead && activeTab === 'create') {
-      return;
-    }
     if (!selectedLead) {
       setEditableInclusions({});
       setEditableDeliverables({});
@@ -3221,9 +3208,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   // Fetch from Supabase directly for the JSON columns
   React.useEffect(() => {
     const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
-    const targetLeadId = selectedLead?.lead_id || (activeTab === 'create' ? createdLeadId : null);
-    if (targetLeadId && targetLeadId !== 'DRAFT-LEAD' && supabaseClient) {
-      const currentKey = `${targetLeadId}`;
+    if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD' && supabaseClient) {
+      const currentKey = `${selectedLead.lead_id}`;
       if (lastLoadedLeadIdRef.current === currentKey) {
         return;
       }
@@ -3232,7 +3218,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           const { data, error } = await supabaseClient
             .from('leads')
             .select('Team_Members, deliverables_description, package_price, budget, Select_Package_Option, Quotation_Discount, Additional_Services_Cost, Final_Quotation_Amount, notes_special_customizations')
-            .eq('lead_id', targetLeadId)
+            .eq('lead_id', selectedLead.lead_id)
             .maybeSingle();
           
           if (!error && data) {
@@ -3286,20 +3272,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       newInclusions[`${pkgId}_${eventName}`] = members;
                     }
                   });
-                  setEditableInclusions(prev => {
-                    const merged = { ...prev, ...newInclusions };
-                    Object.keys(prev).forEach(k => {
-                      if (prev[k] && prev[k].length > 0) {
-                        if (!newInclusions[k] || newInclusions[k].length === 0) {
-                          merged[k] = prev[k];
-                        } else {
-                          const combined = Array.from(new Set([...newInclusions[k], ...prev[k]]));
-                          merged[k] = combined;
-                        }
-                      }
-                    });
-                    return merged;
-                  });
+                  setEditableInclusions(newInclusions);
                 }
               } catch (e) {
                 console.error('Error parsing Team_Members from leads:', e);
@@ -3340,20 +3313,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       newDeliverables[pkgId] = allDel.length > 0 ? Array.from(new Set(allDel)) : [];
                     }
                   }
-                  setEditableDeliverables(prev => {
-                    const merged = { ...prev, ...newDeliverables };
-                    Object.keys(prev).forEach(k => {
-                      if (prev[k] && prev[k].length > 0) {
-                        if (!newDeliverables[k] || newDeliverables[k].length === 0) {
-                          merged[k] = prev[k];
-                        } else {
-                          const combined = Array.from(new Set([...newDeliverables[k], ...prev[k]]));
-                          merged[k] = combined;
-                        }
-                      }
-                    });
-                    return merged;
-                  });
+                  setEditableDeliverables(newDeliverables);
                 }
               } catch (e) {
                 // Not JSON, handle as comma/newline separated list
@@ -3362,20 +3322,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   : [];
                 if (delList.length > 0) {
                   newDeliverables[pkgId] = delList;
-                  setEditableDeliverables(prev => {
-                    const merged = { ...prev, ...newDeliverables };
-                    Object.keys(prev).forEach(k => {
-                      if (prev[k] && prev[k].length > 0) {
-                        if (!newDeliverables[k] || newDeliverables[k].length === 0) {
-                          merged[k] = prev[k];
-                        } else {
-                          const combined = Array.from(new Set([...newDeliverables[k], ...prev[k]]));
-                          merged[k] = combined;
-                        }
-                      }
-                    });
-                    return merged;
-                  });
+                  setEditableDeliverables(newDeliverables);
                 }
               }
             }
@@ -3386,11 +3333,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       };
       fetchSupabasePackageData();
     } else {
-      if (!selectedLead && !createdLeadId) {
+      if (!selectedLead) {
         lastLoadedLeadIdRef.current = null;
       }
     }
-  }, [selectedLead?.lead_id, createdLeadId, activeTab, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, supabaseClient, crmEvents, crmWizardStep, wizardStep]);
+  }, [selectedLead?.lead_id, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, supabaseClient, crmEvents, crmWizardStep, wizardStep]);
 
   // Save to Supabase directly for the JSON columns
   const isFirstRender = React.useRef(true);
@@ -3400,8 +3347,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return;
     }
     const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
-    const targetLeadId = selectedLead?.lead_id || (activeTab === 'create' ? createdLeadId : null);
-    if (targetLeadId && targetLeadId !== 'DRAFT-LEAD' && pkgId) {
+    if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD' && pkgId) {
       const updateDatabase = async () => {
         try {
           await saveStep3DataRealtime(editableInclusions, editableDeliverables);
@@ -3411,11 +3357,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       };
       const timeoutId = setTimeout(() => {
         updateDatabase();
-      }, 300);
+      }, 500);
       return () => clearTimeout(timeoutId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editableDeliverables, editableInclusions, selectedLead?.lead_id, createdLeadId, activeTab, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option]);
+  }, [editableDeliverables, editableInclusions, selectedLead?.lead_id, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option]);
 
   // Step 1 Automatic Data Prefill & Hydration from Supabase leads table
   React.useEffect(() => {
@@ -4454,36 +4400,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     return (
       <div className="space-y-4 animate-fade-in text-left">
         <div className="space-y-3.5 text-left">
-          <div className="flex items-center justify-between">
+          <div>
             <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Select Package Option *</label>
-            {step3AutoSaveStatus === 'saving' && (
-              <span className="text-[10px] text-amber-400 font-mono font-semibold animate-pulse flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
-                Saving...
-              </span>
-            )}
-            {step3AutoSaveStatus === 'saved' && (
-              <span className="text-[10px] text-emerald-400 font-mono font-semibold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                Saved ✓
-              </span>
-            )}
-            {step3AutoSaveStatus === 'error' && (
-              <span className="text-[10px] text-red-400 font-mono font-semibold flex items-center gap-1">
-                Save failed
-              </span>
-            )}
-          </div>
-          <select
-            id={isEdit ? "select_package_option" : "wizard_step3_first_field"}
-            value={currentPkgId}
-            onChange={(e) => {
-              const val = e.target.value;
-              setSelectedPkgIds([val]);
-              handlePackageDropdownChange(val);
-            }}
-            className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 text-white focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer"
-          >
+            <select
+              id={isEdit ? "select_package_option" : "wizard_step3_first_field"}
+              value={currentPkgId}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedPkgIds([val]);
+                handlePackageDropdownChange(val);
+              }}
+              className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 text-white focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer"
+            >
               <option value="Custom Package">Custom Package</option>
               {(() => {
                 const activePkgs = availablePkgs.filter(p => {
@@ -4645,7 +4573,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 [nameKey]: currentList
                               };
                               setEditableInclusions(updated);
-                              saveStep3DataRealtime(updated, editableDeliverables);
+                              if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
                             }}
                             className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
                           >
@@ -4670,7 +4598,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   [nameKey]: currentList
                                 };
                                 setEditableInclusions(updated);
-                                saveStep3DataRealtime(updated, editableDeliverables);
+                                if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
                               }}
                               onDelete={() => {
                                 const currentList = [...eventInclusions];
@@ -4681,7 +4609,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   [nameKey]: currentList
                                 };
                                 setEditableInclusions(updated);
-                                saveStep3DataRealtime(updated, editableDeliverables);
+                                if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
                               }}
                             />
                           ))}
@@ -4697,7 +4625,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   [nameKey]: currentList
                                 };
                                 setEditableInclusions(updated);
-                                saveStep3DataRealtime(updated, editableDeliverables);
+                                if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
                               }}
                               className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
                             >
@@ -4727,7 +4655,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 [nameKey]: currentList
                               };
                               setEditableDeliverables(updated);
-                              saveStep3DataRealtime(editableInclusions, updated);
+                              if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
                             }}
                             className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
                           >
@@ -4752,7 +4680,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   [nameKey]: currentList
                                 };
                                 setEditableDeliverables(updated);
-                                saveStep3DataRealtime(editableInclusions, updated);
+                                if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
                               }}
                               onDelete={() => {
                                 const currentList = [...eventDeliverables];
@@ -4763,7 +4691,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   [nameKey]: currentList
                                 };
                                 setEditableDeliverables(updated);
-                                saveStep3DataRealtime(editableInclusions, updated);
+                                if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
                               }}
                             />
                           ))}
@@ -4779,7 +4707,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   [nameKey]: currentList
                                 };
                                 setEditableDeliverables(updated);
-                                saveStep3DataRealtime(editableInclusions, updated);
+                                if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
                               }}
                               className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
                             >
@@ -4812,7 +4740,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             [selectedPkgId]: currentList
                           };
                           setEditableInclusions(updated);
-                          saveStep3DataRealtime(updated, editableDeliverables);
+                          if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
                         }}
                         className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
                       >
@@ -4836,7 +4764,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               [selectedPkgId]: currentList
                             };
                             setEditableInclusions(updated);
-                            saveStep3DataRealtime(updated, editableDeliverables);
+                            if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
                           }}
                           onDelete={() => {
                             const currentList = [...inclusionsList];
@@ -4846,7 +4774,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               [selectedPkgId]: currentList
                             };
                             setEditableInclusions(updated);
-                            saveStep3DataRealtime(updated, editableDeliverables);
+                            if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
                           }}
                         />
                       ))}
@@ -4861,7 +4789,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               [selectedPkgId]: currentList
                             };
                             setEditableInclusions(updated);
-                            saveStep3DataRealtime(updated, editableDeliverables);
+                            if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
                           }}
                           className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
                         >
@@ -4890,7 +4818,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             [selectedPkgId]: currentList
                           };
                           setEditableDeliverables(updated);
-                          saveStep3DataRealtime(editableInclusions, updated);
+                          if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
                         }}
                         className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
                       >
@@ -4914,7 +4842,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               [selectedPkgId]: currentList
                             };
                             setEditableDeliverables(updated);
-                            saveStep3DataRealtime(editableInclusions, updated);
+                            if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
                           }}
                           onDelete={() => {
                             const currentList = [...deliverablesList];
@@ -4924,7 +4852,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               [selectedPkgId]: currentList
                             };
                             setEditableDeliverables(updated);
-                            saveStep3DataRealtime(editableInclusions, updated);
+                            if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
                           }}
                         />
                       ))}
@@ -4939,7 +4867,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               [selectedPkgId]: currentList
                             };
                             setEditableDeliverables(updated);
-                            saveStep3DataRealtime(editableInclusions, updated);
+                            if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
                           }}
                           className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
                         >
@@ -4952,6 +4880,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </div>
             )}
           </div>
+        </div>
 
         <div className="mt-4 flex justify-end pb-2">
           <button
@@ -5137,11 +5066,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setActiveQuoteNum('');
     setQuoteDiscount(0);
     setQuoteAdditional(0);
-    // Explicitly reset only when switching to a different lead ID
-    if (!selectedLead || selectedLead.lead_id !== lead.lead_id) {
-      setEditableInclusions({});
-      setEditableDeliverables({});
-    }
+    // Explicitly reset on new lead selection
+    setEditableInclusions({});
+    setEditableDeliverables({});
     // Clean and set Sales Executive Details (isolated from Operations/Production staff on events)
     const initialSalesStaffName = getCleanSalesStaffName(lead.sales_staff_name, lead);
     const initialSalesStaffMobile = getCleanSalesStaffMobile(lead.sales_staff_mobile, lead);
@@ -5216,115 +5143,120 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     // 1. Load Deliverables: Prioritize lead.deliverables_description, then latestQuote, then primaryLP, then matchedPkg
     let loadedDelText = fullLead.deliverables_description || latestQuote?.deliverables_description || primaryLP?.deliverables_description || matchedPkg?.deliverables || '';
 
-    setEditableDeliverables(prev => {
-      if (Object.keys(prev).some(k => prev[k] && prev[k].length > 0)) {
-        return prev;
-      }
-      if (matchedPkgId) {
-        const newDeliverables: Record<string, string[]> = {};
-        if (loadedDelText) {
-          try {
-            const parsedDel = JSON.parse(loadedDelText);
-            if (Array.isArray(parsedDel)) {
-              if (typeof parsedDel[0] === 'string') {
-                newDeliverables[matchedPkgId] = parsedDel;
-              } else {
-                let allDel: string[] = [];
-                parsedDel.forEach((item: any) => {
-                  const eventName = item.event_name;
-                  const deliverables = Array.isArray(item.deliverables) ? item.deliverables : [];
-                  if (deliverables.length > 0) {
-                    allDel = [...allDel, ...deliverables];
-                  }
-                  if (eventName === 'General') {
-                    newDeliverables[matchedPkgId] = deliverables;
-                  } else if (fullLead.events && fullLead.events.length > 0) {
-                    const matchingEvent = fullLead.events.find(e => 
-                      (e.event_name || e.event_type || 'Unnamed Event') === eventName
-                    );
-                    if (matchingEvent) {
-                      newDeliverables[`${matchedPkgId}_${matchingEvent.id}`] = deliverables;
-                      newDeliverables[`${matchedPkgId}_${matchingEvent.event_name || matchingEvent.event_type || 'Unnamed Event'}`] = deliverables;
-                    } else {
-                      newDeliverables[`${matchedPkgId}_${eventName}`] = deliverables;
-                    }
+    if (matchedPkgId) {
+      const newDeliverables: Record<string, string[]> = {};
+      if (loadedDelText) {
+        try {
+          const parsedDel = JSON.parse(loadedDelText);
+          if (Array.isArray(parsedDel)) {
+            if (typeof parsedDel[0] === 'string') {
+              newDeliverables[matchedPkgId] = parsedDel;
+            } else {
+              let allDel: string[] = [];
+              parsedDel.forEach((item: any) => {
+                const eventName = item.event_name;
+                const deliverables = Array.isArray(item.deliverables) ? item.deliverables : [];
+                if (deliverables.length > 0) {
+                  allDel = [...allDel, ...deliverables];
+                }
+                if (eventName === 'General') {
+                  newDeliverables[matchedPkgId] = deliverables;
+                } else if (fullLead.events && fullLead.events.length > 0) {
+                  const matchingEvent = fullLead.events.find(e => 
+                    (e.event_name || e.event_type || 'Unnamed Event') === eventName
+                  );
+                  if (matchingEvent) {
+                    newDeliverables[`${matchedPkgId}_${matchingEvent.id}`] = deliverables;
+                    newDeliverables[`${matchedPkgId}_${matchingEvent.event_name || matchingEvent.event_type || 'Unnamed Event'}`] = deliverables;
                   } else {
                     newDeliverables[`${matchedPkgId}_${eventName}`] = deliverables;
                   }
-                });
-                if (!newDeliverables[matchedPkgId]) {
-                  newDeliverables[matchedPkgId] = allDel.length > 0 ? Array.from(new Set(allDel)) : [];
+                } else {
+                  newDeliverables[`${matchedPkgId}_${eventName}`] = deliverables;
                 }
+              });
+              if (!newDeliverables[matchedPkgId]) {
+                newDeliverables[matchedPkgId] = allDel.length > 0 ? Array.from(new Set(allDel)) : [];
               }
-            } else {
-              newDeliverables[matchedPkgId] = [];
             }
-          } catch (e) {
-            // Fallback if not JSON (e.g. newline-separated text)
-            const delList = loadedDelText.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
-            newDeliverables[matchedPkgId] = delList;
+          } else {
+            newDeliverables[matchedPkgId] = [];
           }
-        } else {
-          newDeliverables[matchedPkgId] = [];
+        } catch (e) {
+          // Fallback if not JSON (e.g. newline-separated text)
+          const delList = loadedDelText.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
+          newDeliverables[matchedPkgId] = delList;
         }
-        return newDeliverables;
       } else {
-        if (latestQuote?.editableDeliverables) return latestQuote.editableDeliverables;
-        if (primaryLP?.editable_deliverables) return primaryLP.editable_deliverables;
-        return {};
+        newDeliverables[matchedPkgId] = [];
       }
-    });
+      setEditableDeliverables(newDeliverables);
+    } else {
+      if (latestQuote?.editableDeliverables) {
+        setEditableDeliverables(latestQuote.editableDeliverables);
+      } else if (primaryLP?.editable_deliverables) {
+        setEditableDeliverables(primaryLP.editable_deliverables);
+      } else {
+        setEditableDeliverables({});
+      }
+    }
 
     // 2. Load Team Members: Prioritize lead.Team_Members, then latestQuote.editableInclusions, then primaryLP, then matchedPkg
-    setEditableInclusions(prev => {
-      if (Object.keys(prev).some(k => prev[k] && prev[k].length > 0)) {
-        return prev;
-      }
-      if (matchedPkgId && fullLead.Team_Members) {
-        try {
-          const parsedTeam = JSON.parse(fullLead.Team_Members);
-          if (Array.isArray(parsedTeam)) {
-            const newInclusions: Record<string, string[]> = {};
-            let allMembers: string[] = [];
-            parsedTeam.forEach((item: any) => {
-              const eventName = item.event_name;
-              const members = Array.isArray(item.team_members) ? item.team_members : [];
-              if (members.length > 0) {
-                allMembers = [...allMembers, ...members];
-              }
-              if (eventName === 'General') {
-                newInclusions[matchedPkgId] = members;
-              } else if (fullLead.events && fullLead.events.length > 0) {
-                const matchingEvent = fullLead.events.find(e => 
-                  (e.event_name || e.event_type || 'Unnamed Event') === eventName
-                );
-                if (matchingEvent) {
-                  newInclusions[`${matchedPkgId}_${matchingEvent.id}`] = members;
-                  newInclusions[`${matchedPkgId}_${matchingEvent.event_name || matchingEvent.event_type || 'Unnamed Event'}`] = members;
-                } else {
-                  newInclusions[`${matchedPkgId}_${eventName}`] = members;
-                }
+    if (matchedPkgId && fullLead.Team_Members) {
+      try {
+        const parsedTeam = JSON.parse(fullLead.Team_Members);
+        if (Array.isArray(parsedTeam)) {
+          const newInclusions: Record<string, string[]> = {};
+          let allMembers: string[] = [];
+          parsedTeam.forEach((item: any) => {
+            const eventName = item.event_name;
+            const members = Array.isArray(item.team_members) ? item.team_members : [];
+            if (members.length > 0) {
+              allMembers = [...allMembers, ...members];
+            }
+            if (eventName === 'General') {
+              newInclusions[matchedPkgId] = members;
+            } else if (fullLead.events && fullLead.events.length > 0) {
+              const matchingEvent = fullLead.events.find(e => 
+                (e.event_name || e.event_type || 'Unnamed Event') === eventName
+              );
+              if (matchingEvent) {
+                newInclusions[`${matchedPkgId}_${matchingEvent.id}`] = members;
+                newInclusions[`${matchedPkgId}_${matchingEvent.event_name || matchingEvent.event_type || 'Unnamed Event'}`] = members;
               } else {
                 newInclusions[`${matchedPkgId}_${eventName}`] = members;
               }
-            });
-            if (!newInclusions[matchedPkgId]) {
-              newInclusions[matchedPkgId] = allMembers.length > 0 ? Array.from(new Set(allMembers)) : [];
+            } else {
+              newInclusions[`${matchedPkgId}_${eventName}`] = members;
             }
-            return newInclusions;
+          });
+          if (!newInclusions[matchedPkgId]) {
+            newInclusions[matchedPkgId] = allMembers.length > 0 ? Array.from(new Set(allMembers)) : [];
           }
-        } catch (e) {
-          console.error('Error parsing Team_Members from leads in handleSelectLead:', e);
+          setEditableInclusions(newInclusions);
+        } else {
+          setEditableInclusions({});
+        }
+      } catch (e) {
+        console.error('Error parsing Team_Members from leads in handleSelectLead:', e);
+        if (latestQuote?.editableInclusions) {
+          setEditableInclusions(latestQuote.editableInclusions);
+        } else if (primaryLP?.editable_inclusions) {
+          setEditableInclusions(primaryLP.editable_inclusions);
+        } else {
+          setEditableInclusions({});
         }
       }
-      if (latestQuote?.editableInclusions) return latestQuote.editableInclusions;
-      if (primaryLP?.editable_inclusions) return primaryLP.editable_inclusions;
-      if (matchedPkg?.team_members) {
-        const defaultInc = parseTeamMembers(matchedPkg.team_members);
-        return { [matchedPkgId]: defaultInc.length > 0 ? defaultInc : ['1 Candid Photographer'] };
-      }
-      return {};
-    });
+    } else if (latestQuote?.editableInclusions) {
+      setEditableInclusions(latestQuote.editableInclusions);
+    } else if (primaryLP?.editable_inclusions) {
+      setEditableInclusions(primaryLP.editable_inclusions);
+    } else if (matchedPkg?.team_members) {
+      const defaultInc = parseTeamMembers(matchedPkg.team_members);
+      setEditableInclusions({ [matchedPkgId]: defaultInc.length > 0 ? defaultInc : ['1 Candid Photographer'] });
+    } else {
+      setEditableInclusions({});
+    }
 
     const firstEvent = fullLead.events && fullLead.events.length > 0 ? fullLead.events[0] : null;
     const evName = firstEvent?.event_name || fullLead.custom_event_name || '';
@@ -5740,13 +5672,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList);
             return {
               event_name: event.event_name || event.event_type || 'Unnamed Event',
-              team_members: list.filter(item => item !== undefined && item !== null)
+              team_members: list.filter(Boolean)
             };
           })
         : [
             {
               event_name: "General",
-              team_members: inclusionsList.filter(item => item !== undefined && item !== null)
+              team_members: inclusionsList.filter(Boolean)
             }
           ];
       const teamMembersText = JSON.stringify(teamMembersJson);
@@ -5762,13 +5694,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             return {
               event_id: event.id,
               event_name: event.event_name || event.event_type || 'Unnamed Event',
-              deliverables: list.filter(item => item !== undefined && item !== null)
+              deliverables: list.filter(Boolean)
             };
           })
         : [
             {
               event_name: "General",
-              deliverables: deliverablesList.filter(item => item !== undefined && item !== null)
+              deliverables: deliverablesList.filter(Boolean)
             }
           ];
       const deliverablesText = JSON.stringify(deliverablesJson);
@@ -6054,13 +5986,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList);
               return {
                 event_name: event.event_name || event.event_type || 'Unnamed Event',
-                team_members: list.filter(item => item !== undefined && item !== null)
+                team_members: list.filter(Boolean)
               };
             })
           : [
               {
                 event_name: "General",
-                team_members: inclusionsList.filter(item => item !== undefined && item !== null)
+                team_members: inclusionsList.filter(Boolean)
               }
             ];
         const teamMembersText = JSON.stringify(teamMembersJson);
@@ -6076,13 +6008,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               return {
                 event_id: event.id,
                 event_name: event.event_name || event.event_type || 'Unnamed Event',
-                deliverables: list.filter(item => item !== undefined && item !== null)
+                deliverables: list.filter(Boolean)
               };
             })
           : [
               {
                 event_name: "General",
-                deliverables: deliverablesList.filter(item => item !== undefined && item !== null)
+                deliverables: deliverablesList.filter(Boolean)
               }
             ];
         const deliverablesText = JSON.stringify(deliverablesJson);
@@ -6454,19 +6386,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
 
       if (isCreateFlow) {
-        // Await confirmation from Supabase that the lead and events are persisted before initializing Step 3
-        if (supabaseClient && currentLeadId) {
-          try {
-            await supabaseClient
-              .from('leads')
-              .select('lead_id')
-              .eq('lead_id', currentLeadId)
-              .maybeSingle();
-          } catch (refetchErr) {
-            console.warn("Silent confirmation before Step 3 failed:", refetchErr);
-          }
-        }
-
         setSelectedPkgIds(['Custom Package']);
         setWizardLeadData(prev => ({ ...prev, selected_package_id: 'Custom Package', Select_Package_Option: 'Custom Package' }));
         setWizardStep(3);
