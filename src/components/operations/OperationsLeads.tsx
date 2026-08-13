@@ -657,10 +657,21 @@ export const OperationsLeads: React.FC = () => {
     if (!targetDate || !staffName) return false;
 
     // A staff member is ONLY busy if there is a successfully saved assignment record in staffAssignments
-    const activeAssignments = staffAssignments ? staffAssignments.filter(sa => 
-      sa.staff_name.toLowerCase() === staffName.toLowerCase() && 
-      sa.assignment_status !== 'Cancelled'
-    ) : [];
+    const activeAssignments = staffAssignments ? staffAssignments.filter(sa => {
+      if (sa.staff_name.toLowerCase() !== staffName.toLowerCase()) return false;
+      const assignmentStatus = (sa.assignment_status || '').toLowerCase();
+      const taskStatus = ((sa as any).task_status || '').toLowerCase();
+      
+      const completedStatuses = [
+        'cancelled', 'canceled', 'completed', 'event completed', 
+        'project completed', 'closed', 'order closed', 'project closed', 'delivered'
+      ];
+      
+      if (completedStatuses.includes(assignmentStatus) || completedStatuses.includes(taskStatus)) {
+        return false;
+      }
+      return true;
+    }) : [];
 
     if (activeAssignments.length === 0) return false;
 

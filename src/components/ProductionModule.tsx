@@ -348,8 +348,8 @@ const StaffSelectDropdown = React.memo(({
 
   const currentStaffIsBusy = useMemo(() => {
     if (!currentStaff) return false;
-    return editorAssignments.some(a => a.staff_id === currentStaff.staff_id && a.status !== 'Completed');
-  }, [currentStaff, editorAssignments]);
+    return editorAssignments.some(a => a.staff_id === currentStaff.staff_id && isAssignmentActive(a, production || []));
+  }, [currentStaff, editorAssignments, production]);
 
   return (
     <div ref={dropdownRef} className="relative w-full text-left">
@@ -409,7 +409,7 @@ const StaffSelectDropdown = React.memo(({
           ) : (
             <>
               {(filteredStaff || []).map(s => {
-                  const isBusy = editorAssignments.some(a => a.staff_id === s.staff_id && a.status !== 'Completed');
+                  const isBusy = editorAssignments.some(a => a.staff_id === s.staff_id && isAssignmentActive(a, production || []));
                   const isAlreadyAssigned = allRowsForDeliverable.some(r => r.staffId === s.staff_id && r.id !== rowId);
                   return (
                     <div
@@ -3111,11 +3111,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
     
     const assignedCount = staffAssignments.length;
     const completedCount = staffAssignments.filter(a => a.status === 'Completed').length;
-    const activeCount = staffAssignments.filter(a => a.status !== 'Completed').length;
+    const activeCount = staffAssignments.filter(a => isAssignmentActive(a, production || [])).length;
     
     const todayStr = new Date().toISOString().split('T')[0];
     const overdueCount = staffAssignments.filter(a => 
-      a.status !== 'Completed' && a.target_finish_date && a.target_finish_date < todayStr
+      isAssignmentActive(a, production || []) && a.target_finish_date && a.target_finish_date < todayStr
     ).length;
 
     // Backward compatibility for direct assignments
@@ -5552,7 +5552,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         const getStaffActiveTasks = (staffName: string) => {
           return (editorAssignments || []).filter(a => 
             a.staff_name.toLowerCase() === staffName.toLowerCase() && 
-            a.status !== 'Completed'
+            isAssignmentActive(a, production || [])
           );
         };
 
@@ -6152,7 +6152,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                           const activeAssignments = (editorAssignments || []).filter(a =>
                             a.staff_name.toLowerCase() === member.name.toLowerCase() &&
-                            a.status !== 'Completed'
+                            isAssignmentActive(a, production || [])
                           );
                           const isAvailable = activeAssignments.length === 0;
 
@@ -6183,7 +6183,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         return (filteredStaff || []).map((member) => {
                           const activeAssignments = (editorAssignments || []).filter(a =>
                             a.staff_name.toLowerCase() === member.name.toLowerCase() &&
-                            a.status !== 'Completed'
+                            isAssignmentActive(a, production || [])
                           );
                           const isAvailable = activeAssignments.length === 0;
 
@@ -10682,7 +10682,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         {selectedStaffForTasks && (() => {
           const staffTasks = [...(editorAssignments || [])].filter(a => 
             a.staff_name.toLowerCase() === selectedStaffForTasks.toLowerCase() && 
-            a.status !== 'Completed'
+            isAssignmentActive(a, production || [])
           );
 
           return (
@@ -11253,5 +11253,20 @@ const isProjectLocked = (status?: string): boolean => {
   const s = status.toLowerCase();
   return ['project completed', 'completed', 'delivered', 'project delivered', 'project cancelled', 'cancelled', 'canceled', 'closed', 'project closed', 'order closed'].includes(s);
 };
+
+export const isAssignmentActive = (a: any, productionList: any[] = []): boolean => {
+  if (!a) return false;
+  const s = (a.status || '').toLowerCase();
+  if (['completed', 'editing completed', 'project closed', 'order closed', 'closed', 'cancelled', 'canceled'].includes(s)) return false;
+  
+  if (productionList.length > 0 && a.production_id) {
+    const prod = productionList.find(p => p.production_id === a.production_id);
+    if (prod && isProjectLocked(prod.editing_status)) {
+      return false;
+    }
+  }
+  return true;
+};
+
 
 

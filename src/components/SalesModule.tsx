@@ -2987,103 +2987,108 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       Select_Package_Option: pkgId,
     };
 
-    if (cleanPkgCost !== null) {
+    if (cleanPkgCost !== null && cleanPkgCost !== undefined) {
       updatePayload.package_price = cleanPkgCost;
       updatePayload.budget = cleanPkgCost;
     }
 
     try {
-      // Always UPDATE the existing lead record
-      const { error: updateError } = await supabaseClient
-        .from('leads')
-        .update(updatePayload)
-        .eq('lead_id', leadId);
+      // Update using RoleContext to keep the local leads array perfectly in sync
+      await updateLead(leadId, updatePayload);
+      setStep3AutoSaveStatus('saved');
+      
+      // Update local context manually to ensure instant visual sync in modal
+      if (selectedLead) {
+        setSelectedLead(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            Team_Members: teamMembersText,
+            deliverables_description: deliverablesText,
+            Select_Package_Option: pkgId,
+            ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? {
+              package_price: cleanPkgCost,
+              budget: cleanPkgCost
+            } : {})
+          };
+        });
+      }
+      
+      // Also sync wizardLeadData deliverables state
+      setWizardLeadData(prev => ({
+        ...prev,
+        deliverables: deliverablesText,
+        deliverables_description: deliverablesText,
+        Select_Package_Option: pkgId,
+        ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? {
+          package_price: cleanPkgCost,
+          package_cost: cleanPkgCost,
+          budget: cleanPkgCost
+        } : {})
+      }));
 
-      if (updateError) {
-        console.error("Error updating leads table via saveStep3DataRealtime:", updateError);
-        setStep3AutoSaveStatus('error');
-      } else {
-        setStep3AutoSaveStatus('saved');
-        // Update local React state to ensure 100% synchronization
-        if (selectedLead) {
-          setSelectedLead(prev => {
-            if (!prev) return null;
-            return {
-              ...prev,
-              Team_Members: teamMembersText,
-              deliverables_description: deliverablesText
-            };
+      // Also save / update lead_packages record in Supabase
+      try {
+        const packagePayload = {
+          lead_id: leadId,
+          package_id: pkgId,
+          package_name: wizardLeadData.package_name || (pkgId === 'Custom Package' || pkgId === 'custom_package' ? 'Custom Package' : `Package ${pkgId}`),
+          package_cost: cleanPkgCost || 0,
+          quantity: 1,
+          total_amount: cleanPkgCost || 0,
+          discount: quoteDiscount || 0,
+          final_amount: (cleanPkgCost || 0) + (quoteAdditional || 0) - (quoteDiscount || 0),
+          Team_Members_Included: teamMembersJson,
+          deliverables_descriptionn: deliverablesJson,
+          deliverables_description: deliverablesText,
+          editable_inclusions: updatedInclusions,
+          editable_deliverables: updatedDeliverables,
+          updated_at: new Date().toISOString()
+        };
+
+        const { data: existingLps } = await supabaseClient
+          .from('lead_packages')
+          .select('*')
+          .eq('lead_id', leadId);
+        
+        let targetLpId = `LP-${leadId}-${pkgId}`;
+        
+        if (existingLps && existingLps.length > 0) {
+          const matched = existingLps.find(lp => String(lp.package_id) === String(pkgId)) || existingLps[0];
+          targetLpId = matched.lead_package_id || matched.id || targetLpId;
+          await supabaseClient
+            .from('lead_packages')
+            .update(packagePayload)
+            .eq(matched.lead_package_id ? 'lead_package_id' : 'id', targetLpId);
+        } else {
+          await supabaseClient
+            .from('lead_packages')
+            .insert({
+              ...packagePayload,
+              lead_package_id: targetLpId,
+              created_at: new Date().toISOString()
+            });
+        }
+        
+        if (setLeadPackages) {
+          setLeadPackages(prev => {
+            const idx = prev.findIndex(lp => (lp.lead_package_id === targetLpId) || (lp.id === targetLpId));
+            const fullLpRecord = {
+              lead_package_id: targetLpId,
+              id: targetLpId,
+              ...packagePayload
+            } as LeadPackage;
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = fullLpRecord;
+              return next;
+            } else {
+              return [...prev, fullLpRecord];
+            }
           });
         }
-
-        // Also sync wizardLeadData deliverables state
-        setWizardLeadData(prev => ({
-          ...prev,
-          deliverables: deliverablesText,
-          deliverables_description: deliverablesText
-        }));
-
-        // Also save / update lead_packages record in Supabase
-        try {
-          const packagePayload = {
-            lead_id: leadId,
-            package_id: pkgId,
-            package_name: wizardLeadData.package_name || (pkgId === 'Custom Package' || pkgId === 'custom_package' ? 'Custom Package' : `Package ${pkgId}`),
-            package_cost: cleanPkgCost || 0,
-            quantity: 1,
-            total_amount: cleanPkgCost || 0,
-            discount: quoteDiscount || 0,
-            final_amount: (cleanPkgCost || 0) + (quoteAdditional || 0) - (quoteDiscount || 0),
-            Team_Members_Included: teamMembersJson,
-            deliverables_descriptionn: deliverablesJson,
-            deliverables_description: deliverablesText,
-            editable_inclusions: updatedInclusions,
-            editable_deliverables: updatedDeliverables,
-            updated_at: new Date().toISOString()
-          };
-
-          const { data: existingLps } = await supabaseClient
-            .from('lead_packages')
-            .select('*')
-            .eq('lead_id', leadId);
-
-          let targetLpId = `LP-${leadId}-${pkgId}`;
-          if (existingLps && existingLps.length > 0) {
-            const matched = existingLps.find(lp => String(lp.package_id) === String(pkgId)) || existingLps[0];
-            targetLpId = matched.lead_package_id;
-            await supabaseClient
-              .from('lead_packages')
-              .update(packagePayload)
-              .eq('lead_package_id', targetLpId);
-          } else {
-            await supabaseClient
-              .from('lead_packages')
-              .insert({
-                ...packagePayload,
-                lead_package_id: targetLpId,
-                created_at: new Date().toISOString()
-              });
-          }
-
-          if (setLeadPackages) {
-            setLeadPackages(prev => {
-              const idx = prev.findIndex(lp => lp.lead_package_id === targetLpId);
-              const fullLpRecord = {
-                lead_package_id: targetLpId,
-                ...packagePayload
-              } as LeadPackage;
-              if (idx >= 0) {
-                const next = [...prev];
-                next[idx] = fullLpRecord;
-                return next;
-              } else {
-                return [...prev, fullLpRecord];
-              }
-            });
-          }
-        } catch (e) {
-          console.warn("Could not update lead_packages in saveStep3DataRealtime:", e);
-        }
+      } catch (e) {
+        console.warn("Could not update lead_packages in saveStep3DataRealtime:", e);
       }
     } catch (err) {
       console.error("Exception in saveStep3DataRealtime:", err);
@@ -3531,28 +3536,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   // Save to Supabase directly for the JSON columns
   const isFirstRender = React.useRef(true);
-  React.useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-    const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
-    const targetLeadId = selectedLead?.lead_id || (activeTab === 'create' ? createdLeadId : null);
-    if (targetLeadId && targetLeadId !== 'DRAFT-LEAD' && pkgId) {
-      const updateDatabase = async () => {
-        try {
-          await saveStep3DataRealtime(editableInclusions, editableDeliverables);
-        } catch (e) {
-          console.error('Error updating lead_package via saveStep3DataRealtime', e);
-        }
-      };
-      const timeoutId = setTimeout(() => {
-        updateDatabase();
-      }, 300);
-      return () => clearTimeout(timeoutId);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editableDeliverables, editableInclusions, selectedLead?.lead_id, createdLeadId, activeTab, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option]);
+  
+  // Explicit saves are now handled directly in the onChange handlers for immediate persistence
+  // to avoid closure stale state overwrites in debounced effects.
 
   // Step 1 Automatic Data Prefill & Hydration from Supabase leads table
   React.useEffect(() => {
