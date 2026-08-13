@@ -11,7 +11,7 @@ import { SafeProofImage } from '../ui/SafeProofImage';
 import { ProjectDetailModal } from '../ProjectDetailModal';
 import { ViewDetailsModal } from './ViewDetailsModal';
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
-import { convertTimeToDbFormat, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem } from '../../utils';
+import { convertTimeToDbFormat, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem, parseQtyAndText } from '../../utils';
 import { supabaseClient } from '../../supabaseClient';
 import { getCalculatedOrderStage, getStageRank } from '../../utils/orderStageCalculator';
 
