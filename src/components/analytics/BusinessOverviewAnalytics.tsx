@@ -3,6 +3,7 @@ import { useRole } from '../RoleContext';
 import { DatePreset, getPresetDateRange, isDateInRange, TODAY_REF } from './DateFilterHelper';
 import { DatePresetSelector } from './DatePresetSelector';
 import { AnalyticsReportModal } from './AnalyticsReportModal';
+import { ErrorBoundary } from '../ErrorBoundary';
 import { formatINR } from '../../utils';
 import { CameraLensStatsCard } from '../CameraLensStatsCard';
 import { 
@@ -443,19 +444,21 @@ export const BusinessOverviewAnalytics: React.FC = () => {
 
       {/* Analytics Drilldown Modal */}
       {selectedCard && (
-        <AnalyticsReportModal
-          isOpen={!!selectedCard}
-          onClose={() => setSelectedCard(null)}
-          reportTitle={`BUSINESS OVERVIEW DETAILED DOSSIER: ${selectedCard.toUpperCase()}`}
-          reportType="business_overview"
-          cardName={selectedCard}
-          leads={leads}
-          orders={orders}
-          payments={payments}
-          operations={operations}
-          production={production}
-          staff={staff}
-        />
+        <ErrorBoundary onReset={() => setSelectedCard(null)}>
+          <AnalyticsReportModal
+            isOpen={!!selectedCard}
+            onClose={() => setSelectedCard(null)}
+            reportTitle={`BUSINESS OVERVIEW DETAILED DOSSIER: ${(selectedCard || '').toUpperCase()}`}
+            reportType="business_overview"
+            cardName={selectedCard}
+            leads={leads}
+            orders={orders}
+            payments={payments}
+            operations={operations}
+            production={production}
+            staff={staff}
+          />
+        </ErrorBoundary>
       )}
 
     </div>

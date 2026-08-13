@@ -124,7 +124,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
     const filteredLeads = (leads || []).filter(l => isWithinDateRange(l.created_date || l.created_at || (l as any).updated_at));
 
     const staffRows = salesUsers.map(user => {
-      const nameLower = user.name.toLowerCase();
+      const nameLower = (user?.name || '').toLowerCase();
       const fullNameLower = (user.full_name || '').toLowerCase();
 
       const staffLeads = filteredLeads.filter(l => {

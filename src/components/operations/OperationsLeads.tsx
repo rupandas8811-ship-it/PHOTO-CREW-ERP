@@ -15,6 +15,16 @@ import { convertTimeToDbFormat, triggerAutoScrollAndFocus, convertTo12Hour, form
 import { supabaseClient } from '../../supabaseClient';
 import { getCalculatedOrderStage, getStageRank } from '../../utils/orderStageCalculator';
 
+const parseQtyAndText = (input: string) => {
+  if (!input) return { qty: 1, text: '' };
+  const str = String(input).trim();
+  const match = str.match(/^(\d+)\s*×\s*(.*)$/) || str.match(/^(\d+)\s*x\s*(.*)$/i) || str.match(/^(\d+)\s+(.*)$/);
+  if (match) {
+    return { qty: parseInt(match[1], 10) || 1, text: match[2].trim() };
+  }
+  return { qty: 1, text: str };
+};
+
 const OperationsActionColumn = ({ ord, actionItems, isOpen, setActiveMenuOrderId, setMenuCoords, setActiveMenuItems }: any) => {
   return (
     <div className="flex items-center justify-end actions-menu-container">

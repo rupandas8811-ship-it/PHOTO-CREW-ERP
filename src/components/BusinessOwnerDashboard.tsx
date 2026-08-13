@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { supabaseClient } from '../supabaseClient';
 import { useRole } from './RoleContext';
+import { ErrorBoundary } from './ErrorBoundary';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 import { 
@@ -364,7 +365,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-400">{item.order_id || item.lead_id}</span> },
       { key: 'customer_name', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customer_name}</span> },
       { key: 'custom_event_name', label: 'Event Name', render: (item: any) => <span>{item.custom_event_name || item.event_type || 'Photography'}</span> },
-      { key: 'event_date', label: 'Event Date', render: (item: any) => <span className="font-mono text-zinc-400">{item.event_date ? item.event_date.split('T')[0] : 'N/A'}</span> }
+      { key: 'event_date', label: 'Event Date', render: (item: any) => <span className="font-mono text-zinc-400">{item.event_date ? (typeof item.event_date === 'string' && item.event_date.includes('T') ? item.event_date.split('T')[0] : String(item.event_date)) : 'N/A'}</span> }
     ];
 
     if (selectedCard === 'overview_revenue') {
@@ -1317,18 +1318,20 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       )}
 
       {/* CARD DETAIL POPUP/MODAL */}
-      <BusinessOwnerCardDetailModal
-        isOpen={selectedCard !== null && selectedCard.startsWith('overview_')}
-        onClose={() => setSelectedCard(null)}
-        title={modalTitleAndMeta.title}
-        subtitle={`${startDate} ~ ${endDate}`}
-        accentColor={modalTitleAndMeta.accentColor}
-        data={modalData}
-        columns={modalColumns}
-        totalLabel={modalTitleAndMeta.totalLabel}
-        totalValue={modalTitleAndMeta.totalValue}
-        filterDescription={modalTitleAndMeta.filterDescription}
-      />
+      <ErrorBoundary onReset={() => setSelectedCard(null)}>
+        <BusinessOwnerCardDetailModal
+          isOpen={selectedCard !== null && selectedCard.startsWith('overview_')}
+          onClose={() => setSelectedCard(null)}
+          title={modalTitleAndMeta.title}
+          subtitle={`${startDate} ~ ${endDate}`}
+          accentColor={modalTitleAndMeta.accentColor}
+          data={modalData}
+          columns={modalColumns}
+          totalLabel={modalTitleAndMeta.totalLabel}
+          totalValue={modalTitleAndMeta.totalValue}
+          filterDescription={modalTitleAndMeta.filterDescription}
+        />
+      </ErrorBoundary>
 
       {/* REVIEW & CLOSE MODAL */}
       {reviewModalOrder && (
@@ -1648,9 +1651,9 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
   const filtered = useMemo(() => {
     return records.filter(r => {
       const matchSearch = 
-        r.orderId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.eventName.toLowerCase().includes(searchTerm.toLowerCase());
+        (r.orderId || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+        (r.customerName || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+        (r.eventName || '').toLowerCase().includes((searchTerm || '').toLowerCase());
 
       const matchDate = !startDate || !endDate || (r.eventDate >= startDate && r.eventDate <= endDate);
 
@@ -2066,18 +2069,20 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       </div>
 
       {/* CARD DETAIL POPUP/MODAL */}
-      <BusinessOwnerCardDetailModal
-        isOpen={selectedCard !== null && selectedCard.startsWith('summary_')}
-        onClose={() => setSelectedCard(null)}
-        title={modalTitleAndMeta.title}
-        subtitle={`${startDate} ~ ${endDate}`}
-        accentColor={modalTitleAndMeta.accentColor}
-        data={modalData}
-        columns={modalColumns}
-        totalLabel={modalTitleAndMeta.totalLabel}
-        totalValue={modalTitleAndMeta.totalValue}
-        filterDescription={modalTitleAndMeta.filterDescription}
-      />
+      <ErrorBoundary onReset={() => setSelectedCard(null)}>
+        <BusinessOwnerCardDetailModal
+          isOpen={selectedCard !== null && selectedCard.startsWith('summary_')}
+          onClose={() => setSelectedCard(null)}
+          title={modalTitleAndMeta.title}
+          subtitle={`${startDate} ~ ${endDate}`}
+          accentColor={modalTitleAndMeta.accentColor}
+          data={modalData}
+          columns={modalColumns}
+          totalLabel={modalTitleAndMeta.totalLabel}
+          totalValue={modalTitleAndMeta.totalValue}
+          filterDescription={modalTitleAndMeta.filterDescription}
+        />
+      </ErrorBoundary>
 
     </div>
   );

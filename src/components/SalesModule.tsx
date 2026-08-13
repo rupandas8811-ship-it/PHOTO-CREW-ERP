@@ -2041,6 +2041,27 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
     }
 
+    // Clean raw JSON strings or JSON objects if reason was stored as stringified JSON
+    if (typeof reason === 'string') {
+      const trimmedR = reason.trim();
+      if (trimmedR.startsWith('{') || trimmedR.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(trimmedR);
+          if (parsed && typeof parsed === 'object') {
+            reason = parsed.reason || parsed.lost_reason || parsed.Lost_Reason || parsed.remarks || parsed.notes || 'Not provided';
+          }
+        } catch (e) {}
+      }
+    }
+
+    if (typeof reason === 'string') {
+      reason = reason.replace(/^Lost Reason:\s*/i, '').trim();
+      if (reason.includes('lead_id') || reason.includes('event_id') || reason.includes('created_at') || reason.includes('google_maps_link')) {
+        const match = reason.match(/["']?reason["']?\s*:\s*["']([^"']+)["']/i);
+        reason = match && match[1] ? match[1].trim() : 'Not provided';
+      }
+    }
+
     // Sanitize
     if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null' || reason.trim() === '') {
       reason = 'Not provided';
@@ -2622,50 +2643,59 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     activePkgId?: string
   ) => {
     if (isStep3Locked) return;
-    const pkgId = activePkgId || wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
-    const leadId = selectedLead?.lead_id;
+    const pkgId = activePkgId || wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || 'Custom Package';
+    const leadId = selectedLead?.lead_id || createdLeadId;
     if (!leadId || leadId === 'DRAFT-LEAD' || !pkgId || !supabaseClient) return;
 
+    // Use events from crmEvents or createEvents or selectedLead.events
+    const eventsList = (crmEvents && crmEvents.length > 0)
+      ? crmEvents
+      : ((createEvents && createEvents.length > 0) ? createEvents : (selectedLead?.events || []));
+
     // Generate JSON for Team_Members based on updatedInclusions
-    const inclusionsList = updatedInclusions[pkgId] || [];
-    const teamMembersJson = (crmEvents && crmEvents.length > 0)
-      ? crmEvents.map(event => {
+    const inclusionsList = updatedInclusions[pkgId] || updatedInclusions['Custom Package'] || updatedInclusions['custom_package'] || [];
+    const teamMembersJson = (eventsList && eventsList.length > 0)
+      ? eventsList.map(event => {
           const eventKey = `${pkgId}_${event.id}`;
           const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
           const list = updatedInclusions[eventKey] !== undefined 
             ? updatedInclusions[eventKey] 
-            : (updatedInclusions[nameKey] !== undefined ? updatedInclusions[nameKey] : inclusionsList);
+            : (updatedInclusions[nameKey] !== undefined 
+              ? updatedInclusions[nameKey] 
+              : (updatedInclusions['Custom Package'] !== undefined ? updatedInclusions['Custom Package'] : inclusionsList));
           return {
             event_name: event.event_name || event.event_type || 'Unnamed Event',
-            team_members: list.filter(Boolean)
+            team_members: (list || []).filter(Boolean)
           };
         })
       : [
           {
             event_name: "General",
-            team_members: inclusionsList.filter(Boolean)
+            team_members: (inclusionsList || []).filter(Boolean)
           }
         ];
 
     // Generate JSON for deliverables_description based on updatedDeliverables
-    const deliverablesList = updatedDeliverables[pkgId] || [];
-    const deliverablesJson = (crmEvents && crmEvents.length > 0)
-      ? crmEvents.map(event => {
+    const deliverablesList = updatedDeliverables[pkgId] || updatedDeliverables['Custom Package'] || updatedDeliverables['custom_package'] || [];
+    const deliverablesJson = (eventsList && eventsList.length > 0)
+      ? eventsList.map(event => {
           const eventKey = `${pkgId}_${event.id}`;
           const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
           const list = updatedDeliverables[eventKey] !== undefined 
             ? updatedDeliverables[eventKey] 
-            : (updatedDeliverables[nameKey] !== undefined ? updatedDeliverables[nameKey] : deliverablesList);
+            : (updatedDeliverables[nameKey] !== undefined 
+              ? updatedDeliverables[nameKey] 
+              : (updatedDeliverables['Custom Package'] !== undefined ? updatedDeliverables['Custom Package'] : deliverablesList));
           return {
             event_id: event.id,
             event_name: event.event_name || event.event_type || 'Unnamed Event',
-            deliverables: list.filter(Boolean)
+            deliverables: (list || []).filter(Boolean)
           };
         })
       : [
           {
             event_name: "General",
-            deliverables: deliverablesList.filter(Boolean)
+            deliverables: (deliverablesList || []).filter(Boolean)
           }
         ];
     const deliverablesText = JSON.stringify(deliverablesJson);
@@ -2689,7 +2719,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
 
     try {
-      // Always UPDATE the existing lead record
+      // Synchronize lastLoadedLeadIdRef so background fetch won't overwrite fresh local changes
+      lastLoadedLeadIdRef.current = leadId;
+
       const { error: updateError } = await supabaseClient
         .from('leads')
         .update(updatePayload)
@@ -2698,7 +2730,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       if (updateError) {
         console.error("Error updating leads table via saveStep3DataRealtime:", updateError);
       } else {
-        // Update local React state to ensure 100% synchronization
         setSelectedLead(prev => {
           if (!prev) return null;
           return {
@@ -2708,7 +2739,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           };
         });
 
-        // Also sync wizardLeadData deliverables state
         setWizardLeadData(prev => ({
           ...prev,
           deliverables: deliverablesText,
@@ -3065,24 +3095,34 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     });
   };
 
+  const prevInitLeadIdRef = React.useRef<string | null>(null);
+
   // Auto-initialize spec editor state when selecting a lead
   React.useEffect(() => {
     if (!selectedLead) {
       setEditableInclusions({});
       setEditableDeliverables({});
+      prevInitLeadIdRef.current = null;
+      return;
+    }
+
+    if (prevInitLeadIdRef.current === selectedLead.lead_id) {
       return;
     }
 
     const activePackages = (leadPackages || []).filter(lp => lp.lead_id === selectedLead.lead_id);
     const hasActivePkgs = activePackages.length > 0;
 
+    prevInitLeadIdRef.current = selectedLead.lead_id;
+
     setEditableInclusions(prev => {
+      if (Object.keys(prev).length > 0) return prev;
       const newInclusions = { ...prev };
       let changed = false;
       if (!hasActivePkgs) {
         const defaultId = `default_${selectedLead.lead_id}`;
         if (!newInclusions[defaultId]) {
-          newInclusions[defaultId] = [
+          const defaults = [
             '1 Candid Photographer',
             '1 Cinematographer',
             '2 Traditional Photographers',
@@ -3091,6 +3131,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             '1 LED Wall',
             '1 Spot Mixing'
           ];
+          newInclusions[defaultId] = defaults;
+          if (!newInclusions['Custom Package']) {
+            newInclusions['Custom Package'] = defaults;
+          }
           changed = true;
         }
       } else {
@@ -3119,12 +3163,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     });
 
     setEditableDeliverables(prev => {
+      if (Object.keys(prev).length > 0) return prev;
       const newDeliverables = { ...prev };
       let changed = false;
       if (!hasActivePkgs) {
         const defaultId = `default_${selectedLead.lead_id}`;
         if (!newDeliverables[defaultId]) {
-          newDeliverables[defaultId] = [
+          const defaults = [
             '350 Edited Photos',
             '4K Cinematic Video',
             '3 Reels',
@@ -3132,6 +3177,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             'Album Details',
             'Additional Deliverables'
           ];
+          newDeliverables[defaultId] = defaults;
+          if (!newDeliverables['Custom Package']) {
+            newDeliverables['Custom Package'] = defaults;
+          }
           changed = true;
         }
       } else {
@@ -3156,7 +3205,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
       return changed ? newDeliverables : prev;
     });
-  }, [selectedLead, leadPackages, packages]);
+  }, [selectedLead?.lead_id, leadPackages, packages]);
 
   // Auto-load package details into Step 3 if a package is selected but inclusions/deliverables are empty
   React.useEffect(() => {
@@ -3272,7 +3321,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       newInclusions[`${pkgId}_${eventName}`] = members;
                     }
                   });
-                  setEditableInclusions(newInclusions);
+                  if (Object.keys(newInclusions).length > 0) {
+                    setEditableInclusions(prev => ({ ...prev, ...newInclusions }));
+                  }
                 }
               } catch (e) {
                 console.error('Error parsing Team_Members from leads:', e);
@@ -3313,7 +3364,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       newDeliverables[pkgId] = allDel.length > 0 ? Array.from(new Set(allDel)) : [];
                     }
                   }
-                  setEditableDeliverables(newDeliverables);
+                  if (Object.keys(newDeliverables).length > 0) {
+                    setEditableDeliverables(prev => ({ ...prev, ...newDeliverables }));
+                  }
                 }
               } catch (e) {
                 // Not JSON, handle as comma/newline separated list
@@ -3322,7 +3375,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   : [];
                 if (delList.length > 0) {
                   newDeliverables[pkgId] = delList;
-                  setEditableDeliverables(newDeliverables);
+                  setEditableDeliverables(prev => ({ ...prev, ...newDeliverables }));
                 }
               }
             }
@@ -5067,6 +5120,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setQuoteDiscount(0);
     setQuoteAdditional(0);
     // Explicitly reset on new lead selection
+    lastLoadedLeadIdRef.current = null;
+    prevInitLeadIdRef.current = lead.lead_id;
     setEditableInclusions({});
     setEditableDeliverables({});
     // Clean and set Sales Executive Details (isolated from Operations/Production staff on events)
@@ -6388,6 +6443,63 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       if (isCreateFlow) {
         setSelectedPkgIds(['Custom Package']);
         setWizardLeadData(prev => ({ ...prev, selected_package_id: 'Custom Package', Select_Package_Option: 'Custom Package' }));
+        if (currentLeadId) {
+          prevInitLeadIdRef.current = currentLeadId;
+          lastLoadedLeadIdRef.current = currentLeadId;
+
+          const defaultInc = [
+            '1 Candid Photographer',
+            '1 Cinematographer',
+            '2 Traditional Photographers',
+            '2 Traditional Videographers',
+            '1 Drone',
+            '1 LED Wall',
+            '1 Spot Mixing'
+          ];
+          const defaultDel = [
+            '350 Edited Photos',
+            '4K Cinematic Video',
+            '3 Reels',
+            'Traditional Edited Video',
+            'Album Details',
+            'Additional Deliverables'
+          ];
+
+          setEditableInclusions(prev => ({
+            ...prev,
+            'Custom Package': (prev['Custom Package'] && prev['Custom Package'].length > 0) ? prev['Custom Package'] : defaultInc
+          }));
+          setEditableDeliverables(prev => ({
+            ...prev,
+            'Custom Package': (prev['Custom Package'] && prev['Custom Package'].length > 0) ? prev['Custom Package'] : defaultDel
+          }));
+
+          setSelectedLead(prev => {
+            if (prev && prev.lead_id === currentLeadId) {
+              return { 
+                ...prev, 
+                events: reloadedEvents, 
+                Select_Package_Option: 'Custom Package' 
+              };
+            }
+            return {
+              lead_id: currentLeadId,
+              customer_name: createForm.customer_name || '',
+              mobile: createForm.mobile || '',
+              email: createForm.email || '',
+              whatsapp_number: createForm.whatsapp_number || createForm.mobile || '',
+              lead_source: createForm.lead_source || '',
+              Specify_Custom_Lead_Source_Name: createForm.Specify_Custom_Lead_Source_Name || '',
+              client_residence_address: createForm.client_residence_address || '',
+              city: createForm.city || '',
+              state: createForm.state || '',
+              pincode: createForm.pincode || '',
+              events: reloadedEvents,
+              Select_Package_Option: 'Custom Package',
+              status: 'New Lead'
+            } as Lead;
+          });
+        }
         setWizardStep(3);
       } else {
         const newCompleted = Math.max(crmHighestStep, 2);
@@ -6629,6 +6741,63 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         setSalesStatus(targetStatus as CurrentStage);
         setSelectedPkgIds(['Custom Package']);
         setWizardLeadData(prev => ({ ...prev, selected_package_id: 'Custom Package', Select_Package_Option: 'Custom Package' }));
+        if (currentLeadId) {
+          prevInitLeadIdRef.current = currentLeadId;
+          lastLoadedLeadIdRef.current = currentLeadId;
+
+          const defaultInc = [
+            '1 Candid Photographer',
+            '1 Cinematographer',
+            '2 Traditional Photographers',
+            '2 Traditional Videographers',
+            '1 Drone',
+            '1 LED Wall',
+            '1 Spot Mixing'
+          ];
+          const defaultDel = [
+            '350 Edited Photos',
+            '4K Cinematic Video',
+            '3 Reels',
+            'Traditional Edited Video',
+            'Album Details',
+            'Additional Deliverables'
+          ];
+
+          setEditableInclusions(prev => ({
+            ...prev,
+            'Custom Package': (prev['Custom Package'] && prev['Custom Package'].length > 0) ? prev['Custom Package'] : defaultInc
+          }));
+          setEditableDeliverables(prev => ({
+            ...prev,
+            'Custom Package': (prev['Custom Package'] && prev['Custom Package'].length > 0) ? prev['Custom Package'] : defaultDel
+          }));
+
+          setSelectedLead(prev => {
+            if (prev && prev.lead_id === currentLeadId) {
+              return { 
+                ...prev, 
+                events: reloadedEvents, 
+                Select_Package_Option: 'Custom Package' 
+              };
+            }
+            return {
+              lead_id: currentLeadId,
+              customer_name: createForm.customer_name || '',
+              mobile: createForm.mobile || '',
+              email: createForm.email || '',
+              whatsapp_number: createForm.whatsapp_number || createForm.mobile || '',
+              lead_source: createForm.lead_source || '',
+              Specify_Custom_Lead_Source_Name: createForm.Specify_Custom_Lead_Source_Name || '',
+              client_residence_address: createForm.client_residence_address || '',
+              city: createForm.city || '',
+              state: createForm.state || '',
+              pincode: createForm.pincode || '',
+              events: reloadedEvents,
+              Select_Package_Option: 'Custom Package',
+              status: targetStatus as CurrentStage
+            } as Lead;
+          });
+        }
         setWizardStep(3);
       } else {
         const newCompleted = Math.max(crmHighestStep, 2);
@@ -8130,6 +8299,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         };
 
         // Stay in Create Lead form, and advance to Step 2
+        setCreatedLeadId(finalId);
+        setSelectedLead(newLeadObj);
+        prevInitLeadIdRef.current = finalId;
+        lastLoadedLeadIdRef.current = finalId;
         setWizardStep(2);
 
         showToastMsg("Inbound quotation created successfully! Continuing to Step 2.", "success");
@@ -12318,31 +12491,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </div>
             </div>
 
-            {/* If Lost Lead, display Lost Details */}
-            {selectedLead && ['Lost Lead', 'Lead Lost', 'Lost'].includes(selectedLead.status || (selectedLead as any).current_status || '') && (() => {
-              const { reason: lostReasonText, notes: lostNotesText } = getLostReasonAndNotes(selectedLead, statusHistory);
-              return (
-                <div className="mx-4 sm:mx-5 mt-2 bg-rose-950/25 border border-rose-500/20 p-2.5 rounded-xl flex items-start gap-3 text-left shadow-lg">
-                  <span className="text-rose-500 text-base mt-0.5">❌</span>
-                  <div className="w-full">
-                    <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wide">Lost Lead Information</h4>
-                    <div className="text-[11px] text-zinc-300 leading-relaxed mt-1 space-y-0.5">
-                      <div>
-                        <strong className="text-slate-400 font-mono uppercase tracking-wider text-[10px]">Lost Reason:</strong>{' '}
-                        <span className="text-rose-300 font-semibold">{lostReasonText}</span>
-                      </div>
-                      {lostNotesText && lostNotesText !== 'Not provided' && (
-                        <div>
-                          <strong className="text-slate-400 font-mono uppercase tracking-wider text-[10px]">Notes:</strong>{' '}
-                          <span className="text-zinc-300">{lostNotesText}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-
             {/* Content container with horizontal padding */}
             <div id="crm-wizard-scroll-container" className="flex-1 overflow-y-auto p-2.5 sm:p-3">
               <div className="max-w-5xl mx-auto">
@@ -12447,6 +12595,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                    {crmWizardStep === 3 && (
                      <div className="space-y-4 animate-fade-in text-left">
+                       {selectedLead && ['Lost Lead', 'Lead Lost', 'Lost'].includes(selectedLead.status || (selectedLead as any).current_status || '') ? (
+                         <div className="bg-rose-950/20 border border-rose-500/30 rounded-xl p-4 sm:p-5 text-left shadow-lg">
+                           <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
+                             <span className="text-rose-400 font-mono font-bold text-xs uppercase tracking-wider shrink-0">
+                               LOST REASON:
+                             </span>
+                             <span className="text-rose-200 text-xs sm:text-sm font-semibold break-words">
+                               {getLostReasonAndNotes(selectedLead, statusHistory).reason}
+                             </span>
+                           </div>
+                         </div>
+                       ) : (
+                         <>
                        <div className="border-b border-slate-800 pb-1.5">
                          <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
                            <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">3</span>
@@ -13243,7 +13404,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           )}
                         </div>
                       </div>
-                     </div>
+                      </>
+                     )}
+                    </div>
                    )}
                   </fieldset>
                 </form>
@@ -13285,23 +13448,25 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </div>
 
               <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => handleSaveStep(crmWizardStep)}
-                  disabled={isSaving || isCrmLocked || (crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === ''))}
-                  className={`px-4 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 border-0 ${
-                    isCrmLocked
-                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 shadow-none' :
-                    crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')
-                      ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
-                      : 'bg-indigo-650 hover:bg-indigo-600 text-white cursor-pointer'
-                  }`}
-                >
-                  {isSaving ? (
-                    <span className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
-                  ) : null}
-                  <span>{isSaving ? 'Saving...' : crmWizardStep === 3 ? 'Save & Process' : 'Save & Next'}</span>
-                </button>
+                {!(crmWizardStep === 3 && selectedLead && ['Lost Lead', 'Lead Lost', 'Lost'].includes(selectedLead.status || (selectedLead as any).current_status || '')) && (
+                  <button
+                    type="button"
+                    onClick={() => handleSaveStep(crmWizardStep)}
+                    disabled={isSaving || isCrmLocked || (crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === ''))}
+                    className={`px-4 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 border-0 ${
+                      isCrmLocked
+                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 shadow-none' :
+                      crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')
+                        ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
+                        : 'bg-indigo-650 hover:bg-indigo-600 text-white cursor-pointer'
+                    }`}
+                  >
+                    {isSaving ? (
+                      <span className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
+                    ) : null}
+                    <span>{isSaving ? 'Saving...' : crmWizardStep === 3 ? 'Save & Process' : 'Save & Next'}</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>

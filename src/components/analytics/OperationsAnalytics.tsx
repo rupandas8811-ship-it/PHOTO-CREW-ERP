@@ -3,6 +3,7 @@ import { useRole } from '../RoleContext';
 import { DatePreset, getPresetDateRange, isDateInRange, TODAY_REF, DateRange } from './DateFilterHelper';
 import { DatePresetSelector } from './DatePresetSelector';
 import { AnalyticsReportModal } from './AnalyticsReportModal';
+import { ErrorBoundary } from '../ErrorBoundary';
 import { 
   PlusSquare, Calendar, Users, CheckCircle, Video, Clock, AlertTriangle, Play,
   BarChart3, ChevronRight, TrendingUp, UserCheck, Activity, FileText, Download, 
@@ -411,7 +412,7 @@ export const OperationsAnalytics: React.FC = () => {
 
           // Filtering the table based on search query, role selection and clickable cards
           const filteredStaffPerformance = staffPerformanceData.filter(s => {
-            const matchesSearch = s.name.toLowerCase().includes(staffNameFilter.toLowerCase());
+            const matchesSearch = (s?.name || '').toLowerCase().includes((staffNameFilter || '').toLowerCase());
             const matchesRole = staffRoleFilter === 'All' || s.role === staffRoleFilter;
             
             // Sub-card quick filters
@@ -992,19 +993,21 @@ export const OperationsAnalytics: React.FC = () => {
 
       {/* Analytics Drilldown Modal */}
       {selectedCard && (
-        <AnalyticsReportModal
-          isOpen={!!selectedCard}
-          onClose={() => setSelectedCard(null)}
-          reportTitle={`OPERATIONS LOGICAL REPORT: ${selectedCard.toUpperCase()}`}
-          reportType="operations"
-          cardName={selectedCard}
-          leads={leads}
-          orders={orders}
-          payments={payments}
-          operations={operations}
-          production={production}
-          staff={staff}
-        />
+        <ErrorBoundary onReset={() => setSelectedCard(null)}>
+          <AnalyticsReportModal
+            isOpen={!!selectedCard}
+            onClose={() => setSelectedCard(null)}
+            reportTitle={`OPERATIONS LOGICAL REPORT: ${(selectedCard || '').toUpperCase()}`}
+            reportType="operations"
+            cardName={selectedCard}
+            leads={leads}
+            orders={orders}
+            payments={payments}
+            operations={operations}
+            production={production}
+            staff={staff}
+          />
+        </ErrorBoundary>
       )}
 
     </div>

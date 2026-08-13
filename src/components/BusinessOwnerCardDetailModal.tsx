@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Search, Calendar, Info } from 'lucide-react';
 import { formatINR } from '../utils';
+import { ErrorBoundary } from './ErrorBoundary';
 
 interface ColumnDefinition {
   key: string;
@@ -15,8 +16,8 @@ interface BusinessOwnerCardDetailModalProps {
   title: string;
   subtitle?: string;
   accentColor?: 'emerald' | 'blue' | 'amber' | 'rose';
-  data: any[];
-  columns: ColumnDefinition[];
+  data?: any[];
+  columns?: ColumnDefinition[];
   totalLabel?: string;
   totalValue?: React.ReactNode;
   filterDescription?: string;
@@ -28,25 +29,29 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
   title,
   subtitle,
   accentColor = 'amber',
-  data,
-  columns,
+  data = [],
+  columns = [],
   totalLabel = 'Total Value',
   totalValue,
   filterDescription
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
+  const safeData = data || [];
+  const safeColumns = columns || [];
+
   // Search filter inside the modal for ease of review
   const filteredData = useMemo(() => {
-    if (!searchTerm.trim()) return data;
+    if (!searchTerm.trim()) return safeData;
     const lowerSearch = searchTerm.toLowerCase();
-    return data.filter(item => {
+    return safeData.filter(item => {
+      if (!item) return false;
       return Object.values(item).some(val => {
         if (val === null || val === undefined) return false;
         return String(val).toLowerCase().includes(lowerSearch);
       });
     });
-  }, [data, searchTerm]);
+  }, [safeData, searchTerm]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -67,6 +72,20 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
   }, [isOpen]);
 
   if (!isOpen || typeof document === 'undefined') return null;
+
+  // Helper function to safely render column cells
+  const renderCell = (col: ColumnDefinition, item: any) => {
+    try {
+      if (col.render) {
+        return col.render(item);
+      }
+      const val = item?.[col.key];
+      return val !== undefined && val !== null ? String(val) : 'N/A';
+    } catch (err) {
+      console.error(`Error rendering column cell ${col.key}:`, err);
+      return <span className="text-zinc-500 font-mono text-[10px]">N/A</span>;
+    }
+  };
 
   // Determine colors based on accent type
   const colorMap = {
@@ -192,7 +211,7 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-zinc-950/80 border-b border-zinc-900 text-[10px] font-mono text-zinc-400 uppercase tracking-wider">
-                        {columns.map(col => (
+                        {safeColumns.map(col => (
                           <th key={col.key} className="py-3 px-4 font-bold">
                             {col.label}
                           </th>
@@ -202,12 +221,12 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
                     <tbody className="divide-y divide-zinc-900 bg-zinc-950/20 text-xs">
                       {filteredData.map((item, idx) => (
                         <tr 
-                          key={item.id || item.order_id || item.lead_id || idx} 
+                          key={item?.id || item?.order_id || item?.lead_id || idx} 
                           className="hover:bg-zinc-900/40 transition-colors"
                         >
-                          {columns.map(col => (
+                          {safeColumns.map(col => (
                             <td key={col.key} className="py-3 px-4 text-zinc-300 font-sans">
-                              {col.render ? col.render(item) : String(item[col.key] || 'N/A')}
+                              {renderCell(col, item)}
                             </td>
                           ))}
                         </tr>
@@ -221,10 +240,10 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
               <div className="md:hidden space-y-3 max-h-[60vh] overflow-y-auto pr-1">
                 {filteredData.map((item, idx) => (
                   <div 
-                    key={item.id || item.order_id || item.lead_id || idx} 
+                    key={item?.id || item?.order_id || item?.lead_id || idx} 
                     className="bg-zinc-900/30 border border-zinc-850/80 p-4 rounded-xl space-y-2.5 shadow-inner"
                   >
-                    {columns.map(col => (
+                    {safeColumns.map(col => (
                       <div 
                         key={col.key} 
                         className="flex flex-col gap-1 border-b border-zinc-900/40 pb-2 last:border-0 last:pb-0"
@@ -233,7 +252,7 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
                           {col.label}
                         </span>
                         <div className="text-xs text-zinc-250 font-sans break-words">
-                          {col.render ? col.render(item) : String(item[col.key] || 'N/A')}
+                          {renderCell(col, item)}
                         </div>
                       </div>
                     ))}
