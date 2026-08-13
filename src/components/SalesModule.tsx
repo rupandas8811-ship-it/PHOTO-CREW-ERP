@@ -4003,7 +4003,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         editableInclusions,
         editableDeliverables
       );
-      const activeDeliverablesText = deliverablesText;
+      
+      const activeDeliverablesText = (deliverablesText === '[]' && leadObj.deliverables_description && leadObj.deliverables_description !== '[]') 
+        ? leadObj.deliverables_description 
+        : deliverablesText;
+        
+      let finalBasePkgSum = basePkgSum;
+      if (finalBasePkgSum === 0 && leadObj.package_price && leadObj.package_price > 0) {
+        finalBasePkgSum = leadObj.package_price;
+      }
 
       const standardQuotation = {
         quotation_id: qId,
@@ -4013,8 +4021,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         customer_name: leadObj.customer_name || '',
         order_id: '',
         package_name: activePkgs.map(p => p.package_name).join(' + '),
-        package_price: basePkgSum,
-        quotation_amount: basePkgSum + Number(quoteAdditional || 0),
+        package_price: finalBasePkgSum,
+        quotation_amount: finalBasePkgSum + Number(quoteAdditional || 0),
         discount: quoteDiscount,
         discount_amount: quoteDiscount,
         additional_services_cost: Number(quoteAdditional || 0),
@@ -4110,7 +4118,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         await updateLead(leadObj.lead_id, {
           budget: finalAmt,
           status: 'Quotation Sent' as CurrentStage,
-          package_price: basePkgSum,
+          package_price: finalBasePkgSum,
           deliverables_description: activeDeliverablesText,
           notes_special_customizations: leadObj.notes_special_customizations,
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
@@ -4143,8 +4151,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         await updateLead(createdLeadId!, {
           budget: finalAmt,
           status: 'Quotation Sent' as CurrentStage,
-          package_price: basePkgSum,
-          deliverables_description: leadObj.deliverables_description,
+          package_price: finalBasePkgSum,
+          deliverables_description: activeDeliverablesText,
           notes_special_customizations: leadObj.notes_special_customizations,
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
           Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),

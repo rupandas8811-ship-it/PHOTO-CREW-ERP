@@ -6373,7 +6373,33 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     const timestamp = new Date().toISOString();
     const finalUpdates = { ...updates };
-    
+
+    // CRITICAL SAFETY GUARD: Prevent accidental overwrites of valuable fields with empty/default values
+    // if the existing record already has valid data.
+    if (prevLead) {
+      if ('deliverables_description' in finalUpdates) {
+        const newVal = finalUpdates.deliverables_description;
+        const prevVal = prevLead.deliverables_description;
+        if ((!newVal || newVal === '[]' || newVal === '') && (prevVal && prevVal !== '[]' && prevVal !== '')) {
+          console.warn(`[SAFETY] Prevented accidental overwrite of deliverables_description. Retaining existing data.`);
+          delete finalUpdates.deliverables_description;
+        }
+      }
+      
+      if ('package_price' in finalUpdates) {
+        const newVal = finalUpdates.package_price;
+        const prevVal = prevLead.package_price;
+        if ((newVal === null || newVal === undefined || newVal === 0 || newVal === '') && (prevVal !== null && prevVal !== undefined && prevVal !== 0 && prevVal !== '')) {
+          console.warn(`[SAFETY] Prevented accidental overwrite of package_price. Retaining existing data.`);
+          delete finalUpdates.package_price;
+          // Also protect budget since they are often synced
+          if ('budget' in finalUpdates && (finalUpdates.budget === null || finalUpdates.budget === undefined || finalUpdates.budget === 0 || finalUpdates.budget === '')) {
+             delete finalUpdates.budget;
+          }
+        }
+      }
+    }
+
     let updatedEvents: LeadEvent[] | undefined;
     if ('events' in finalUpdates) {
       updatedEvents = finalUpdates.events;
