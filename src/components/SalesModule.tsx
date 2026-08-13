@@ -277,11 +277,14 @@ export function buildStep3EventPayloads(
     };
   });
 
+  const flatTeamMembers = teamMembersJson.flatMap(e => e.team_members || []);
+  const flatDeliverables = deliverablesJson.flatMap(e => e.deliverables || []);
+
   return {
     teamMembersJson,
     deliverablesJson,
-    teamMembersText: JSON.stringify(teamMembersJson),
-    deliverablesText: JSON.stringify(deliverablesJson)
+    teamMembersText: JSON.stringify(flatTeamMembers),
+    deliverablesText: JSON.stringify(flatDeliverables)
   };
 }
 
@@ -2952,7 +2955,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const saveStep3DataRealtime = async (
     updatedInclusions: Record<string, string[]>,
     updatedDeliverables: Record<string, string[]>,
-    activePkgId?: string
+    activePkgId?: string,
+    packageCostOverride?: number | null
   ) => {
     if (isStep3Locked) return;
     const pkgId = activePkgId || wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedPkgIds[0] || 'Custom Package';
@@ -2969,11 +2973,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       updatedDeliverables
     );
 
-    const cleanPkgCost = wizardLeadData.package_cost !== "" && wizardLeadData.package_cost != null && !isNaN(Number(wizardLeadData.package_cost))
+    const cleanPkgCost = packageCostOverride !== undefined ? packageCostOverride : (
+      wizardLeadData.package_cost !== "" && wizardLeadData.package_cost != null && !isNaN(Number(wizardLeadData.package_cost))
       ? Number(wizardLeadData.package_cost)
       : (wizardLeadData.package_price !== "" && wizardLeadData.package_price != null && !isNaN(Number(wizardLeadData.package_price))
         ? Number(wizardLeadData.package_price)
-        : (wizardLeadData.budget ? Number(wizardLeadData.budget) : null));
+        : (wizardLeadData.budget ? Number(wizardLeadData.budget) : null))
+    );
 
     const updatePayload: any = {
       Team_Members: teamMembersText,
@@ -4485,6 +4491,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   if (currentPkg) {
                     setPkgPrices(prev => ({ ...prev, [currentPkg]: parsedNum }));
                   }
+                  saveStep3DataRealtime(editableInclusions, editableDeliverables, currentPkg, parsedNum);
                 }}
                 placeholder="0"
                 className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-2 px-3 text-xs text-amber-300 font-mono font-bold focus:outline-none focus:ring-1 focus:ring-amber-500/20 transition-all"
@@ -4698,6 +4705,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   budget: numVal,
                   final_quoted_amount: numVal
                 }));
+                saveStep3DataRealtime(editableInclusions, editableDeliverables, wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option, numVal);
               }}
               placeholder="Enter package base price..."
               className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-amber-300 font-mono font-bold"
@@ -12707,6 +12715,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       budget: numVal,
                                       final_quoted_amount: numVal
                                     }));
+                                    saveStep3DataRealtime(editableInclusions, editableDeliverables, wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option, numVal);
                                   }}
                                   placeholder="Enter package base price..."
                                   className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-amber-300 font-mono font-bold"
