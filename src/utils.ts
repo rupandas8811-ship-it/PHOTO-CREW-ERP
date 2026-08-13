@@ -530,22 +530,48 @@ export function deserializeLeadEvents(textNotes: string | undefined): { events: 
 /**
  * Parses team members field from JSON string array or falls back to older text formats
  */
-export function parseTeamMembers(teamMembersStr: string | undefined | null): string[] {
+export function parseTeamMembers(teamMembersStr: string | undefined | null, targetEventName?: string): string[] {
   if (!teamMembersStr) return [];
   const trimmed = teamMembersStr.trim();
   if (trimmed === '' || trimmed === 'null' || trimmed === 'undefined') return [];
-  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+  
+  if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
     try {
       const parsed = JSON.parse(trimmed);
       if (Array.isArray(parsed)) {
-        return parsed.map(item => {
-          if (typeof item === 'object' && item !== null) {
-            const qty = item.qty ? Number(item.qty) : 1;
-            const name = item.name || '';
-            return qty > 1 ? `${qty} ${name}`.trim() : name;
+        const result: string[] = [];
+        if (parsed[0] && typeof parsed[0] === 'object' && ('team_members' in parsed[0] || 'event_name' in parsed[0] || 'event_id' in parsed[0])) {
+          let eventsToUse = parsed;
+          if (targetEventName) {
+            const matched = parsed.filter((ev: any) => {
+              const evName = (ev.event_name || ev.event_type || '').toLowerCase();
+              return evName === targetEventName.toLowerCase() || evName.includes(targetEventName.toLowerCase()) || targetEventName.toLowerCase().includes(evName);
+            });
+            if (matched.length > 0) eventsToUse = matched;
           }
-          return String(item).trim();
-        }).filter(Boolean);
+          eventsToUse.forEach((ev: any) => {
+            const members = Array.isArray(ev.team_members) ? ev.team_members : (Array.isArray(ev.members) ? ev.members : []);
+            members.forEach((m: any) => {
+              if (typeof m === 'object' && m !== null) {
+                const qty = Number(m.qty || m.quantity || 1);
+                const name = m.name || m.role || m.member_name || '';
+                if (name) result.push(qty > 1 ? `${qty} ${name}`.trim() : name);
+              } else if (m) {
+                result.push(String(m).trim());
+              }
+            });
+          });
+          return result;
+        } else {
+          return parsed.map(item => {
+            if (typeof item === 'object' && item !== null) {
+              const qty = Number(item.qty || item.quantity || 1);
+              const name = item.name || item.role || item.member_name || '';
+              return qty > 1 ? `${qty} ${name}`.trim() : name;
+            }
+            return String(item).trim();
+          }).filter(Boolean);
+        }
       }
     } catch (e) {
       // Fallback
@@ -602,18 +628,22 @@ export function parseDeliverablesWithQty(
 
   let itemsRaw: any[] = [];
   let isFilteredButNoMatch = false;
+  let isJson = false;
 
+  const trimmed = description.trim();
   // 1. Try parsing JSON
-  if (typeof description === 'string' && (description.trim().startsWith('[') || description.trim().startsWith('{'))) {
+  if (typeof description === 'string' && (trimmed.startsWith('[') || trimmed.startsWith('{'))) {
     try {
-      const parsed = JSON.parse(description);
+      const parsed = JSON.parse(trimmed);
+      isJson = true;
+
       if (Array.isArray(parsed)) {
         // Case A: Array of event objects: [{ event_name: "...", deliverables: [...] }]
-        if (parsed[0] && typeof parsed[0] === 'object' && ('event_name' in parsed[0] || 'event_type' in parsed[0] || 'deliverables' in parsed[0])) {
+        if (parsed[0] && typeof parsed[0] === 'object' && ('event_name' in parsed[0] || 'event_type' in parsed[0] || 'deliverables' in parsed[0] || 'event_id' in parsed[0])) {
           let targetEvents = parsed;
           if (targetEventId || targetEventName) {
             const matched = parsed.filter((ev: any) => {
-              const evIdMatch = targetEventId && ev.event_id && ev.event_id === targetEventId;
+              const evIdMatch = targetEventId && ev.event_id && String(ev.event_id) === String(targetEventId);
               const evName = (ev.event_name || ev.event_type || ev.name || '').toLowerCase();
               const nameMatch = targetEventName && (evName === targetEventName.toLowerCase() || evName.includes(targetEventName.toLowerCase()) || targetEventName.toLowerCase().includes(evName));
               return evIdMatch || nameMatch;
@@ -628,6 +658,8 @@ export function parseDeliverablesWithQty(
           targetEvents.forEach((ev: any) => {
             if (Array.isArray(ev.deliverables)) {
               itemsRaw.push(...ev.deliverables);
+            } else if (Array.isArray(ev.deliverables_list)) {
+              itemsRaw.push(...ev.deliverables_list);
             } else if (typeof ev.deliverables === 'string') {
               itemsRaw.push(ev.deliverables);
             }
@@ -640,15 +672,17 @@ export function parseDeliverablesWithQty(
       } else if (parsed && typeof parsed === 'object') {
         if (Array.isArray(parsed.deliverables)) {
           itemsRaw = parsed.deliverables;
+        } else if (Array.isArray(parsed.deliverables_list)) {
+          itemsRaw = parsed.deliverables_list;
         }
       }
     } catch (e) {
-      // Fallback
+      isJson = false;
     }
   }
 
-  // 2. If no JSON items extracted, treat description as plain text
-  if (itemsRaw.length === 0 && typeof description === 'string' && !isFilteredButNoMatch) {
+  // 2. If no JSON items extracted, treat description as plain text ONLY if description was NOT valid JSON
+  if (itemsRaw.length === 0 && typeof description === 'string' && !isJson && !isFilteredButNoMatch) {
     itemsRaw = description.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
   }
 

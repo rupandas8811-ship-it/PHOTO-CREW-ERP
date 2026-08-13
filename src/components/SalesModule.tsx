@@ -135,6 +135,115 @@ function combineQtyAndText(qty: number | string, text: string): string {
   return `${validQty} ${finalText}`.trim();
 }
 
+export function formatListToStructuredObjects(list: any[]): { name: string; qty: number }[] {
+  if (!Array.isArray(list)) return [];
+  const result: { name: string; qty: number }[] = [];
+  list.forEach(item => {
+    if (!item) return;
+    if (typeof item === 'object') {
+      const name = String(item.name || item.role || item.member_name || item.text || item.deliverable || item.title || '').trim();
+      const q = Number(item.qty || item.quantity || item.count || 1);
+      const qty = isNaN(q) || q < 1 ? 1 : q;
+      if (name) {
+        result.push({ name, qty });
+      }
+    } else if (typeof item === 'string') {
+      const trimmed = item.trim();
+      if (!trimmed) return;
+      const parsed = parseQtyAndText(trimmed);
+      if (parsed.text) {
+        result.push({ name: parsed.text, qty: parsed.qty });
+      }
+    }
+  });
+  return result;
+}
+
+export function buildStep3EventPayloads(
+  pkgId: string,
+  currentEvents: any[],
+  editableInclusions: Record<string, any[]>,
+  editableDeliverables: Record<string, any[]>
+) {
+  const effectivePkgId = pkgId || 'Custom Package';
+  const eventsList = (currentEvents && currentEvents.length > 0) ? currentEvents : [null];
+
+  const teamMembersJson = eventsList.map((event, idx) => {
+    const evId = event?.id || event?.event_id || `event_${idx + 1}`;
+    const evName = event?.event_name || event?.event_type || 'Unnamed Event';
+
+    const keysToTry = [
+      `${effectivePkgId}_${evId}`,
+      `${effectivePkgId}_${evName}`,
+      `Custom Package_${evId}`,
+      `Custom Package_${evName}`,
+      `custom_package_${evId}`,
+      `custom_package_${evName}`,
+      effectivePkgId,
+      'Custom Package',
+      'custom_package'
+    ];
+
+    let list: any[] = [];
+    for (const k of keysToTry) {
+      if (editableInclusions[k] !== undefined && Array.isArray(editableInclusions[k]) && editableInclusions[k].length > 0) {
+        list = editableInclusions[k];
+        break;
+      }
+    }
+    if (list.length === 0 && idx === 0) {
+      list = editableInclusions[effectivePkgId] || editableInclusions['Custom Package'] || editableInclusions['custom_package'] || (Object.values(editableInclusions).find(v => Array.isArray(v) && v.length > 0) || []);
+    }
+
+    return {
+      event_id: evId,
+      event_name: evName,
+      team_members: formatListToStructuredObjects(list)
+    };
+  });
+
+  const deliverablesJson = eventsList.map((event, idx) => {
+    const evId = event?.id || event?.event_id || `event_${idx + 1}`;
+    const evName = event?.event_name || event?.event_type || 'Unnamed Event';
+
+    const keysToTry = [
+      `${effectivePkgId}_${evId}`,
+      `${effectivePkgId}_${evName}`,
+      `Custom Package_${evId}`,
+      `Custom Package_${evName}`,
+      `custom_package_${evId}`,
+      `custom_package_${evName}`,
+      effectivePkgId,
+      'Custom Package',
+      'custom_package'
+    ];
+
+    let list: any[] = [];
+    for (const k of keysToTry) {
+      if (editableDeliverables[k] !== undefined && Array.isArray(editableDeliverables[k]) && editableDeliverables[k].length > 0) {
+        list = editableDeliverables[k];
+        break;
+      }
+    }
+    if (list.length === 0 && idx === 0) {
+      list = editableDeliverables[effectivePkgId] || editableDeliverables['Custom Package'] || editableDeliverables['custom_package'] || (Object.values(editableDeliverables).find(v => Array.isArray(v) && v.length > 0) || []);
+    }
+
+    return {
+      event_id: evId,
+      event_name: evName,
+      deliverables: formatListToStructuredObjects(list)
+    };
+  });
+
+  return {
+    teamMembersJson,
+    deliverablesJson,
+    teamMembersText: JSON.stringify(teamMembersJson),
+    deliverablesText: JSON.stringify(deliverablesJson)
+  };
+}
+
 export function parseTeamMembersJsonToRecord(
   rawTeamData: any,
   pkgId: string,
@@ -2815,51 +2924,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     setStep3AutoSaveStatus('saving');
 
-    // Generate JSON for Team_Members based on updatedInclusions
-    const inclusionsList = updatedInclusions[pkgId] || updatedInclusions['Custom Package'] || [];
     const activeEventsList = (activeTab === 'create' && createEvents.length > 0) ? createEvents : (crmEvents && crmEvents.length > 0 ? crmEvents : []);
-    const teamMembersJson = (activeEventsList && activeEventsList.length > 0)
-      ? activeEventsList.map(event => {
-          const eventKey = `${pkgId}_${event.id}`;
-          const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
-          const list = updatedInclusions[eventKey] !== undefined 
-            ? updatedInclusions[eventKey] 
-            : (updatedInclusions[nameKey] !== undefined ? updatedInclusions[nameKey] : inclusionsList);
-          return {
-            event_name: event.event_name || event.event_type || 'Unnamed Event',
-            team_members: list.filter(item => item !== undefined && item !== null)
-          };
-        })
-      : [
-          {
-            event_name: "General",
-            team_members: inclusionsList.filter(item => item !== undefined && item !== null)
-          }
-        ];
-
-    // Generate JSON for deliverables_description based on updatedDeliverables
-    const deliverablesList = updatedDeliverables[pkgId] || updatedDeliverables['Custom Package'] || [];
-    const deliverablesJson = (activeEventsList && activeEventsList.length > 0)
-      ? activeEventsList.map(event => {
-          const eventKey = `${pkgId}_${event.id}`;
-          const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
-          const list = updatedDeliverables[eventKey] !== undefined 
-            ? updatedDeliverables[eventKey] 
-            : (updatedDeliverables[nameKey] !== undefined ? updatedDeliverables[nameKey] : deliverablesList);
-          return {
-            event_id: event.id,
-            event_name: event.event_name || event.event_type || 'Unnamed Event',
-            deliverables: list.filter(item => item !== undefined && item !== null)
-          };
-        })
-      : [
-          {
-            event_name: "General",
-            deliverables: deliverablesList.filter(item => item !== undefined && item !== null)
-          }
-        ];
-    const deliverablesText = JSON.stringify(deliverablesJson);
-    const teamMembersText = JSON.stringify(teamMembersJson);
+    const { teamMembersJson, deliverablesJson, teamMembersText, deliverablesText } = buildStep3EventPayloads(
+      pkgId,
+      activeEventsList,
+      updatedInclusions,
+      updatedDeliverables
+    );
 
     const cleanPkgCost = wizardLeadData.package_cost !== "" && wizardLeadData.package_cost != null && !isNaN(Number(wizardLeadData.package_cost))
       ? Number(wizardLeadData.package_cost)
@@ -4025,11 +4096,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       console.log(`✔ Creating/Updating quotation ${quotNum}...`);
       const qId = existingQuotation ? existingQuotation.quotation_id : ('QT-' + Math.random().toString(36).substring(2, 9).toUpperCase());
       
-      const activePkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
-      const activeDelList = editableDeliverables[activePkgId] || [];
-      const activeDeliverablesText = activeDelList.filter(Boolean).length > 0
-        ? activeDelList.filter(Boolean).join('\n')
-        : (wizardLeadData.deliverables || leadObj.deliverables_description || '');
+      const activePkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || 'Custom Package';
+      const { teamMembersJson, deliverablesJson, teamMembersText, deliverablesText } = buildStep3EventPayloads(
+        activePkgId,
+        crmEvents,
+        editableInclusions,
+        editableDeliverables
+      );
+      const activeDeliverablesText = deliverablesText;
 
       const standardQuotation = {
         quotation_id: qId,
@@ -5817,79 +5891,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
 
       const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead?.Select_Package_Option || 'Custom Package';
-
-      // Construct JSON strings for deliverables and team members
-      const inclusionsList = editableInclusions[pkgId] || editableInclusions['Custom Package'] || editableInclusions['custom_package'] || (Object.values(editableInclusions).find(v => Array.isArray(v) && v.length > 0) || []);
       const currentEvents = selectedLead ? crmEvents : createEvents;
-      const teamMembersJson = (currentEvents && currentEvents.length > 0)
-        ? currentEvents.map(event => {
-            const eventKey = `${pkgId}_${event.id}`;
-            const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
-            const customKey = `Custom Package_${event.id}`;
-            const customNameKey = `Custom Package_${event.event_name || event.event_type || 'Unnamed Event'}`;
-            const customLowerKey = `custom_package_${event.id}`;
-            const customLowerNameKey = `custom_package_${event.event_name || event.event_type || 'Unnamed Event'}`;
-            const list = editableInclusions[eventKey] !== undefined 
-              ? editableInclusions[eventKey] 
-              : (editableInclusions[nameKey] !== undefined 
-                ? editableInclusions[nameKey] 
-                : (editableInclusions[customKey] !== undefined
-                  ? editableInclusions[customKey]
-                  : (editableInclusions[customNameKey] !== undefined
-                    ? editableInclusions[customNameKey]
-                    : (editableInclusions[customLowerKey] !== undefined
-                      ? editableInclusions[customLowerKey]
-                      : (editableInclusions[customLowerNameKey] !== undefined
-                        ? editableInclusions[customLowerNameKey]
-                        : inclusionsList)))));
-            return {
-              event_name: event.event_name || event.event_type || 'Unnamed Event',
-              team_members: list.filter(item => item !== undefined && item !== null)
-            };
-          })
-        : [
-            {
-              event_name: "General",
-              team_members: inclusionsList.filter(item => item !== undefined && item !== null)
-            }
-          ];
-      const teamMembersText = JSON.stringify(teamMembersJson);
 
-      const deliverablesList = editableDeliverables[pkgId] || editableDeliverables['Custom Package'] || editableDeliverables['custom_package'] || (Object.values(editableDeliverables).find(v => Array.isArray(v) && v.length > 0) || []);
-      const deliverablesJson = (currentEvents && currentEvents.length > 0)
-        ? currentEvents.map(event => {
-            const eventKey = `${pkgId}_${event.id}`;
-            const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
-            const customKey = `Custom Package_${event.id}`;
-            const customNameKey = `Custom Package_${event.event_name || event.event_type || 'Unnamed Event'}`;
-            const customLowerKey = `custom_package_${event.id}`;
-            const customLowerNameKey = `custom_package_${event.event_name || event.event_type || 'Unnamed Event'}`;
-            const list = editableDeliverables[eventKey] !== undefined 
-              ? editableDeliverables[eventKey] 
-              : (editableDeliverables[nameKey] !== undefined 
-                ? editableDeliverables[nameKey] 
-                : (editableDeliverables[customKey] !== undefined
-                  ? editableDeliverables[customKey]
-                  : (editableDeliverables[customNameKey] !== undefined
-                    ? editableDeliverables[customNameKey]
-                    : (editableDeliverables[customLowerKey] !== undefined
-                      ? editableDeliverables[customLowerKey]
-                      : (editableDeliverables[customLowerNameKey] !== undefined
-                        ? editableDeliverables[customLowerNameKey]
-                        : deliverablesList)))));
-            return {
-              event_id: event.id,
-              event_name: event.event_name || event.event_type || 'Unnamed Event',
-              deliverables: list.filter(item => item !== undefined && item !== null)
-            };
-          })
-        : [
-            {
-              event_name: "General",
-              deliverables: deliverablesList.filter(item => item !== undefined && item !== null)
-            }
-          ];
-      const deliverablesText = JSON.stringify(deliverablesJson);
+      const { teamMembersJson, deliverablesJson, teamMembersText, deliverablesText } = buildStep3EventPayloads(
+        pkgId,
+        currentEvents,
+        editableInclusions,
+        editableDeliverables
+      );
 
       // 3. Update the lead record in Supabase with latest Step 3 package / pricing / staff info
       const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
@@ -6225,52 +6234,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           return;
         }
         const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead.Select_Package_Option || 'Custom Package';
-        if (pkgId) {
-          // await saveStep3DataRealtime removed to avoid duplicate DB calls
-        }
-
-        const inclusionsList = editableInclusions[pkgId] || [];
-        const teamMembersJson = (crmEvents && crmEvents.length > 0)
-          ? crmEvents.map(event => {
-              const eventKey = `${pkgId}_${event.id}`;
-              const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
-              const list = editableInclusions[eventKey] !== undefined 
-                ? editableInclusions[eventKey] 
-                : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList);
-              return {
-                event_name: event.event_name || event.event_type || 'Unnamed Event',
-                team_members: list.filter(item => item !== undefined && item !== null)
-              };
-            })
-          : [
-              {
-                event_name: "General",
-                team_members: inclusionsList.filter(item => item !== undefined && item !== null)
-              }
-            ];
-        const teamMembersText = JSON.stringify(teamMembersJson);
-
-        const deliverablesList = editableDeliverables[pkgId] || [];
-        const deliverablesJson = (crmEvents && crmEvents.length > 0)
-          ? crmEvents.map(event => {
-              const eventKey = `${pkgId}_${event.id}`;
-              const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
-              const list = editableDeliverables[eventKey] !== undefined 
-                ? editableDeliverables[eventKey] 
-                : (editableDeliverables[nameKey] !== undefined ? editableDeliverables[nameKey] : deliverablesList);
-              return {
-                event_id: event.id,
-                event_name: event.event_name || event.event_type || 'Unnamed Event',
-                deliverables: list.filter(item => item !== undefined && item !== null)
-              };
-            })
-          : [
-              {
-                event_name: "General",
-                deliverables: deliverablesList.filter(item => item !== undefined && item !== null)
-              }
-            ];
-        const deliverablesText = JSON.stringify(deliverablesJson);
+        const { teamMembersJson, deliverablesJson, teamMembersText, deliverablesText } = buildStep3EventPayloads(
+          pkgId,
+          crmEvents,
+          editableInclusions,
+          editableDeliverables
+        );
 
         const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
         
