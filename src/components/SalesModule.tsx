@@ -2326,12 +2326,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   // Helper function to resolve Lost Reason and Notes from all possible sources
   const getLostReasonAndNotes = (lead: Lead | null, historyList?: any[]) => {
-    if (!lead) return { reason: 'No reason provided.' };
+    if (!lead) return { reason: 'No reason provided.', notes: '' };
 
     // 1. Direct fields on lead (check casing variations)
     let reason = lead.Lost_Reason || (lead as any).lost_reason || (lead as any).LostReason || (lead as any).lostReason;
+    let notes = lead.Lost_Notes || (lead as any).lost_notes || (lead as any).LostNotes || (lead as any).lostNotes;
 
-    // 2. Extract from remarks field if reason is missing
+    // 2. Extract from remarks field if missing
     if (lead.remarks) {
       if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') {
         const matchReason = lead.remarks.match(/Lost Reason:\s*([^.\n]+)/i);
@@ -2339,10 +2340,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           reason = matchReason[1].trim();
         }
       }
+      if (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null') {
+        const matchNotes = lead.remarks.match(/Notes:\s*([\s\S]*?)(?=\n\[Update|\n\[Time|\[CRM_COMPLETED_STEP|$)/i);
+        if (matchNotes && matchNotes[1] && matchNotes[1].trim()) {
+          notes = matchNotes[1].trim();
+        }
+      }
     }
 
     // 3. Check statusHistory array (ONLY specific regex)
-    if ((!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') && historyList && historyList.length > 0) {
+    if (((!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') || (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null')) && historyList && historyList.length > 0) {
       const lostHistItems = [...historyList]
         .filter(h => String(h.lead_id) === String(lead.lead_id) && ['Lost Lead', 'Lead Lost', 'Lost'].includes(h.new_status || h.status || ''))
         .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
@@ -2357,33 +2364,42 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             }
           }
         }
+        if (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null') {
+          if (lostHist.remarks) {
+            const matchN = lostHist.remarks.match(/Notes:\s*([\s\S]*?)(?=\n\[Update|\n\[Time|\[CRM_COMPLETED_STEP|$)/i);
+            if (matchN && matchN[1] && matchN[1].trim()) {
+              notes = matchN[1].trim();
+            }
+          }
+        }
       }
     }
 
-    // Sanitize and strip any raw data / EVENTS_JSON
+    // Sanitize reason
     if (reason && typeof reason === 'string') {
-      if (reason.includes('---EVENTS_JSON---')) {
-        reason = reason.split('---EVENTS_JSON---')[0].trim();
-      }
-      // sometimes remarks contain 'Notes:' part, we should strip it from reason if it leaked
-      if (reason.includes('Notes:')) {
-        reason = reason.split('Notes:')[0].trim();
-      }
-      // sometimes it contains json array like [{
-      if (reason.includes('[{')) {
-        reason = reason.split('[{')[0].trim();
-      }
+      if (reason.includes('---EVENTS_JSON---')) reason = reason.split('---EVENTS_JSON---')[0].trim();
+      if (reason.includes('Notes:')) reason = reason.split('Notes:')[0].trim();
+      if (reason.includes('[{')) reason = reason.split('[{')[0].trim();
+    }
+    // Sanitize notes
+    if (notes && typeof notes === 'string') {
+      if (notes.includes('---EVENTS_JSON---')) notes = notes.split('---EVENTS_JSON---')[0].trim();
+      if (notes.includes('[{')) notes = notes.split('[{')[0].trim();
     }
 
     if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null' || reason.trim() === '') {
       reason = 'No reason provided.';
     } else {
-      // Remove trailing period if we want, but it's fine.
-      // Ensure there is no trailing comma or weird char
       reason = reason.replace(/[,;]+$/, '').trim();
     }
 
-    return { reason };
+    if (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null' || notes.trim() === '') {
+      notes = '';
+    } else {
+      notes = notes.replace(/[,;]+$/, '').trim();
+    }
+
+    return { reason, notes };
   };
 
   const [showCancelConfirmPopup, setShowCancelConfirmPopup] = useState(false);
@@ -2973,6 +2989,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       updatedDeliverables
     );
 
+    const safeTeamMembersText = (teamMembersText === '[]' && selectedLead?.Team_Members && selectedLead.Team_Members !== '[]') 
+      ? selectedLead.Team_Members 
+      : teamMembersText;
+
+    const safeDeliverablesText = (deliverablesText === '[]' && selectedLead?.deliverables_description && selectedLead.deliverables_description !== '[]') 
+      ? selectedLead.deliverables_description 
+      : deliverablesText;
+
     const cleanPkgCost = packageCostOverride !== undefined ? packageCostOverride : (
       wizardLeadData.package_cost !== "" && wizardLeadData.package_cost != null && !isNaN(Number(wizardLeadData.package_cost))
       ? Number(wizardLeadData.package_cost)
@@ -2982,8 +3006,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     );
 
     const updatePayload: any = {
-      Team_Members: teamMembersText,
-      deliverables_description: deliverablesText,
+      Team_Members: safeTeamMembersText,
+      deliverables_description: safeDeliverablesText,
       Select_Package_Option: pkgId,
     };
 
@@ -3003,8 +3027,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           if (!prev) return null;
           return {
             ...prev,
-            Team_Members: teamMembersText,
-            deliverables_description: deliverablesText,
+            Team_Members: safeTeamMembersText,
+            deliverables_description: safeDeliverablesText,
             Select_Package_Option: pkgId,
             ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? {
               package_price: cleanPkgCost,
@@ -3029,6 +3053,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       // Also save / update lead_packages record in Supabase
       try {
+        const isTeamEmpty = teamMembersText === '[]' || teamMembersText === '';
+        const isDelEmpty = deliverablesText === '[]' || deliverablesText === '';
+
         const packagePayload = {
           lead_id: leadId,
           package_id: pkgId,
@@ -3038,11 +3065,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           total_amount: cleanPkgCost || 0,
           discount: quoteDiscount || 0,
           final_amount: (cleanPkgCost || 0) + (quoteAdditional || 0) - (quoteDiscount || 0),
-          Team_Members_Included: teamMembersJson,
-          deliverables_descriptionn: deliverablesJson,
-          deliverables_description: deliverablesText,
-          editable_inclusions: updatedInclusions,
-          editable_deliverables: updatedDeliverables,
+          ...( !isTeamEmpty ? {
+            Team_Members_Included: teamMembersJson,
+            editable_inclusions: updatedInclusions,
+          } : {}),
+          ...( !isDelEmpty ? {
+            deliverables_descriptionn: deliverablesJson,
+            deliverables_description: deliverablesText,
+            editable_deliverables: updatedDeliverables,
+          } : {}),
           updated_at: new Date().toISOString()
         };
 
@@ -4008,6 +4039,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         ? leadObj.deliverables_description 
         : deliverablesText;
         
+      const activeTeamMembersText = (teamMembersText === '[]' && leadObj.Team_Members && leadObj.Team_Members !== '[]')
+        ? leadObj.Team_Members
+        : teamMembersText;
+        
       let finalBasePkgSum = basePkgSum;
       if (finalBasePkgSum === 0 && leadObj.package_price && leadObj.package_price > 0) {
         finalBasePkgSum = leadObj.package_price;
@@ -4083,6 +4118,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             const isPrimary = lp.package_id === wizardLeadData.selected_package_id;
             const incStr = (editableInclusions[lp.package_id!] || []).join(', ');
             const delStr = (editableDeliverables[lp.package_id!] || []).join(', ');
+            
+            // Protect against empty object overwriting valid data during a race condition
+            const hasNewInclusions = Object.keys(editableInclusions).length > 0;
+            const hasNewDeliverables = Object.keys(editableDeliverables).length > 0;
+            
             return {
               package_id: lp.package_id!,
               package_name: lp.package_name || 'Selected Package',
@@ -4096,8 +4136,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               additional_services_cost: lp.additional_services_cost || 0,
               team_members: incStr || lp.team_members || '',
               deliverables: delStr || lp.deliverables || '',
-              editable_inclusions: editableInclusions,
-              editable_deliverables: editableDeliverables,
+              ...(hasNewInclusions ? { editable_inclusions: editableInclusions, Team_Members_Included: teamMembersJson } : {}),
+              ...(hasNewDeliverables ? { editable_deliverables: editableDeliverables, deliverables_descriptionn: deliverablesJson } : {}),
             };
           });
 
@@ -4113,13 +4153,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           status: 'Quotation Sent' as CurrentStage,
           remarks: updatedRemarks,
           deliverables: activeDeliverablesText,
-          deliverables_description: activeDeliverablesText
+          deliverables_description: activeDeliverablesText,
+          Team_Members: activeTeamMembersText
         }));
         await updateLead(leadObj.lead_id, {
           budget: finalAmt,
           status: 'Quotation Sent' as CurrentStage,
           package_price: finalBasePkgSum,
           deliverables_description: activeDeliverablesText,
+          Team_Members: activeTeamMembersText,
           notes_special_customizations: leadObj.notes_special_customizations,
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
           Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
@@ -4153,6 +4195,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           status: 'Quotation Sent' as CurrentStage,
           package_price: finalBasePkgSum,
           deliverables_description: activeDeliverablesText,
+          Team_Members: activeTeamMembersText,
           notes_special_customizations: leadObj.notes_special_customizations,
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
           Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
@@ -5832,12 +5875,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const effectiveSalesName = getEffectiveSalesStaffName();
       const effectiveSalesMobile = getEffectiveSalesStaffMobile();
 
+      const safeTeamMembersText = (teamMembersText === '[]' && selectedLead?.Team_Members && selectedLead.Team_Members !== '[]') 
+        ? selectedLead.Team_Members 
+        : teamMembersText;
+
+      const safeDeliverablesText = (deliverablesText === '[]' && selectedLead?.deliverables_description && selectedLead.deliverables_description !== '[]') 
+        ? selectedLead.deliverables_description 
+        : deliverablesText;
+
       if (targetLeadId && targetLeadId !== 'DRAFT-LEAD' && supabaseClient) {
         await updateLead(targetLeadId, {
           budget: cleanPkgCost,
           package_price: cleanPkgCost,
-          deliverables_description: deliverablesText,
-          Team_Members: teamMembersText,
+          deliverables_description: safeDeliverablesText,
+          Team_Members: safeTeamMembersText,
           notes_special_customizations: wizardLeadData.notes,
           remarks: updatedRemarks,
           Select_Package_Option: pkgId,
@@ -5851,6 +5902,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
         // Also upsert to lead_packages table so that Step 3 reloads from lead_packages perfectly
         try {
+          // If we safely retained the old lead data, we should also try to retain the old json data
+          // if the new one is empty. We can check if teamMembersText was '[]' but we saved safeTeamMembersText
+          const isTeamEmpty = teamMembersText === '[]' || teamMembersText === '';
+          const isDelEmpty = deliverablesText === '[]' || deliverablesText === '';
+          
           const packagePayload = {
             lead_id: targetLeadId,
             package_id: pkgId,
@@ -5860,11 +5916,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             total_amount: cleanPkgCost || 0,
             discount: cleanDiscount || 0,
             final_amount: cleanFinalAmt || 0,
-            Team_Members_Included: teamMembersJson,
-            deliverables_descriptionn: deliverablesJson,
-            deliverables_description: deliverablesText,
-            editable_inclusions: editableInclusions,
-            editable_deliverables: editableDeliverables,
+            
+            // Only update these fields if we actually have data, or if there wasn't existing data we're trying to protect
+            ...( !isTeamEmpty ? {
+              Team_Members_Included: teamMembersJson,
+              editable_inclusions: editableInclusions,
+            } : {}),
+            
+            ...( !isDelEmpty ? {
+              deliverables_descriptionn: deliverablesJson,
+              deliverables_description: deliverablesText,
+              editable_deliverables: editableDeliverables,
+            } : {}),
+            
             updated_at: new Date().toISOString()
           };
 
@@ -6168,11 +6232,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         const effectiveSalesName = getEffectiveSalesStaffName();
         const effectiveSalesMobile = getEffectiveSalesStaffMobile();
 
+        const safeTeamMembersText = (teamMembersText === '[]' && selectedLead?.Team_Members && selectedLead.Team_Members !== '[]') 
+          ? selectedLead.Team_Members 
+          : teamMembersText;
+
+        const safeDeliverablesText = (deliverablesText === '[]' && selectedLead?.deliverables_description && selectedLead.deliverables_description !== '[]') 
+          ? selectedLead.deliverables_description 
+          : deliverablesText;
+
         await updateLead(selectedLead.lead_id, {
           budget: cleanPkgCost,
           package_price: cleanPkgCost,
-          deliverables_description: deliverablesText,
-          Team_Members: teamMembersText,
+          deliverables_description: safeDeliverablesText,
+          Team_Members: safeTeamMembersText,
           notes_special_customizations: wizardLeadData.notes,
           remarks: updatedRemarks,
           Select_Package_Option: pkgId,
@@ -6190,8 +6262,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
         setWizardLeadData(prev => ({
           ...prev,
-          deliverables: deliverablesText,
-          deliverables_description: deliverablesText,
+          deliverables: safeDeliverablesText,
+          deliverables_description: safeDeliverablesText,
+          Team_Members: safeTeamMembersText,
           package_cost: cleanPkgCost ?? prev.package_cost,
           package_price: cleanPkgCost ?? prev.package_price,
           selected_package_id: pkgId,
@@ -6208,8 +6281,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             ...prev,
             budget: cleanPkgCost ?? prev.budget,
             package_price: cleanPkgCost ?? prev.package_price,
-            deliverables_description: deliverablesText,
-            Team_Members: teamMembersText,
+            deliverables_description: safeDeliverablesText,
+            Team_Members: safeTeamMembersText,
             notes_special_customizations: wizardLeadData.notes,
             remarks: updatedRemarks,
             Select_Package_Option: pkgId,
@@ -12465,16 +12538,29 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
             {/* If Lost Lead, display Lost Details */}
             {selectedLead && ['Lost Lead', 'Lead Lost', 'Lost'].includes(selectedLead.status || (selectedLead as any).current_status || '') && (() => {
-              const { reason: lostReasonText } = getLostReasonAndNotes(selectedLead, statusHistory);
+              const { reason: lostReasonText, notes: lostNotesText } = getLostReasonAndNotes(selectedLead, statusHistory);
               return (
-                <div className="mx-4 sm:mx-5 mt-2 bg-rose-950/25 border border-rose-500/20 p-2.5 rounded-xl flex items-start gap-3 text-left shadow-lg">
-                  <span className="text-rose-500 text-base mt-0.5">❌</span>
-                  <div className="w-full">
-                    <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wide">LOST REASON</h4>
-                    <div className="text-[11px] text-zinc-300 leading-relaxed mt-0.5">
-                      <span className="text-rose-300 font-semibold">{lostReasonText}</span>
+                <div className="mx-4 sm:mx-5 mt-2 bg-rose-950/25 border border-rose-500/20 p-2.5 rounded-xl flex items-start gap-3 text-left shadow-lg flex-col">
+                  <div className="flex items-start gap-3 w-full">
+                    <span className="text-rose-500 text-base mt-0.5">❌</span>
+                    <div className="w-full">
+                      <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wide">LOST REASON</h4>
+                      <div className="text-[11px] text-zinc-300 leading-relaxed mt-0.5">
+                        <span className="text-rose-300 font-semibold">{lostReasonText}</span>
+                      </div>
                     </div>
                   </div>
+                  {lostNotesText && (
+                    <div className="flex items-start gap-3 w-full border-t border-rose-500/20 pt-2 mt-1">
+                      <span className="text-rose-500/0 text-base mt-0.5 w-[20px]"></span> {/* spacer */}
+                      <div className="w-full">
+                        <h4 className="text-xs font-bold text-rose-400/80 uppercase tracking-wide">LOST NOTES</h4>
+                        <div className="text-[11px] text-zinc-300 leading-relaxed mt-0.5 whitespace-pre-wrap">
+                          {lostNotesText}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })()}

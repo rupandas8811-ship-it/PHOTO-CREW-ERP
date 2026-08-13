@@ -3460,7 +3460,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     setLeads((prev) => 
       prev.map((ld) => {
         if (ld.lead_id === leadId) {
-          return {
+          const updatedLd = {
             ...ld,
             status: normalizedStatus,
             current_status: normalizedStatus,
@@ -3471,6 +3471,11 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             updated_by: currentUserName,
             updated_at: timestamp
           };
+          if (normalizedStatus === 'Lost Lead') {
+             (updatedLd as any).Lost_Reason = callNotes;
+             (updatedLd as any).Lost_Notes = negotiationNotes || callNotes;
+          }
+          return updatedLd;
         }
         return ld;
       })
@@ -6383,6 +6388,25 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if ((!newVal || newVal === '[]' || newVal === '') && (prevVal && prevVal !== '[]' && prevVal !== '')) {
           console.warn(`[SAFETY] Prevented accidental overwrite of deliverables_description. Retaining existing data.`);
           delete finalUpdates.deliverables_description;
+        }
+      }
+
+      if ('Team_Members' in finalUpdates) {
+        const newVal = finalUpdates.Team_Members;
+        const prevVal = prevLead.Team_Members;
+        if ((!newVal || newVal === '[]' || newVal === '') && (prevVal && prevVal !== '[]' && prevVal !== '')) {
+          console.warn(`[SAFETY] Prevented accidental overwrite of Team_Members. Retaining existing data.`);
+          delete finalUpdates.Team_Members;
+        }
+      }
+      
+      // Also check any possible alias used
+      if ('Team_Members_Included' in finalUpdates) {
+        const newVal = finalUpdates.Team_Members_Included;
+        const prevVal = prevLead.Team_Members_Included;
+        if ((!newVal || newVal === '[]' || newVal === '') && (prevVal && prevVal !== '[]' && prevVal !== '')) {
+          console.warn(`[SAFETY] Prevented accidental overwrite of Team_Members_Included. Retaining existing data.`);
+          delete finalUpdates.Team_Members_Included;
         }
       }
       
