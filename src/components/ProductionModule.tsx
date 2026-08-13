@@ -1294,6 +1294,7 @@ ${coordinatorName}`;
   // Action Dropdown state for Production Leads table
   const [openActionDropdown, setOpenActionDropdown] = useState<{
     id: string;
+    buttonEl: HTMLElement | null;
     rect: DOMRect;
     prod: Production;
     order: any;
@@ -1304,24 +1305,37 @@ ${coordinatorName}`;
   } | null>(null);
 
   useEffect(() => {
-    if (!openActionDropdown) return;
-    const handleResize = () => {
-      setOpenActionDropdown(null);
+    if (!openActionDropdown || !openActionDropdown.buttonEl) return;
+
+    const updatePosition = () => {
+      setOpenActionDropdown(prev => {
+        if (!prev || !prev.buttonEl) return null;
+        const newRect = prev.buttonEl.getBoundingClientRect();
+        // If button is completely off visible screen or hidden
+        if (
+          newRect.bottom < 0 ||
+          newRect.top > window.innerHeight ||
+          newRect.right < 0 ||
+          newRect.left > window.innerWidth ||
+          (newRect.width === 0 && newRect.height === 0)
+        ) {
+          return null;
+        }
+        return {
+          ...prev,
+          rect: newRect
+        };
+      });
     };
-    const handleScroll = (e: Event) => {
-      const dropdownEl = document.getElementById('production-action-dropdown');
-      if (dropdownEl && dropdownEl.contains(e.target as Node)) {
-        return;
-      }
-      setOpenActionDropdown(null);
-    };
-    window.addEventListener('scroll', handleScroll, true);
-    window.addEventListener('resize', handleResize);
+
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+
     return () => {
-      window.removeEventListener('scroll', handleScroll, true);
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
     };
-  }, [openActionDropdown]);
+  }, [openActionDropdown?.id, openActionDropdown?.buttonEl]);
 
   const getProductionStatus = (prod: Production): string => {
     const status = (prod.editing_status || 'Verified Footage') as string;
@@ -3979,12 +3993,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                         type="button"
                                         onClick={(e) => {
                                           e.stopPropagation();
+                                          const btn = e.currentTarget;
                                           if (openActionDropdown?.id === prod.production_id) {
                                             setOpenActionDropdown(null);
                                           } else {
-                                            const rect = e.currentTarget.getBoundingClientRect();
+                                            const rect = btn.getBoundingClientRect();
                                             setOpenActionDropdown({
                                               id: prod.production_id,
+                                              buttonEl: btn,
                                               rect,
                                               prod,
                                               order,
@@ -4021,187 +4037,190 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           </div>
 
           {/* Floating Action Dropdown Menu */}
-          {openActionDropdown && (() => {
-            const { id, rect, prod, order, displayStatus, isEditorAssigned, hasSavedAssignments, isStatusActive } = openActionDropdown;
-            
-            const menuWidth = 224; // w-56
-            const menuHeightEstimate = 320;
-            const spaceBelow = window.innerHeight - rect.bottom;
-            const spaceAbove = rect.top;
-            const openUp = spaceBelow < menuHeightEstimate && spaceAbove > spaceBelow;
+          {openActionDropdown && createPortal(
+            (() => {
+              const { id, rect, prod, order, displayStatus, isEditorAssigned, hasSavedAssignments, isStatusActive } = openActionDropdown;
+              
+              const menuWidth = 224; // w-56
+              const menuHeightEstimate = 320;
+              const spaceBelow = window.innerHeight - rect.bottom;
+              const spaceAbove = rect.top;
+              const openUp = spaceBelow < menuHeightEstimate && spaceAbove > spaceBelow;
 
-            const topPos = openUp ? undefined : rect.bottom + 6;
-            const bottomPos = openUp ? window.innerHeight - rect.top + 6 : undefined;
-            const maxHeight = openUp ? Math.max(160, rect.top - 16) : Math.max(160, window.innerHeight - rect.bottom - 16);
+              const topPos = openUp ? undefined : rect.bottom + 6;
+              const bottomPos = openUp ? window.innerHeight - rect.top + 6 : undefined;
+              const maxHeight = openUp ? Math.max(160, rect.top - 16) : Math.max(160, window.innerHeight - rect.bottom - 16);
 
-            let leftCalc = rect.right - menuWidth;
-            if (leftCalc < 12) leftCalc = rect.left;
-            if (leftCalc < 12) leftCalc = 12;
-            if (leftCalc + menuWidth > window.innerWidth - 12) {
-              leftCalc = window.innerWidth - menuWidth - 12;
-            }
+              let leftCalc = rect.right - menuWidth;
+              if (leftCalc < 12) leftCalc = rect.left;
+              if (leftCalc < 12) leftCalc = 12;
+              if (leftCalc + menuWidth > window.innerWidth - 12) {
+                leftCalc = Math.max(12, window.innerWidth - menuWidth - 12);
+              }
 
-            const isLocked = isProjectLocked(displayStatus) || isProjectLocked(prod.editing_status);
+              const isLocked = isProjectLocked(displayStatus) || isProjectLocked(prod.editing_status);
 
-            return (
-              <>
-                {/* Transparent overlay backdrop to close menu on outside click */}
-                <div 
-                  className="fixed inset-0 z-40 bg-transparent cursor-default"
-                  onClick={() => setOpenActionDropdown(null)}
-                />
+              return (
+                <div className="fixed inset-0 z-[9999] pointer-events-none">
+                  {/* Transparent overlay backdrop to close menu on outside click */}
+                  <div 
+                    className="fixed inset-0 bg-transparent cursor-default pointer-events-auto"
+                    onClick={() => setOpenActionDropdown(null)}
+                  />
 
-                {/* Floating Action Dropdown Panel */}
-                <div
-                  id="production-action-dropdown"
-                  style={{
-                    top: topPos !== undefined ? `${topPos}px` : undefined,
-                    bottom: bottomPos !== undefined ? `${bottomPos}px` : undefined,
-                    left: `${leftCalc}px`,
-                    maxHeight: `${maxHeight}px`,
-                  }}
-                  className="fixed z-50 w-56 overflow-y-auto bg-zinc-900/98 backdrop-blur-md border border-zinc-700/80 rounded-xl shadow-2xl p-1.5 text-zinc-200 text-xs font-sans ring-1 ring-white/10 animate-in fade-in zoom-in-95 duration-150"
-                >
-                  <div className="px-2.5 py-1.5 text-[9px] font-black uppercase font-mono tracking-wider text-zinc-400 border-b border-zinc-800/80 mb-1 flex items-center justify-between sticky top-0 bg-zinc-900/95 z-10 pb-1.5">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
-                      <span>Action Menu</span>
-                    </span>
-                    <span className="text-zinc-500 font-normal text-[8px] font-mono">
-                      ID: {prod.tracking_id || prod.production_id}
-                    </span>
-                  </div>
+                  {/* Floating Action Dropdown Panel */}
+                  <div
+                    id="production-action-dropdown"
+                    style={{
+                      top: topPos !== undefined ? `${topPos}px` : undefined,
+                      bottom: bottomPos !== undefined ? `${bottomPos}px` : undefined,
+                      left: `${leftCalc}px`,
+                      maxHeight: `${maxHeight}px`,
+                    }}
+                    className="fixed z-[10000] pointer-events-auto w-56 max-w-[calc(100vw-24px)] overflow-y-auto bg-zinc-900/98 backdrop-blur-md border border-zinc-700/80 rounded-xl shadow-2xl p-1.5 text-zinc-200 text-xs font-sans ring-1 ring-white/10 animate-in fade-in zoom-in-95 duration-150"
+                  >
+                    <div className="px-2.5 py-1.5 text-[9px] font-black uppercase font-mono tracking-wider text-zinc-400 border-b border-zinc-800/80 mb-1 flex items-center justify-between sticky top-0 bg-zinc-900/95 z-10 pb-1.5">
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                        <span>Action Menu</span>
+                      </span>
+                      <span className="text-zinc-500 font-normal text-[8px] font-mono">
+                        ID: {prod.tracking_id || prod.production_id}
+                      </span>
+                    </div>
 
-                  <div className="flex flex-col gap-0.5">
-                    {/* Assign Editor */}
-                    {(displayStatus === "Raw Footage Received" || displayStatus === "Verified Footage" || displayStatus === "Footage Handover Verified" || displayStatus === "Pending") && (
+                    <div className="flex flex-col gap-0.5">
+                      {/* Assign Editor */}
+                      {(displayStatus === "Raw Footage Received" || displayStatus === "Verified Footage" || displayStatus === "Footage Handover Verified" || displayStatus === "Pending") && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenActionDropdown(null);
+                            handleOpenAssignEditor(prod);
+                          }}
+                          className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-purple-300 hover:text-white hover:bg-purple-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                        >
+                          <span className="text-sm">👤</span>
+                          <span>Assign Editor</span>
+                        </button>
+                      )}
+
+                      {/* Reassign Editor */}
+                      {(displayStatus === "Assigned Editor" || displayStatus === "Editing Started" || displayStatus === "Customer Review") && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenActionDropdown(null);
+                            handleOpenAssignEditor(prod);
+                          }}
+                          className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-purple-300 hover:text-white hover:bg-purple-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                        >
+                          <span className="text-sm">👤</span>
+                          <span>Reassign Editor</span>
+                        </button>
+                      )}
+
+                      {/* Send Review Link */}
+                      {(displayStatus === "Customer Review" || displayStatus === "Editing Completed") && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenActionDropdown(null);
+                            handleOpenResendReviewPopup(prod);
+                          }}
+                          className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-cyan-300 hover:text-white hover:bg-cyan-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                        >
+                          <span className="text-sm">📤</span>
+                          <span>Send Review Link</span>
+                        </button>
+                      )}
+
+                      {/* Client Acceptance */}
+                      {displayStatus === "Editing Completed" && currentRole !== "Production Staff" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenActionDropdown(null);
+                            handleOpenClientAcceptance(prod);
+                          }}
+                          className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-emerald-300 hover:text-white hover:bg-emerald-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                        >
+                          <span className="text-sm">✓</span>
+                          <span>Client Acceptance</span>
+                        </button>
+                      )}
+
+                      {/* Share via WhatsApp */}
+                      {isEditorAssigned && hasSavedAssignments && isStatusActive && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenActionDropdown(null);
+                            prepareEditorWhatsappData(prod.production_id);
+                          }}
+                          className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-green-300 hover:text-white hover:bg-green-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                        >
+                          <span className="text-sm">💬</span>
+                          <span>Share</span>
+                        </button>
+                      )}
+
+                      {/* Edit Full Dossier */}
                       <button
                         type="button"
                         onClick={() => {
                           setOpenActionDropdown(null);
-                          handleOpenAssignEditor(prod);
+                          setSelectedLeadProd(prod);
+                          setDossierError("");
+                          setDossierSuccessMessage("");
+                          setLeadEditor(prod.editor_assigned || "Unassigned");
+                          setLeadStaff(prod.assigned_staff ? prod.assigned_staff.split(", ").map(s => s.trim()) : []);
+                          setAssignRoleFilter("");
+                          setLeadPriority(prod.project_priority || "Medium");
+                          setLeadFootageStatus(getRawFootageStatus(prod));
+                          setLeadProdStatus(getProductionStatus(prod));
+                          setLeadRemarks(prod.remarks || "");
+                          setLeadStartDate(prod.editing_start_date || "");
+                          setLeadTargetDeliveryDate(prod.target_delivery_date || "");
+                          setLeadExpectedDeliveryDate(prod.expected_delivery_date || "");
+                          setLeadActualDeliveryDate(prod.delivery_date || prod.actual_delivery_date || "");
+                          const pLogs = (logs || []).filter(log => 
+                            log.record_id === prod.production_id ||
+                            log.record_id === prod.tracking_id ||
+                            log.record_id === order?.order_id
+                          );
+                          const rf = (rawFootage || []).find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
+                          const computedRfDate = rf && (rf.status === "Received" || rf.raw_received) 
+                            ? (rf.uploaded_date || rf.event_completed_date) 
+                            : "";
+                          const crLog = pLogs.find(log => 
+                            log.new_stage === "Client Review Sent" || 
+                            log.new_stage === "Customer Review" ||
+                            log.action.includes("Client Review Sent") ||
+                            log.action.includes("Customer Review")
+                          );
+                          const caLog = pLogs.find(log => 
+                            log.new_stage === "Final Approval" || 
+                            log.new_stage === "Approved" ||
+                            log.action.includes("Final Approval") ||
+                            log.action.includes("Approved")
+                          );
+                          setLeadRawFootageDate(toInputDateFormat((prod as any).raw_footage_received_date || computedRfDate));
+                          setLeadClientReviewDate(toInputDateFormat((prod as any).client_review_upload_date || (crLog ? crLog.timestamp : null)));
+                          setLeadClientApprovalDate(toInputDateFormat((prod as any).client_approval_date || (caLog ? caLog.timestamp : null)));
                         }}
-                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-purple-300 hover:text-white hover:bg-purple-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-zinc-300 hover:text-white hover:bg-zinc-800/90 rounded-lg transition-colors flex items-center gap-2 cursor-pointer border-t border-zinc-800/80 mt-0.5 pt-1.5"
                       >
-                        <span className="text-sm">👤</span>
-                        <span>Assign Editor</span>
+                        <span className="text-sm">✎</span>
+                        <span>Edit Full Dossier</span>
                       </button>
-                    )}
-
-                    {/* Reassign Editor */}
-                    {(displayStatus === "Assigned Editor" || displayStatus === "Editing Started" || displayStatus === "Customer Review") && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenActionDropdown(null);
-                          handleOpenAssignEditor(prod);
-                        }}
-                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-purple-300 hover:text-white hover:bg-purple-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                      >
-                        <span className="text-sm">👤</span>
-                        <span>Reassign Editor</span>
-                      </button>
-                    )}
-
-                    {/* Send Review Link */}
-                    {(displayStatus === "Customer Review" || displayStatus === "Editing Completed") && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenActionDropdown(null);
-                          handleOpenResendReviewPopup(prod);
-                        }}
-                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-cyan-300 hover:text-white hover:bg-cyan-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                      >
-                        <span className="text-sm">📤</span>
-                        <span>Send Review Link</span>
-                      </button>
-                    )}
-
-                    {/* Client Acceptance */}
-                    {displayStatus === "Editing Completed" && currentRole !== "Production Staff" && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenActionDropdown(null);
-                          handleOpenClientAcceptance(prod);
-                        }}
-                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-emerald-300 hover:text-white hover:bg-emerald-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                      >
-                        <span className="text-sm">✓</span>
-                        <span>Client Acceptance</span>
-                      </button>
-                    )}
-
-                    {/* Share via WhatsApp */}
-                    {isEditorAssigned && hasSavedAssignments && isStatusActive && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenActionDropdown(null);
-                          prepareEditorWhatsappData(prod.production_id);
-                        }}
-                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-green-300 hover:text-white hover:bg-green-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                      >
-                        <span className="text-sm">💬</span>
-                        <span>Share</span>
-                      </button>
-                    )}
-
-                    {/* Edit Full Dossier */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOpenActionDropdown(null);
-                        setSelectedLeadProd(prod);
-                        setDossierError("");
-                        setDossierSuccessMessage("");
-                        setLeadEditor(prod.editor_assigned || "Unassigned");
-                        setLeadStaff(prod.assigned_staff ? prod.assigned_staff.split(", ").map(s => s.trim()) : []);
-                        setAssignRoleFilter("");
-                        setLeadPriority(prod.project_priority || "Medium");
-                        setLeadFootageStatus(getRawFootageStatus(prod));
-                        setLeadProdStatus(getProductionStatus(prod));
-                        setLeadRemarks(prod.remarks || "");
-                        setLeadStartDate(prod.editing_start_date || "");
-                        setLeadTargetDeliveryDate(prod.target_delivery_date || "");
-                        setLeadExpectedDeliveryDate(prod.expected_delivery_date || "");
-                        setLeadActualDeliveryDate(prod.delivery_date || prod.actual_delivery_date || "");
-                        const pLogs = (logs || []).filter(log => 
-                          log.record_id === prod.production_id ||
-                          log.record_id === prod.tracking_id ||
-                          log.record_id === order?.order_id
-                        );
-                        const rf = (rawFootage || []).find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
-                        const computedRfDate = rf && (rf.status === "Received" || rf.raw_received) 
-                          ? (rf.uploaded_date || rf.event_completed_date) 
-                          : "";
-                        const crLog = pLogs.find(log => 
-                          log.new_stage === "Client Review Sent" || 
-                          log.new_stage === "Customer Review" ||
-                          log.action.includes("Client Review Sent") ||
-                          log.action.includes("Customer Review")
-                        );
-                        const caLog = pLogs.find(log => 
-                          log.new_stage === "Final Approval" || 
-                          log.new_stage === "Approved" ||
-                          log.action.includes("Final Approval") ||
-                          log.action.includes("Approved")
-                        );
-                        setLeadRawFootageDate(toInputDateFormat((prod as any).raw_footage_received_date || computedRfDate));
-                        setLeadClientReviewDate(toInputDateFormat((prod as any).client_review_upload_date || (crLog ? crLog.timestamp : null)));
-                        setLeadClientApprovalDate(toInputDateFormat((prod as any).client_approval_date || (caLog ? caLog.timestamp : null)));
-                      }}
-                      className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-zinc-300 hover:text-white hover:bg-zinc-800/90 rounded-lg transition-colors flex items-center gap-2 cursor-pointer border-t border-zinc-800/80 mt-0.5 pt-1.5"
-                    >
-                      <span className="text-sm">✎</span>
-                      <span>Edit Full Dossier</span>
-                    </button>
+                    </div>
                   </div>
                 </div>
-              </>
-            );
-          })()}
+              );
+            })(),
+            document.body
+          )}
         </div>
       )}
 

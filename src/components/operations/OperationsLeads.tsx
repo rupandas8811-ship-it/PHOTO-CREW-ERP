@@ -1065,8 +1065,22 @@ export const OperationsLeads: React.FC = () => {
         }
         const includedRoles = eventRoles?.length > 0 ? eventRoles : [];
 
-        const hasExisting = staffAssignments?.some(sa => sa.order_id === order.order_id);
-        const existingNames = (hasExisting && ev.assigned_staff_names) ? ev.assigned_staff_names.split(',').map((n: string) => n.trim()) : [];
+        // Group roles into tasks
+        const tasksMap = new Map<string, { roleName: string; targetQty: number }>();
+        includedRoles.forEach((roleStr: string) => {
+          const { qty, text } = parseQtyAndText(roleStr);
+          const roleName = (text || roleStr).trim();
+          if (!roleName) return;
+          if (tasksMap.has(roleName)) {
+            tasksMap.get(roleName)!.targetQty += (qty || 1);
+          } else {
+            tasksMap.set(roleName, { roleName, targetQty: qty || 1 });
+          }
+        });
+        const taskGroups = Array.from(tasksMap.values());
+
+        const orderStaffAssignments = staffAssignments?.filter(sa => sa.order_id === order.order_id && sa.assignment_status !== 'Cancelled') || [];
+        const existingNames = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean) : [];
 
         let assignedEquipment: string[] = [];
         let mobilesRaw = ev.assigned_staff_mobiles || '';
@@ -1087,28 +1101,92 @@ export const OperationsLeads: React.FC = () => {
         const cleanMobilesRaw = mobilesRaw.split(' || EQUIPMENT:')[0] || '';
         const mobilesList = cleanMobilesRaw.split(',').map((m: string) => m.trim());
 
-        // Construct exactly 1 dedicated slot per role in includedRoles using roleIdx
-        includedRoles.forEach((roleStr: string, roleIdx: number) => {
-          const assignedName = existingNames[roleIdx] || '';
-          if (assignedName) {
-            const st = staff?.find(s => s.name?.toLowerCase() === assignedName.toLowerCase());
-            const saMatch = staffAssignments?.find(sa => sa.order_id === order.order_id && sa.staff_name?.toLowerCase() === assignedName.toLowerCase());
-            const stType = saMatch?.staff_type || st?.staff_type || (st as any)?.Staff_Type || 'In-House';
+        if (orderStaffAssignments.length > 0) {
+          orderStaffAssignments.forEach((sa, saIdx) => {
+            const st = staff?.find(s => s.name?.toLowerCase() === sa.staff_name?.toLowerCase());
+            const stType = sa.staff_type || st?.staff_type || (st as any)?.Staff_Type || 'In-House';
             const cleanType = (stType === 'Freelancer' || stType === 'freelancer') ? 'Freelancer' : 'In-House';
 
             staffList.push({
-              role_index: roleIdx,
-              staff_role: roleStr,
-              staff_id: st?.staff_id || ('MOCK-' + Math.random().toString(36).substr(2, 4)),
-              staff_name: assignedName,
-              mobile: st?.mobile || mobilesList[roleIdx] || '',
+              id: sa.assignment_id || ('slot_' + Math.random().toString(36).substr(2, 6)),
+              staff_role: sa.staff_role || taskGroups[0]?.roleName || 'General Staff',
+              staff_id: sa.staff_id || st?.staff_id || ('MOCK-' + Math.random().toString(36).substr(2, 4)),
+              staff_name: sa.staff_name,
+              mobile: sa.mobile || st?.mobile || '',
               staff_type: cleanType,
-              equipment: staffEquipments[roleIdx] || (roleIdx === 0 ? assignedEquipment : [])
+              equipment: sa.equipment || staffEquipments[saIdx] || []
+            });
+          });
+        } else if (existingNames.length > 0) {
+          let namePointer = 0;
+          if (taskGroups.length > 0) {
+            taskGroups.forEach(task => {
+              for (let i = 0; i < task.targetQty; i++) {
+                const assignedName = existingNames[namePointer] || '';
+                namePointer++;
+                const st = staff?.find(s => s.name?.toLowerCase() === assignedName.toLowerCase());
+                const stType = st?.staff_type || (st as any)?.Staff_Type || 'In-House';
+                const cleanType = (stType === 'Freelancer' || stType === 'freelancer') ? 'Freelancer' : 'In-House';
+
+                staffList.push({
+                  id: 'slot_' + Math.random().toString(36).substr(2, 6),
+                  staff_role: task.roleName,
+                  staff_id: st?.staff_id || (assignedName ? 'MOCK-' + Math.random().toString(36).substr(2, 4) : ''),
+                  staff_name: assignedName,
+                  mobile: st?.mobile || mobilesList[namePointer - 1] || '',
+                  staff_type: cleanType,
+                  equipment: staffEquipments[namePointer - 1] || []
+                });
+              }
+            });
+          } else {
+            existingNames.forEach((assignedName, idx) => {
+              const st = staff?.find(s => s.name?.toLowerCase() === assignedName.toLowerCase());
+              staffList.push({
+                id: 'slot_' + Math.random().toString(36).substr(2, 6),
+                staff_role: 'General Staff',
+                staff_id: st?.staff_id || 'MOCK-' + Math.random().toString(36).substr(2, 4),
+                staff_name: assignedName,
+                mobile: st?.mobile || mobilesList[idx] || '',
+                staff_type: 'In-House',
+                equipment: staffEquipments[idx] || []
+              });
+            });
+          }
+        } else {
+          if (taskGroups.length > 0) {
+            taskGroups.forEach(task => {
+              for (let i = 0; i < task.targetQty; i++) {
+                staffList.push({
+                  id: 'slot_' + Math.random().toString(36).substr(2, 6),
+                  staff_role: task.roleName,
+                  staff_id: '',
+                  staff_name: '',
+                  mobile: '',
+                  staff_type: 'In-House',
+                  equipment: []
+                });
+              }
             });
           } else {
             staffList.push({
-              role_index: roleIdx,
-              staff_role: roleStr,
+              id: 'slot_' + Math.random().toString(36).substr(2, 6),
+              staff_role: 'General Staff',
+              staff_id: '',
+              staff_name: '',
+              mobile: '',
+              staff_type: 'In-House',
+              equipment: []
+            });
+          }
+        }
+
+        // Ensure every task group has at least 1 slot in staffList
+        taskGroups.forEach(task => {
+          if (!staffList.some(s => s.staff_role === task.roleName)) {
+            staffList.push({
+              id: 'slot_' + Math.random().toString(36).substr(2, 6),
+              staff_role: task.roleName,
               staff_id: '',
               staff_name: '',
               mobile: '',
@@ -1246,17 +1324,30 @@ export const OperationsLeads: React.FC = () => {
           if (includedRoles.length > 0) {
             const allocStaff = eventAllocations[evId]?.staff || [];
             const validAllocStaff = allocStaff.filter((s: any) => s.staff_name && s.staff_name.trim() !== '');
+            
+            const tasksMap = new Map<string, { roleName: string; targetQty: number }>();
+            includedRoles.forEach((roleStr: string) => {
+              const { qty, text } = parseQtyAndText(roleStr);
+              const roleName = (text || roleStr).trim();
+              if (!roleName) return;
+              if (tasksMap.has(roleName)) {
+                tasksMap.get(roleName)!.targetQty += (qty || 1);
+              } else {
+                tasksMap.set(roleName, { roleName, targetQty: qty || 1 });
+              }
+            });
+
             let isMissingStaff = false;
-            for (const roleStr of Array.from(new Set<string>(includedRoles as string[]))) {
-              if (!validAllocStaff.some((s: any) => s.staff_role === roleStr)) {
-                 isMissingStaff = true;
-                 break;
+            for (const task of Array.from(tasksMap.values())) {
+              if (!validAllocStaff.some((s: any) => s.staff_role === task.roleName)) {
+                isMissingStaff = true;
+                break;
               }
             }
 
             if (isMissingStaff) {
                 setValidationAttempted(true);
-                setAssignValidationError(`Please complete all Staff Assignments before saving.\nAt least one Staff is required for every Team Member Included.`);
+                setAssignValidationError(`Please complete all Staff Assignments before saving.\nAt least one Staff is required for every Team Member Included task.`);
                 
                 // Open the collapsed event and focus
                 setCollapsedAssignEvents(prev => ({ ...prev, [evId]: false }));
@@ -2397,14 +2488,432 @@ export const OperationsLeads: React.FC = () => {
                       </div>
                       {/* 3. Team Members Included & Staff Assignment */}
                       <div className="space-y-4 pt-2">
-                           <div className="flex items-center justify-between mb-2 pb-2 border-b border-zinc-800">
-                           <h4 className="text-[11px] font-mono font-bold uppercase text-sky-400 tracking-wider">
-                             Team Members Included
-                           </h4>
-                           <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900 px-2 py-1 rounded-md border border-zinc-800 shadow-inner">
-                              {allocStaff.length} / {includedRoles.length} Assigned
-                           </span>
+                        <div className="flex items-center justify-between mb-2 pb-2 border-b border-zinc-800">
+                          <h4 className="text-[11px] font-mono font-bold uppercase text-sky-400 tracking-wider">
+                            Team Members Included & Staff Allocation
+                          </h4>
+                          <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900 px-2 py-1 rounded-md border border-zinc-800 shadow-inner">
+                            {allocStaff.filter((s: any) => s.staff_name && s.staff_name.trim()).length} Staff Assigned
+                          </span>
                         </div>
+
+                        <div className="space-y-4">
+                          {(() => {
+                            // Group roles into tasks
+                            const tasksMap = new Map<string, { roleName: string; targetQty: number }>();
+                            includedRoles.forEach((roleStr: string) => {
+                              const { qty, text } = parseQtyAndText(roleStr);
+                              const roleName = (text || roleStr).trim();
+                              if (!roleName) return;
+                              if (tasksMap.has(roleName)) {
+                                tasksMap.get(roleName)!.targetQty += (qty || 1);
+                              } else {
+                                tasksMap.set(roleName, { roleName, targetQty: qty || 1 });
+                              }
+                            });
+
+                            // Ensure any staff_role existing in allocStaff is also in tasksMap
+                            allocStaff.forEach((s: any) => {
+                              if (s.staff_role && !tasksMap.has(s.staff_role)) {
+                                tasksMap.set(s.staff_role, { roleName: s.staff_role, targetQty: 1 });
+                              }
+                            });
+
+                            const taskGroups = Array.from(tasksMap.values());
+
+                            if (taskGroups.length === 0 && includedRoles.length === 0) {
+                              return (
+                                <div className="text-center py-6 text-zinc-500 text-xs italic font-mono bg-zinc-900/10 border border-zinc-900 rounded-xl">
+                                  {loadError ? (
+                                    <div className="text-red-400 space-y-1 p-4">
+                                      <div>❌ Failed to load Team Members Included.</div>
+                                      <div className="text-[10px]">Reason: {loadError}</div>
+                                    </div>
+                                  ) : (
+                                    "No Team Members Included found for this event."
+                                  )}
+                                </div>
+                              );
+                            }
+
+                            return taskGroups.map((task, groupIdx) => {
+                              const taskSlots = allocStaff.filter((s: any) => s.staff_role === task.roleName);
+                              const slotsToRender = taskSlots.length > 0 ? taskSlots : [{
+                                id: 'slot_' + Math.random().toString(36).substr(2, 6),
+                                staff_role: task.roleName,
+                                staff_id: '',
+                                staff_name: '',
+                                mobile: '',
+                                staff_type: 'In-House',
+                                equipment: []
+                              }];
+
+                              const assignedCount = taskSlots.filter((s: any) => s.staff_name && s.staff_name.trim() !== '').length;
+
+                              return (
+                                <div key={`task_${groupIdx}_${task.roleName}`} className="border border-zinc-800/80 rounded-xl overflow-hidden bg-zinc-950/80 shadow-md">
+                                  {/* Task Header */}
+                                  <div className="bg-zinc-900/80 px-3.5 py-2.5 border-b border-zinc-800/80 flex items-center justify-between flex-wrap gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sky-400 text-xs">✔</span>
+                                      <span className="text-xs font-bold text-zinc-100 font-sans uppercase tracking-wide">
+                                        {task.roleName}
+                                      </span>
+                                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                                        Required: {task.targetQty}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${
+                                        assignedCount >= task.targetQty 
+                                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                                          : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                      }`}>
+                                        {assignedCount} / {task.targetQty} Assigned
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Staff Rows under Task */}
+                                  <div className="p-3 space-y-3 divide-y divide-zinc-900/60">
+                                    {slotsToRender.map((slot: any, slotIdx: number) => {
+                                      const isEmpty = !slot.staff_name || slot.staff_name.trim() === '';
+                                      const currentStaffType = slot.staff_type || 'In-House';
+                                      const slotKey = slot.id || `slot_${groupIdx}_${slotIdx}`;
+
+                                      return (
+                                        <div key={slotKey} className={`pt-2.5 first:pt-0 space-y-2.5 ${validationAttempted && isEmpty ? 'bg-rose-950/10 p-2 rounded-lg' : ''}`}>
+                                          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                            {/* Staff Type Select */}
+                                            <div className="w-full sm:w-32 shrink-0">
+                                              <select
+                                                value={currentStaffType}
+                                                onChange={(e) => {
+                                                  const newType = e.target.value as 'In-House' | 'Freelancer';
+                                                  setEventAllocations((prev: any) => {
+                                                    const existingAlloc = prev[evId] || { staff: [] };
+                                                    const updatedStaff = existingAlloc.staff.map((s: any) => {
+                                                      if (s.id === slot.id || s === slot) {
+                                                        return { ...s, staff_type: newType, staff_name: '', staff_id: '', mobile: '' };
+                                                      }
+                                                      return s;
+                                                    });
+                                                    return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
+                                                  });
+                                                }}
+                                                className="w-full bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs text-zinc-300 rounded-lg px-2.5 py-1.5 font-sans focus:outline-none focus:border-amber-500 cursor-pointer h-8"
+                                              >
+                                                <option value="In-House">In-House</option>
+                                                <option value="Freelancer">Freelancer</option>
+                                              </select>
+                                            </div>
+
+                                            {/* Staff Name Select */}
+                                            <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-2">
+                                              <select
+                                                value={slot.staff_name || ''}
+                                                onChange={(e) => {
+                                                  const selectedName = e.target.value;
+                                                  const memberInfo = staff?.find(st => st.name === selectedName);
+                                                  const staffId = memberInfo?.staff_id || '';
+
+                                                  setEventAllocations((prev: any) => {
+                                                    const existingAlloc = prev[evId] || { staff: [] };
+                                                    const updatedStaff = existingAlloc.staff.map((s: any) => {
+                                                      if (s.id === slot.id || s === slot) {
+                                                        return {
+                                                          ...s,
+                                                          staff_name: selectedName,
+                                                          staff_id: staffId,
+                                                          mobile: memberInfo?.mobile || ''
+                                                        };
+                                                      }
+                                                      return s;
+                                                    });
+                                                    return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
+                                                  });
+                                                }}
+                                                className={`w-full bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs rounded-lg px-2.5 py-1.5 font-sans focus:outline-none focus:border-amber-500 cursor-pointer h-8 ${
+                                                  slot.staff_name ? 'text-emerald-400 font-bold' : 'text-zinc-400 font-normal'
+                                                }`}
+                                              >
+                                                {(() => {
+                                                  const normType = (type: string | undefined): string => {
+                                                    const clean = (type || 'In-House').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+                                                    return (clean === 'inhouse' || clean === 'in-house' || clean === 'in house') ? 'in-house' : 'freelancer';
+                                                  };
+
+                                                  const filteredStaff = (staff || []).filter(s => {
+                                                    if (s.status !== 'Active') return false;
+                                                    if (s.department !== 'Operations') return false;
+                                                    const sType = s.staff_type || s.Staff_Type;
+                                                    return normType(sType) === normType(currentStaffType);
+                                                  });
+
+                                                  const assignedInOtherSlots = (eventAllocations[evId]?.staff || []).filter((s: any) => {
+                                                    return (s.id !== slot.id) && s.staff_name && s.staff_name.trim() !== '';
+                                                  }).map((s: any) => s.staff_name.trim().toLowerCase());
+
+                                                  const currentAssignedNameLower = (slot.staff_name || '').trim().toLowerCase();
+
+                                                  const availableStaff = filteredStaff.filter(s => {
+                                                    const nameLower = (s.name || '').trim().toLowerCase();
+                                                    if (nameLower === currentAssignedNameLower) return true;
+                                                    return !assignedInOtherSlots.includes(nameLower);
+                                                  });
+
+                                                  if (availableStaff.length === 0) {
+                                                    return <option value="" disabled>No staff available.</option>;
+                                                  }
+
+                                                  return (
+                                                    <>
+                                                      <option value="">▼ Select Staff</option>
+                                                      {availableStaff.map(st => {
+                                                        const isBusy = isStaffBusyOnDate(st.name, ev.event_date || '', activeOrderInstance?.order_id || '');
+                                                        return (
+                                                          <option key={st.staff_id} value={st.name}>
+                                                            {st.name} {isBusy ? '🔴 Busy' : '🟢 Available'} - {st.role}
+                                                          </option>
+                                                        );
+                                                      })}
+                                                    </>
+                                                  );
+                                                })()}
+                                              </select>
+
+                                              {/* Availability badge & Remove Row Button */}
+                                              <div className="flex items-center justify-between sm:justify-start gap-2 shrink-0">
+                                                {slot.staff_name && (
+                                                  isStaffBusyOnDate(slot.staff_name, ev.event_date || '', activeOrderInstance?.order_id || '') ? (
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => setBusyRosterStaff(slot.staff_name)}
+                                                      className="text-[9px] px-2 py-1 rounded bg-red-500/10 text-red-400 font-mono uppercase border border-red-500/20 cursor-pointer hover:bg-red-500/20 transition-colors shrink-0"
+                                                    >
+                                                      🔴 Busy
+                                                    </button>
+                                                  ) : (
+                                                    <span className="text-[9px] px-2 py-1 rounded bg-emerald-500/10 text-emerald-400 font-mono uppercase border border-emerald-500/20 shrink-0">
+                                                      🟢 Available
+                                                    </span>
+                                                  )
+                                                )}
+
+                                                {/* Remove Staff Slot Button */}
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setEventAllocations((prev: any) => {
+                                                      const existingAlloc = prev[evId] || { staff: [] };
+                                                      const updatedStaff = existingAlloc.staff.filter((s: any) => s.id !== slot.id && s !== slot);
+                                                      return {
+                                                        ...prev,
+                                                        [evId]: {
+                                                          ...existingAlloc,
+                                                          staff: updatedStaff
+                                                        }
+                                                      };
+                                                    });
+                                                  }}
+                                                  className="flex items-center gap-1 text-xs text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 px-2 py-1 rounded border border-rose-500/20 transition-colors cursor-pointer font-medium ml-auto sm:ml-0"
+                                                  title="Remove this staff assignment slot"
+                                                >
+                                                  ✕ <span className="hidden sm:inline">Remove</span>
+                                                </button>
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          {/* Equipment Section per Staff */}
+                                          {(() => {
+                                            const eqKey = `${evId}-${slot.id}`;
+                                            const searchQuery = equipmentSearchQueryByEvent[eqKey] || '';
+                                            const isDropdownOpen = !!isEquipmentDropdownOpenByEvent[eqKey];
+                                            const selectedEquipmentNames = slot.equipment || [];
+
+                                            const allOtherSelectedEquipments = allocStaff
+                                              .filter((s: any) => s.id !== slot.id && s !== slot)
+                                              .flatMap((s: any) => s.equipment || []);
+
+                                            const filteredEquipment = (equipment || []).filter(eq => {
+                                              if (allOtherSelectedEquipments.includes(eq.equipment_name)) {
+                                                return false;
+                                              }
+                                              const q = searchQuery.toLowerCase();
+                                              return eq.equipment_name.toLowerCase().includes(q) ||
+                                                     (eq.category || '').toLowerCase().includes(q) ||
+                                                     (eq.serial_number || '').toLowerCase().includes(q);
+                                            });
+
+                                            return (
+                                              <div className="flex flex-col sm:flex-row sm:items-start gap-2 pt-1.5 border-t border-zinc-900/50">
+                                                <div className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider pt-1 shrink-0 sm:w-32 hidden sm:block">
+                                                  Equipment
+                                                </div>
+
+                                                <div className="flex flex-col flex-1 gap-2 min-w-0 w-full">
+                                                  {selectedEquipmentNames.length > 0 && (
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                      {selectedEquipmentNames.map((eqName: string, eqIdx: number) => (
+                                                        <span key={eqIdx} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[11px] font-mono font-medium rounded border border-amber-500/20 transition-all">
+                                                          <span className="truncate max-w-[150px] sm:max-w-[220px]">⚙️ {eqName}</span>
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                              setEventAllocations((prev: any) => {
+                                                                const existingAlloc = prev[evId] || { staff: [] };
+                                                                const updatedStaff = existingAlloc.staff.map((s: any) => {
+                                                                  if (s.id === slot.id || s === slot) {
+                                                                    return {
+                                                                      ...s,
+                                                                      equipment: (s.equipment || []).filter((name: string) => name !== eqName)
+                                                                    };
+                                                                  }
+                                                                  return s;
+                                                                });
+                                                                return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
+                                                              });
+                                                            }}
+                                                            className="text-amber-500 hover:text-amber-300 font-bold ml-1 text-xs cursor-pointer focus:outline-none"
+                                                          >
+                                                            ✕
+                                                          </button>
+                                                        </span>
+                                                      ))}
+                                                    </div>
+                                                  )}
+
+                                                  <div className="relative">
+                                                    <div className="flex gap-1.5">
+                                                      <input
+                                                        type="text"
+                                                        placeholder={selectedEquipmentNames.length === 0 ? "Search to assign equipment..." : "Search equipment..."}
+                                                        value={searchQuery}
+                                                        onFocus={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: true }))}
+                                                        onChange={(e) => setEquipmentSearchQueryByEvent(prev => ({ ...prev, [eqKey]: e.target.value }))}
+                                                        className="flex-1 min-w-0 bg-zinc-900 border border-zinc-800 focus:border-amber-500 focus:outline-none rounded-lg py-1 px-2.5 text-xs text-zinc-100 placeholder-zinc-500 h-8"
+                                                      />
+                                                      {isDropdownOpen ? (
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: false }))}
+                                                          className="px-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono rounded-lg border border-zinc-700 transition-colors cursor-pointer shrink-0 h-8"
+                                                        >
+                                                          Close
+                                                        </button>
+                                                      ) : (
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: true }))}
+                                                          className="px-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-xs font-mono rounded-lg border border-zinc-800 transition-colors cursor-pointer shrink-0 h-8"
+                                                        >
+                                                          Browse
+                                                        </button>
+                                                      )}
+                                                    </div>
+                                                    {isDropdownOpen && (
+                                                      <div className="absolute left-0 right-0 mt-1 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl max-h-48 overflow-y-auto z-40 scrollbar-thin divide-y divide-zinc-800/60">
+                                                        {filteredEquipment.length > 0 ? (
+                                                          filteredEquipment.map((eq) => {
+                                                            const isAlreadySelected = selectedEquipmentNames.includes(eq.equipment_name);
+                                                            return (
+                                                              <div
+                                                                key={eq.equipment_id}
+                                                                onClick={() => {
+                                                                  setEventAllocations((prev: any) => {
+                                                                    const existingAlloc = prev[evId] || { staff: [] };
+                                                                    const updatedStaff = existingAlloc.staff.map((s: any) => {
+                                                                      if (s.id === slot.id || s === slot) {
+                                                                        const currentEq = s.equipment || [];
+                                                                        return {
+                                                                          ...s,
+                                                                          equipment: isAlreadySelected
+                                                                            ? currentEq.filter((name: string) => name !== eq.equipment_name)
+                                                                            : [...currentEq, eq.equipment_name]
+                                                                        };
+                                                                      }
+                                                                      return s;
+                                                                    });
+                                                                    return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
+                                                                  });
+                                                                }}
+                                                                className={`flex items-center justify-between p-2.5 cursor-pointer transition-colors text-xs text-left ${
+                                                                  isAlreadySelected ? 'bg-amber-500/10 hover:bg-amber-500/15' : 'hover:bg-zinc-800/80'
+                                                                }`}
+                                                              >
+                                                                <div className="space-y-0.5">
+                                                                  <div className="font-bold text-white flex items-center gap-1.5">
+                                                                    <span>⚙️ {eq.equipment_name}</span>
+                                                                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-400 uppercase font-mono">
+                                                                      {eq.category}
+                                                                    </span>
+                                                                  </div>
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                  <span className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] font-bold ${
+                                                                    isAlreadySelected ? 'bg-amber-500 border-amber-500 text-black' : 'border-zinc-700'
+                                                                  }`}>
+                                                                    {isAlreadySelected ? '✓' : ''}
+                                                                  </span>
+                                                                </div>
+                                                              </div>
+                                                            );
+                                                          })
+                                                        ) : (
+                                                          <div className="p-4 text-center text-xs text-zinc-500 italic">
+                                                            No equipment found matching "{searchQuery}"
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            );
+                                          })()}
+                                        </div>
+                                      );
+                                    })}
+
+                                    {/* Add Staff Button under Task */}
+                                    <div className="pt-2 border-t border-zinc-900 flex items-center justify-between">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEventAllocations((prev: any) => {
+                                            const existingAlloc = prev[evId] || { staff: [] };
+                                            const newSlot = {
+                                              id: 'slot_' + Math.random().toString(36).substr(2, 6),
+                                              staff_role: task.roleName,
+                                              staff_id: '',
+                                              staff_name: '',
+                                              mobile: '',
+                                              staff_type: 'In-House',
+                                              equipment: []
+                                            };
+                                            return {
+                                              ...prev,
+                                              [evId]: {
+                                                ...existingAlloc,
+                                                staff: [...existingAlloc.staff, newSlot]
+                                              }
+                                            };
+                                          });
+                                        }}
+                                        className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-sky-400 hover:text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 px-3 py-1.5 rounded-lg border border-sky-500/20 transition-all cursor-pointer"
+                                      >
+                                        ➕ Add Staff for {task.roleName}
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </div>
+                      {false && (
                         
                         <div className="border border-zinc-900 rounded-xl overflow-hidden bg-zinc-950">
                           <div className="w-full text-left">
@@ -2809,6 +3318,7 @@ export const OperationsLeads: React.FC = () => {
                             </div>
                           </div>
                         </div>
+                      )}
 
 
                         {/* Staff Schedule Card (Hidden as requested) */}
@@ -2936,8 +3446,6 @@ export const OperationsLeads: React.FC = () => {
                            );
                         })()}
                         
-                      </div>
-                      
                       {/* 4. WhatsApp Sharing (Hidden as requested) */}
                       {false && allocStaff.length > 0 && (
                         <div className="pt-3 mt-4 border-t border-zinc-800">
