@@ -430,9 +430,10 @@ export function parseDeliverablesJsonToRecord(
             }).filter(Boolean);
           }
 
-          if (evName === 'General' || !evName) {
+          if (evName === 'General' || !evName || evName === 'Unnamed Event' || (eventsList.length <= 1)) {
             generalList = [...generalList, ...deliverables];
-          } else {
+          }
+          if (evName !== 'General' && evName) {
             if (deliverables.length > 0) {
               result[`${pkgId}_${evName}`] = deliverables;
               result[`Custom Package_${evName}`] = deliverables;
