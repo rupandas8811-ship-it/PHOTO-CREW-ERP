@@ -4626,7 +4626,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 [nameKey]: currentList
                               };
                               setEditableInclusions(updated);
-                              if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
+                              saveStep3DataRealtime(updated, editableDeliverables);
                             }}
                             className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
                           >
@@ -4651,7 +4651,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   [nameKey]: currentList
                                 };
                                 setEditableInclusions(updated);
-                                if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
+                                saveStep3DataRealtime(updated, editableDeliverables);
                               }}
                               onDelete={() => {
                                 const currentList = [...eventInclusions];
@@ -4662,7 +4662,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   [nameKey]: currentList
                                 };
                                 setEditableInclusions(updated);
-                                if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
+                                saveStep3DataRealtime(updated, editableDeliverables);
                               }}
                             />
                           ))}
@@ -4678,7 +4678,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   [nameKey]: currentList
                                 };
                                 setEditableInclusions(updated);
-                                if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
+                                saveStep3DataRealtime(updated, editableDeliverables);
                               }}
                               className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
                             >
@@ -4708,7 +4708,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 [nameKey]: currentList
                               };
                               setEditableDeliverables(updated);
-                              if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
+                              saveStep3DataRealtime(editableInclusions, updated);
                             }}
                             className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
                           >
@@ -4733,7 +4733,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   [nameKey]: currentList
                                 };
                                 setEditableDeliverables(updated);
-                                if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
+                                saveStep3DataRealtime(editableInclusions, updated);
                               }}
                               onDelete={() => {
                                 const currentList = [...eventDeliverables];
@@ -4744,7 +4744,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   [nameKey]: currentList
                                 };
                                 setEditableDeliverables(updated);
-                                if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
+                                saveStep3DataRealtime(editableInclusions, updated);
                               }}
                             />
                           ))}
@@ -4760,7 +4760,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   [nameKey]: currentList
                                 };
                                 setEditableDeliverables(updated);
-                                if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
+                                saveStep3DataRealtime(editableInclusions, updated);
                               }}
                               className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
                             >
@@ -4793,7 +4793,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             [selectedPkgId]: currentList
                           };
                           setEditableInclusions(updated);
-                          if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
+                          saveStep3DataRealtime(updated, editableDeliverables);
                         }}
                         className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
                       >
@@ -4817,7 +4817,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               [selectedPkgId]: currentList
                             };
                             setEditableInclusions(updated);
-                            if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
+                            saveStep3DataRealtime(updated, editableDeliverables);
                           }}
                           onDelete={() => {
                             const currentList = [...inclusionsList];
@@ -4827,7 +4827,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               [selectedPkgId]: currentList
                             };
                             setEditableInclusions(updated);
-                            if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
+                            saveStep3DataRealtime(updated, editableDeliverables);
                           }}
                         />
                       ))}
@@ -4842,7 +4842,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               [selectedPkgId]: currentList
                             };
                             setEditableInclusions(updated);
-                            if (isEdit) saveStep3DataRealtime(updated, editableDeliverables);
+                            saveStep3DataRealtime(updated, editableDeliverables);
                           }}
                           className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
                         >
@@ -4871,7 +4871,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             [selectedPkgId]: currentList
                           };
                           setEditableDeliverables(updated);
-                          if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
+                          saveStep3DataRealtime(editableInclusions, updated);
                         }}
                         className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
                       >
@@ -4895,7 +4895,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               [selectedPkgId]: currentList
                             };
                             setEditableDeliverables(updated);
-                            if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
+                            saveStep3DataRealtime(editableInclusions, updated);
                           }}
                           onDelete={() => {
                             const currentList = [...deliverablesList];
@@ -4905,7 +4905,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               [selectedPkgId]: currentList
                             };
                             setEditableDeliverables(updated);
-                            if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
+                            saveStep3DataRealtime(editableInclusions, updated);
                           }}
                         />
                       ))}
@@ -4920,7 +4920,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               [selectedPkgId]: currentList
                             };
                             setEditableDeliverables(updated);
-                            if (isEdit) saveStep3DataRealtime(editableInclusions, updated);
+                            saveStep3DataRealtime(editableInclusions, updated);
                           }}
                           className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
                         >
@@ -5907,53 +5907,58 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         }
         let finalEventsList = [...crmEvents];
 
-        if (showEventForm || finalEventsList.length === 0) {
-          if (!eventForm.event_type || eventForm.event_type === '') {
-            showToastMsg("Please select Event Type.", "error");
-            setIsSaving(false);
-            return;
-          }
-          if (!eventForm.event_date || eventForm.event_date === '') {
-            showToastMsg("Please select Event Date.", "error");
-            setIsSaving(false);
-            return;
-          }
-          if (!eventForm.event_location || eventForm.event_location.trim() === '') {
-            showToastMsg("Please enter Event Location.", "error");
-            setIsSaving(false);
-            return;
-          }
+        if (showEventForm || editingEventId) {
+          const isFormFilled = !!(eventForm.event_type || eventForm.event_date || eventForm.event_location);
+          if (editingEventId || isFormFilled || finalEventsList.length === 0) {
+            if (!eventForm.event_type || eventForm.event_type === '') {
+              showToastMsg("Please select Event Type.", "error");
+              setIsSaving(false);
+              return;
+            }
+            if (!eventForm.event_date || eventForm.event_date === '') {
+              showToastMsg("Please select Event Date.", "error");
+              setIsSaving(false);
+              return;
+            }
+            if (!eventForm.event_location || eventForm.event_location.trim() === '') {
+              showToastMsg("Please enter Event Location.", "error");
+              setIsSaving(false);
+              return;
+            }
 
-          const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);
-          if (dateTimeErrMsg) {
-            showToastMsg(dateTimeErrMsg, "error");
-            setIsSaving(false);
-            return;
-          }
+            const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);
+            if (dateTimeErrMsg) {
+              showToastMsg(dateTimeErrMsg, "error");
+              setIsSaving(false);
+              return;
+            }
 
-          const guestPaxVal = eventForm.guest_pax !== '' ? Math.max(0, parseInt(String(eventForm.guest_pax)) || 0) : '';
-          const staffPaxVal = eventForm.staff_pax !== '' ? Math.max(0, parseInt(String(eventForm.staff_pax)) || 0) : '';
+            const guestPaxVal = eventForm.guest_pax !== '' ? Math.max(0, parseInt(String(eventForm.guest_pax)) || 0) : '';
+            const staffPaxVal = eventForm.staff_pax !== '' ? Math.max(0, parseInt(String(eventForm.staff_pax)) || 0) : '';
 
-          const eventData = {
-            ...eventForm,
-            guest_pax: guestPaxVal,
-            staff_pax: staffPaxVal,
-            event_start_date: eventForm.event_date,
-            event_end_date: eventForm.event_end_date || ''
-          };
+            const eventData = {
+              ...eventForm,
+              guest_pax: guestPaxVal,
+              staff_pax: staffPaxVal,
+              event_start_date: eventForm.event_date,
+              event_end_date: eventForm.event_end_date || ''
+            };
 
-          if (editingEventId) {
-            finalEventsList = finalEventsList.map(ev => ev.id === editingEventId ? { ...eventData, id: editingEventId } : ev);
+            if (editingEventId) {
+              finalEventsList = finalEventsList.map(ev => ev.id === editingEventId ? { ...eventData, id: editingEventId } : ev);
+            } else {
+              finalEventsList.push({
+                ...eventData,
+                id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
+              });
+            }
+
+            setCrmEvents(finalEventsList);
+            setEditingEventId(null);
+            setShowEventForm(false);
           } else {
-            finalEventsList.push({
-              ...eventData,
-              id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
-            });
+            setShowEventForm(false);
           }
-
-          setCrmEvents(finalEventsList);
-          setEditingEventId(null);
-          setShowEventForm(false);
         }
 
         if (finalEventsList.length === 0) {
@@ -6014,7 +6019,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
 
         // Perform direct save for Step 2 without showing follow-up popup
-        await handleSaveStep2Direct();
+        await handleSaveStep2Direct(finalEventsList);
         return;
       } else if (step === 3) {
         if (isStep3Locked) {
@@ -6322,7 +6327,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     return () => clearInterval(interval);
   }, [leads]);
 
-  const handleSaveStep2Direct = async () => {
+  const handleSaveStep2Direct = async (overrideEvents?: LeadEvent[]) => {
     const isCreateFlow = activeTab === 'create';
     if (!isCreateFlow && isStep2Locked) {
       showToastMsg("Event details are locked after order confirmation.", "error");
@@ -6335,7 +6340,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
     setIsSaving(true);
     try {
-      const finalEventsList = (isCreateFlow ? [...createEvents] : [...crmEvents]);
+      const finalEventsList = (overrideEvents && overrideEvents.length > 0)
+        ? overrideEvents
+        : (isCreateFlow ? [...createEvents] : [...crmEvents]);
       if (finalEventsList.length === 0) {
         showToastMsg("Please add at least one event.", "error");
         setIsSaving(false);
@@ -6465,14 +6472,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             'Additional Deliverables'
           ];
 
-          setEditableInclusions(prev => ({
-            ...prev,
-            'Custom Package': (prev['Custom Package'] && prev['Custom Package'].length > 0) ? prev['Custom Package'] : defaultInc
-          }));
-          setEditableDeliverables(prev => ({
-            ...prev,
-            'Custom Package': (prev['Custom Package'] && prev['Custom Package'].length > 0) ? prev['Custom Package'] : defaultDel
-          }));
+          const finalInc = {
+            ...editableInclusions,
+            'Custom Package': (editableInclusions['Custom Package'] && editableInclusions['Custom Package'].length > 0) ? editableInclusions['Custom Package'] : defaultInc
+          };
+          const finalDel = {
+            ...editableDeliverables,
+            'Custom Package': (editableDeliverables['Custom Package'] && editableDeliverables['Custom Package'].length > 0) ? editableDeliverables['Custom Package'] : defaultDel
+          };
+
+          setEditableInclusions(finalInc);
+          setEditableDeliverables(finalDel);
+
+          await saveStep3DataRealtime(finalInc, finalDel, 'Custom Package');
 
           setSelectedLead(prev => {
             if (prev && prev.lead_id === currentLeadId) {
@@ -8351,48 +8363,53 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       let finalEventsList = [...createEvents];
       
       // If eventForm is visible or there are no events in the list, validate and add
-      if (showEventForm || finalEventsList.length === 0) {
-        if (!eventForm.event_type || eventForm.event_type === '') {
-          showValidationError("input_event_type", "Please select Event Type.");
-          return;
-        }
-        if (!eventForm.event_date || eventForm.event_date === '') {
-          showValidationError("input_event_date", "Please select Event Date.");
-          return;
-        }
-        if (!eventForm.event_location || eventForm.event_location.trim() === '') {
-          showValidationError("input_event_location", "Please enter Event Location.");
-          return;
-        }
-        const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);
-        if (dateTimeErrMsg) {
-          showValidationError("input_event_end_time", dateTimeErrMsg);
-          return;
-        }
+      if (showEventForm || editingEventId) {
+        const isFormFilled = !!(eventForm.event_type || eventForm.event_date || eventForm.event_location);
+        if (editingEventId || isFormFilled || finalEventsList.length === 0) {
+          if (!eventForm.event_type || eventForm.event_type === '') {
+            showValidationError("input_event_type", "Please select Event Type.");
+            return;
+          }
+          if (!eventForm.event_date || eventForm.event_date === '') {
+            showValidationError("input_event_date", "Please select Event Date.");
+            return;
+          }
+          if (!eventForm.event_location || eventForm.event_location.trim() === '') {
+            showValidationError("input_event_location", "Please enter Event Location.");
+            return;
+          }
+          const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);
+          if (dateTimeErrMsg) {
+            showValidationError("input_event_end_time", dateTimeErrMsg);
+            return;
+          }
 
-        const guestPaxVal = eventForm.guest_pax !== '' ? Math.max(0, parseInt(String(eventForm.guest_pax)) || 0) : '';
-        const staffPaxVal = eventForm.staff_pax !== '' ? Math.max(0, parseInt(String(eventForm.staff_pax)) || 0) : '';
+          const guestPaxVal = eventForm.guest_pax !== '' ? Math.max(0, parseInt(String(eventForm.guest_pax)) || 0) : '';
+          const staffPaxVal = eventForm.staff_pax !== '' ? Math.max(0, parseInt(String(eventForm.staff_pax)) || 0) : '';
 
-        const eventData = {
-          ...eventForm,
-          guest_pax: guestPaxVal,
-          staff_pax: staffPaxVal,
-          event_start_date: eventForm.event_date,
-          event_end_date: eventForm.event_end_date || ''
-        };
+          const eventData = {
+            ...eventForm,
+            guest_pax: guestPaxVal,
+            staff_pax: staffPaxVal,
+            event_start_date: eventForm.event_date,
+            event_end_date: eventForm.event_end_date || ''
+          };
 
-        if (editingEventId) {
-          finalEventsList = finalEventsList.map(ev => ev.id === editingEventId ? { ...eventData, id: editingEventId } : ev);
+          if (editingEventId) {
+            finalEventsList = finalEventsList.map(ev => ev.id === editingEventId ? { ...eventData, id: editingEventId } : ev);
+          } else {
+            finalEventsList.push({
+              ...eventData,
+              id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
+            });
+          }
+          
+          setCreateEvents(finalEventsList);
+          setEditingEventId(null);
+          setShowEventForm(false);
         } else {
-          finalEventsList.push({
-            ...eventData,
-            id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
-          });
+          setShowEventForm(false);
         }
-        
-        setCreateEvents(finalEventsList);
-        setEditingEventId(null);
-        setShowEventForm(false);
       }
 
       if (finalEventsList.length === 0) {
@@ -8450,7 +8467,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const firstEvent = finalEventsList[0];
 
       try {
-        await handleSaveStep2Direct();
+        await handleSaveStep2Direct(finalEventsList);
       } catch (err: any) {
         console.error("Step 2 saving failed:", err);
   
