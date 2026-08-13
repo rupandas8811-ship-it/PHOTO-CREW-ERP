@@ -629,30 +629,6 @@ export const OperationsLeads: React.FC = () => {
     return 'Assigned Crew';
   };
 
-  const isCompletedEvent = (o: Order) => {
-    const completedStages = [
-      'Event Completed',
-      'Raw Footage Received',
-      'Editor Assigned',
-      'Editing Started',
-      'Editing In Progress',
-      'Internal QC Review',
-      'Client Review Sent',
-      'Revision Required',
-      'Revision In Progress',
-      'Final Approval',
-      'Project Delivered',
-      'Project Closed',
-      'Customer Review',
-      'Approved',
-      'Delivered',
-      'Payment Pending',
-      'Closed'
-    ];
-    const op = operations.find(x => x.order_id === o.order_id);
-    return completedStages.includes(o.current_stage) || op?.event_status === 'Completed';
-  };
-
   const isStaffBusyOnDate = (staffName: string, targetDate: string, currentOrderId?: string) => {
     if (!targetDate || !staffName) return false;
 
@@ -1724,6 +1700,30 @@ export const OperationsLeads: React.FC = () => {
     markEventCompleted(closingOrderId, serverPath);
     setClosingOrderId(null);
     alert(`Shoot marked completed for [${closingOrderId}]!`);
+  };
+
+  const isCompletedEvent = (o: Order) => {
+    const completedStages = [
+      'Event Completed',
+      'Raw Footage Received',
+      'Editor Assigned',
+      'Editing Started',
+      'Editing In Progress',
+      'Internal QC Review',
+      'Client Review Sent',
+      'Revision Required',
+      'Revision In Progress',
+      'Final Approval',
+      'Project Delivered',
+      'Project Closed',
+      'Customer Review',
+      'Approved',
+      'Delivered',
+      'Payment Pending',
+      'Closed'
+    ];
+    const op = operations.find(x => x.order_id === o.order_id);
+    return completedStages.includes(o.current_stage) || op?.event_status === 'Completed';
   };
 
   const stats = useMemo(() => {
