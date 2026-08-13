@@ -113,26 +113,61 @@ const LocalEditableInput: React.FC<LocalEditableInputProps> = ({ value, disabled
   );
 };
 
-function parseQtyAndText(raw: string): { qty: number; text: string } {
-  if (!raw || typeof raw !== "string") return { qty: 1, text: "" };
-  const str = raw.trim();
-  const match = str.match(/^(\d+)\s*(.*)$/);
-  if (match) {
-    const qty = parseInt(match[1], 10);
-    const text = match[2] || "";
-    return { qty: isNaN(qty) || qty < 1 ? 1 : qty, text };
+function parseQtyAndText(raw: any): { qty: number; text: string } {
+  if (raw === null || raw === undefined) return { qty: 1, text: "" };
+
+  let qty = 1;
+  let text = "";
+
+  if (typeof raw === "object") {
+    const q = Number(raw.qty || raw.quantity || raw.count || 1);
+    qty = isNaN(q) || q < 1 ? 1 : q;
+    text = String(raw.name || raw.text || raw.deliverable || raw.title || raw.role || raw.member_name || "").trim();
+  } else {
+    text = String(raw).trim();
   }
-  return { qty: 1, text: str };
+
+  if (!text) return { qty: 1, text: "" };
+
+  // 1. Extract and strip any (Qty X) or (quantity X) or (Qty: X) occurrences anywhere in text
+  const qtyPatterns = /\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*(\d+)\s*[\)\]\-]?/gi;
+  let match;
+  while ((match = qtyPatterns.exec(text)) !== null) {
+    if (match[1]) {
+      const parsedQty = parseInt(match[1], 10);
+      if (!isNaN(parsedQty) && parsedQty >= 1) {
+        qty = parsedQty;
+      }
+    }
+  }
+
+  // Remove ALL (Qty X) / (quantity X) / (Qty: X) patterns from text
+  text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
+
+  // 2. Check for leading quantity: e.g. "2 Lead Photographer", "2 x Traditional Photos", "2 - Traditional Photos"
+  const leadingMatch = text.match(/^(\d+)\s*[\*xX×\-–—]?\s*(.*)$/);
+  if (leadingMatch) {
+    const parsedQty = parseInt(leadingMatch[1], 10);
+    if (!isNaN(parsedQty) && parsedQty >= 1) {
+      qty = parsedQty;
+    }
+    text = leadingMatch[2] ? leadingMatch[2].trim() : "";
+    text = text.replace(/^[xX×\*\-–—]\s*/, "").trim();
+  }
+
+  // 3. Clean trailing punctuation
+  text = text.replace(/[\(\[\-–—:]+$/, "").trim();
+
+  return { qty: isNaN(qty) || qty < 1 ? 1 : qty, text };
 }
 
 function combineQtyAndText(qty: number | string, text: string): string {
-  const cleanText = text ? text.trim() : "";
+  const parsed = parseQtyAndText(text);
   const qNum = parseInt(String(qty), 10);
-  const validQty = isNaN(qNum) || qNum < 1 ? 1 : qNum;
-  if (!cleanText) return validQty > 1 ? `${validQty} ` : "";
-  const textMatch = cleanText.match(/^(\d+)\s*(.*)$/);
-  const finalText = textMatch ? textMatch[2].trim() : cleanText;
-  return `${validQty} ${finalText}`.trim();
+  const validQty = !isNaN(qNum) && qNum >= 1 ? qNum : parsed.qty;
+  const cleanText = parsed.text;
+  if (!cleanText) return validQty > 1 ? `${validQty}` : "";
+  return `${validQty} ${cleanText}`.trim();
 }
 
 export function formatListToStructuredObjects(list: any[]): { name: string; qty: number }[] {
@@ -141,11 +176,12 @@ export function formatListToStructuredObjects(list: any[]): { name: string; qty:
   list.forEach(item => {
     if (!item) return;
     if (typeof item === 'object') {
-      const name = String(item.name || item.role || item.member_name || item.text || item.deliverable || item.title || '').trim();
-      const q = Number(item.qty || item.quantity || item.count || 1);
+      const rawName = String(item.name || item.role || item.member_name || item.text || item.deliverable || item.title || '').trim();
+      const parsed = parseQtyAndText(rawName);
+      const q = Number(item.qty || item.quantity || item.count || parsed.qty || 1);
       const qty = isNaN(q) || q < 1 ? 1 : q;
-      if (name) {
-        result.push({ name, qty });
+      if (parsed.text) {
+        result.push({ name: parsed.text, qty });
       }
     } else if (typeof item === 'string') {
       const trimmed = item.trim();
@@ -191,9 +227,6 @@ export function buildStep3EventPayloads(
         break;
       }
     }
-    if (list.length === 0 && idx === 0) {
-      list = editableInclusions[effectivePkgId] || editableInclusions['Custom Package'] || editableInclusions['custom_package'] || (Object.values(editableInclusions).find(v => Array.isArray(v) && v.length > 0) || []);
-    }
 
     return {
       event_id: evId,
@@ -225,9 +258,6 @@ export function buildStep3EventPayloads(
         break;
       }
     }
-    if (list.length === 0 && idx === 0) {
-      list = editableDeliverables[effectivePkgId] || editableDeliverables['Custom Package'] || editableDeliverables['custom_package'] || (Object.values(editableDeliverables).find(v => Array.isArray(v) && v.length > 0) || []);
-    }
 
     return {
       event_id: evId,
@@ -257,7 +287,10 @@ export function parseTeamMembersJsonToRecord(
     try {
       parsed = JSON.parse(rawTeamData);
     } catch (e) {
-      const list = rawTeamData.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
+      const list = rawTeamData.split(/[,\n]/).map((s: string) => {
+        const { qty, text } = parseQtyAndText(s);
+        return text ? combineQtyAndText(qty, text) : '';
+      }).filter(Boolean);
       if (list.length > 0) {
         result[pkgId] = list;
         result['Custom Package'] = list;
@@ -271,24 +304,22 @@ export function parseTeamMembersJsonToRecord(
     let generalList: string[] = [];
     parsed.forEach((item: any) => {
       if (typeof item === 'string') {
-        generalList.push(item);
+        const { qty, text } = parseQtyAndText(item);
+        if (text) generalList.push(combineQtyAndText(qty, text));
       } else if (item && typeof item === 'object') {
-        if (item.role || item.member_name || item.name) {
-          const rName = item.role || item.member_name || item.name;
-          const rQty = item.qty || item.quantity ? `${item.qty || item.quantity} ` : '';
-          generalList.push(`${rQty}${rName}`.trim());
+        const rawName = item.role || item.member_name || item.name || item.text || item.title || '';
+        const { qty: parsedQty, text: parsedText } = parseQtyAndText(rawName);
+        const itemQty = item.qty || item.quantity || parsedQty || 1;
+
+        if (parsedText) {
+          generalList.push(combineQtyAndText(itemQty, parsedText));
         } else {
           const evName = item.event_name || item.event_type;
           const evId = item.event_id;
           const membersList = Array.isArray(item.team_members) ? item.team_members : (Array.isArray(item.members) ? item.members : []);
           const members = membersList.map((m: any) => {
-            if (typeof m === 'string') return m;
-            if (m && typeof m === 'object') {
-              const mName = m.role || m.member_name || m.name || '';
-              const mQty = m.qty || m.quantity ? `${m.qty || m.quantity} ` : '';
-              return `${mQty}${mName}`.trim();
-            }
-            return String(m);
+            const { qty, text } = parseQtyAndText(m);
+            return text ? combineQtyAndText(qty, text) : '';
           }).filter(Boolean);
 
           if (evName === 'General' || !evName) {
@@ -327,7 +358,10 @@ export function parseTeamMembersJsonToRecord(
   } else if (parsed && typeof parsed === 'object') {
     Object.keys(parsed).forEach(k => {
       if (Array.isArray(parsed[k])) {
-        result[k] = parsed[k].map((s: any) => String(s)).filter(Boolean);
+        result[k] = parsed[k].map((s: any) => {
+          const { qty, text } = parseQtyAndText(s);
+          return text ? combineQtyAndText(qty, text) : '';
+        }).filter(Boolean);
       }
     });
   }
@@ -348,7 +382,10 @@ export function parseDeliverablesJsonToRecord(
     try {
       parsed = JSON.parse(rawDelData);
     } catch (e) {
-      const list = rawDelData.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
+      const list = rawDelData.split(/[,\n]/).map((s: string) => {
+        const { qty, text } = parseQtyAndText(s);
+        return text ? combineQtyAndText(qty, text) : '';
+      }).filter(Boolean);
       if (list.length > 0) {
         result[pkgId] = list;
         result['Custom Package'] = list;
@@ -362,26 +399,23 @@ export function parseDeliverablesJsonToRecord(
     let generalList: string[] = [];
     parsed.forEach((item: any) => {
       if (typeof item === 'string') {
-        generalList.push(item);
+        const { qty, text } = parseQtyAndText(item);
+        if (text) generalList.push(combineQtyAndText(qty, text));
       } else if (item && typeof item === 'object') {
-        if (item.name || item.deliverable || item.title) {
-          const nameStr = item.name || item.deliverable || item.title;
-          const qtyStr = item.qty || item.quantity ? `Qty ${item.qty || item.quantity}` : '';
-          const fullStr = qtyStr ? `${nameStr} (${qtyStr})` : nameStr;
-          generalList.push(fullStr);
+        const rawName = item.name || item.deliverable || item.title || item.text || '';
+        const { qty: parsedQty, text: parsedText } = parseQtyAndText(rawName);
+        const itemQty = item.qty || item.quantity || parsedQty || 1;
+
+        if (parsedText) {
+          generalList.push(combineQtyAndText(itemQty, parsedText));
         } else {
           const evName = item.event_name || item.event_type;
           const evId = item.event_id;
           let deliverables: string[] = [];
           if (Array.isArray(item.deliverables)) {
             deliverables = item.deliverables.map((d: any) => {
-              if (typeof d === 'string') return d;
-              if (d && typeof d === 'object') {
-                const dName = d.name || d.deliverable || d.title || '';
-                const dQty = d.qty || d.quantity ? `Qty ${d.qty || d.quantity}` : '';
-                return dQty ? `${dName} (${dQty})` : dName;
-              }
-              return String(d);
+              const { qty, text } = parseQtyAndText(d);
+              return text ? combineQtyAndText(qty, text) : '';
             }).filter(Boolean);
           }
 
@@ -421,7 +455,10 @@ export function parseDeliverablesJsonToRecord(
   } else if (parsed && typeof parsed === 'object') {
     Object.keys(parsed).forEach(k => {
       if (Array.isArray(parsed[k])) {
-        result[k] = parsed[k].map((s: any) => String(s)).filter(Boolean);
+        result[k] = parsed[k].map((s: any) => {
+          const { qty, text } = parseQtyAndText(s);
+          return text ? combineQtyAndText(qty, text) : '';
+        }).filter(Boolean);
       }
     });
   }
@@ -3393,7 +3430,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     });
   };
 
-  // Auto-initialize spec editor state when selecting a lead
+  // Reset or clear state when selectedLead changes or is deselected
   React.useEffect(() => {
     if (!selectedLead && activeTab === 'create') {
       return;
@@ -3403,136 +3440,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setEditableDeliverables({});
       return;
     }
-
-    const activePackages = (leadPackages || []).filter(lp => lp.lead_id === selectedLead.lead_id);
-    const hasActivePkgs = activePackages.length > 0;
-
-    setEditableInclusions(prev => {
-      const newInclusions = { ...prev };
-      let changed = false;
-      if (!hasActivePkgs) {
-        const defaultId = `default_${selectedLead.lead_id}`;
-        if (!newInclusions[defaultId]) {
-          newInclusions[defaultId] = [
-            '1 Candid Photographer',
-            '1 Cinematographer',
-            '2 Traditional Photographers',
-            '2 Traditional Videographers',
-            '1 Drone',
-            '1 LED Wall',
-            '1 Spot Mixing'
-          ];
-          changed = true;
-        }
-      } else {
-        activePackages.forEach((lp) => {
-          const pkgKey = lp.package_id || lp.lead_package_id || 'default';
-          if (!newInclusions[pkgKey]) {
-            const pObj = (packages || []).find(p => p.package_id === lp.package_id);
-            const incStr = pObj?.team_members || lp.team_members || '';
-            const parsedInc = parseTeamMembers(incStr);
-            newInclusions[pkgKey] = parsedInc.length > 0
-              ? parsedInc
-              : [
-                  '1 Candid Photographer',
-                  '1 Cinematographer',
-                  '2 Traditional Photographers',
-                  '2 Traditional Videographers',
-                  '1 Drone',
-                  '1 LED Wall',
-                  '1 Spot Mixing'
-                ];
-            changed = true;
-          }
-        });
-      }
-      return changed ? newInclusions : prev;
-    });
-
-    setEditableDeliverables(prev => {
-      const newDeliverables = { ...prev };
-      let changed = false;
-      if (!hasActivePkgs) {
-        const defaultId = `default_${selectedLead.lead_id}`;
-        if (!newDeliverables[defaultId]) {
-          newDeliverables[defaultId] = [
-            '350 Edited Photos',
-            '4K Cinematic Video',
-            '3 Reels',
-            'Traditional Edited Video',
-            'Album Details',
-            'Additional Deliverables'
-          ];
-          changed = true;
-        }
-      } else {
-        activePackages.forEach((lp) => {
-          const pkgKey = lp.package_id || lp.lead_package_id || 'default';
-          if (!newDeliverables[pkgKey]) {
-            const pObj = (packages || []).find(p => p.package_id === lp.package_id);
-            const delStr = pObj?.deliverables || lp.deliverables || '';
-            newDeliverables[pkgKey] = delStr
-              ? delStr.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
-              : [
-                  '350 Edited Photos',
-                  '4K Cinematic Video',
-                  '3 Reels',
-                  'Traditional Edited Video',
-                  'Album Details',
-                  'Additional Deliverables'
-                ];
-            changed = true;
-          }
-        });
-      }
-      return changed ? newDeliverables : prev;
-    });
-  }, [selectedLead, leadPackages, packages]);
-
-  // Auto-load package details into Step 3 if a package is selected but inclusions/deliverables are empty
-  React.useEffect(() => {
-    const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
-    if (pkgId === 'Custom Package' || pkgId === 'custom_package') return;
-    if (pkgId && packages && packages.length > 0) {
-      const pkg = packages.find((p) => String(p.package_id) === String(pkgId));
-      if (pkg) {
-        setEditableInclusions(prev => {
-          let updated = { ...prev };
-          let changed = false;
-          const incList = parseTeamMembers(pkg.team_members);
-          const defaultInc = incList.length > 0 ? incList : ['1 Candid Photographer'];
-          
-          if (!prev[pkgId]) {
-            updated[pkgId] = defaultInc;
-            changed = true;
-          }
-          if (crmEvents && crmEvents.length > 0) {
-            crmEvents.forEach(ev => {
-              const key = `${pkgId}_${ev.id}`;
-              if (!prev[key]) {
-                updated[key] = [...defaultInc];
-                changed = true;
-              }
-            });
-          }
-          return changed ? updated : prev;
-        });
-
-        setEditableDeliverables(prev => {
-          let updated = { ...prev };
-          let changed = false;
-          const delList = parseTeamMembers(pkg.deliverables);
-          const defaultDel = delList.length > 0 ? delList : ['High Resolution Edited Photos'];
-
-          if (!prev[pkgId]) {
-            updated[pkgId] = defaultDel;
-            changed = true;
-          }
-          return changed ? updated : prev;
-        });
-      }
-    }
-  }, [wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, packages, crmEvents]);
+  }, [selectedLead, activeTab]);
 
   const lastLoadedLeadIdRef = React.useRef<string | null>(null);
 
@@ -5656,10 +5564,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }));
       
       const incList = parseTeamMembers(pkg.team_members);
-      const defaultInc = incList.length > 0 ? incList : ['1 Candid Photographer'];
+      const defaultInc = incList.length > 0 ? incList : [];
       
       const delList = parseTeamMembers(pkg.deliverables);
-      const defaultDel = delList.length > 0 ? delList : ['High Resolution Edited Photos'];
+      const defaultDel = delList.length > 0 ? delList : [];
 
       const newInclusions = { ...editableInclusions };
       newInclusions[pkgIdStr] = [...defaultInc];

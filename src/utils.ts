@@ -586,37 +586,50 @@ export function parseTeamMembers(teamMembersStr: string | undefined | null, targ
 
 export function parseQtyAndText(raw: any): { qty: number; text: string } {
   if (raw === null || raw === undefined) return { qty: 1, text: "" };
-  
+
+  let qty = 1;
+  let text = "";
+
   if (typeof raw === "object") {
     const q = Number(raw.qty || raw.quantity || raw.count || 1);
-    const qty = isNaN(q) || q < 1 ? 1 : q;
-    const t = String(raw.name || raw.text || raw.deliverable || raw.title || "").trim();
-    return { qty, text: t };
+    qty = isNaN(q) || q < 1 ? 1 : q;
+    text = String(raw.name || raw.text || raw.deliverable || raw.title || raw.role || raw.member_name || "").trim();
+  } else {
+    text = String(raw).trim();
   }
 
-  const str = String(raw).trim();
-  if (!str) return { qty: 1, text: "" };
+  if (!text) return { qty: 1, text: "" };
 
-  // 1. Leading quantity: e.g. "2 x Traditional Photos", "2 - Traditional Photos", "2 Photos", "2 × Photos", "2x Photos"
-  const leadingMatch = str.match(/^(\d+)\s*[\*xX×\-–—]?\s*(.*)$/);
+  // 1. Extract and strip any (Qty X) or (quantity X) or (Qty: X) occurrences anywhere in text
+  const qtyPatterns = /\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*(\d+)\s*[\)\]\-]?/gi;
+  let match;
+  while ((match = qtyPatterns.exec(text)) !== null) {
+    if (match[1]) {
+      const parsedQty = parseInt(match[1], 10);
+      if (!isNaN(parsedQty) && parsedQty >= 1) {
+        qty = parsedQty;
+      }
+    }
+  }
+
+  // Remove ALL (Qty X) / (quantity X) / (Qty: X) patterns from text
+  text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
+
+  // 2. Check for leading quantity: e.g. "2 Lead Photographer", "2 x Traditional Photos", "2 - Traditional Photos"
+  const leadingMatch = text.match(/^(\d+)\s*[\*xX×\-–—]?\s*(.*)$/);
   if (leadingMatch) {
-    const q = parseInt(leadingMatch[1], 10);
-    const qty = isNaN(q) || q < 1 ? 1 : q;
-    let text = leadingMatch[2] ? leadingMatch[2].trim() : "";
+    const parsedQty = parseInt(leadingMatch[1], 10);
+    if (!isNaN(parsedQty) && parsedQty >= 1) {
+      qty = parsedQty;
+    }
+    text = leadingMatch[2] ? leadingMatch[2].trim() : "";
     text = text.replace(/^[xX×\*\-–—]\s*/, "").trim();
-    if (text) return { qty, text };
   }
 
-  // 2. Trailing quantity: e.g. "Traditional Photos - Qty: 2", "Traditional Photos (Qty: 2)", "Traditional Photos x2"
-  const trailingMatch = str.match(/^(.*?)\s*[\(\-–—]?\s*(?:qty|quantity|count|x|×)?\s*[:=\-–—]?\s*(\d+)\s*[\)]?$/i);
-  if (trailingMatch && trailingMatch[1].trim()) {
-    const q = parseInt(trailingMatch[2], 10);
-    const qty = isNaN(q) || q < 1 ? 1 : q;
-    const text = trailingMatch[1].trim().replace(/[\(\-–—]\s*(?:qty|quantity|count|x|×)?\s*$/i, "").trim();
-    if (text) return { qty, text };
-  }
+  // 3. Clean trailing punctuation
+  text = text.replace(/[\(\[\-–—:]+$/, "").trim();
 
-  return { qty: 1, text: str };
+  return { qty: isNaN(qty) || qty < 1 ? 1 : qty, text };
 }
 
 export function parseDeliverablesWithQty(
