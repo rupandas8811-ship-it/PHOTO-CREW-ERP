@@ -1305,14 +1305,21 @@ ${coordinatorName}`;
 
   useEffect(() => {
     if (!openActionDropdown) return;
-    const handleScrollOrResize = () => {
+    const handleResize = () => {
       setOpenActionDropdown(null);
     };
-    window.addEventListener('scroll', handleScrollOrResize, true);
-    window.addEventListener('resize', handleScrollOrResize);
+    const handleScroll = (e: Event) => {
+      const dropdownEl = document.getElementById('production-action-dropdown');
+      if (dropdownEl && dropdownEl.contains(e.target as Node)) {
+        return;
+      }
+      setOpenActionDropdown(null);
+    };
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleResize);
     return () => {
-      window.removeEventListener('scroll', handleScrollOrResize, true);
-      window.removeEventListener('resize', handleScrollOrResize);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleResize);
     };
   }, [openActionDropdown]);
 
@@ -4017,16 +4024,24 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           {openActionDropdown && (() => {
             const { id, rect, prod, order, displayStatus, isEditorAssigned, hasSavedAssignments, isStatusActive } = openActionDropdown;
             
-            const menuHeightEstimate = 220;
+            const menuWidth = 224; // w-56
+            const menuHeightEstimate = 320;
             const spaceBelow = window.innerHeight - rect.bottom;
             const spaceAbove = rect.top;
-            const openUp = spaceBelow < menuHeightEstimate && spaceAbove > menuHeightEstimate;
+            const openUp = spaceBelow < menuHeightEstimate && spaceAbove > spaceBelow;
 
             const topPos = openUp ? undefined : rect.bottom + 6;
             const bottomPos = openUp ? window.innerHeight - rect.top + 6 : undefined;
+            const maxHeight = openUp ? Math.max(160, rect.top - 16) : Math.max(160, window.innerHeight - rect.bottom - 16);
 
-            const spaceRight = window.innerWidth - rect.right;
-            const rightPos = Math.max(12, spaceRight);
+            let leftCalc = rect.right - menuWidth;
+            if (leftCalc < 12) leftCalc = rect.left;
+            if (leftCalc < 12) leftCalc = 12;
+            if (leftCalc + menuWidth > window.innerWidth - 12) {
+              leftCalc = window.innerWidth - menuWidth - 12;
+            }
+
+            const isLocked = isProjectLocked(displayStatus) || isProjectLocked(prod.editing_status);
 
             return (
               <>
@@ -4038,14 +4053,16 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                 {/* Floating Action Dropdown Panel */}
                 <div
+                  id="production-action-dropdown"
                   style={{
                     top: topPos !== undefined ? `${topPos}px` : undefined,
                     bottom: bottomPos !== undefined ? `${bottomPos}px` : undefined,
-                    right: `${rightPos}px`,
+                    left: `${leftCalc}px`,
+                    maxHeight: `${maxHeight}px`,
                   }}
-                  className="fixed z-50 w-52 bg-zinc-900/95 backdrop-blur-md border border-zinc-700/80 rounded-xl shadow-2xl p-1.5 text-zinc-200 text-xs font-sans ring-1 ring-white/10 animate-in fade-in zoom-in-95 duration-150"
+                  className="fixed z-50 w-56 overflow-y-auto bg-zinc-900/98 backdrop-blur-md border border-zinc-700/80 rounded-xl shadow-2xl p-1.5 text-zinc-200 text-xs font-sans ring-1 ring-white/10 animate-in fade-in zoom-in-95 duration-150"
                 >
-                  <div className="px-2.5 py-1.5 text-[9px] font-black uppercase font-mono tracking-wider text-zinc-400 border-b border-zinc-800/80 mb-1 flex items-center justify-between">
+                  <div className="px-2.5 py-1.5 text-[9px] font-black uppercase font-mono tracking-wider text-zinc-400 border-b border-zinc-800/80 mb-1 flex items-center justify-between sticky top-0 bg-zinc-900/95 z-10 pb-1.5">
                     <span className="flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
                       <span>Action Menu</span>

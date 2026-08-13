@@ -31,65 +31,52 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
   reportTitle,
   reportType,
   cardName,
-  leads = [],
-  orders = [],
-  payments = [],
-  operations = [],
-  production = [],
-  staff = []
+  leads,
+  orders,
+  payments,
+  operations,
+  production,
+  staff
 }) => {
-  const roleCtx = useRole();
-  const globalDateRange = roleCtx?.globalDateRange || { start: '', end: '' };
+  const { globalDateRange } = useRole();
   const [searchQuery, setSearchQuery] = useState('');
-  const [localStartDate, setLocalStartDate] = useState(globalDateRange?.start || '');
-  const [localEndDate, setLocalEndDate] = useState(globalDateRange?.end || '');
+  const [localStartDate, setLocalStartDate] = useState(globalDateRange.start);
+  const [localEndDate, setLocalEndDate] = useState(globalDateRange.end);
   const [statusFilter, setStatusFilter] = useState('All');
   const [eventTypeFilter, setEventTypeFilter] = useState('All');
 
   // Sync initial date range if context changes or component is reopened
   React.useEffect(() => {
-    if (globalDateRange) {
-      setLocalStartDate(globalDateRange.start || '');
-      setLocalEndDate(globalDateRange.end || '');
-    }
+    setLocalStartDate(globalDateRange.start);
+    setLocalEndDate(globalDateRange.end);
   }, [globalDateRange, isOpen]);
 
   const uniqueStatuses = useMemo(() => {
     if (reportType !== 'sales') return ['All'];
-    const safeLeads = leads || [];
-    const statuses = new Set(safeLeads.map(l => l?.status).filter(Boolean));
+    const statuses = new Set(leads.map(l => l.status).filter(Boolean));
     return ['All', ...Array.from(statuses)];
   }, [leads, reportType]);
 
   const uniqueEventTypes = useMemo(() => {
     if (reportType !== 'sales') return ['All'];
     const types = new Set<string>(EVENT_TYPES);
-    const safeLeads = leads || [];
-    safeLeads.forEach(l => {
-      if (l?.event_type) types.add(l.event_type);
+    leads.forEach(l => {
+      if (l.event_type) types.add(l.event_type);
     });
     return ['All', ...Array.from(types)];
   }, [leads, reportType]);
 
   // 1. Compute current active range directly from context
-  const currentRange = globalDateRange || { start: '', end: '' };
+  const currentRange = globalDateRange;
 
   // 2. Fetch appropriate tabular rows based on report type & metric card clicked
   const rawRows = useMemo(() => {
     if (!isOpen) return [];
-    const safeLeads = leads || [];
-    const safeOrders = orders || [];
-    const safePayments = payments || [];
-    const safeOperations = operations || [];
-    const safeProduction = production || [];
-    const safeStaff = staff || [];
-    const safeCardName = (cardName || '').trim();
 
     switch (reportType) {
       case 'sales': {
-        return safeLeads.map(l => {
-          if (!l) return null;
-          const order = safeOrders.find(o => o && (o.lead_id === l.lead_id || o.customer_name === l.customer_name));
+        return leads.map(l => {
+          const order = orders.find(o => o.lead_id === l.lead_id || o.customer_name === l.customer_name);
           return {
             "Lead ID": l.lead_id || '—',
             "Order ID": order?.order_id || '—',
@@ -101,8 +88,8 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
             "Lead Source": l.lead_source || '—',
             "Created Date": l.created_date || '—'
           };
-        }).filter(Boolean).filter((row: any) => {
-          const name = safeCardName;
+        }).filter(row => {
+          const name = cardName.trim();
           if (name === 'New Leads') return row["Current Status"] === 'New Lead';
           if (name === 'Follow-up Pending' || name === 'Follow-Ups') return row["Current Status"] === 'Follow Up' || row["Current Status"] === 'Follow-Up';
           if (name === 'Quotation Sent' || name === 'Quotations Sent') return row["Current Status"] === 'Quotation Sent';
@@ -121,9 +108,8 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
       }
 
       case 'operations': {
-        return safeOrders.map(o => {
-          if (!o) return null;
-          const op = safeOperations.find(x => x && x.order_id === o.order_id);
+        return orders.map(o => {
+          const op = operations.find(x => x.order_id === o.order_id);
           const staffAssigned = op 
             ? [op.photographer_assigned, op.videographer_assigned, op.drone_operator_assigned].filter(name => name && name !== 'None').join(', ')
             : 'Unassigned';
@@ -137,23 +123,22 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
             "Reporting Time": op?.reporting_time || '—',
             "Order Date": o.created_at && typeof o.created_at === 'string' ? o.created_at.split('T')[0] : o.event_date
           };
-        }).filter(Boolean).filter((row: any) => {
-          if (safeCardName === 'New Orders Received') return row["Event Status"] === 'New Order Received' || row["Event Status"] === 'Order Confirmed';
-          if (safeCardName === 'Events Scheduled') return row["Event Status"] === 'Event Scheduled' || row["Event Status"] === 'Operations Assigned';
-          if (safeCardName === 'Staff Assigned') return row["Assigned Team"] !== 'None' && row["Assigned Team"] !== 'Unassigned';
-          if (safeCardName === 'Events Completed') return row["Event Status"] === 'Event Completed' || row["Event Status"] === 'Completed' || row["Event Status"] === 'Closed' || row["Event Status"] === 'Delivered';
-          if (safeCardName === 'Raw Footage Received') return row["Event Status"] === 'Raw Footage Received';
-          if (safeCardName === 'Upcoming Events') return row["Event Date"] >= TODAY_REF;
-          if (safeCardName === "Today's Events") return row["Event Date"] === TODAY_REF;
-          if (safeCardName === 'Overdue Events') return row["Event Date"] < TODAY_REF && row["Event Status"] !== 'Event Completed' && row["Event Status"] !== 'Closed' && row["Event Status"] !== 'Delivered';
+        }).filter(row => {
+          if (cardName === 'New Orders Received') return row["Event Status"] === 'New Order Received' || row["Event Status"] === 'Order Confirmed';
+          if (cardName === 'Events Scheduled') return row["Event Status"] === 'Event Scheduled' || row["Event Status"] === 'Operations Assigned';
+          if (cardName === 'Staff Assigned') return row["Assigned Team"] !== 'None' && row["Assigned Team"] !== 'Unassigned';
+          if (cardName === 'Events Completed') return row["Event Status"] === 'Event Completed' || row["Event Status"] === 'Completed' || row["Event Status"] === 'Closed' || row["Event Status"] === 'Delivered';
+          if (cardName === 'Raw Footage Received') return row["Event Status"] === 'Raw Footage Received';
+          if (cardName === 'Upcoming Events') return row["Event Date"] >= TODAY_REF;
+          if (cardName === "Today's Events") return row["Event Date"] === TODAY_REF;
+          if (cardName === 'Overdue Events') return row["Event Date"] < TODAY_REF && row["Event Status"] !== 'Event Completed' && row["Event Status"] !== 'Closed' && row["Event Status"] !== 'Delivered';
           return true;
         });
       }
 
       case 'production': {
-        return safeProduction.map(p => {
-          if (!p) return null;
-          const order = safeOrders.find(o => o && (o.order_id === p.tracking_id || o.order_id === p.production_id || o.lead_id === p.original_lead_id));
+        return production.map(p => {
+          const order = orders.find(o => o.order_id === p.tracking_id || o.order_id === p.production_id || o.lead_id === p.original_lead_id);
           return {
             "Order ID": order?.order_id || p.tracking_id || '—',
             "Customer Name": order?.customer_name || p.customer_name || 'CRM Client',
@@ -173,35 +158,34 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
             "Current Status": p.editing_status || '—',
             "Target Delivery Date": p.target_delivery_date || p.expected_delivery_date || '—'
           };
-        }).filter(Boolean).filter((row: any) => {
-          if (safeCardName === 'Total Production Projects' || safeCardName === 'Total Production') return true;
-          if (safeCardName === 'Raw Footage Queue' || safeCardName === 'Raw Footage Received') return row["Current Status"] === 'Raw Footage Received';
-          if (safeCardName === 'Editor Assigned') return row["Current Status"] === 'Editor Assigned';
-          if (safeCardName === 'Editing Started') return row["Current Status"] === 'Editing Started';
-          if (safeCardName === 'Editing In Progress' || safeCardName === 'In Progress') return row["Current Status"] === 'Editing In Progress';
-          if (safeCardName === 'Internal QC Review' || safeCardName === 'QC Review') return row["Current Status"] === 'Internal QC Review';
-          if (safeCardName === 'Client Review Sent' || safeCardName === 'Client Review') return row["Current Status"] === 'Client Review Sent';
-          if (safeCardName === 'Revision Required') return row["Current Status"] === 'Revision Required';
-          if (safeCardName === 'Revision In Progress') return row["Current Status"] === 'Revision In Progress';
-          if (safeCardName === 'Final Approval') return row["Current Status"] === 'Final Approval';
-          if (safeCardName === 'Project Delivered' || safeCardName === 'Delivered Projects' || safeCardName === 'Delivered') return row["Current Status"] === 'Project Delivered';
-          if (safeCardName === 'Project Closed' || safeCardName === 'Closed Projects' || safeCardName === 'Closed') return row["Current Status"] === 'Project Closed';
+        }).filter(row => {
+          if (cardName === 'Total Production Projects' || cardName === 'Total Production') return true;
+          if (cardName === 'Raw Footage Queue' || cardName === 'Raw Footage Received') return row["Current Status"] === 'Raw Footage Received';
+          if (cardName === 'Editor Assigned') return row["Current Status"] === 'Editor Assigned';
+          if (cardName === 'Editing Started') return row["Current Status"] === 'Editing Started';
+          if (cardName === 'Editing In Progress' || cardName === 'In Progress') return row["Current Status"] === 'Editing In Progress';
+          if (cardName === 'Internal QC Review' || cardName === 'QC Review') return row["Current Status"] === 'Internal QC Review';
+          if (cardName === 'Client Review Sent' || cardName === 'Client Review') return row["Current Status"] === 'Client Review Sent';
+          if (cardName === 'Revision Required') return row["Current Status"] === 'Revision Required';
+          if (cardName === 'Revision In Progress') return row["Current Status"] === 'Revision In Progress';
+          if (cardName === 'Final Approval') return row["Current Status"] === 'Final Approval';
+          if (cardName === 'Project Delivered' || cardName === 'Delivered Projects' || cardName === 'Delivered') return row["Current Status"] === 'Project Delivered';
+          if (cardName === 'Project Closed' || cardName === 'Closed Projects' || cardName === 'Closed') return row["Current Status"] === 'Project Closed';
           return true;
         });
       }
 
       case 'business_overview': {
-        const isFinances = safeCardName.includes('Revenue') || 
-                           safeCardName.includes('Amount') || 
-                           safeCardName.includes('Outstanding') || 
-                           safeCardName.includes('Balance') || 
-                           safeCardName.includes('Paid') || 
-                           safeCardName.includes('Payment');
+        const isFinances = cardName.includes('Revenue') || 
+                           cardName.includes('Amount') || 
+                           cardName.includes('Outstanding') || 
+                           cardName.includes('Balance') || 
+                           cardName.includes('Paid') || 
+                           cardName.includes('Payment');
 
         if (isFinances) {
-          return safePayments.map(p => {
-            if (!p) return null;
-            const order = safeOrders.find(o => o && o.order_id === p.order_id);
+          return payments.map(p => {
+            const order = orders.find(o => o.order_id === p.order_id);
             const receivedDate = p.payment_date || (order?.created_at && typeof order.created_at === 'string' ? order.created_at.split('T')[0] : '—');
             return {
               "Record ID": p.payment_id || '—',
@@ -213,16 +197,16 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
               "Received Date": receivedDate,
               "Created Date": order?.created_at && typeof order.created_at === 'string' ? order.created_at.split('T')[0] : order?.event_date || '—'
             };
-          }).filter(Boolean).filter((row: any) => {
-            if (safeCardName === 'Total Pending Amount' || safeCardName === 'Outstanding Balance') return row["Balance Due"] > 0;
-            if (safeCardName === 'Partial Payment Amount' || safeCardName === 'Partially Paid Events') return row["Payment Status"] === 'Partially Paid';
-            if (safeCardName === 'Fully Paid Events') return row["Payment Status"] === 'Fully Paid';
-            if (safeCardName === 'Pending Payment Events') return row["Payment Status"] === 'Pending';
+          }).filter(row => {
+            if (cardName === 'Total Pending Amount' || cardName === 'Outstanding Balance') return row["Balance Due"] > 0;
+            if (cardName === 'Partial Payment Amount' || cardName === 'Partially Paid Events') return row["Payment Status"] === 'Partially Paid';
+            if (cardName === 'Fully Paid Events') return row["Payment Status"] === 'Fully Paid';
+            if (cardName === 'Pending Payment Events') return row["Payment Status"] === 'Pending';
             return true;
           });
-        } else if (safeCardName.includes('Staff') || safeCardName.includes('Editors') || safeCardName.includes('Workload') || safeCardName.includes('Projects')) {
-          if (safeCardName === 'Active Staff') {
-            return safeStaff.filter(s => s && s.status === 'Active').map(s => ({
+        } else if (cardName.includes('Staff') || cardName.includes('Editors') || cardName.includes('Workload') || cardName.includes('Projects')) {
+          if (cardName === 'Active Staff') {
+            return staff.filter(s => s.status === 'Active').map(s => ({
               "Staff ID": s.staff_id || '—',
               "Staff Name": s.name || '—',
               "Role": s.role || '—',
@@ -230,9 +214,9 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
               "Status": s.status || 'Active',
               "Joining Date": s.joining_date || '—'
             }));
-          } else if (safeCardName === 'Active Editors') {
-            const activeEditors = Array.from(new Set(safeProduction.map(p => p?.editor_assigned).filter(e => e && e !== 'Unassigned')));
-            return safeStaff.filter(s => s && activeEditors.includes(s.name)).map(s => ({
+          } else if (cardName === 'Active Editors') {
+            const activeEditors = Array.from(new Set(production.map(p => p.editor_assigned).filter(e => e && e !== 'Unassigned')));
+            return staff.filter(s => activeEditors.includes(s.name)).map(s => ({
               "Staff ID": s.staff_id || '—',
               "Staff Name": s.name || '—',
               "Role": s.role || '—',
@@ -241,9 +225,8 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
               "Joining Date": s.joining_date || '—'
             }));
           } else {
-            return safeProduction.map(p => {
-              if (!p) return null;
-              const order = safeOrders.find(o => o && o.order_id === p.tracking_id);
+            return production.map(p => {
+              const order = orders.find(o => o.order_id === p.tracking_id);
               return {
                 "Project ID": p.production_id || '—',
                 "Customer Name": order?.customer_name || 'CRM Client',
@@ -252,27 +235,24 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
                 "Priority": p.project_priority || 'Medium',
                 "Event Date": order?.event_date || '—'
               };
-            }).filter(Boolean).filter((row: any) => {
-              if (safeCardName === 'Active Projects') return row["Editing Status"] !== 'Project Closed';
+            }).filter(row => {
+              if (cardName === 'Active Projects') return row["Editing Status"] !== 'Project Closed';
               return true;
             });
           }
         } else {
-          return safeOrders.map(o => {
-            if (!o) return null;
-            return {
-              "Order ID": o.order_id || '—',
-              "Customer Name": o.customer_name || 'CRM Client',
-              "Event Type": o.event_type === 'Other' ? (o.custom_event_name || o.custom_event_type || 'Other') : (o.event_type || '—'),
-              "Event Date": o.event_date || '—',
-              "Amount": o.quotation_amount || 0,
-              "Status": o.current_stage || '—'
-            };
-          }).filter(Boolean).filter((row: any) => {
-            if (safeCardName === 'Completed Events') return row["Status"] === 'Event Completed' || row["Status"] === 'Closed' || row["Status"] === 'Delivered';
-            if (safeCardName === 'Upcoming Events') return row["Event Date"] >= TODAY_REF;
-            if (safeCardName === 'Ongoing Events') return row["Event Date"] === TODAY_REF;
-            if (safeCardName === 'Cancelled Events') return row["Status"] === 'Closed' && row["Amount"] === 0;
+          return orders.map(o => ({
+            "Order ID": o.order_id || '—',
+            "Customer Name": o.customer_name || 'CRM Client',
+            "Event Type": o.event_type === 'Other' ? (o.custom_event_name || o.custom_event_type || 'Other') : (o.event_type || '—'),
+            "Event Date": o.event_date || '—',
+            "Amount": o.quotation_amount || 0,
+            "Status": o.current_stage || '—'
+          })).filter(row => {
+            if (cardName === 'Completed Events') return row["Status"] === 'Event Completed' || row["Status"] === 'Closed' || row["Status"] === 'Delivered';
+            if (cardName === 'Upcoming Events') return row["Event Date"] >= TODAY_REF;
+            if (cardName === 'Ongoing Events') return row["Event Date"] === TODAY_REF;
+            if (cardName === 'Cancelled Events') return row["Status"] === 'Closed' && row["Amount"] === 0;
             return true;
           });
         }
@@ -284,23 +264,19 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
 
   // 3. Search and filter rows
   const filteredRows = useMemo(() => {
-    let result = rawRows || [];
+    let result = rawRows;
 
     // Filter by local date range
-    result = result.filter((row: any) => {
-      if (!row) return false;
+    result = result.filter(row => {
       const dateVal = row["Created Date"] || row["Event Date"] || row["Order Date"] || row["Joining Date"] || row["Received Date"] || '';
       if (!dateVal || dateVal === '—') return true;
-      const cleanDate = typeof dateVal === 'string' && dateVal.includes('T') ? dateVal.split('T')[0] : String(dateVal);
-      if (localStartDate && cleanDate < localStartDate) return false;
-      if (localEndDate && cleanDate > localEndDate) return false;
-      return true;
+      const cleanDate = dateVal.split('T')[0];
+      return cleanDate >= localStartDate && cleanDate <= localEndDate;
     });
 
     // Filter by status dropdown
     if (statusFilter !== 'All') {
-      result = result.filter((row: any) => {
-        if (!row) return false;
+      result = result.filter(row => {
         const val = row["Current Status"] || row["Status"] || row["Event Status"] || row["Editing Status"] || row["Payment Status"] || '';
         return String(val).toLowerCase() === statusFilter.toLowerCase();
       });
@@ -308,8 +284,7 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
 
     // Filter by event type dropdown
     if (eventTypeFilter !== 'All') {
-      result = result.filter((row: any) => {
-        if (!row) return false;
+      result = result.filter(row => {
         const val = row["Event Type"] || '';
         return String(val).toLowerCase() === eventTypeFilter.toLowerCase();
       });
@@ -318,8 +293,7 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
     // Search query match
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      result = result.filter((row: any) => {
-        if (!row) return false;
+      result = result.filter(row => {
         return Object.values(row).some(val => 
           String(val ?? '').toLowerCase().includes(q)
         );

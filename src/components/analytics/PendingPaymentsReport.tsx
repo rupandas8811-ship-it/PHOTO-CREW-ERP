@@ -282,8 +282,8 @@ export const PendingPaymentsReport: React.FC = () => {
       if (endDate && rec.eventDate && rec.eventDate > endDate) return false;
 
       // Search filters
-      if (searchTerm && !(rec.customerName || '').toLowerCase().includes(searchTerm.toLowerCase())) return false;
-      if (searchOrderId && !(rec.orderId || '').toLowerCase().includes(searchOrderId.toLowerCase())) return false;
+      if (searchTerm && !rec.customerName.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+      if (searchOrderId && !rec.orderId.toLowerCase().includes(searchOrderId.toLowerCase())) return false;
 
       // Event Type Filter
       if (eventTypeFilter !== 'All' && rec.eventType !== eventTypeFilter) return false;

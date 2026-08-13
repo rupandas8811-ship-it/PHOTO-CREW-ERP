@@ -3,7 +3,6 @@ import { useRole } from '../RoleContext';
 import { DatePreset, getPresetDateRange, isDateInRange, TODAY_REF } from './DateFilterHelper';
 import { DatePresetSelector } from './DatePresetSelector';
 import { AnalyticsReportModal } from './AnalyticsReportModal';
-import { ErrorBoundary } from '../ErrorBoundary';
 import { 
   FolderDown, UserCheck, Play, Layers, ShieldCheck, Eye, RefreshCw, CheckCircle, Truck, Clipboard,
   BarChart3, ChevronRight, X, Info, Users, Search, Filter, FileText, Download, Activity, TrendingUp,
@@ -610,7 +609,7 @@ export const ProductionAnalytics: React.FC = () => {
 
           // Filtering editors list
           const filteredEditorsPerformance = editorPerformanceData.filter(e => {
-            const matchesSearch = (e?.name || '').toLowerCase().includes((editorNameFilter || '').toLowerCase());
+            const matchesSearch = e.name.toLowerCase().includes(editorNameFilter.toLowerCase());
             const matchesRole = editorSpecialityFilter === 'All' || e.roleSpeciality === editorSpecialityFilter;
 
             if (activeEditorCardFilter === 'ActiveEditors') {
@@ -1170,21 +1169,19 @@ export const ProductionAnalytics: React.FC = () => {
 
       {/* Analytics Drilldown Modal */}
       {selectedCard && (
-        <ErrorBoundary onReset={() => setSelectedCard(null)}>
-          <AnalyticsReportModal
-            isOpen={!!selectedCard}
-            onClose={() => setSelectedCard(null)}
-            reportTitle={`PRODUCTION PIPELINE RECORD: ${(selectedCard || '').toUpperCase()}`}
-            reportType="production"
-            cardName={selectedCard}
-            leads={leads}
-            orders={orders}
-            payments={payments}
-            operations={operations}
-            production={filteredProduction as any}
-            staff={staff}
-          />
-        </ErrorBoundary>
+        <AnalyticsReportModal
+          isOpen={!!selectedCard}
+          onClose={() => setSelectedCard(null)}
+          reportTitle={`PRODUCTION PIPELINE RECORD: ${selectedCard.toUpperCase()}`}
+          reportType="production"
+          cardName={selectedCard}
+          leads={leads}
+          orders={orders}
+          payments={payments}
+          operations={operations}
+          production={filteredProduction as any}
+          staff={staff}
+        />
       )}
 
     </div>

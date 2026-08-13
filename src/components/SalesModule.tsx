@@ -2041,27 +2041,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
     }
 
-    // Clean raw JSON strings or JSON objects if reason was stored as stringified JSON
-    if (typeof reason === 'string') {
-      const trimmedR = reason.trim();
-      if (trimmedR.startsWith('{') || trimmedR.startsWith('[')) {
-        try {
-          const parsed = JSON.parse(trimmedR);
-          if (parsed && typeof parsed === 'object') {
-            reason = parsed.reason || parsed.lost_reason || parsed.Lost_Reason || parsed.remarks || parsed.notes || 'Not provided';
-          }
-        } catch (e) {}
-      }
-    }
-
-    if (typeof reason === 'string') {
-      reason = reason.replace(/^Lost Reason:\s*/i, '').trim();
-      if (reason.includes('lead_id') || reason.includes('event_id') || reason.includes('created_at') || reason.includes('google_maps_link')) {
-        const match = reason.match(/["']?reason["']?\s*:\s*["']([^"']+)["']/i);
-        reason = match && match[1] ? match[1].trim() : 'Not provided';
-      }
-    }
-
     // Sanitize
     if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null' || reason.trim() === '') {
       reason = 'Not provided';
@@ -2637,65 +2616,61 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [editableInclusions, setEditableInclusions] = useState<Record<string, string[]>>({});
   const [editableDeliverables, setEditableDeliverables] = useState<Record<string, string[]>>({});
   
+  const [step3AutoSaveStatus, setStep3AutoSaveStatus] = useState<'saving' | 'saved' | 'error' | null>(null);
+
   const saveStep3DataRealtime = async (
     updatedInclusions: Record<string, string[]>,
     updatedDeliverables: Record<string, string[]>,
     activePkgId?: string
   ) => {
     if (isStep3Locked) return;
-    const pkgId = activePkgId || wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || 'Custom Package';
+    const pkgId = activePkgId || wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedPkgIds[0] || 'Custom Package';
     const leadId = selectedLead?.lead_id || createdLeadId;
     if (!leadId || leadId === 'DRAFT-LEAD' || !pkgId || !supabaseClient) return;
 
-    // Use events from crmEvents or createEvents or selectedLead.events
-    const eventsList = (crmEvents && crmEvents.length > 0)
-      ? crmEvents
-      : ((createEvents && createEvents.length > 0) ? createEvents : (selectedLead?.events || []));
+    setStep3AutoSaveStatus('saving');
 
     // Generate JSON for Team_Members based on updatedInclusions
-    const inclusionsList = updatedInclusions[pkgId] || updatedInclusions['Custom Package'] || updatedInclusions['custom_package'] || [];
-    const teamMembersJson = (eventsList && eventsList.length > 0)
-      ? eventsList.map(event => {
+    const inclusionsList = updatedInclusions[pkgId] || updatedInclusions['Custom Package'] || [];
+    const activeEventsList = (activeTab === 'create' && createEvents.length > 0) ? createEvents : (crmEvents && crmEvents.length > 0 ? crmEvents : []);
+    const teamMembersJson = (activeEventsList && activeEventsList.length > 0)
+      ? activeEventsList.map(event => {
           const eventKey = `${pkgId}_${event.id}`;
           const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
           const list = updatedInclusions[eventKey] !== undefined 
             ? updatedInclusions[eventKey] 
-            : (updatedInclusions[nameKey] !== undefined 
-              ? updatedInclusions[nameKey] 
-              : (updatedInclusions['Custom Package'] !== undefined ? updatedInclusions['Custom Package'] : inclusionsList));
+            : (updatedInclusions[nameKey] !== undefined ? updatedInclusions[nameKey] : inclusionsList);
           return {
             event_name: event.event_name || event.event_type || 'Unnamed Event',
-            team_members: (list || []).filter(Boolean)
+            team_members: list.filter(item => item !== undefined && item !== null)
           };
         })
       : [
           {
             event_name: "General",
-            team_members: (inclusionsList || []).filter(Boolean)
+            team_members: inclusionsList.filter(item => item !== undefined && item !== null)
           }
         ];
 
     // Generate JSON for deliverables_description based on updatedDeliverables
-    const deliverablesList = updatedDeliverables[pkgId] || updatedDeliverables['Custom Package'] || updatedDeliverables['custom_package'] || [];
-    const deliverablesJson = (eventsList && eventsList.length > 0)
-      ? eventsList.map(event => {
+    const deliverablesList = updatedDeliverables[pkgId] || updatedDeliverables['Custom Package'] || [];
+    const deliverablesJson = (activeEventsList && activeEventsList.length > 0)
+      ? activeEventsList.map(event => {
           const eventKey = `${pkgId}_${event.id}`;
           const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
           const list = updatedDeliverables[eventKey] !== undefined 
             ? updatedDeliverables[eventKey] 
-            : (updatedDeliverables[nameKey] !== undefined 
-              ? updatedDeliverables[nameKey] 
-              : (updatedDeliverables['Custom Package'] !== undefined ? updatedDeliverables['Custom Package'] : deliverablesList));
+            : (updatedDeliverables[nameKey] !== undefined ? updatedDeliverables[nameKey] : deliverablesList);
           return {
             event_id: event.id,
             event_name: event.event_name || event.event_type || 'Unnamed Event',
-            deliverables: (list || []).filter(Boolean)
+            deliverables: list.filter(item => item !== undefined && item !== null)
           };
         })
       : [
           {
             event_name: "General",
-            deliverables: (deliverablesList || []).filter(Boolean)
+            deliverables: deliverablesList.filter(item => item !== undefined && item !== null)
           }
         ];
     const deliverablesText = JSON.stringify(deliverablesJson);
@@ -2719,9 +2694,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
 
     try {
-      // Synchronize lastLoadedLeadIdRef so background fetch won't overwrite fresh local changes
-      lastLoadedLeadIdRef.current = leadId;
-
+      // Always UPDATE the existing lead record
       const { error: updateError } = await supabaseClient
         .from('leads')
         .update(updatePayload)
@@ -2729,16 +2702,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       if (updateError) {
         console.error("Error updating leads table via saveStep3DataRealtime:", updateError);
+        setStep3AutoSaveStatus('error');
       } else {
-        setSelectedLead(prev => {
-          if (!prev) return null;
-          return {
-            ...prev,
-            Team_Members: teamMembersText,
-            deliverables_description: deliverablesText
-          };
-        });
+        setStep3AutoSaveStatus('saved');
+        // Update local React state to ensure 100% synchronization
+        if (selectedLead) {
+          setSelectedLead(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              Team_Members: teamMembersText,
+              deliverables_description: deliverablesText
+            };
+          });
+        }
 
+        // Also sync wizardLeadData deliverables state
         setWizardLeadData(prev => ({
           ...prev,
           deliverables: deliverablesText,
@@ -2747,6 +2726,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
     } catch (err) {
       console.error("Exception in saveStep3DataRealtime:", err);
+      setStep3AutoSaveStatus('error');
     }
   };
 
@@ -3095,34 +3075,27 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     });
   };
 
-  const prevInitLeadIdRef = React.useRef<string | null>(null);
-
   // Auto-initialize spec editor state when selecting a lead
   React.useEffect(() => {
+    if (!selectedLead && activeTab === 'create') {
+      return;
+    }
     if (!selectedLead) {
       setEditableInclusions({});
       setEditableDeliverables({});
-      prevInitLeadIdRef.current = null;
-      return;
-    }
-
-    if (prevInitLeadIdRef.current === selectedLead.lead_id) {
       return;
     }
 
     const activePackages = (leadPackages || []).filter(lp => lp.lead_id === selectedLead.lead_id);
     const hasActivePkgs = activePackages.length > 0;
 
-    prevInitLeadIdRef.current = selectedLead.lead_id;
-
     setEditableInclusions(prev => {
-      if (Object.keys(prev).length > 0) return prev;
       const newInclusions = { ...prev };
       let changed = false;
       if (!hasActivePkgs) {
         const defaultId = `default_${selectedLead.lead_id}`;
         if (!newInclusions[defaultId]) {
-          const defaults = [
+          newInclusions[defaultId] = [
             '1 Candid Photographer',
             '1 Cinematographer',
             '2 Traditional Photographers',
@@ -3131,10 +3104,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             '1 LED Wall',
             '1 Spot Mixing'
           ];
-          newInclusions[defaultId] = defaults;
-          if (!newInclusions['Custom Package']) {
-            newInclusions['Custom Package'] = defaults;
-          }
           changed = true;
         }
       } else {
@@ -3163,13 +3132,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     });
 
     setEditableDeliverables(prev => {
-      if (Object.keys(prev).length > 0) return prev;
       const newDeliverables = { ...prev };
       let changed = false;
       if (!hasActivePkgs) {
         const defaultId = `default_${selectedLead.lead_id}`;
         if (!newDeliverables[defaultId]) {
-          const defaults = [
+          newDeliverables[defaultId] = [
             '350 Edited Photos',
             '4K Cinematic Video',
             '3 Reels',
@@ -3177,10 +3145,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             'Album Details',
             'Additional Deliverables'
           ];
-          newDeliverables[defaultId] = defaults;
-          if (!newDeliverables['Custom Package']) {
-            newDeliverables['Custom Package'] = defaults;
-          }
           changed = true;
         }
       } else {
@@ -3205,7 +3169,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
       return changed ? newDeliverables : prev;
     });
-  }, [selectedLead?.lead_id, leadPackages, packages]);
+  }, [selectedLead, leadPackages, packages]);
 
   // Auto-load package details into Step 3 if a package is selected but inclusions/deliverables are empty
   React.useEffect(() => {
@@ -3257,8 +3221,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   // Fetch from Supabase directly for the JSON columns
   React.useEffect(() => {
     const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
-    if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD' && supabaseClient) {
-      const currentKey = `${selectedLead.lead_id}`;
+    const targetLeadId = selectedLead?.lead_id || (activeTab === 'create' ? createdLeadId : null);
+    if (targetLeadId && targetLeadId !== 'DRAFT-LEAD' && supabaseClient) {
+      const currentKey = `${targetLeadId}`;
       if (lastLoadedLeadIdRef.current === currentKey) {
         return;
       }
@@ -3267,7 +3232,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           const { data, error } = await supabaseClient
             .from('leads')
             .select('Team_Members, deliverables_description, package_price, budget, Select_Package_Option, Quotation_Discount, Additional_Services_Cost, Final_Quotation_Amount, notes_special_customizations')
-            .eq('lead_id', selectedLead.lead_id)
+            .eq('lead_id', targetLeadId)
             .maybeSingle();
           
           if (!error && data) {
@@ -3321,9 +3286,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       newInclusions[`${pkgId}_${eventName}`] = members;
                     }
                   });
-                  if (Object.keys(newInclusions).length > 0) {
-                    setEditableInclusions(prev => ({ ...prev, ...newInclusions }));
-                  }
+                  setEditableInclusions(prev => {
+                    const merged = { ...prev, ...newInclusions };
+                    Object.keys(prev).forEach(k => {
+                      if (prev[k] && prev[k].length > 0) {
+                        if (!newInclusions[k] || newInclusions[k].length === 0) {
+                          merged[k] = prev[k];
+                        } else {
+                          const combined = Array.from(new Set([...newInclusions[k], ...prev[k]]));
+                          merged[k] = combined;
+                        }
+                      }
+                    });
+                    return merged;
+                  });
                 }
               } catch (e) {
                 console.error('Error parsing Team_Members from leads:', e);
@@ -3364,9 +3340,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       newDeliverables[pkgId] = allDel.length > 0 ? Array.from(new Set(allDel)) : [];
                     }
                   }
-                  if (Object.keys(newDeliverables).length > 0) {
-                    setEditableDeliverables(prev => ({ ...prev, ...newDeliverables }));
-                  }
+                  setEditableDeliverables(prev => {
+                    const merged = { ...prev, ...newDeliverables };
+                    Object.keys(prev).forEach(k => {
+                      if (prev[k] && prev[k].length > 0) {
+                        if (!newDeliverables[k] || newDeliverables[k].length === 0) {
+                          merged[k] = prev[k];
+                        } else {
+                          const combined = Array.from(new Set([...newDeliverables[k], ...prev[k]]));
+                          merged[k] = combined;
+                        }
+                      }
+                    });
+                    return merged;
+                  });
                 }
               } catch (e) {
                 // Not JSON, handle as comma/newline separated list
@@ -3375,7 +3362,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   : [];
                 if (delList.length > 0) {
                   newDeliverables[pkgId] = delList;
-                  setEditableDeliverables(prev => ({ ...prev, ...newDeliverables }));
+                  setEditableDeliverables(prev => {
+                    const merged = { ...prev, ...newDeliverables };
+                    Object.keys(prev).forEach(k => {
+                      if (prev[k] && prev[k].length > 0) {
+                        if (!newDeliverables[k] || newDeliverables[k].length === 0) {
+                          merged[k] = prev[k];
+                        } else {
+                          const combined = Array.from(new Set([...newDeliverables[k], ...prev[k]]));
+                          merged[k] = combined;
+                        }
+                      }
+                    });
+                    return merged;
+                  });
                 }
               }
             }
@@ -3386,11 +3386,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       };
       fetchSupabasePackageData();
     } else {
-      if (!selectedLead) {
+      if (!selectedLead && !createdLeadId) {
         lastLoadedLeadIdRef.current = null;
       }
     }
-  }, [selectedLead?.lead_id, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, supabaseClient, crmEvents, crmWizardStep, wizardStep]);
+  }, [selectedLead?.lead_id, createdLeadId, activeTab, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, supabaseClient, crmEvents, crmWizardStep, wizardStep]);
 
   // Save to Supabase directly for the JSON columns
   const isFirstRender = React.useRef(true);
@@ -3400,7 +3400,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return;
     }
     const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
-    if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD' && pkgId) {
+    const targetLeadId = selectedLead?.lead_id || (activeTab === 'create' ? createdLeadId : null);
+    if (targetLeadId && targetLeadId !== 'DRAFT-LEAD' && pkgId) {
       const updateDatabase = async () => {
         try {
           await saveStep3DataRealtime(editableInclusions, editableDeliverables);
@@ -3410,11 +3411,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       };
       const timeoutId = setTimeout(() => {
         updateDatabase();
-      }, 500);
+      }, 300);
       return () => clearTimeout(timeoutId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editableDeliverables, editableInclusions, selectedLead?.lead_id, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option]);
+  }, [editableDeliverables, editableInclusions, selectedLead?.lead_id, createdLeadId, activeTab, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option]);
 
   // Step 1 Automatic Data Prefill & Hydration from Supabase leads table
   React.useEffect(() => {
@@ -4453,18 +4454,36 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     return (
       <div className="space-y-4 animate-fade-in text-left">
         <div className="space-y-3.5 text-left">
-          <div>
+          <div className="flex items-center justify-between">
             <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Select Package Option *</label>
-            <select
-              id={isEdit ? "select_package_option" : "wizard_step3_first_field"}
-              value={currentPkgId}
-              onChange={(e) => {
-                const val = e.target.value;
-                setSelectedPkgIds([val]);
-                handlePackageDropdownChange(val);
-              }}
-              className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 text-white focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer"
-            >
+            {step3AutoSaveStatus === 'saving' && (
+              <span className="text-[10px] text-amber-400 font-mono font-semibold animate-pulse flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+                Saving...
+              </span>
+            )}
+            {step3AutoSaveStatus === 'saved' && (
+              <span className="text-[10px] text-emerald-400 font-mono font-semibold flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                Saved ✓
+              </span>
+            )}
+            {step3AutoSaveStatus === 'error' && (
+              <span className="text-[10px] text-red-400 font-mono font-semibold flex items-center gap-1">
+                Save failed
+              </span>
+            )}
+          </div>
+          <select
+            id={isEdit ? "select_package_option" : "wizard_step3_first_field"}
+            value={currentPkgId}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSelectedPkgIds([val]);
+              handlePackageDropdownChange(val);
+            }}
+            className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 text-white focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer"
+          >
               <option value="Custom Package">Custom Package</option>
               {(() => {
                 const activePkgs = availablePkgs.filter(p => {
@@ -4933,7 +4952,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </div>
             )}
           </div>
-        </div>
 
         <div className="mt-4 flex justify-end pb-2">
           <button
@@ -5119,11 +5137,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setActiveQuoteNum('');
     setQuoteDiscount(0);
     setQuoteAdditional(0);
-    // Explicitly reset on new lead selection
-    lastLoadedLeadIdRef.current = null;
-    prevInitLeadIdRef.current = lead.lead_id;
-    setEditableInclusions({});
-    setEditableDeliverables({});
+    // Explicitly reset only when switching to a different lead ID
+    if (!selectedLead || selectedLead.lead_id !== lead.lead_id) {
+      setEditableInclusions({});
+      setEditableDeliverables({});
+    }
     // Clean and set Sales Executive Details (isolated from Operations/Production staff on events)
     const initialSalesStaffName = getCleanSalesStaffName(lead.sales_staff_name, lead);
     const initialSalesStaffMobile = getCleanSalesStaffMobile(lead.sales_staff_mobile, lead);
@@ -5198,120 +5216,115 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     // 1. Load Deliverables: Prioritize lead.deliverables_description, then latestQuote, then primaryLP, then matchedPkg
     let loadedDelText = fullLead.deliverables_description || latestQuote?.deliverables_description || primaryLP?.deliverables_description || matchedPkg?.deliverables || '';
 
-    if (matchedPkgId) {
-      const newDeliverables: Record<string, string[]> = {};
-      if (loadedDelText) {
-        try {
-          const parsedDel = JSON.parse(loadedDelText);
-          if (Array.isArray(parsedDel)) {
-            if (typeof parsedDel[0] === 'string') {
-              newDeliverables[matchedPkgId] = parsedDel;
-            } else {
-              let allDel: string[] = [];
-              parsedDel.forEach((item: any) => {
-                const eventName = item.event_name;
-                const deliverables = Array.isArray(item.deliverables) ? item.deliverables : [];
-                if (deliverables.length > 0) {
-                  allDel = [...allDel, ...deliverables];
-                }
-                if (eventName === 'General') {
-                  newDeliverables[matchedPkgId] = deliverables;
-                } else if (fullLead.events && fullLead.events.length > 0) {
-                  const matchingEvent = fullLead.events.find(e => 
-                    (e.event_name || e.event_type || 'Unnamed Event') === eventName
-                  );
-                  if (matchingEvent) {
-                    newDeliverables[`${matchedPkgId}_${matchingEvent.id}`] = deliverables;
-                    newDeliverables[`${matchedPkgId}_${matchingEvent.event_name || matchingEvent.event_type || 'Unnamed Event'}`] = deliverables;
+    setEditableDeliverables(prev => {
+      if (Object.keys(prev).some(k => prev[k] && prev[k].length > 0)) {
+        return prev;
+      }
+      if (matchedPkgId) {
+        const newDeliverables: Record<string, string[]> = {};
+        if (loadedDelText) {
+          try {
+            const parsedDel = JSON.parse(loadedDelText);
+            if (Array.isArray(parsedDel)) {
+              if (typeof parsedDel[0] === 'string') {
+                newDeliverables[matchedPkgId] = parsedDel;
+              } else {
+                let allDel: string[] = [];
+                parsedDel.forEach((item: any) => {
+                  const eventName = item.event_name;
+                  const deliverables = Array.isArray(item.deliverables) ? item.deliverables : [];
+                  if (deliverables.length > 0) {
+                    allDel = [...allDel, ...deliverables];
+                  }
+                  if (eventName === 'General') {
+                    newDeliverables[matchedPkgId] = deliverables;
+                  } else if (fullLead.events && fullLead.events.length > 0) {
+                    const matchingEvent = fullLead.events.find(e => 
+                      (e.event_name || e.event_type || 'Unnamed Event') === eventName
+                    );
+                    if (matchingEvent) {
+                      newDeliverables[`${matchedPkgId}_${matchingEvent.id}`] = deliverables;
+                      newDeliverables[`${matchedPkgId}_${matchingEvent.event_name || matchingEvent.event_type || 'Unnamed Event'}`] = deliverables;
+                    } else {
+                      newDeliverables[`${matchedPkgId}_${eventName}`] = deliverables;
+                    }
                   } else {
                     newDeliverables[`${matchedPkgId}_${eventName}`] = deliverables;
                   }
-                } else {
-                  newDeliverables[`${matchedPkgId}_${eventName}`] = deliverables;
+                });
+                if (!newDeliverables[matchedPkgId]) {
+                  newDeliverables[matchedPkgId] = allDel.length > 0 ? Array.from(new Set(allDel)) : [];
                 }
-              });
-              if (!newDeliverables[matchedPkgId]) {
-                newDeliverables[matchedPkgId] = allDel.length > 0 ? Array.from(new Set(allDel)) : [];
               }
+            } else {
+              newDeliverables[matchedPkgId] = [];
             }
-          } else {
-            newDeliverables[matchedPkgId] = [];
+          } catch (e) {
+            // Fallback if not JSON (e.g. newline-separated text)
+            const delList = loadedDelText.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
+            newDeliverables[matchedPkgId] = delList;
           }
-        } catch (e) {
-          // Fallback if not JSON (e.g. newline-separated text)
-          const delList = loadedDelText.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
-          newDeliverables[matchedPkgId] = delList;
+        } else {
+          newDeliverables[matchedPkgId] = [];
         }
+        return newDeliverables;
       } else {
-        newDeliverables[matchedPkgId] = [];
+        if (latestQuote?.editableDeliverables) return latestQuote.editableDeliverables;
+        if (primaryLP?.editable_deliverables) return primaryLP.editable_deliverables;
+        return {};
       }
-      setEditableDeliverables(newDeliverables);
-    } else {
-      if (latestQuote?.editableDeliverables) {
-        setEditableDeliverables(latestQuote.editableDeliverables);
-      } else if (primaryLP?.editable_deliverables) {
-        setEditableDeliverables(primaryLP.editable_deliverables);
-      } else {
-        setEditableDeliverables({});
-      }
-    }
+    });
 
     // 2. Load Team Members: Prioritize lead.Team_Members, then latestQuote.editableInclusions, then primaryLP, then matchedPkg
-    if (matchedPkgId && fullLead.Team_Members) {
-      try {
-        const parsedTeam = JSON.parse(fullLead.Team_Members);
-        if (Array.isArray(parsedTeam)) {
-          const newInclusions: Record<string, string[]> = {};
-          let allMembers: string[] = [];
-          parsedTeam.forEach((item: any) => {
-            const eventName = item.event_name;
-            const members = Array.isArray(item.team_members) ? item.team_members : [];
-            if (members.length > 0) {
-              allMembers = [...allMembers, ...members];
-            }
-            if (eventName === 'General') {
-              newInclusions[matchedPkgId] = members;
-            } else if (fullLead.events && fullLead.events.length > 0) {
-              const matchingEvent = fullLead.events.find(e => 
-                (e.event_name || e.event_type || 'Unnamed Event') === eventName
-              );
-              if (matchingEvent) {
-                newInclusions[`${matchedPkgId}_${matchingEvent.id}`] = members;
-                newInclusions[`${matchedPkgId}_${matchingEvent.event_name || matchingEvent.event_type || 'Unnamed Event'}`] = members;
+    setEditableInclusions(prev => {
+      if (Object.keys(prev).some(k => prev[k] && prev[k].length > 0)) {
+        return prev;
+      }
+      if (matchedPkgId && fullLead.Team_Members) {
+        try {
+          const parsedTeam = JSON.parse(fullLead.Team_Members);
+          if (Array.isArray(parsedTeam)) {
+            const newInclusions: Record<string, string[]> = {};
+            let allMembers: string[] = [];
+            parsedTeam.forEach((item: any) => {
+              const eventName = item.event_name;
+              const members = Array.isArray(item.team_members) ? item.team_members : [];
+              if (members.length > 0) {
+                allMembers = [...allMembers, ...members];
+              }
+              if (eventName === 'General') {
+                newInclusions[matchedPkgId] = members;
+              } else if (fullLead.events && fullLead.events.length > 0) {
+                const matchingEvent = fullLead.events.find(e => 
+                  (e.event_name || e.event_type || 'Unnamed Event') === eventName
+                );
+                if (matchingEvent) {
+                  newInclusions[`${matchedPkgId}_${matchingEvent.id}`] = members;
+                  newInclusions[`${matchedPkgId}_${matchingEvent.event_name || matchingEvent.event_type || 'Unnamed Event'}`] = members;
+                } else {
+                  newInclusions[`${matchedPkgId}_${eventName}`] = members;
+                }
               } else {
                 newInclusions[`${matchedPkgId}_${eventName}`] = members;
               }
-            } else {
-              newInclusions[`${matchedPkgId}_${eventName}`] = members;
+            });
+            if (!newInclusions[matchedPkgId]) {
+              newInclusions[matchedPkgId] = allMembers.length > 0 ? Array.from(new Set(allMembers)) : [];
             }
-          });
-          if (!newInclusions[matchedPkgId]) {
-            newInclusions[matchedPkgId] = allMembers.length > 0 ? Array.from(new Set(allMembers)) : [];
+            return newInclusions;
           }
-          setEditableInclusions(newInclusions);
-        } else {
-          setEditableInclusions({});
-        }
-      } catch (e) {
-        console.error('Error parsing Team_Members from leads in handleSelectLead:', e);
-        if (latestQuote?.editableInclusions) {
-          setEditableInclusions(latestQuote.editableInclusions);
-        } else if (primaryLP?.editable_inclusions) {
-          setEditableInclusions(primaryLP.editable_inclusions);
-        } else {
-          setEditableInclusions({});
+        } catch (e) {
+          console.error('Error parsing Team_Members from leads in handleSelectLead:', e);
         }
       }
-    } else if (latestQuote?.editableInclusions) {
-      setEditableInclusions(latestQuote.editableInclusions);
-    } else if (primaryLP?.editable_inclusions) {
-      setEditableInclusions(primaryLP.editable_inclusions);
-    } else if (matchedPkg?.team_members) {
-      const defaultInc = parseTeamMembers(matchedPkg.team_members);
-      setEditableInclusions({ [matchedPkgId]: defaultInc.length > 0 ? defaultInc : ['1 Candid Photographer'] });
-    } else {
-      setEditableInclusions({});
-    }
+      if (latestQuote?.editableInclusions) return latestQuote.editableInclusions;
+      if (primaryLP?.editable_inclusions) return primaryLP.editable_inclusions;
+      if (matchedPkg?.team_members) {
+        const defaultInc = parseTeamMembers(matchedPkg.team_members);
+        return { [matchedPkgId]: defaultInc.length > 0 ? defaultInc : ['1 Candid Photographer'] };
+      }
+      return {};
+    });
 
     const firstEvent = fullLead.events && fullLead.events.length > 0 ? fullLead.events[0] : null;
     const evName = firstEvent?.event_name || fullLead.custom_event_name || '';
@@ -5727,13 +5740,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList);
             return {
               event_name: event.event_name || event.event_type || 'Unnamed Event',
-              team_members: list.filter(Boolean)
+              team_members: list.filter(item => item !== undefined && item !== null)
             };
           })
         : [
             {
               event_name: "General",
-              team_members: inclusionsList.filter(Boolean)
+              team_members: inclusionsList.filter(item => item !== undefined && item !== null)
             }
           ];
       const teamMembersText = JSON.stringify(teamMembersJson);
@@ -5749,13 +5762,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             return {
               event_id: event.id,
               event_name: event.event_name || event.event_type || 'Unnamed Event',
-              deliverables: list.filter(Boolean)
+              deliverables: list.filter(item => item !== undefined && item !== null)
             };
           })
         : [
             {
               event_name: "General",
-              deliverables: deliverablesList.filter(Boolean)
+              deliverables: deliverablesList.filter(item => item !== undefined && item !== null)
             }
           ];
       const deliverablesText = JSON.stringify(deliverablesJson);
@@ -5907,58 +5920,53 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         }
         let finalEventsList = [...crmEvents];
 
-        if (showEventForm || editingEventId) {
-          const isFormFilled = !!(eventForm.event_type || eventForm.event_date || eventForm.event_location);
-          if (editingEventId || isFormFilled || finalEventsList.length === 0) {
-            if (!eventForm.event_type || eventForm.event_type === '') {
-              showToastMsg("Please select Event Type.", "error");
-              setIsSaving(false);
-              return;
-            }
-            if (!eventForm.event_date || eventForm.event_date === '') {
-              showToastMsg("Please select Event Date.", "error");
-              setIsSaving(false);
-              return;
-            }
-            if (!eventForm.event_location || eventForm.event_location.trim() === '') {
-              showToastMsg("Please enter Event Location.", "error");
-              setIsSaving(false);
-              return;
-            }
-
-            const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);
-            if (dateTimeErrMsg) {
-              showToastMsg(dateTimeErrMsg, "error");
-              setIsSaving(false);
-              return;
-            }
-
-            const guestPaxVal = eventForm.guest_pax !== '' ? Math.max(0, parseInt(String(eventForm.guest_pax)) || 0) : '';
-            const staffPaxVal = eventForm.staff_pax !== '' ? Math.max(0, parseInt(String(eventForm.staff_pax)) || 0) : '';
-
-            const eventData = {
-              ...eventForm,
-              guest_pax: guestPaxVal,
-              staff_pax: staffPaxVal,
-              event_start_date: eventForm.event_date,
-              event_end_date: eventForm.event_end_date || ''
-            };
-
-            if (editingEventId) {
-              finalEventsList = finalEventsList.map(ev => ev.id === editingEventId ? { ...eventData, id: editingEventId } : ev);
-            } else {
-              finalEventsList.push({
-                ...eventData,
-                id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
-              });
-            }
-
-            setCrmEvents(finalEventsList);
-            setEditingEventId(null);
-            setShowEventForm(false);
-          } else {
-            setShowEventForm(false);
+        if (showEventForm || finalEventsList.length === 0) {
+          if (!eventForm.event_type || eventForm.event_type === '') {
+            showToastMsg("Please select Event Type.", "error");
+            setIsSaving(false);
+            return;
           }
+          if (!eventForm.event_date || eventForm.event_date === '') {
+            showToastMsg("Please select Event Date.", "error");
+            setIsSaving(false);
+            return;
+          }
+          if (!eventForm.event_location || eventForm.event_location.trim() === '') {
+            showToastMsg("Please enter Event Location.", "error");
+            setIsSaving(false);
+            return;
+          }
+
+          const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);
+          if (dateTimeErrMsg) {
+            showToastMsg(dateTimeErrMsg, "error");
+            setIsSaving(false);
+            return;
+          }
+
+          const guestPaxVal = eventForm.guest_pax !== '' ? Math.max(0, parseInt(String(eventForm.guest_pax)) || 0) : '';
+          const staffPaxVal = eventForm.staff_pax !== '' ? Math.max(0, parseInt(String(eventForm.staff_pax)) || 0) : '';
+
+          const eventData = {
+            ...eventForm,
+            guest_pax: guestPaxVal,
+            staff_pax: staffPaxVal,
+            event_start_date: eventForm.event_date,
+            event_end_date: eventForm.event_end_date || ''
+          };
+
+          if (editingEventId) {
+            finalEventsList = finalEventsList.map(ev => ev.id === editingEventId ? { ...eventData, id: editingEventId } : ev);
+          } else {
+            finalEventsList.push({
+              ...eventData,
+              id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
+            });
+          }
+
+          setCrmEvents(finalEventsList);
+          setEditingEventId(null);
+          setShowEventForm(false);
         }
 
         if (finalEventsList.length === 0) {
@@ -6019,7 +6027,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
 
         // Perform direct save for Step 2 without showing follow-up popup
-        await handleSaveStep2Direct(finalEventsList);
+        await handleSaveStep2Direct();
         return;
       } else if (step === 3) {
         if (isStep3Locked) {
@@ -6046,13 +6054,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList);
               return {
                 event_name: event.event_name || event.event_type || 'Unnamed Event',
-                team_members: list.filter(Boolean)
+                team_members: list.filter(item => item !== undefined && item !== null)
               };
             })
           : [
               {
                 event_name: "General",
-                team_members: inclusionsList.filter(Boolean)
+                team_members: inclusionsList.filter(item => item !== undefined && item !== null)
               }
             ];
         const teamMembersText = JSON.stringify(teamMembersJson);
@@ -6068,13 +6076,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               return {
                 event_id: event.id,
                 event_name: event.event_name || event.event_type || 'Unnamed Event',
-                deliverables: list.filter(Boolean)
+                deliverables: list.filter(item => item !== undefined && item !== null)
               };
             })
           : [
               {
                 event_name: "General",
-                deliverables: deliverablesList.filter(Boolean)
+                deliverables: deliverablesList.filter(item => item !== undefined && item !== null)
               }
             ];
         const deliverablesText = JSON.stringify(deliverablesJson);
@@ -6327,7 +6335,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     return () => clearInterval(interval);
   }, [leads]);
 
-  const handleSaveStep2Direct = async (overrideEvents?: LeadEvent[]) => {
+  const handleSaveStep2Direct = async () => {
     const isCreateFlow = activeTab === 'create';
     if (!isCreateFlow && isStep2Locked) {
       showToastMsg("Event details are locked after order confirmation.", "error");
@@ -6340,9 +6348,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
     setIsSaving(true);
     try {
-      const finalEventsList = (overrideEvents && overrideEvents.length > 0)
-        ? overrideEvents
-        : (isCreateFlow ? [...createEvents] : [...crmEvents]);
+      const finalEventsList = (isCreateFlow ? [...createEvents] : [...crmEvents]);
       if (finalEventsList.length === 0) {
         showToastMsg("Please add at least one event.", "error");
         setIsSaving(false);
@@ -6448,70 +6454,21 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
 
       if (isCreateFlow) {
+        // Await confirmation from Supabase that the lead and events are persisted before initializing Step 3
+        if (supabaseClient && currentLeadId) {
+          try {
+            await supabaseClient
+              .from('leads')
+              .select('lead_id')
+              .eq('lead_id', currentLeadId)
+              .maybeSingle();
+          } catch (refetchErr) {
+            console.warn("Silent confirmation before Step 3 failed:", refetchErr);
+          }
+        }
+
         setSelectedPkgIds(['Custom Package']);
         setWizardLeadData(prev => ({ ...prev, selected_package_id: 'Custom Package', Select_Package_Option: 'Custom Package' }));
-        if (currentLeadId) {
-          prevInitLeadIdRef.current = currentLeadId;
-          lastLoadedLeadIdRef.current = currentLeadId;
-
-          const defaultInc = [
-            '1 Candid Photographer',
-            '1 Cinematographer',
-            '2 Traditional Photographers',
-            '2 Traditional Videographers',
-            '1 Drone',
-            '1 LED Wall',
-            '1 Spot Mixing'
-          ];
-          const defaultDel = [
-            '350 Edited Photos',
-            '4K Cinematic Video',
-            '3 Reels',
-            'Traditional Edited Video',
-            'Album Details',
-            'Additional Deliverables'
-          ];
-
-          const finalInc = {
-            ...editableInclusions,
-            'Custom Package': (editableInclusions['Custom Package'] && editableInclusions['Custom Package'].length > 0) ? editableInclusions['Custom Package'] : defaultInc
-          };
-          const finalDel = {
-            ...editableDeliverables,
-            'Custom Package': (editableDeliverables['Custom Package'] && editableDeliverables['Custom Package'].length > 0) ? editableDeliverables['Custom Package'] : defaultDel
-          };
-
-          setEditableInclusions(finalInc);
-          setEditableDeliverables(finalDel);
-
-          await saveStep3DataRealtime(finalInc, finalDel, 'Custom Package');
-
-          setSelectedLead(prev => {
-            if (prev && prev.lead_id === currentLeadId) {
-              return { 
-                ...prev, 
-                events: reloadedEvents, 
-                Select_Package_Option: 'Custom Package' 
-              };
-            }
-            return {
-              lead_id: currentLeadId,
-              customer_name: createForm.customer_name || '',
-              mobile: createForm.mobile || '',
-              email: createForm.email || '',
-              whatsapp_number: createForm.whatsapp_number || createForm.mobile || '',
-              lead_source: createForm.lead_source || '',
-              Specify_Custom_Lead_Source_Name: createForm.Specify_Custom_Lead_Source_Name || '',
-              client_residence_address: createForm.client_residence_address || '',
-              city: createForm.city || '',
-              state: createForm.state || '',
-              pincode: createForm.pincode || '',
-              events: reloadedEvents,
-              Select_Package_Option: 'Custom Package',
-              status: 'New Lead'
-            } as Lead;
-          });
-        }
         setWizardStep(3);
       } else {
         const newCompleted = Math.max(crmHighestStep, 2);
@@ -6753,63 +6710,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         setSalesStatus(targetStatus as CurrentStage);
         setSelectedPkgIds(['Custom Package']);
         setWizardLeadData(prev => ({ ...prev, selected_package_id: 'Custom Package', Select_Package_Option: 'Custom Package' }));
-        if (currentLeadId) {
-          prevInitLeadIdRef.current = currentLeadId;
-          lastLoadedLeadIdRef.current = currentLeadId;
-
-          const defaultInc = [
-            '1 Candid Photographer',
-            '1 Cinematographer',
-            '2 Traditional Photographers',
-            '2 Traditional Videographers',
-            '1 Drone',
-            '1 LED Wall',
-            '1 Spot Mixing'
-          ];
-          const defaultDel = [
-            '350 Edited Photos',
-            '4K Cinematic Video',
-            '3 Reels',
-            'Traditional Edited Video',
-            'Album Details',
-            'Additional Deliverables'
-          ];
-
-          setEditableInclusions(prev => ({
-            ...prev,
-            'Custom Package': (prev['Custom Package'] && prev['Custom Package'].length > 0) ? prev['Custom Package'] : defaultInc
-          }));
-          setEditableDeliverables(prev => ({
-            ...prev,
-            'Custom Package': (prev['Custom Package'] && prev['Custom Package'].length > 0) ? prev['Custom Package'] : defaultDel
-          }));
-
-          setSelectedLead(prev => {
-            if (prev && prev.lead_id === currentLeadId) {
-              return { 
-                ...prev, 
-                events: reloadedEvents, 
-                Select_Package_Option: 'Custom Package' 
-              };
-            }
-            return {
-              lead_id: currentLeadId,
-              customer_name: createForm.customer_name || '',
-              mobile: createForm.mobile || '',
-              email: createForm.email || '',
-              whatsapp_number: createForm.whatsapp_number || createForm.mobile || '',
-              lead_source: createForm.lead_source || '',
-              Specify_Custom_Lead_Source_Name: createForm.Specify_Custom_Lead_Source_Name || '',
-              client_residence_address: createForm.client_residence_address || '',
-              city: createForm.city || '',
-              state: createForm.state || '',
-              pincode: createForm.pincode || '',
-              events: reloadedEvents,
-              Select_Package_Option: 'Custom Package',
-              status: targetStatus as CurrentStage
-            } as Lead;
-          });
-        }
         setWizardStep(3);
       } else {
         const newCompleted = Math.max(crmHighestStep, 2);
@@ -8311,10 +8211,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         };
 
         // Stay in Create Lead form, and advance to Step 2
-        setCreatedLeadId(finalId);
-        setSelectedLead(newLeadObj);
-        prevInitLeadIdRef.current = finalId;
-        lastLoadedLeadIdRef.current = finalId;
         setWizardStep(2);
 
         showToastMsg("Inbound quotation created successfully! Continuing to Step 2.", "success");
@@ -8363,53 +8259,48 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       let finalEventsList = [...createEvents];
       
       // If eventForm is visible or there are no events in the list, validate and add
-      if (showEventForm || editingEventId) {
-        const isFormFilled = !!(eventForm.event_type || eventForm.event_date || eventForm.event_location);
-        if (editingEventId || isFormFilled || finalEventsList.length === 0) {
-          if (!eventForm.event_type || eventForm.event_type === '') {
-            showValidationError("input_event_type", "Please select Event Type.");
-            return;
-          }
-          if (!eventForm.event_date || eventForm.event_date === '') {
-            showValidationError("input_event_date", "Please select Event Date.");
-            return;
-          }
-          if (!eventForm.event_location || eventForm.event_location.trim() === '') {
-            showValidationError("input_event_location", "Please enter Event Location.");
-            return;
-          }
-          const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);
-          if (dateTimeErrMsg) {
-            showValidationError("input_event_end_time", dateTimeErrMsg);
-            return;
-          }
-
-          const guestPaxVal = eventForm.guest_pax !== '' ? Math.max(0, parseInt(String(eventForm.guest_pax)) || 0) : '';
-          const staffPaxVal = eventForm.staff_pax !== '' ? Math.max(0, parseInt(String(eventForm.staff_pax)) || 0) : '';
-
-          const eventData = {
-            ...eventForm,
-            guest_pax: guestPaxVal,
-            staff_pax: staffPaxVal,
-            event_start_date: eventForm.event_date,
-            event_end_date: eventForm.event_end_date || ''
-          };
-
-          if (editingEventId) {
-            finalEventsList = finalEventsList.map(ev => ev.id === editingEventId ? { ...eventData, id: editingEventId } : ev);
-          } else {
-            finalEventsList.push({
-              ...eventData,
-              id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
-            });
-          }
-          
-          setCreateEvents(finalEventsList);
-          setEditingEventId(null);
-          setShowEventForm(false);
-        } else {
-          setShowEventForm(false);
+      if (showEventForm || finalEventsList.length === 0) {
+        if (!eventForm.event_type || eventForm.event_type === '') {
+          showValidationError("input_event_type", "Please select Event Type.");
+          return;
         }
+        if (!eventForm.event_date || eventForm.event_date === '') {
+          showValidationError("input_event_date", "Please select Event Date.");
+          return;
+        }
+        if (!eventForm.event_location || eventForm.event_location.trim() === '') {
+          showValidationError("input_event_location", "Please enter Event Location.");
+          return;
+        }
+        const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);
+        if (dateTimeErrMsg) {
+          showValidationError("input_event_end_time", dateTimeErrMsg);
+          return;
+        }
+
+        const guestPaxVal = eventForm.guest_pax !== '' ? Math.max(0, parseInt(String(eventForm.guest_pax)) || 0) : '';
+        const staffPaxVal = eventForm.staff_pax !== '' ? Math.max(0, parseInt(String(eventForm.staff_pax)) || 0) : '';
+
+        const eventData = {
+          ...eventForm,
+          guest_pax: guestPaxVal,
+          staff_pax: staffPaxVal,
+          event_start_date: eventForm.event_date,
+          event_end_date: eventForm.event_end_date || ''
+        };
+
+        if (editingEventId) {
+          finalEventsList = finalEventsList.map(ev => ev.id === editingEventId ? { ...eventData, id: editingEventId } : ev);
+        } else {
+          finalEventsList.push({
+            ...eventData,
+            id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
+          });
+        }
+        
+        setCreateEvents(finalEventsList);
+        setEditingEventId(null);
+        setShowEventForm(false);
       }
 
       if (finalEventsList.length === 0) {
@@ -8467,7 +8358,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const firstEvent = finalEventsList[0];
 
       try {
-        await handleSaveStep2Direct(finalEventsList);
+        await handleSaveStep2Direct();
       } catch (err: any) {
         console.error("Step 2 saving failed:", err);
   
@@ -12508,6 +12399,31 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </div>
             </div>
 
+            {/* If Lost Lead, display Lost Details */}
+            {selectedLead && ['Lost Lead', 'Lead Lost', 'Lost'].includes(selectedLead.status || (selectedLead as any).current_status || '') && (() => {
+              const { reason: lostReasonText, notes: lostNotesText } = getLostReasonAndNotes(selectedLead, statusHistory);
+              return (
+                <div className="mx-4 sm:mx-5 mt-2 bg-rose-950/25 border border-rose-500/20 p-2.5 rounded-xl flex items-start gap-3 text-left shadow-lg">
+                  <span className="text-rose-500 text-base mt-0.5">❌</span>
+                  <div className="w-full">
+                    <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wide">Lost Lead Information</h4>
+                    <div className="text-[11px] text-zinc-300 leading-relaxed mt-1 space-y-0.5">
+                      <div>
+                        <strong className="text-slate-400 font-mono uppercase tracking-wider text-[10px]">Lost Reason:</strong>{' '}
+                        <span className="text-rose-300 font-semibold">{lostReasonText}</span>
+                      </div>
+                      {lostNotesText && lostNotesText !== 'Not provided' && (
+                        <div>
+                          <strong className="text-slate-400 font-mono uppercase tracking-wider text-[10px]">Notes:</strong>{' '}
+                          <span className="text-zinc-300">{lostNotesText}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Content container with horizontal padding */}
             <div id="crm-wizard-scroll-container" className="flex-1 overflow-y-auto p-2.5 sm:p-3">
               <div className="max-w-5xl mx-auto">
@@ -12612,19 +12528,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                    {crmWizardStep === 3 && (
                      <div className="space-y-4 animate-fade-in text-left">
-                       {selectedLead && ['Lost Lead', 'Lead Lost', 'Lost'].includes(selectedLead.status || (selectedLead as any).current_status || '') ? (
-                         <div className="bg-rose-950/20 border border-rose-500/30 rounded-xl p-4 sm:p-5 text-left shadow-lg">
-                           <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
-                             <span className="text-rose-400 font-mono font-bold text-xs uppercase tracking-wider shrink-0">
-                               LOST REASON:
-                             </span>
-                             <span className="text-rose-200 text-xs sm:text-sm font-semibold break-words">
-                               {getLostReasonAndNotes(selectedLead, statusHistory).reason}
-                             </span>
-                           </div>
-                         </div>
-                       ) : (
-                         <>
                        <div className="border-b border-slate-800 pb-1.5">
                          <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
                            <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">3</span>
@@ -13421,9 +13324,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           )}
                         </div>
                       </div>
-                      </>
-                     )}
-                    </div>
+                     </div>
                    )}
                   </fieldset>
                 </form>
@@ -13465,25 +13366,23 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </div>
 
               <div className="flex items-center gap-2">
-                {!(crmWizardStep === 3 && selectedLead && ['Lost Lead', 'Lead Lost', 'Lost'].includes(selectedLead.status || (selectedLead as any).current_status || '')) && (
-                  <button
-                    type="button"
-                    onClick={() => handleSaveStep(crmWizardStep)}
-                    disabled={isSaving || isCrmLocked || (crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === ''))}
-                    className={`px-4 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 border-0 ${
-                      isCrmLocked
-                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 shadow-none' :
-                      crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')
-                        ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
-                        : 'bg-indigo-650 hover:bg-indigo-600 text-white cursor-pointer'
-                    }`}
-                  >
-                    {isSaving ? (
-                      <span className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
-                    ) : null}
-                    <span>{isSaving ? 'Saving...' : crmWizardStep === 3 ? 'Save & Process' : 'Save & Next'}</span>
-                  </button>
-                )}
+              <button
+                type="button"
+                onClick={() => handleSaveStep(crmWizardStep)}
+                  disabled={isSaving || isCrmLocked || (crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === ''))}
+                  className={`px-4 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 border-0 ${
+                    isCrmLocked
+                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 shadow-none' :
+                    crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')
+                      ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
+                      : 'bg-indigo-650 hover:bg-indigo-600 text-white cursor-pointer'
+                  }`}
+                >
+                  {isSaving ? (
+                    <span className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
+                  ) : null}
+                  <span>{isSaving ? 'Saving...' : crmWizardStep === 3 ? 'Save & Process' : 'Save & Next'}</span>
+                </button>
               </div>
             </div>
           </div>

@@ -372,6 +372,33 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
             </div>
           </div>
 
+          {/* Section 3.5: Assigned Equipment */}
+          <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4 sm:p-5 space-y-3">
+            <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2 border-b border-zinc-800 pb-2">
+              <Package className="w-4 h-4 text-amber-400" /> Assigned Equipment
+            </h4>
+            {booking?.equipmentItems && booking.equipmentItems.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {booking.equipmentItems.map((item: any, idx: number) => (
+                  <div key={idx} className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60 flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold shrink-0">
+                      <ShieldCheck className="w-4 h-4" />
+                    </div>
+                    <div className="overflow-hidden">
+                      <span className="block text-xs font-bold text-white truncate">{item.name}</span>
+                      <span className="text-[10px] font-mono text-zinc-500">Asset ID: {item.assetId}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-3 bg-zinc-950/40 border border-zinc-800/60 rounded-lg text-xs text-zinc-400 font-mono flex items-center gap-2">
+                <span className="inline-flex items-center px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700 text-[11px] font-bold">Not Assigned</span>
+                <span>No equipment has been assigned to this staff member for this task/event.</span>
+              </div>
+            )}
+          </div>
+
           {/* Section 4: Uploaded Verification Proof Images & Handover Docs */}
           <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4 sm:p-5 space-y-4">
             <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2 border-b border-zinc-800 pb-2">

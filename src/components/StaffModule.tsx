@@ -546,8 +546,22 @@ export const StaffModule: React.FC = () => {
                 }
               } catch(e) {}
             } else if (mobilesRaw.includes(' || EQUIPMENT: ')) {
-              const parts = mobilesRaw.split(' || EQUIPMENT: ');
-              const eqList = parts[1] ? parts[1].split(',').map((s: string) => s.trim()) : [];
+              if (staffIdx === 0) {
+                const parts = mobilesRaw.split(' || EQUIPMENT: ');
+                const eqList = parts[1] ? parts[1].split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+                assignedEqItems = eqList.map(eqStr => {
+                  const match = equipment.find(e => 
+                    e.equipment_name.toLowerCase() === eqStr.toLowerCase() || 
+                    e.model.toLowerCase() === eqStr.toLowerCase()
+                  );
+                  return {
+                    name: eqStr,
+                    assetId: match?.equipment_id || match?.serial_number || `EQ-ASSET-${Math.floor(1000 + Math.random() * 9000)}`
+                  };
+                });
+              }
+            } else if (op?.equipment_kit && assignedNames.length === 1 && staffIdx === 0) {
+              const eqList = op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean);
               assignedEqItems = eqList.map(eqStr => {
                 const match = equipment.find(e => 
                   e.equipment_name.toLowerCase() === eqStr.toLowerCase() || 
@@ -558,22 +572,6 @@ export const StaffModule: React.FC = () => {
                   assetId: match?.equipment_id || match?.serial_number || `EQ-ASSET-${Math.floor(1000 + Math.random() * 9000)}`
                 };
               });
-            } else if (op?.equipment_kit) {
-              const eqList = op.equipment_kit.split(',').map((s: string) => s.trim());
-              assignedEqItems = eqList.map(eqStr => {
-                const match = equipment.find(e => 
-                  e.equipment_name.toLowerCase() === eqStr.toLowerCase() || 
-                  e.model.toLowerCase() === eqStr.toLowerCase()
-                );
-                return {
-                  name: eqStr,
-                  assetId: match?.equipment_id || match?.serial_number || `EQ-ASSET-${Math.floor(1000 + Math.random() * 9000)}`
-                };
-              });
-            }
-
-            if (assignedEqItems.length === 0) {
-              assignedEqItems = [{ name: 'Standard Event Camera Kit', assetId: 'EQ-KIT-STD' }];
             }
 
             // Role
@@ -656,8 +654,8 @@ export const StaffModule: React.FC = () => {
           }
 
           let assignedEqItems: { name: string; assetId: string }[] = [];
-          if (op?.equipment_kit) {
-            const eqList = op.equipment_kit.split(',').map((s: string) => s.trim());
+          if (op?.equipment_kit && (!op?.assigned_staff_mobiles || !op.assigned_staff_mobiles.includes('EQUIPMENT:'))) {
+            const eqList = op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean);
             assignedEqItems = eqList.map(eqStr => {
               const match = equipment.find(e => 
                 e.equipment_name.toLowerCase() === eqStr.toLowerCase() || 
@@ -668,9 +666,6 @@ export const StaffModule: React.FC = () => {
                 assetId: match?.equipment_id || match?.serial_number || `EQ-ASSET-${Math.floor(1000 + Math.random() * 9000)}`
               };
             });
-          }
-          if (assignedEqItems.length === 0) {
-            assignedEqItems = [{ name: 'Standard Event Camera Kit', assetId: 'EQ-KIT-STD' }];
           }
 
           const uniqueKey = `${orderId}_gen_${staffName.toLowerCase()}`;
@@ -895,14 +890,17 @@ export const StaffModule: React.FC = () => {
     if (!e.target.files || e.target.files.length === 0) return;
     const file = e.target.files[0];
 
-    // Enforce Event Start ordering rule
+    // Enforce Event Start ordering rule ONLY if equipment is assigned
     if (photoModalData?.stage === 'Event Start' && eqName === 'Event Start Photo Proof') {
-      const hasAssetColl = !!modalPhotos['Asset Collection Photo Proof'];
-      if (!hasAssetColl) {
-        e.target.value = '';
-        alert("Please upload the Asset Collection Photo Proof before uploading the Event Start Photo Proof.");
-        showToast("⚠️ Please upload the Asset Collection Photo Proof before uploading the Event Start Photo Proof.");
-        return;
+      const hasEquipment = photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0;
+      if (hasEquipment) {
+        const hasAssetColl = !!modalPhotos['Asset Collection Photo Proof'];
+        if (!hasAssetColl) {
+          e.target.value = '';
+          alert("Please upload the Asset Collection Photo Proof before uploading the Event Start Photo Proof.");
+          showToast("⚠️ Please upload the Asset Collection Photo Proof before uploading the Event Start Photo Proof.");
+          return;
+        }
       }
     }
 
@@ -1808,8 +1806,8 @@ export const StaffModule: React.FC = () => {
                     <th className="py-4 px-6">Order ID</th>
                     <th className="py-4 px-6">Customer Name</th>
                     <th className="py-4 px-6">Event Name & Shoot</th>
-                    <th className="py-4 px-6">Event Date & Time</th>
                     <th className="py-4 px-6">Assigned Role</th>
+                    <th className="py-4 px-6">Equipment Status</th>
                     <th className="py-4 px-6">Status</th>
                     <th className="py-4 px-6 text-right">Actions</th>
                   </tr>
@@ -1829,23 +1827,39 @@ export const StaffModule: React.FC = () => {
                         <td className="py-4 px-6 font-mono font-bold text-amber-400">{b.orderId}</td>
                         <td className="py-4 px-6 font-bold text-white">{b.customerName}</td>
                         <td className="py-4 px-6">
-                          <div className="font-semibold text-zinc-200">{b.eventName}</div>
-                          <span className="text-[10px] font-mono uppercase text-zinc-500">{b.shootType}</span>
-                        </td>
-                        <td className="py-4 px-6 text-zinc-300">
-                          <div className="flex items-center gap-1.5 font-medium">
-                            <Calendar className="w-3.5 h-3.5 text-zinc-400" />
-                            {b.eventDate}
+                          <div className="font-bold text-zinc-100">{b.eventName}</div>
+                          <div className="text-xs text-zinc-400 font-mono mt-0.5 flex items-center gap-1 flex-wrap">
+                            <span>{b.eventDate}</span>
+                            {b.eventStartTime && b.eventStartTime !== 'N/A' && (
+                              <span className="text-zinc-500">• {b.eventStartTime}</span>
+                            )}
                           </div>
-                          <div className="flex items-center gap-1.5 text-xs text-zinc-400 mt-1">
-                            <Clock className="w-3 h-3 text-zinc-500" />
-                            {b.eventStartTime}
-                          </div>
+                          {b.shootType && b.shootType !== 'N/A' && (
+                            <div className="text-[10px] font-mono uppercase text-zinc-500 mt-0.5">
+                              {b.shootType}
+                            </div>
+                          )}
                         </td>
                         <td className="py-4 px-6">
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-bold">
                             {b.assignedRole}
                           </span>
+                        </td>
+                        <td className="py-4 px-6">
+                          {b.equipmentItems && b.equipmentItems.length > 0 ? (
+                            <div className="flex flex-col gap-1">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold font-mono">
+                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Assigned ({b.equipmentItems.length})
+                              </span>
+                              <span className="text-[10px] text-zinc-400 max-w-[150px] truncate font-mono" title={b.equipmentItems.map((e: any) => e.name).join(', ')}>
+                                {b.equipmentItems.map((e: any) => e.name).join(', ')}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-zinc-800/80 text-zinc-400 border border-zinc-700 text-xs font-bold font-mono">
+                              Not Assigned
+                            </span>
+                          )}
                         </td>
                         <td className="py-4 px-6 flex flex-col gap-2 items-start">
                           {b.taskStatus === 'Footage Handover' || b.taskStatus === 'Verified Footage' ? (
@@ -1935,8 +1949,10 @@ export const StaffModule: React.FC = () => {
                     <span><strong>Event Completion Proof Required:</strong> Please upload or capture the <strong>Event Completion Photo Proof</strong> to complete the Event End stage.</span>
                   ) : photoModalData.stage === 'Equipment Handover' ? (
                     <span><strong>Footage Handover:</strong> Provide the <strong>Raw Footage Drive Link (Required)</strong>. Equipment Handover Photo Proof is optional.</span>
-                  ) : (
+                  ) : photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0 ? (
                     <span><strong>Equipment Inspection Required:</strong> Please capture or upload a clear photo of each assigned equipment item to verify condition at <span className="font-bold underline">{photoModalData.stage}</span>.</span>
+                  ) : (
+                    <span><strong>Event Start Proof Required:</strong> Please capture or upload a clear photo for <strong>Event Start Photo Proof</strong>.</span>
                   )}
                 </div>
               </div>
