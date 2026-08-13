@@ -107,6 +107,8 @@ const parseEventTimes = (timeStr: string) => {
 
 export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   const { 
+    currentUser,
+    currentUserName,
     leads, 
     orders, 
     operations, 
@@ -286,35 +288,109 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
     try {
       const events: CalendarEvent[] = [];
 
+      const salesStages = [
+        'Quotation Sent', 'Quote Sent', 'Created Quotation', 'Quote Follow-up', 'Create Quote',
+        'Confirm Order', 'Order Confirmed', 'Booking Confirmed', 'Advance Received', 'Payment Received',
+        'Event Scheduled', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned',
+        'Event Started', 'Event Start', 'Event Ended', 'Event End', 'Event Completed', 'Event Complete',
+        'Footage Handover', 'Footage Handover Verified', 'Verified Footage', 'Raw Footage Received',
+        'Assigned Editor', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review',
+        'Customer Review', 'Client Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress',
+        'Editing Completed', 'Editing Complete', 'Client Acceptance', 'Final Approval', 'Approved',
+        'Delivered', 'Project Delivered', 'Business Owner Review',
+        'Closed', 'Order Closed', 'Project Closed', 'Project Completed', 'Completed'
+      ];
+
+      const operationsStages = [
+        'Confirm Order', 'Order Confirmed', 'Booking Confirmed',
+        'Event Scheduled', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned',
+        'Event Started', 'Event Start', 'Event Ended', 'Event End', 'Event Completed', 'Event Complete',
+        'Footage Handover', 'Footage Handover Verified', 'Verified Footage', 'Raw Footage Received'
+      ];
+
+      const productionStages = [
+        'Verified Footage', 'Footage Handover Verified', 'Raw Footage Received',
+        'Assigned Editor', 'Editor Assigned', 'Editing Started', 'Editing In Progress',
+        'Internal QC Review', 'Customer Review', 'Client Review', 'Client Review Sent',
+        'Revision Required', 'Revision In Progress', 'Editing Completed', 'Editing Complete',
+        'Client Acceptance'
+      ];
+
+      const ownerStages = [
+        'Confirm Order', 'Order Confirmed', 'Booking Confirmed',
+        'Event Scheduled', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned',
+        'Event Started', 'Event Start', 'Event Ended', 'Event End', 'Event Completed', 'Event Complete',
+        'Footage Handover', 'Footage Handover Verified', 'Verified Footage', 'Raw Footage Received',
+        'Assigned Editor', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review',
+        'Customer Review', 'Client Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress',
+        'Editing Completed', 'Editing Complete', 'Client Acceptance', 'Final Approval', 'Approved',
+        'Delivered', 'Project Delivered', 'Business Owner Review',
+        'Closed', 'Order Closed', 'Project Closed', 'Project Completed', 'Completed'
+      ];
+
       leads.forEach(ld => {
         if (!ld) return;
-        // Display only leads where:
-        const statusClean = (ld.status || ld.current_status || '').trim();
-        
-        // Define stages
-        const opsStages = ['Order Confirmed', 'Event Scheduled', 'Operations Assigned', 'Event Started', 'Event Ended', 'Event Completed'];
-        const prodStages = ['Verified Footage', 'Footage Handover Verified', 'Raw Footage Received', 'Assigned Editor', 'Editing Started', 'Editing In Progress', 'Customer Review', 'Editing Completed'];
-        const postProdStages = ['Delivered', 'Client Acceptance', 'Business Owner Review', 'Closed', 'Project Closed', 'Order Closed', 'Project Completed', 'Completed', 'Approved', 'Project Delivered'];
-        
+
+        const ord = orders?.find(o => o.lead_id === ld.lead_id);
+        const orderId = ord?.order_id || ld.lead_id;
+        const prodRecord = production?.find(p => p.tracking_id === ld.lead_id || p.order_id === ld.lead_id || p.tracking_id === orderId || (p as any).order_id === orderId);
+        const opsRecord = operations?.find(o => o.order_id === orderId || o.order_id === ld.lead_id);
+
+        const statusClean = (ord?.current_stage || prodRecord?.editing_status || ld.status || ld.current_status || '').trim();
+
         let isVisible = false;
 
-        if (role === 'sales' || role === 'owner') {
-          // Visible from Order Confirmed through Closed
-          isVisible = opsStages.includes(statusClean) || prodStages.includes(statusClean) || postProdStages.includes(statusClean);
+        if (role === 'sales') {
+          isVisible = salesStages.some(st => st.toLowerCase() === statusClean.toLowerCase());
         } else if (role === 'operations') {
-          // Operations (and operations staff): Order Confirmed to Event Completed
-          isVisible = opsStages.includes(statusClean);
+          isVisible = operationsStages.some(st => st.toLowerCase() === statusClean.toLowerCase());
+        } else if (role === 'worker') {
+          isVisible = operationsStages.some(st => st.toLowerCase() === statusClean.toLowerCase());
         } else if (role === 'production') {
-          // Production (and production staff): Verified Footage to Editing Completed
-          isVisible = prodStages.includes(statusClean);
+          isVisible = productionStages.some(st => st.toLowerCase() === statusClean.toLowerCase());
+        } else if (role === 'owner') {
+          isVisible = ownerStages.some(st => st.toLowerCase() === statusClean.toLowerCase());
         } else {
-          // Fallback
-          isVisible = opsStages.includes(statusClean) || prodStages.includes(statusClean);
+          isVisible = true;
         }
 
         if (!isVisible) return;
 
-        // 2. Fetch events from ld.events or fall back to lead-level event if no events are saved
+        // Find staff assignments
+        const assigns = staffAssignments ? staffAssignments.filter(x => 
+          x.order_id === ld.lead_id || 
+          x.order_id === orderId || 
+          (x as any).lead_id === ld.lead_id
+        ) : [];
+
+        // Operations Staff restriction: show ONLY events assigned to this staff member
+        if (role === 'worker') {
+          const activeStaffName = (currentUserName || currentUser?.name || '').toLowerCase().trim();
+          const activeStaffEmail = (currentUser?.email || '').toLowerCase().trim();
+          const activeStaffMobile = (currentUser?.mobile || '').trim();
+
+          const isAssigned = (activeStaffName || activeStaffEmail || activeStaffMobile) && (
+            assigns.some(a => 
+              (a.staff_name && activeStaffName && a.staff_name.toLowerCase().trim() === activeStaffName) ||
+              (a.staff_email && activeStaffEmail && a.staff_email.toLowerCase().trim() === activeStaffEmail) ||
+              (a.staff_mobile && activeStaffMobile && a.staff_mobile === activeStaffMobile)
+            ) ||
+            (ld.events && ld.events.some((e: any) => {
+              const assignedNames = e.assigned_staff_names ? e.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
+              return activeStaffName && assignedNames.includes(activeStaffName);
+            })) ||
+            (opsRecord && (
+              (opsRecord.photographer_assigned && activeStaffName && opsRecord.photographer_assigned.toLowerCase().includes(activeStaffName)) ||
+              (opsRecord.videographer_assigned && activeStaffName && opsRecord.videographer_assigned.toLowerCase().includes(activeStaffName)) ||
+              (opsRecord.drone_operator_assigned && activeStaffName && opsRecord.drone_operator_assigned.toLowerCase().includes(activeStaffName)) ||
+              (opsRecord.assistant_assigned && activeStaffName && opsRecord.assistant_assigned.toLowerCase().includes(activeStaffName))
+            ))
+          );
+
+          if (!isAssigned) return;
+        }
+
+        // Fetch events from ld.events or fall back to lead-level event if no events are saved
         const eventsList = (ld.events && ld.events.length > 0) ? ld.events : [
           {
             id: `fallback-${ld.lead_id}`,
@@ -326,55 +402,54 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
           }
         ];
 
-        // Find production record for Target Delivery Date (if any)
-        const ord = orders?.find(o => o.lead_id === ld.lead_id);
-        const orderId = ord?.order_id || ld.lead_id;
-        const prodRecord = production?.find(p => p.tracking_id === ld.lead_id || p.order_id === ld.lead_id || p.tracking_id === orderId || (p as any).order_id === orderId);
         const targetDeliveryDate = prodRecord?.expected_delivery_date || prodRecord?.target_delivery_date || ld.delivery_target_date || '';
-
-        // Find staff assignments
-        const assigns = staffAssignments ? staffAssignments.filter(x => 
-          x.order_id === ld.lead_id || 
-          x.order_id === orderId || 
-          (x as any).lead_id === ld.lead_id
-        ) : [];
         const uniqueStaff = new Set(assigns.map(a => a.staff_name));
         const assignedTeamCount = uniqueStaff.size;
 
         eventsList.forEach((ev, index) => {
           if (!ev) return;
-          const evDate = ev.event_date || ld.event_date || '';
-          if (!evDate) return; // skip if no date at all
+
+          let dateToUse = '';
+          if (role === 'production') {
+            // Production calendar MUST show target delivery date ONLY
+            dateToUse = ev.target_delivery_date || targetDeliveryDate;
+          } else {
+            // Sales/Ops/Ops Staff/Owner calendars show actual event date
+            dateToUse = ev.event_date || ld.event_date || '';
+          }
+
+          // If dateToUse is missing/empty, do not render on calendar
+          if (!dateToUse) return;
 
           const evStartTime = ev.event_start_time || ev.event_time || ld.event_time || '10:00 AM';
-          const evName = ev.event_name || ld.custom_event_name || ld.event_type || 'Event Shoot';
+          const evName = ev.event_name || ld.custom_event_name || ev.event_type || ld.event_type || 'Event Shoot';
           const evType = ev.event_type || ld.event_type || 'Shoot';
           const evLoc = ev.event_location || ld.event_location || 'Studio';
 
           events.push({
             id: `lead-event-${ld.lead_id}-${index}-${ev.id || 'idx'}`,
             sourceType: 'order',
-            eventClass: 'Event Scheduled',
-            date: evDate,
+            eventClass: role === 'production' ? 'Target Delivery' : 'Event Scheduled',
+            date: dateToUse,
             customerName: ld.customer_name,
             mobile: ld.mobile,
-            eventType: evType,
+            eventType: `${evName} (${evType})`,
             eventTime: evStartTime,
             eventLocation: evLoc,
-            currentStage: ld.status,
+            currentStage: statusClean || ld.status,
             notes: 'On Track',
             packageName: ld.Select_Package_Option || 'Custom Package',
             totalAmount: ld.package_price || ld.budget || 0,
-            orderId: ld.lead_id, // Map lead_id to orderId for compatibility
+            orderId: orderId,
             targetDeliveryDate: targetDeliveryDate,
             raw: {
               ...ld,
               ...ev,
               lead_id: ld.lead_id,
-              order_id: ld.lead_id,
+              order_id: orderId,
               event_name: evName,
               event_type: evType,
-              event_date: evDate,
+              event_date: ev.event_date || ld.event_date || '',
               event_start_time: evStartTime,
               event_end_time: ev.event_end_time || '',
               reporting_date: ev.reporting_date || '',
@@ -388,42 +463,15 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
         });
       });
 
-      /* Calendar memos hidden per user request */
-      /*
-      if (calendarMemos) {
-        calendarMemos.forEach((memo) => {
-          events.push({
-            id: memo.id,
-            sourceType: 'memo',
-            eventClass: 'Calendar Memo',
-            date: memo.memo_date,
-            customerName: memo.title,
-            mobile: '',
-            eventType: 'Memo',
-            eventTime: '',
-            eventLocation: '',
-            currentStage: 'Active',
-            notes: memo.message,
-            packageName: '',
-            totalAmount: 0,
-            orderId: memo.id,
-            targetDeliveryDate: '',
-            raw: { ...memo }
-          });
-        });
-      }
-      */
-
       return events;
     } catch (err: any) {
       console.error("Error computing calendar events:", err);
-      // Fail-safe error state
       if (!calendarError) {
         setCalendarError(err.message || "Unknown error occurred while parsing database events.");
       }
       return [];
     }
-  }, [leads, orders, production, staffAssignments, calendarMemos]);
+  }, [leads, orders, production, operations, staffAssignments, calendarMemos, role, currentUser, currentUserName]);
 
   // Filters Event list by role first
   const roleFilteredEvents = useMemo(() => {

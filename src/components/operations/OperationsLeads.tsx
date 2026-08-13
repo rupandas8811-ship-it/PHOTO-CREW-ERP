@@ -63,6 +63,116 @@ const OperationsActionColumn = ({ ord, actionItems, isOpen, setActiveMenuOrderId
   );
 };
 
+const extractTeamMembersConfig = (lead: any, leadPkgs: any[]): { event_id?: string; event_name?: string; team_members: any[] }[] => {
+  if (!lead && (!leadPkgs || leadPkgs.length === 0)) return [];
+
+  const parseRaw = (val: any) => {
+    if (!val) return null;
+    if (typeof val === 'string') {
+      try {
+        return JSON.parse(val);
+      } catch (e) {
+        return val.split(/,|\n/).map(s => s.trim()).filter(Boolean);
+      }
+    }
+    return val;
+  };
+
+  const rawCandidates = [
+    lead?.Team_Members,
+    lead?.Team_Members_Included,
+    leadPkgs?.[0]?.Team_Members_Included,
+    leadPkgs?.[0]?.editable_inclusions,
+    leadPkgs?.[0]?.Team_Members
+  ];
+
+  let parsed: any = null;
+  for (const candidate of rawCandidates) {
+    if (candidate) {
+      const p = parseRaw(candidate);
+      if (p) {
+        if (Array.isArray(p) && p.length > 0) {
+          parsed = p;
+          break;
+        } else if (typeof p === 'object' && Object.keys(p).length > 0) {
+          parsed = p;
+          break;
+        }
+      }
+    }
+  }
+
+  if (Array.isArray(parsed)) {
+    if (parsed.length > 0 && typeof parsed[0] === 'object' && parsed[0] !== null && ('team_members' in parsed[0] || 'deliverables' in parsed[0] || 'inclusions' in parsed[0] || 'name' in parsed[0])) {
+      if ('team_members' in parsed[0] || 'inclusions' in parsed[0] || 'deliverables' in parsed[0]) {
+        return parsed.map((item: any) => ({
+          event_id: item.event_id || item.id || '',
+          event_name: item.event_name || item.name || item.event_type || '',
+          team_members: item.team_members || item.inclusions || item.deliverables || []
+        }));
+      }
+    }
+    return [{
+      event_id: '',
+      event_name: '',
+      team_members: parsed
+    }];
+  }
+
+  if (parsed && typeof parsed === 'object') {
+    return Object.entries(parsed).map(([key, val]) => ({
+      event_id: '',
+      event_name: key,
+      team_members: Array.isArray(val) ? val : [val]
+    }));
+  }
+
+  if (lead?.events && Array.isArray(lead.events) && lead.events.length > 0) {
+    const eventConfigs = lead.events.map((ev: any) => {
+      const tm = ev.team_members || ev.inclusions || ev.Team_Members || [];
+      return {
+        event_id: ev.id || ev.event_id || '',
+        event_name: ev.event_name || ev.event_type || '',
+        team_members: Array.isArray(tm) ? tm : parseRaw(tm) || []
+      };
+    }).filter(c => c.team_members.length > 0);
+    if (eventConfigs.length > 0) return eventConfigs;
+  }
+
+  return [];
+};
+
+const getEventRolesForEvent = (ev: any, index: number, configList: any[]): any[] => {
+  if (!configList || configList.length === 0) return [];
+
+  const evId = (ev.id || ev.event_id || '').toLowerCase().trim();
+  const evName = (ev.event_name || ev.event_type || '').toLowerCase().trim();
+  const evType = (ev.event_type || '').toLowerCase().trim();
+
+  if (evId) {
+    const matchById = configList.find(c => c.event_id && c.event_id.toLowerCase().trim() === evId);
+    if (matchById && matchById.team_members?.length > 0) return matchById.team_members;
+  }
+
+  if (evName || evType) {
+    const matchByName = configList.find(c => {
+      const cName = (c.event_name || '').toLowerCase().trim();
+      return cName && (cName === evName || cName === evType || evName.includes(cName) || cName.includes(evName));
+    });
+    if (matchByName && matchByName.team_members?.length > 0) return matchByName.team_members;
+  }
+
+  if (configList.length === 1 && configList[0].team_members?.length > 0) {
+    return configList[0].team_members;
+  }
+
+  if (configList[index] && configList[index].team_members?.length > 0) {
+    return configList[index].team_members;
+  }
+
+  return [];
+};
+
 export const OperationsLeads: React.FC = () => {
   const { 
     currentRole, 
@@ -1038,16 +1148,10 @@ export const OperationsLeads: React.FC = () => {
     setActiveAssignments([]);
 
     const targetLead = leads?.find(l => l.lead_id === order.lead_id);
+    const targetLeadPkgs = leadPackages?.filter(lp => lp.lead_id === order.lead_id) || [];
     
     // Calculate expected roles for loading
-    let teamMembersConfig: { event_name: string; team_members: string[] }[] = [];
-    try {
-      if (targetLead?.Team_Members) {
-        teamMembersConfig = typeof targetLead.Team_Members === 'string' ? JSON.parse(targetLead.Team_Members) : targetLead.Team_Members;
-      }
-    } catch (e) {
-      console.error("Failed to parse Team_Members:", e);
-    }
+    const teamMembersConfig = extractTeamMembersConfig(targetLead, targetLeadPkgs);
 
     const initialAllocations: Record<string, any> = {};
     if (targetLead?.events && targetLead.events.length > 0) {
@@ -1055,21 +1159,13 @@ export const OperationsLeads: React.FC = () => {
         const evId = ev.id || `EV-N/A-${index}`;
         const staffList: any[] = [];
         
-        const evName = ev.event_name || ev.event_type || 'Unnamed Event';
-        const matchedEventConfig = teamMembersConfig.find((tm: any) => tm.event_name === evName);
-        let eventRoles = matchedEventConfig ? matchedEventConfig.team_members : [];
-        if (!eventRoles || eventRoles.length === 0) {
-          if (teamMembersConfig.length === 1) {
-            eventRoles = teamMembersConfig[0].team_members;
-          }
-        }
-        const includedRoles = eventRoles?.length > 0 ? eventRoles : [];
+        const includedRoles = getEventRolesForEvent(ev, index, teamMembersConfig);
 
         // Group roles into tasks
         const tasksMap = new Map<string, { roleName: string; targetQty: number }>();
-        includedRoles.forEach((roleStr: string) => {
-          const { qty, text } = parseQtyAndText(roleStr);
-          const roleName = (text || roleStr).trim();
+        includedRoles.forEach((roleItem: any) => {
+          const { qty, text } = parseQtyAndText(roleItem);
+          const roleName = (text || (typeof roleItem === 'string' ? roleItem : '')).trim();
           if (!roleName) return;
           if (tasksMap.has(roleName)) {
             tasksMap.get(roleName)!.targetQty += (qty || 1);
@@ -1079,7 +1175,11 @@ export const OperationsLeads: React.FC = () => {
         });
         const taskGroups = Array.from(tasksMap.values());
 
-        const orderStaffAssignments = staffAssignments?.filter(sa => sa.order_id === order.order_id && sa.assignment_status !== 'Cancelled') || [];
+        const orderStaffAssignments = staffAssignments?.filter(sa => 
+          sa.order_id === order.order_id && 
+          sa.assignment_status !== 'Cancelled' &&
+          (!sa.event_id || sa.event_id === evId)
+        ) || [];
         const existingNames = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean) : [];
 
         let assignedEquipment: string[] = [];
@@ -1181,9 +1281,11 @@ export const OperationsLeads: React.FC = () => {
           }
         }
 
-        // Ensure every task group has at least 1 slot in staffList
+        // Ensure every task group has at least targetQty slots in staffList
         taskGroups.forEach(task => {
-          if (!staffList.some(s => s.staff_role === task.roleName)) {
+          const currentSlots = staffList.filter(s => s.staff_role === task.roleName);
+          const missingCount = task.targetQty - currentSlots.length;
+          for (let m = 0; m < missingCount; m++) {
             staffList.push({
               id: 'slot_' + Math.random().toString(36).substr(2, 6),
               staff_role: task.roleName,
@@ -1298,28 +1400,15 @@ export const OperationsLeads: React.FC = () => {
     setValidationAttempted(false);
     let overallMissingStaff = false;
     if (parentLeadInstance?.events) {
-       let teamMembersConfig: { event_name: string; team_members: string[] }[] = [];
-       try {
-         if (parentLeadInstance?.Team_Members) {
-           teamMembersConfig = typeof parentLeadInstance.Team_Members === 'string' ? JSON.parse(parentLeadInstance.Team_Members) : parentLeadInstance.Team_Members;
-         }
-       } catch (e) {
-         console.error("Failed to parse Team_Members:", e);
-       }
+       const targetLeadPkgs = leadPackages?.filter(lp => lp.lead_id === parentLeadInstance?.lead_id) || [];
+       const teamMembersConfig = extractTeamMembersConfig(parentLeadInstance, targetLeadPkgs);
 
-       for (const ev of parentLeadInstance.events) {
+       for (let index = 0; index < parentLeadInstance.events.length; index++) {
+          const ev = parentLeadInstance.events[index];
           const evId = ev.id || '';
           if (!evId) continue;
           
-          const evName = ev.event_name || ev.event_type || 'Unnamed Event';
-          const matchedEventConfig = teamMembersConfig.find((tm: any) => tm.event_name === evName);
-          let eventRoles = matchedEventConfig ? matchedEventConfig.team_members : [];
-          if (!eventRoles || eventRoles.length === 0) {
-            if (teamMembersConfig.length === 1) {
-              eventRoles = teamMembersConfig[0].team_members;
-            }
-          }
-          const includedRoles = eventRoles?.length > 0 ? eventRoles : [];
+          const includedRoles = getEventRolesForEvent(ev, index, teamMembersConfig);
           
           if (includedRoles.length > 0) {
             const allocStaff = eventAllocations[evId]?.staff || [];
@@ -2361,14 +2450,8 @@ export const OperationsLeads: React.FC = () => {
 
                 {/* Multiple Events Iteration */}
                 {(() => {
-                  let teamMembersConfig: { event_name: string; team_members: string[] }[] = [];
-                  try {
-                    if (parentLeadInstance?.Team_Members) {
-                      teamMembersConfig = typeof parentLeadInstance.Team_Members === 'string' ? JSON.parse(parentLeadInstance.Team_Members) : parentLeadInstance.Team_Members;
-                    }
-                  } catch (e) {
-                    console.error("Failed to parse Team_Members:", e);
-                  }
+                  const targetLeadPkgs = leadPackages?.filter(lp => lp.lead_id === parentLeadInstance?.lead_id) || [];
+                  const teamMembersConfig = extractTeamMembersConfig(parentLeadInstance, targetLeadPkgs);
 
                   return parentLeadInstance?.events && parentLeadInstance.events.map((ev, index) => {
                     const evId = ev.id || `EV-N/A-${index}`;
@@ -2376,23 +2459,12 @@ export const OperationsLeads: React.FC = () => {
                     const allocStaff = allocation.staff || [];
                     
                     const evName = ev.event_name || ev.event_type || 'Unnamed Event';
-                    const matchedEventConfig = teamMembersConfig.find((tm: any) => tm.event_name === evName);
-                    let eventRoles = matchedEventConfig ? matchedEventConfig.team_members : [];
-                    if (!eventRoles || eventRoles.length === 0) {
-                      if (teamMembersConfig.length === 1) {
-                        eventRoles = teamMembersConfig[0].team_members;
-                      }
-                    }
+                    const includedRoles = getEventRolesForEvent(ev, index, teamMembersConfig);
                     
                     let loadError = null;
-                    if (!parentLeadInstance?.Team_Members) {
-                       loadError = "Database query failed: Team_Members field is empty or missing in the lead record.";
-                    } else if (teamMembersConfig.length === 0) {
-                       loadError = "Event mapping failed: Could not parse Team Members data.";
-                    } else if (!eventRoles || eventRoles.length === 0) {
-                       loadError = `Invalid Event ID: No Team Members found matching event "${evName}".`;
+                    if (includedRoles.length === 0) {
+                      loadError = `No Team Members specified for event "${evName}". You can manually add staff roles below.`;
                     }
-                    const includedRoles = eventRoles?.length > 0 ? eventRoles : [];
 
                     const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
                     const isCollapsed = collapsedAssignEvents[evId] === undefined ? (isMobile ? true : index !== 0) : collapsedAssignEvents[evId];
