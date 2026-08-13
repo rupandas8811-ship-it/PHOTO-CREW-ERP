@@ -2337,20 +2337,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
     }
 
-    // 3. Check follow_up_notes if reason is still missing
-    if ((!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') && (lead as any).follow_up_notes) {
-      const fNotes = String((lead as any).follow_up_notes).trim();
-      if (fNotes && !fNotes.startsWith('[Update')) {
-        reason = fNotes;
-      }
-    }
-
-    // 4. Check statusHistory array
+    // 3. Check statusHistory array (ONLY specific regex)
     if ((!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') && historyList && historyList.length > 0) {
       const lostHistItems = [...historyList]
         .filter(h => String(h.lead_id) === String(lead.lead_id) && ['Lost Lead', 'Lead Lost', 'Lost'].includes(h.new_status || h.status || ''))
         .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-
+      
       const lostHist = lostHistItems[0];
       if (lostHist) {
         if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') {
@@ -2358,11 +2350,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             const matchR = lostHist.remarks.match(/Lost Reason:\s*([^.\n]+)/i);
             if (matchR && matchR[1] && matchR[1].trim()) {
               reason = matchR[1].trim();
-            } else {
-              reason = lostHist.remarks.trim();
             }
-          } else if (lostHist.call_notes) {
-            reason = lostHist.call_notes.trim();
           }
         }
       }
@@ -12479,12 +12467,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 <div className="mx-4 sm:mx-5 mt-2 bg-rose-950/25 border border-rose-500/20 p-2.5 rounded-xl flex items-start gap-3 text-left shadow-lg">
                   <span className="text-rose-500 text-base mt-0.5">❌</span>
                   <div className="w-full">
-                    <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wide">Lost Lead Information</h4>
-                    <div className="text-[11px] text-zinc-300 leading-relaxed mt-1 space-y-0.5">
-                      <div>
-                        <strong className="text-slate-400 font-mono uppercase tracking-wider text-[10px]">Reason:</strong>{' '}
-                        <span className="text-rose-300 font-semibold">{lostReasonText}</span>
-                      </div>
+                    <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wide">LOST REASON</h4>
+                    <div className="text-[11px] text-zinc-300 leading-relaxed mt-0.5">
+                      <span className="text-rose-300 font-semibold">{lostReasonText}</span>
                     </div>
                   </div>
                 </div>
