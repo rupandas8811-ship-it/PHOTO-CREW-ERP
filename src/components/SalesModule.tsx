@@ -135,6 +135,162 @@ function combineQtyAndText(qty: number | string, text: string): string {
   return `${validQty} ${finalText}`.trim();
 }
 
+export function parseTeamMembersJsonToRecord(
+  rawTeamData: any,
+  pkgId: string,
+  eventsList: any[] = []
+): Record<string, string[]> {
+  const result: Record<string, string[]> = {};
+  if (!rawTeamData) return result;
+
+  let parsed: any = rawTeamData;
+  if (typeof rawTeamData === 'string') {
+    try {
+      parsed = JSON.parse(rawTeamData);
+    } catch (e) {
+      const list = rawTeamData.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
+      if (list.length > 0) {
+        result[pkgId] = list;
+        result['Custom Package'] = list;
+        result['custom_package'] = list;
+      }
+      return result;
+    }
+  }
+
+  if (Array.isArray(parsed)) {
+    let generalList: string[] = [];
+    parsed.forEach((item: any) => {
+      if (typeof item === 'string') {
+        generalList.push(item);
+      } else if (item && typeof item === 'object') {
+        const evName = item.event_name || item.event_type;
+        const evId = item.event_id;
+        const members = Array.isArray(item.team_members)
+          ? item.team_members.map((m: any) => String(m)).filter(Boolean)
+          : (Array.isArray(item.members) ? item.members.map((m: any) => String(m)).filter(Boolean) : []);
+
+        if (evName === 'General' || !evName) {
+          generalList = [...generalList, ...members];
+        } else {
+          if (members.length > 0) {
+            result[`${pkgId}_${evName}`] = members;
+            result[`Custom Package_${evName}`] = members;
+            result[`custom_package_${evName}`] = members;
+            if (evId) {
+              result[`${pkgId}_${evId}`] = members;
+              result[`Custom Package_${evId}`] = members;
+              result[`custom_package_${evId}`] = members;
+            }
+            const matchedEv = (eventsList || []).find(e =>
+              (e.id && String(e.id) === String(evId)) ||
+              (e.event_name && e.event_name === evName) ||
+              (e.event_type && e.event_type === evName)
+            );
+            if (matchedEv) {
+              result[`${pkgId}_${matchedEv.id}`] = members;
+              result[`Custom Package_${matchedEv.id}`] = members;
+              result[`custom_package_${matchedEv.id}`] = members;
+            }
+          }
+        }
+      }
+    });
+
+    if (generalList.length > 0 || Object.keys(result).length === 0) {
+      result[pkgId] = generalList;
+      result['Custom Package'] = generalList;
+      result['custom_package'] = generalList;
+    }
+  } else if (parsed && typeof parsed === 'object') {
+    Object.keys(parsed).forEach(k => {
+      if (Array.isArray(parsed[k])) {
+        result[k] = parsed[k].map((s: any) => String(s)).filter(Boolean);
+      }
+    });
+  }
+
+  return result;
+}
+
+export function parseDeliverablesJsonToRecord(
+  rawDelData: any,
+  pkgId: string,
+  eventsList: any[] = []
+): Record<string, string[]> {
+  const result: Record<string, string[]> = {};
+  if (!rawDelData) return result;
+
+  let parsed: any = rawDelData;
+  if (typeof rawDelData === 'string') {
+    try {
+      parsed = JSON.parse(rawDelData);
+    } catch (e) {
+      const list = rawDelData.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
+      if (list.length > 0) {
+        result[pkgId] = list;
+        result['Custom Package'] = list;
+        result['custom_package'] = list;
+      }
+      return result;
+    }
+  }
+
+  if (Array.isArray(parsed)) {
+    let generalList: string[] = [];
+    parsed.forEach((item: any) => {
+      if (typeof item === 'string') {
+        generalList.push(item);
+      } else if (item && typeof item === 'object') {
+        const evName = item.event_name || item.event_type;
+        const evId = item.event_id;
+        const deliverables = Array.isArray(item.deliverables)
+          ? item.deliverables.map((d: any) => String(d)).filter(Boolean)
+          : [];
+
+        if (evName === 'General' || !evName) {
+          generalList = [...generalList, ...deliverables];
+        } else {
+          if (deliverables.length > 0) {
+            result[`${pkgId}_${evName}`] = deliverables;
+            result[`Custom Package_${evName}`] = deliverables;
+            result[`custom_package_${evName}`] = deliverables;
+            if (evId) {
+              result[`${pkgId}_${evId}`] = deliverables;
+              result[`Custom Package_${evId}`] = deliverables;
+              result[`custom_package_${evId}`] = deliverables;
+            }
+            const matchedEv = (eventsList || []).find(e =>
+              (e.id && String(e.id) === String(evId)) ||
+              (e.event_name && e.event_name === evName) ||
+              (e.event_type && e.event_type === evName)
+            );
+            if (matchedEv) {
+              result[`${pkgId}_${matchedEv.id}`] = deliverables;
+              result[`Custom Package_${matchedEv.id}`] = deliverables;
+              result[`custom_package_${matchedEv.id}`] = deliverables;
+            }
+          }
+        }
+      }
+    });
+
+    if (generalList.length > 0 || Object.keys(result).length === 0) {
+      result[pkgId] = generalList;
+      result['Custom Package'] = generalList;
+      result['custom_package'] = generalList;
+    }
+  } else if (parsed && typeof parsed === 'object') {
+    Object.keys(parsed).forEach(k => {
+      if (Array.isArray(parsed[k])) {
+        result[k] = parsed[k].map((s: any) => String(s)).filter(Boolean);
+      }
+    });
+  }
+
+  return result;
+}
+
 interface CompactQtyItemRowProps {
   value: string;
   options?: string[];
@@ -2723,6 +2879,68 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           deliverables: deliverablesText,
           deliverables_description: deliverablesText
         }));
+
+        // Also save / update lead_packages record in Supabase
+        try {
+          const packagePayload = {
+            lead_id: leadId,
+            package_id: pkgId,
+            package_name: wizardLeadData.package_name || (pkgId === 'Custom Package' || pkgId === 'custom_package' ? 'Custom Package' : `Package ${pkgId}`),
+            package_cost: cleanPkgCost || 0,
+            quantity: 1,
+            total_amount: cleanPkgCost || 0,
+            discount: quoteDiscount || 0,
+            final_amount: (cleanPkgCost || 0) + (quoteAdditional || 0) - (quoteDiscount || 0),
+            Team_Members_Included: teamMembersJson,
+            deliverables_descriptionn: deliverablesJson,
+            deliverables_description: deliverablesText,
+            editable_inclusions: updatedInclusions,
+            editable_deliverables: updatedDeliverables,
+            updated_at: new Date().toISOString()
+          };
+
+          const { data: existingLps } = await supabaseClient
+            .from('lead_packages')
+            .select('*')
+            .eq('lead_id', leadId);
+
+          let targetLpId = `LP-${leadId}-${pkgId}`;
+          if (existingLps && existingLps.length > 0) {
+            const matched = existingLps.find(lp => String(lp.package_id) === String(pkgId)) || existingLps[0];
+            targetLpId = matched.lead_package_id;
+            await supabaseClient
+              .from('lead_packages')
+              .update(packagePayload)
+              .eq('lead_package_id', targetLpId);
+          } else {
+            await supabaseClient
+              .from('lead_packages')
+              .insert({
+                ...packagePayload,
+                lead_package_id: targetLpId,
+                created_at: new Date().toISOString()
+              });
+          }
+
+          if (setLeadPackages) {
+            setLeadPackages(prev => {
+              const idx = prev.findIndex(lp => lp.lead_package_id === targetLpId);
+              const fullLpRecord = {
+                lead_package_id: targetLpId,
+                ...packagePayload
+              } as LeadPackage;
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = fullLpRecord;
+                return next;
+              } else {
+                return [...prev, fullLpRecord];
+              }
+            });
+          }
+        } catch (e) {
+          console.warn("Could not update lead_packages in saveStep3DataRealtime:", e);
+        }
       }
     } catch (err) {
       console.error("Exception in saveStep3DataRealtime:", err);
@@ -3229,159 +3447,64 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
       const fetchSupabasePackageData = async () => {
         try {
+          const { data: lpData } = await supabaseClient
+            .from('lead_packages')
+            .select('*')
+            .eq('lead_id', targetLeadId);
+
           const { data, error } = await supabaseClient
             .from('leads')
             .select('Team_Members, deliverables_description, package_price, budget, Select_Package_Option, Quotation_Discount, Additional_Services_Cost, Final_Quotation_Amount, notes_special_customizations')
             .eq('lead_id', targetLeadId)
             .maybeSingle();
           
-          if (!error && data) {
+          if (!error && (data || (lpData && lpData.length > 0))) {
             lastLoadedLeadIdRef.current = currentKey;
-            const newInclusions: Record<string, string[]> = {};
-            const newDeliverables: Record<string, string[]> = {};
+            
+            const primaryLp = lpData && lpData.length > 0 ? lpData[0] : null;
+            const effectivePkgId = pkgId || data?.Select_Package_Option || primaryLp?.package_id || 'Custom Package';
 
-            const cleanCost = data.package_price ?? data.budget;
+            const cleanCost = primaryLp?.package_cost ?? data?.package_price ?? data?.budget;
             if (cleanCost != null && !isNaN(Number(cleanCost))) {
               setWizardLeadData(prev => {
                 const existingPkg = prev.selected_package_id || prev.Select_Package_Option;
-                const finalPkg = (existingPkg && existingPkg.trim() !== '') ? existingPkg : (data.Select_Package_Option || 'Custom Package');
+                const finalPkg = (existingPkg && existingPkg.trim() !== '') ? existingPkg : effectivePkgId;
                 return {
                   ...prev,
                   package_cost: Number(cleanCost),
                   package_price: Number(cleanCost),
                   budget: Number(cleanCost),
-                  notes: data.notes_special_customizations ?? prev.notes,
+                  notes: data?.notes_special_customizations ?? prev.notes,
                   Select_Package_Option: finalPkg,
                   selected_package_id: finalPkg,
                 };
               });
             }
-            if (data.Quotation_Discount != null) {
+            if (data?.Quotation_Discount != null) {
               setQuoteDiscount(Number(data.Quotation_Discount));
             }
-            if (data.Additional_Services_Cost != null) {
+            if (data?.Additional_Services_Cost != null) {
               setQuoteAdditional(Number(data.Additional_Services_Cost));
             }
 
-            if (data.Team_Members) {
-              try {
-                const parsedTeam = JSON.parse(data.Team_Members);
-                if (Array.isArray(parsedTeam)) {
-                  parsedTeam.forEach((item: any) => {
-                    const eventName = item.event_name;
-                    const members = Array.isArray(item.team_members) ? item.team_members : [];
-                    if (eventName === 'General') {
-                      newInclusions[pkgId] = members;
-                    } else if (crmEvents && crmEvents.length > 0) {
-                      const matchingEvent = crmEvents.find(e => 
-                        (e.event_name || e.event_type || 'Unnamed Event') === eventName
-                      );
-                      if (matchingEvent) {
-                        newInclusions[`${pkgId}_${matchingEvent.id}`] = members;
-                        newInclusions[`${pkgId}_${eventName}`] = members;
-                      } else {
-                        newInclusions[`${pkgId}_${eventName}`] = members;
-                      }
-                    } else {
-                      newInclusions[`${pkgId}_${eventName}`] = members;
-                    }
-                  });
-                  setEditableInclusions(prev => {
-                    const merged = { ...prev, ...newInclusions };
-                    Object.keys(prev).forEach(k => {
-                      if (prev[k] && prev[k].length > 0) {
-                        if (!newInclusions[k] || newInclusions[k].length === 0) {
-                          merged[k] = prev[k];
-                        } else {
-                          const combined = Array.from(new Set([...newInclusions[k], ...prev[k]]));
-                          merged[k] = combined;
-                        }
-                      }
-                    });
-                    return merged;
-                  });
-                }
-              } catch (e) {
-                console.error('Error parsing Team_Members from leads:', e);
+            const rawTeamData = primaryLp?.Team_Members_Included || primaryLp?.editable_inclusions || data?.Team_Members;
+            if (rawTeamData) {
+              const loadedInclusions = parseTeamMembersJsonToRecord(rawTeamData, effectivePkgId, crmEvents);
+              if (Object.keys(loadedInclusions).length > 0) {
+                setEditableInclusions(loadedInclusions);
               }
             }
 
-            if (data.deliverables_description) {
-              try {
-                const parsedDel = JSON.parse(data.deliverables_description);
-                if (Array.isArray(parsedDel)) {
-                  if (typeof parsedDel[0] === 'string') {
-                    newDeliverables[pkgId] = parsedDel;
-                  } else {
-                    let allDel: string[] = [];
-                    parsedDel.forEach((item: any) => {
-                      const eventName = item.event_name;
-                      const deliverables = Array.isArray(item.deliverables) ? item.deliverables : [];
-                      if (deliverables.length > 0) {
-                        allDel = [...allDel, ...deliverables];
-                      }
-                      if (eventName === 'General') {
-                        newDeliverables[pkgId] = deliverables;
-                      } else if (crmEvents && crmEvents.length > 0) {
-                        const matchingEvent = crmEvents.find(e => 
-                          (e.event_name || e.event_type || 'Unnamed Event') === eventName
-                        );
-                        if (matchingEvent) {
-                          newDeliverables[`${pkgId}_${matchingEvent.id}`] = deliverables;
-                          newDeliverables[`${pkgId}_${eventName}`] = deliverables;
-                        } else {
-                          newDeliverables[`${pkgId}_${eventName}`] = deliverables;
-                        }
-                      } else {
-                        newDeliverables[`${pkgId}_${eventName}`] = deliverables;
-                      }
-                    });
-                    if (!newDeliverables[pkgId]) {
-                      newDeliverables[pkgId] = allDel.length > 0 ? Array.from(new Set(allDel)) : [];
-                    }
-                  }
-                  setEditableDeliverables(prev => {
-                    const merged = { ...prev, ...newDeliverables };
-                    Object.keys(prev).forEach(k => {
-                      if (prev[k] && prev[k].length > 0) {
-                        if (!newDeliverables[k] || newDeliverables[k].length === 0) {
-                          merged[k] = prev[k];
-                        } else {
-                          const combined = Array.from(new Set([...newDeliverables[k], ...prev[k]]));
-                          merged[k] = combined;
-                        }
-                      }
-                    });
-                    return merged;
-                  });
-                }
-              } catch (e) {
-                // Not JSON, handle as comma/newline separated list
-                const delList = data.deliverables_description
-                  ? data.deliverables_description.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
-                  : [];
-                if (delList.length > 0) {
-                  newDeliverables[pkgId] = delList;
-                  setEditableDeliverables(prev => {
-                    const merged = { ...prev, ...newDeliverables };
-                    Object.keys(prev).forEach(k => {
-                      if (prev[k] && prev[k].length > 0) {
-                        if (!newDeliverables[k] || newDeliverables[k].length === 0) {
-                          merged[k] = prev[k];
-                        } else {
-                          const combined = Array.from(new Set([...newDeliverables[k], ...prev[k]]));
-                          merged[k] = combined;
-                        }
-                      }
-                    });
-                    return merged;
-                  });
-                }
+            const rawDelData = primaryLp?.deliverables_descriptionn || primaryLp?.editable_deliverables || data?.deliverables_description;
+            if (rawDelData) {
+              const loadedDeliverables = parseDeliverablesJsonToRecord(rawDelData, effectivePkgId, crmEvents);
+              if (Object.keys(loadedDeliverables).length > 0) {
+                setEditableDeliverables(loadedDeliverables);
               }
             }
           }
         } catch (e) {
-          console.error('Error fetching leads details from Supabase', e);
+          console.error('Error fetching leads/lead_packages details from Supabase', e);
         }
       };
       fetchSupabasePackageData();
@@ -5210,121 +5333,26 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setSalesStaffMobile(quoteSalesMobile);
     }
 
-    const matchedPkgId = fullLead.Select_Package_Option || latestQuote?.package_id || primaryLP?.package_id || '';
+    const matchedPkgId = fullLead.Select_Package_Option || latestQuote?.package_id || primaryLP?.package_id || 'Custom Package';
     const matchedPkg = (packages || []).find(p => p.package_id === matchedPkgId);
 
-    // 1. Load Deliverables: Prioritize lead.deliverables_description, then latestQuote, then primaryLP, then matchedPkg
-    let loadedDelText = fullLead.deliverables_description || latestQuote?.deliverables_description || primaryLP?.deliverables_description || matchedPkg?.deliverables || '';
+    // 1. Load Deliverables
+    const rawDelData = primaryLP?.deliverables_descriptionn || primaryLP?.editable_deliverables || fullLead.deliverables_description || latestQuote?.deliverables_description || matchedPkg?.deliverables;
+    if (rawDelData) {
+      const newDeliverables = parseDeliverablesJsonToRecord(rawDelData, matchedPkgId, fullLead.events || crmEvents);
+      setEditableDeliverables(newDeliverables);
+    } else {
+      setEditableDeliverables({});
+    }
 
-    setEditableDeliverables(prev => {
-      if (Object.keys(prev).some(k => prev[k] && prev[k].length > 0)) {
-        return prev;
-      }
-      if (matchedPkgId) {
-        const newDeliverables: Record<string, string[]> = {};
-        if (loadedDelText) {
-          try {
-            const parsedDel = JSON.parse(loadedDelText);
-            if (Array.isArray(parsedDel)) {
-              if (typeof parsedDel[0] === 'string') {
-                newDeliverables[matchedPkgId] = parsedDel;
-              } else {
-                let allDel: string[] = [];
-                parsedDel.forEach((item: any) => {
-                  const eventName = item.event_name;
-                  const deliverables = Array.isArray(item.deliverables) ? item.deliverables : [];
-                  if (deliverables.length > 0) {
-                    allDel = [...allDel, ...deliverables];
-                  }
-                  if (eventName === 'General') {
-                    newDeliverables[matchedPkgId] = deliverables;
-                  } else if (fullLead.events && fullLead.events.length > 0) {
-                    const matchingEvent = fullLead.events.find(e => 
-                      (e.event_name || e.event_type || 'Unnamed Event') === eventName
-                    );
-                    if (matchingEvent) {
-                      newDeliverables[`${matchedPkgId}_${matchingEvent.id}`] = deliverables;
-                      newDeliverables[`${matchedPkgId}_${matchingEvent.event_name || matchingEvent.event_type || 'Unnamed Event'}`] = deliverables;
-                    } else {
-                      newDeliverables[`${matchedPkgId}_${eventName}`] = deliverables;
-                    }
-                  } else {
-                    newDeliverables[`${matchedPkgId}_${eventName}`] = deliverables;
-                  }
-                });
-                if (!newDeliverables[matchedPkgId]) {
-                  newDeliverables[matchedPkgId] = allDel.length > 0 ? Array.from(new Set(allDel)) : [];
-                }
-              }
-            } else {
-              newDeliverables[matchedPkgId] = [];
-            }
-          } catch (e) {
-            // Fallback if not JSON (e.g. newline-separated text)
-            const delList = loadedDelText.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
-            newDeliverables[matchedPkgId] = delList;
-          }
-        } else {
-          newDeliverables[matchedPkgId] = [];
-        }
-        return newDeliverables;
-      } else {
-        if (latestQuote?.editableDeliverables) return latestQuote.editableDeliverables;
-        if (primaryLP?.editable_deliverables) return primaryLP.editable_deliverables;
-        return {};
-      }
-    });
-
-    // 2. Load Team Members: Prioritize lead.Team_Members, then latestQuote.editableInclusions, then primaryLP, then matchedPkg
-    setEditableInclusions(prev => {
-      if (Object.keys(prev).some(k => prev[k] && prev[k].length > 0)) {
-        return prev;
-      }
-      if (matchedPkgId && fullLead.Team_Members) {
-        try {
-          const parsedTeam = JSON.parse(fullLead.Team_Members);
-          if (Array.isArray(parsedTeam)) {
-            const newInclusions: Record<string, string[]> = {};
-            let allMembers: string[] = [];
-            parsedTeam.forEach((item: any) => {
-              const eventName = item.event_name;
-              const members = Array.isArray(item.team_members) ? item.team_members : [];
-              if (members.length > 0) {
-                allMembers = [...allMembers, ...members];
-              }
-              if (eventName === 'General') {
-                newInclusions[matchedPkgId] = members;
-              } else if (fullLead.events && fullLead.events.length > 0) {
-                const matchingEvent = fullLead.events.find(e => 
-                  (e.event_name || e.event_type || 'Unnamed Event') === eventName
-                );
-                if (matchingEvent) {
-                  newInclusions[`${matchedPkgId}_${matchingEvent.id}`] = members;
-                  newInclusions[`${matchedPkgId}_${matchingEvent.event_name || matchingEvent.event_type || 'Unnamed Event'}`] = members;
-                } else {
-                  newInclusions[`${matchedPkgId}_${eventName}`] = members;
-                }
-              } else {
-                newInclusions[`${matchedPkgId}_${eventName}`] = members;
-              }
-            });
-            if (!newInclusions[matchedPkgId]) {
-              newInclusions[matchedPkgId] = allMembers.length > 0 ? Array.from(new Set(allMembers)) : [];
-            }
-            return newInclusions;
-          }
-        } catch (e) {
-          console.error('Error parsing Team_Members from leads in handleSelectLead:', e);
-        }
-      }
-      if (latestQuote?.editableInclusions) return latestQuote.editableInclusions;
-      if (primaryLP?.editable_inclusions) return primaryLP.editable_inclusions;
-      if (matchedPkg?.team_members) {
-        const defaultInc = parseTeamMembers(matchedPkg.team_members);
-        return { [matchedPkgId]: defaultInc.length > 0 ? defaultInc : ['1 Candid Photographer'] };
-      }
-      return {};
-    });
+    // 2. Load Team Members
+    const rawTeamData = primaryLP?.Team_Members_Included || primaryLP?.editable_inclusions || fullLead.Team_Members || matchedPkg?.team_members;
+    if (rawTeamData) {
+      const newInclusions = parseTeamMembersJsonToRecord(rawTeamData, matchedPkgId, fullLead.events || crmEvents);
+      setEditableInclusions(newInclusions);
+    } else {
+      setEditableInclusions({});
+    }
 
     const firstEvent = fullLead.events && fullLead.events.length > 0 ? fullLead.events[0] : null;
     const evName = firstEvent?.event_name || fullLead.custom_event_name || '';
