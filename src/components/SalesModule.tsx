@@ -839,7 +839,7 @@ const generateQuotationPDF = (
         ? editableDeliverables[eventKey]
         : (editableDeliverables?.[nameKey] !== undefined ? editableDeliverables[nameKey] : null);
 
-      const items = eventDeliverables && eventDeliverables.filter(Boolean).length > 0
+      const items = eventDeliverables !== null
         ? eventDeliverables.filter(Boolean)
         : deliverablesList;
 
@@ -2989,13 +2989,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       updatedDeliverables
     );
 
-    const safeTeamMembersText = (teamMembersText === '[]' && selectedLead?.Team_Members && selectedLead.Team_Members !== '[]') 
-      ? selectedLead.Team_Members 
-      : teamMembersText;
+    const safeTeamMembersText = teamMembersText;
 
-    const safeDeliverablesText = (deliverablesText === '[]' && selectedLead?.deliverables_description && selectedLead.deliverables_description !== '[]') 
-      ? selectedLead.deliverables_description 
-      : deliverablesText;
+    const safeDeliverablesText = deliverablesText;
 
     const cleanPkgCost = packageCostOverride !== undefined ? packageCostOverride : (
       wizardLeadData.package_cost !== "" && wizardLeadData.package_cost != null && !isNaN(Number(wizardLeadData.package_cost))
@@ -3065,15 +3061,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           total_amount: cleanPkgCost || 0,
           discount: quoteDiscount || 0,
           final_amount: (cleanPkgCost || 0) + (quoteAdditional || 0) - (quoteDiscount || 0),
-          ...( !isTeamEmpty ? {
-            Team_Members_Included: teamMembersJson,
-            editable_inclusions: updatedInclusions,
-          } : {}),
-          ...( !isDelEmpty ? {
-            deliverables_descriptionn: deliverablesJson,
-            deliverables_description: deliverablesText,
-            editable_deliverables: updatedDeliverables,
-          } : {}),
+          Team_Members_Included: teamMembersJson,
+          editable_inclusions: updatedInclusions,
+          deliverables_descriptionn: deliverablesJson, // keeping typo just in case other code uses it, but adding deliverables_json too
+          deliverables_json: deliverablesJson,
+          deliverables_description: deliverablesText,
+          editable_deliverables: updatedDeliverables,
           updated_at: new Date().toISOString()
         };
 
@@ -5875,13 +5868,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const effectiveSalesName = getEffectiveSalesStaffName();
       const effectiveSalesMobile = getEffectiveSalesStaffMobile();
 
-      const safeTeamMembersText = (teamMembersText === '[]' && selectedLead?.Team_Members && selectedLead.Team_Members !== '[]') 
-        ? selectedLead.Team_Members 
-        : teamMembersText;
+      const safeTeamMembersText = teamMembersText;
 
-      const safeDeliverablesText = (deliverablesText === '[]' && selectedLead?.deliverables_description && selectedLead.deliverables_description !== '[]') 
-        ? selectedLead.deliverables_description 
-        : deliverablesText;
+      const safeDeliverablesText = deliverablesText;
 
       if (targetLeadId && targetLeadId !== 'DRAFT-LEAD' && supabaseClient) {
         await updateLead(targetLeadId, {
@@ -5916,19 +5905,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             total_amount: cleanPkgCost || 0,
             discount: cleanDiscount || 0,
             final_amount: cleanFinalAmt || 0,
-            
-            // Only update these fields if we actually have data, or if there wasn't existing data we're trying to protect
-            ...( !isTeamEmpty ? {
-              Team_Members_Included: teamMembersJson,
-              editable_inclusions: editableInclusions,
-            } : {}),
-            
-            ...( !isDelEmpty ? {
-              deliverables_descriptionn: deliverablesJson,
-              deliverables_description: deliverablesText,
-              editable_deliverables: editableDeliverables,
-            } : {}),
-            
+            Team_Members_Included: teamMembersJson,
+            editable_inclusions: editableInclusions,
+            deliverables_descriptionn: deliverablesJson,
+            deliverables_json: deliverablesJson,
+            deliverables_description: deliverablesText,
+            editable_deliverables: editableDeliverables,
             updated_at: new Date().toISOString()
           };
 
@@ -6232,13 +6214,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         const effectiveSalesName = getEffectiveSalesStaffName();
         const effectiveSalesMobile = getEffectiveSalesStaffMobile();
 
-        const safeTeamMembersText = (teamMembersText === '[]' && selectedLead?.Team_Members && selectedLead.Team_Members !== '[]') 
-          ? selectedLead.Team_Members 
-          : teamMembersText;
+        const safeTeamMembersText = teamMembersText;
 
-        const safeDeliverablesText = (deliverablesText === '[]' && selectedLead?.deliverables_description && selectedLead.deliverables_description !== '[]') 
-          ? selectedLead.deliverables_description 
-          : deliverablesText;
+        const safeDeliverablesText = deliverablesText;
 
         await updateLead(selectedLead.lead_id, {
           budget: cleanPkgCost,

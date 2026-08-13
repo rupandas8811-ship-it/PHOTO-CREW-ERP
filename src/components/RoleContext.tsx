@@ -1152,6 +1152,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let cloned = { ...record };
     delete cloned.customer_id;
 
+    if (table === 'leads') {
+      delete cloned.Specify_Custom_Lead_Source_Name;
+    }
+
     if (table === 'raw_footage') {
       delete cloned.storage_type;
       delete cloned.upload_notes;
