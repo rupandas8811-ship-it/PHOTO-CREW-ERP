@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Download, Printer, Search, FileSpreadsheet, FileDown, CheckCircle, TrendingUp, AlertTriangle } from 'lucide-react';
 import { DatePreset, DateRange, getPresetDateRange, isDateInRange, TODAY_REF } from './DateFilterHelper';
 import { DatePresetSelector } from './DatePresetSelector';
@@ -124,14 +125,19 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
             "Order Date": o.created_at && typeof o.created_at === 'string' ? o.created_at.split('T')[0] : o.event_date
           };
         }).filter(row => {
-          if (cardName === 'New Orders Received') return row["Event Status"] === 'New Order Received' || row["Event Status"] === 'Order Confirmed';
-          if (cardName === 'Events Scheduled') return row["Event Status"] === 'Event Scheduled' || row["Event Status"] === 'Operations Assigned';
-          if (cardName === 'Staff Assigned') return row["Assigned Team"] !== 'None' && row["Assigned Team"] !== 'Unassigned';
-          if (cardName === 'Events Completed') return row["Event Status"] === 'Event Completed' || row["Event Status"] === 'Completed' || row["Event Status"] === 'Closed' || row["Event Status"] === 'Delivered';
-          if (cardName === 'Raw Footage Received') return row["Event Status"] === 'Raw Footage Received';
-          if (cardName === 'Upcoming Events') return row["Event Date"] >= TODAY_REF;
-          if (cardName === "Today's Events") return row["Event Date"] === TODAY_REF;
-          if (cardName === 'Overdue Events') return row["Event Date"] < TODAY_REF && row["Event Status"] !== 'Event Completed' && row["Event Status"] !== 'Closed' && row["Event Status"] !== 'Delivered';
+          const name = (cardName || '').trim().toLowerCase();
+          if (name.includes('new project') || name.includes('new order') || name.includes('orders received') || name.includes('order confirmed')) {
+            return ['Order Confirmed', 'Confirm Order', 'New Order Received'].includes(row["Event Status"]);
+          }
+          if (name.includes('scheduled') || name.includes('event scheduled')) return ['Event Scheduled', 'Operations Assigned', 'Assigned Crew'].includes(row["Event Status"]);
+          if (name.includes('staff assigned') || name.includes('assigned crew')) return row["Assigned Team"] !== 'None' && row["Assigned Team"] !== 'Unassigned';
+          if (name.includes('completed') || name.includes('event ended') || name.includes('event completed')) return ['Event Completed', 'Event Ended', 'Event Complete', 'Closed', 'Delivered'].includes(row["Event Status"]);
+          if (name.includes('event started')) return ['Event Started', 'Event Start'].includes(row["Event Status"]);
+          if (name.includes('footage handover')) return ['Footage Handover', 'Equipment Handover'].includes(row["Event Status"]);
+          if (name.includes('verified footage') || name.includes('raw footage')) return ['Verified Footage', 'Footage Handover Verified', 'Raw Footage Received'].includes(row["Event Status"]);
+          if (name.includes('upcoming')) return row["Event Date"] >= TODAY_REF;
+          if (name.includes('today')) return row["Event Date"] === TODAY_REF;
+          if (name.includes('overdue')) return row["Event Date"] < TODAY_REF && !['Event Completed', 'Closed', 'Delivered'].includes(row["Event Status"]);
           return true;
         });
       }
@@ -159,18 +165,24 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
             "Target Delivery Date": p.target_delivery_date || p.expected_delivery_date || '—'
           };
         }).filter(row => {
-          if (cardName === 'Total Production Projects' || cardName === 'Total Production') return true;
-          if (cardName === 'Raw Footage Queue' || cardName === 'Raw Footage Received') return row["Current Status"] === 'Raw Footage Received';
-          if (cardName === 'Editor Assigned') return row["Current Status"] === 'Editor Assigned';
-          if (cardName === 'Editing Started') return row["Current Status"] === 'Editing Started';
-          if (cardName === 'Editing In Progress' || cardName === 'In Progress') return row["Current Status"] === 'Editing In Progress';
-          if (cardName === 'Internal QC Review' || cardName === 'QC Review') return row["Current Status"] === 'Internal QC Review';
-          if (cardName === 'Client Review Sent' || cardName === 'Client Review') return row["Current Status"] === 'Client Review Sent';
-          if (cardName === 'Revision Required') return row["Current Status"] === 'Revision Required';
-          if (cardName === 'Revision In Progress') return row["Current Status"] === 'Revision In Progress';
-          if (cardName === 'Final Approval') return row["Current Status"] === 'Final Approval';
-          if (cardName === 'Project Delivered' || cardName === 'Delivered Projects' || cardName === 'Delivered') return row["Current Status"] === 'Project Delivered';
-          if (cardName === 'Project Closed' || cardName === 'Closed Projects' || cardName === 'Closed') return row["Current Status"] === 'Project Closed';
+          const name = (cardName || '').trim().toLowerCase();
+          if (name === 'total production projects' || name === 'total production' || name.includes('complete production')) return true;
+          if (name.includes('new project') || name.includes('verified footage')) return ['Verified Footage', 'Footage Handover Verified'].includes(row["Current Status"]);
+          if (name.includes('raw footage')) return ['Raw Footage Received', 'Verified Footage', 'Footage Handover Verified'].includes(row["Current Status"]);
+          if (name.includes('in progress') || name.includes('editing started')) {
+            return ['Editing Started', 'Editing In Progress', 'Internal QC Review', 'Assigned Editor', 'Editor Assigned'].includes(row["Current Status"]);
+          }
+          if (name.includes('client approved') || name.includes('final approval') || name.includes('approved')) {
+            return ['Final Approval', 'Approved', 'Client Acceptance', 'Completed', 'Project Completed', 'Project Delivered', 'Delivered'].includes(row["Current Status"]);
+          }
+          if (name.includes('not approved') || name.includes('review') || name.includes('revision')) {
+            return ['Client Review Sent', 'Customer Review', 'Revision Required', 'Revision In Progress'].includes(row["Current Status"]);
+          }
+          if (name.includes('completed') || name.includes('delivered') || name.includes('closed')) {
+            return ['Project Delivered', 'Delivered', 'Project Closed', 'Closed', 'Completed', 'Project Completed', 'Order Closed'].includes(row["Current Status"]);
+          }
+          if (name.includes('editor assigned')) return ['Editor Assigned', 'Assigned Editor'].includes(row["Current Status"]);
+          if (name.includes('qc review')) return ['Internal QC Review'].includes(row["Current Status"]);
           return true;
         });
       }
@@ -550,9 +562,9 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-      <div className="bg-zinc-950 border border-zinc-850 rounded-2xl w-full w-full max-w-5xl shadow-2xl relative flex flex-col max-h-[90vh]">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+      <div className="bg-zinc-950 border border-zinc-850 rounded-2xl w-full max-w-5xl shadow-2xl relative flex flex-col max-h-[90vh]">
         
         {/* Header bar */}
         <div className="p-4 sm:p-5 border-b border-zinc-850 flex items-center justify-between bg-zinc-950">
@@ -770,6 +782,7 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
