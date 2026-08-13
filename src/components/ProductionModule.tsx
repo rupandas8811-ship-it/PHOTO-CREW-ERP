@@ -4166,54 +4166,56 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       )}
 
                       {/* Edit Full Dossier */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenActionDropdown(null);
-                          setSelectedLeadProd(prod);
-                          setDossierError("");
-                          setDossierSuccessMessage("");
-                          setLeadEditor(prod.editor_assigned || "Unassigned");
-                          setLeadStaff(prod.assigned_staff ? prod.assigned_staff.split(", ").map(s => s.trim()) : []);
-                          setAssignRoleFilter("");
-                          setLeadPriority(prod.project_priority || "Medium");
-                          setLeadFootageStatus(getRawFootageStatus(prod));
-                          setLeadProdStatus(getProductionStatus(prod));
-                          setLeadRemarks(prod.remarks || "");
-                          setLeadStartDate(prod.editing_start_date || "");
-                          setLeadTargetDeliveryDate(prod.target_delivery_date || "");
-                          setLeadExpectedDeliveryDate(prod.expected_delivery_date || "");
-                          setLeadActualDeliveryDate(prod.delivery_date || prod.actual_delivery_date || "");
-                          const pLogs = (logs || []).filter(log => 
-                            log.record_id === prod.production_id ||
-                            log.record_id === prod.tracking_id ||
-                            log.record_id === order?.order_id
-                          );
-                          const rf = (rawFootage || []).find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
-                          const computedRfDate = rf && (rf.status === "Received" || rf.raw_received) 
-                            ? (rf.uploaded_date || rf.event_completed_date) 
-                            : "";
-                          const crLog = pLogs.find(log => 
-                            log.new_stage === "Client Review Sent" || 
-                            log.new_stage === "Customer Review" ||
-                            log.action.includes("Client Review Sent") ||
-                            log.action.includes("Customer Review")
-                          );
-                          const caLog = pLogs.find(log => 
-                            log.new_stage === "Final Approval" || 
-                            log.new_stage === "Approved" ||
-                            log.action.includes("Final Approval") ||
-                            log.action.includes("Approved")
-                          );
-                          setLeadRawFootageDate(toInputDateFormat((prod as any).raw_footage_received_date || computedRfDate));
-                          setLeadClientReviewDate(toInputDateFormat((prod as any).client_review_upload_date || (crLog ? crLog.timestamp : null)));
-                          setLeadClientApprovalDate(toInputDateFormat((prod as any).client_approval_date || (caLog ? caLog.timestamp : null)));
-                        }}
-                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-zinc-300 hover:text-white hover:bg-zinc-800/90 rounded-lg transition-colors flex items-center gap-2 cursor-pointer border-t border-zinc-800/80 mt-0.5 pt-1.5"
-                      >
-                        <span className="text-sm">✎</span>
-                        <span>Edit Full Dossier</span>
-                      </button>
+                      {!(currentRole === 'Production Team' || currentRole === 'Production Staff') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenActionDropdown(null);
+                            setSelectedLeadProd(prod);
+                            setDossierError("");
+                            setDossierSuccessMessage("");
+                            setLeadEditor(prod.editor_assigned || "Unassigned");
+                            setLeadStaff(prod.assigned_staff ? prod.assigned_staff.split(", ").map(s => s.trim()) : []);
+                            setAssignRoleFilter("");
+                            setLeadPriority(prod.project_priority || "Medium");
+                            setLeadFootageStatus(getRawFootageStatus(prod));
+                            setLeadProdStatus(getProductionStatus(prod));
+                            setLeadRemarks(prod.remarks || "");
+                            setLeadStartDate(prod.editing_start_date || "");
+                            setLeadTargetDeliveryDate(prod.target_delivery_date || "");
+                            setLeadExpectedDeliveryDate(prod.expected_delivery_date || "");
+                            setLeadActualDeliveryDate(prod.delivery_date || prod.actual_delivery_date || "");
+                            const pLogs = (logs || []).filter(log => 
+                              log.record_id === prod.production_id ||
+                              log.record_id === prod.tracking_id ||
+                              log.record_id === order?.order_id
+                            );
+                            const rf = (rawFootage || []).find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
+                            const computedRfDate = rf && (rf.status === "Received" || rf.raw_received) 
+                              ? (rf.uploaded_date || rf.event_completed_date) 
+                              : "";
+                            const crLog = pLogs.find(log => 
+                              log.new_stage === "Client Review Sent" || 
+                              log.new_stage === "Customer Review" ||
+                              log.action.includes("Client Review Sent") ||
+                              log.action.includes("Customer Review")
+                            );
+                            const caLog = pLogs.find(log => 
+                              log.new_stage === "Final Approval" || 
+                              log.new_stage === "Approved" ||
+                              log.action.includes("Final Approval") ||
+                              log.action.includes("Approved")
+                            );
+                            setLeadRawFootageDate(toInputDateFormat((prod as any).raw_footage_received_date || computedRfDate));
+                            setLeadClientReviewDate(toInputDateFormat((prod as any).client_review_upload_date || (crLog ? crLog.timestamp : null)));
+                            setLeadClientApprovalDate(toInputDateFormat((prod as any).client_approval_date || (caLog ? caLog.timestamp : null)));
+                          }}
+                          className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-zinc-300 hover:text-white hover:bg-zinc-800/90 rounded-lg transition-colors flex items-center gap-2 cursor-pointer border-t border-zinc-800/80 mt-0.5 pt-1.5"
+                        >
+                          <span className="text-sm">✎</span>
+                          <span>Edit Full Dossier</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

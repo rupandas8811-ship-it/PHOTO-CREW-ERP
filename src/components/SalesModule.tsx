@@ -129,33 +129,44 @@ function parseQtyAndText(raw: any): { qty: number; text: string } {
 
   if (!text) return { qty: 1, text: "" };
 
-  // 1. Extract and strip any (Qty X) or (quantity X) or (Qty: X) occurrences anywhere in text
+  let foundQtyFromPattern: number | null = null;
+  // 1. Extract any (Qty X), (quantity X), (Qty: X) occurrences anywhere in text
   const qtyPatterns = /\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*(\d+)\s*[\)\]\-]?/gi;
   let match;
   while ((match = qtyPatterns.exec(text)) !== null) {
     if (match[1]) {
       const parsedQty = parseInt(match[1], 10);
       if (!isNaN(parsedQty) && parsedQty >= 1) {
-        qty = parsedQty;
+        if (foundQtyFromPattern === null) {
+          foundQtyFromPattern = parsedQty;
+        }
       }
     }
   }
 
-  // Remove ALL (Qty X) / (quantity X) / (Qty: X) patterns from text
+  // Remove ALL (Qty X) / (quantity X) / (Qty: X) patterns completely from text
   text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
 
-  // 2. Check for leading quantity: e.g. "2 Lead Photographer", "2 x Traditional Photos", "2 - Traditional Photos"
+  // 2. Check for leading quantity: e.g. "2 Lead Photographer", "2 x Traditional Photos", "2 × Traditional Photos"
   const leadingMatch = text.match(/^(\d+)\s*[\*xX×\-–—]?\s*(.*)$/);
   if (leadingMatch) {
     const parsedQty = parseInt(leadingMatch[1], 10);
     if (!isNaN(parsedQty) && parsedQty >= 1) {
-      qty = parsedQty;
+      if (typeof raw !== "object" && foundQtyFromPattern === null) {
+        qty = parsedQty;
+      }
     }
     text = leadingMatch[2] ? leadingMatch[2].trim() : "";
     text = text.replace(/^[xX×\*\-–—]\s*/, "").trim();
   }
 
-  // 3. Clean trailing punctuation
+  if (typeof raw !== "object" && foundQtyFromPattern !== null) {
+    qty = foundQtyFromPattern;
+  }
+
+  // Clean any leftover (Qty X) or trailing/leading punctuation
+  text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
+  text = text.replace(/^[\*\-•xX×]\s*/, "").trim();
   text = text.replace(/[\(\[\-–—:]+$/, "").trim();
 
   return { qty: isNaN(qty) || qty < 1 ? 1 : qty, text };
@@ -797,7 +808,7 @@ const generateQuotationPDF = (
     }
   }
 
-  const deliverablesList = rawDelList.filter(Boolean).map(item => formatQtyItem(item));
+  const deliverablesList = rawDelList.filter(Boolean);
 
   const eventsToRender: {
     eventName: string;
@@ -825,7 +836,7 @@ const generateQuotationPDF = (
         : (editableDeliverables?.[nameKey] !== undefined ? editableDeliverables[nameKey] : null);
 
       const items = eventDeliverables && eventDeliverables.filter(Boolean).length > 0
-        ? eventDeliverables.filter(Boolean).map((item: string) => formatQtyItem(item))
+        ? eventDeliverables.filter(Boolean)
         : deliverablesList;
 
       eventsToRender.push({
@@ -2311,24 +2322,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   // Helper function to resolve Lost Reason and Notes from all possible sources
   const getLostReasonAndNotes = (lead: Lead | null, historyList?: any[]) => {
-    if (!lead) return { reason: 'Not provided', notes: 'Not provided' };
+    if (!lead) return { reason: 'No reason provided.' };
 
     // 1. Direct fields on lead (check casing variations)
     let reason = lead.Lost_Reason || (lead as any).lost_reason || (lead as any).LostReason || (lead as any).lostReason;
-    let notes = lead.Lost_Notes || (lead as any).lost_notes || (lead as any).LostNotes || (lead as any).lostNotes;
 
-    // 2. Extract from remarks field if reason or notes is missing
+    // 2. Extract from remarks field if reason is missing
     if (lead.remarks) {
       if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') {
         const matchReason = lead.remarks.match(/Lost Reason:\s*([^.\n]+)/i);
         if (matchReason && matchReason[1] && matchReason[1].trim()) {
           reason = matchReason[1].trim();
-        }
-      }
-      if (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null') {
-        const matchNotes = lead.remarks.match(/Notes:\s*(.*)/i);
-        if (matchNotes && matchNotes[1] && matchNotes[1].trim()) {
-          notes = matchNotes[1].trim();
         }
       }
     }
@@ -2342,7 +2346,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
 
     // 4. Check statusHistory array
-    if ((!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null' || !notes || notes === 'N/A' || notes === 'NULL' || notes === 'null') && historyList && historyList.length > 0) {
+    if ((!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') && historyList && historyList.length > 0) {
       const lostHistItems = [...historyList]
         .filter(h => String(h.lead_id) === String(lead.lead_id) && ['Lost Lead', 'Lead Lost', 'Lost'].includes(h.new_status || h.status || ''))
         .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
@@ -2361,26 +2365,33 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             reason = lostHist.call_notes.trim();
           }
         }
-        if (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null') {
-          if (lostHist.remarks) {
-            const matchN = lostHist.remarks.match(/Notes:\s*(.*)/i);
-            if (matchN && matchN[1] && matchN[1].trim()) {
-              notes = matchN[1].trim();
-            }
-          }
-        }
       }
     }
 
-    // Sanitize
-    if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null' || reason.trim() === '') {
-      reason = 'Not provided';
-    }
-    if (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null' || notes.trim() === '') {
-      notes = 'Not provided';
+    // Sanitize and strip any raw data / EVENTS_JSON
+    if (reason && typeof reason === 'string') {
+      if (reason.includes('---EVENTS_JSON---')) {
+        reason = reason.split('---EVENTS_JSON---')[0].trim();
+      }
+      // sometimes remarks contain 'Notes:' part, we should strip it from reason if it leaked
+      if (reason.includes('Notes:')) {
+        reason = reason.split('Notes:')[0].trim();
+      }
+      // sometimes it contains json array like [{
+      if (reason.includes('[{')) {
+        reason = reason.split('[{')[0].trim();
+      }
     }
 
-    return { reason, notes };
+    if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null' || reason.trim() === '') {
+      reason = 'No reason provided.';
+    } else {
+      // Remove trailing period if we want, but it's fine.
+      // Ensure there is no trailing comma or weird char
+      reason = reason.replace(/[,;]+$/, '').trim();
+    }
+
+    return { reason };
   };
 
   const [showCancelConfirmPopup, setShowCancelConfirmPopup] = useState(false);
@@ -12463,7 +12474,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
             {/* If Lost Lead, display Lost Details */}
             {selectedLead && ['Lost Lead', 'Lead Lost', 'Lost'].includes(selectedLead.status || (selectedLead as any).current_status || '') && (() => {
-              const { reason: lostReasonText, notes: lostNotesText } = getLostReasonAndNotes(selectedLead, statusHistory);
+              const { reason: lostReasonText } = getLostReasonAndNotes(selectedLead, statusHistory);
               return (
                 <div className="mx-4 sm:mx-5 mt-2 bg-rose-950/25 border border-rose-500/20 p-2.5 rounded-xl flex items-start gap-3 text-left shadow-lg">
                   <span className="text-rose-500 text-base mt-0.5">❌</span>
@@ -12471,15 +12482,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wide">Lost Lead Information</h4>
                     <div className="text-[11px] text-zinc-300 leading-relaxed mt-1 space-y-0.5">
                       <div>
-                        <strong className="text-slate-400 font-mono uppercase tracking-wider text-[10px]">Lost Reason:</strong>{' '}
+                        <strong className="text-slate-400 font-mono uppercase tracking-wider text-[10px]">Reason:</strong>{' '}
                         <span className="text-rose-300 font-semibold">{lostReasonText}</span>
                       </div>
-                      {lostNotesText && lostNotesText !== 'Not provided' && (
-                        <div>
-                          <strong className="text-slate-400 font-mono uppercase tracking-wider text-[10px]">Notes:</strong>{' '}
-                          <span className="text-zinc-300">{lostNotesText}</span>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>

@@ -2249,10 +2249,6 @@ export const OperationsLeads: React.FC = () => {
                           }
                           // 2. When Current Status = Assigned Crew
                           else if (isAssignedCrew) {
-                            actionItems.push({
-                              label: 'View Details',
-                              onClick: handleViewDetails
-                            });
                             if (assignedStaffNames.length > 0 && !hasWorkStarted) {
                               actionItems.push({
                                 label: 'Reassign Crew',
@@ -2262,17 +2258,10 @@ export const OperationsLeads: React.FC = () => {
                           }
                           // 3. When Current Status = Event Started
                           else if (isEventStarted) {
-                            actionItems.push({
-                              label: 'View Details',
-                              onClick: handleViewDetails
-                            });
+                            // View Details hidden from Operations action dropdown
                           }
                           // 4. When Current Status = Event Ended or Footage Handover
                           else if (isEventEnded || isFootageHandover) {
-                            actionItems.push({
-                              label: 'View Details',
-                              onClick: handleViewDetails
-                            });
                             if (isFootageHandover) {
                               actionItems.push({
                                 label: 'Upload Final Footage',
@@ -2282,17 +2271,11 @@ export const OperationsLeads: React.FC = () => {
                           }
                           // 6. When Current Status = Verified Footage
                           else if (isVerifiedFootage) {
-                            actionItems.push({
-                              label: 'View Details',
-                              onClick: handleViewDetails
-                            });
+                            // View Details hidden from Operations action dropdown
                           }
                           // Fallback for any other status
                           else {
-                            actionItems.push({
-                              label: 'View Details',
-                              onClick: handleViewDetails
-                            });
+                            // View Details hidden from Operations action dropdown
                           }
 
                           // Extra utilities if applicable

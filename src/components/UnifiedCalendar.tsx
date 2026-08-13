@@ -105,6 +105,41 @@ const parseEventTimes = (timeStr: string) => {
   };
 };
 
+const formatDateDMY = (dateStr: string | null | undefined): string => {
+  if (!dateStr || dateStr === '—') return '—';
+  const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr.trim();
+  if (!cleanDate) return '—';
+  const parts = cleanDate.split('-');
+  if (parts.length === 3 && parts[0].length === 4) {
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  }
+  return cleanDate;
+};
+
+const getProductionAssignedDate = (
+  orderId?: string,
+  leadId?: string,
+  prodRecord?: any,
+  editorAssignments?: any[]
+): string => {
+  if (editorAssignments && editorAssignments.length > 0) {
+    const match = editorAssignments.find(a => 
+      (orderId && a.order_id === orderId) ||
+      (leadId && (a.lead_id === leadId || a.order_id === leadId)) ||
+      (prodRecord?.production_id && a.production_id === prodRecord.production_id)
+    );
+    if (match) {
+      const rawDate = match.assigned_date || match.assignment_date || match.created_at;
+      if (rawDate) return formatDateDMY(rawDate);
+    }
+  }
+
+  if (prodRecord?.editing_start_date) return formatDateDMY(prodRecord.editing_start_date);
+  if (prodRecord?.created_at) return formatDateDMY(prodRecord.created_at);
+
+  return '—';
+};
+
 export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   const { 
     currentUser,
@@ -122,6 +157,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
     deleteCalendarMemo,
     logs,
     staffAssignments,
+    editorAssignments,
     payments,
     isDataLoading
   } = useRole();
@@ -976,41 +1012,86 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
               <table className="w-full text-left text-xs border-collapse min-w-max">
                 <thead>
                   <tr className="bg-zinc-900/80 text-zinc-400 text-[10px] font-mono uppercase tracking-wider border-b border-zinc-800">
-                    <th className="p-3">Event Date</th>
-                    <th className="p-3">Event Name</th>
-                    <th className="p-3">Event Type</th>
-                    <th className="p-3">Customer Name</th>
-                    <th className="p-3">Order ID</th>
-                    <th className="p-3">Event Time</th>
-                    <th className="p-3">Current Status</th>
-                    <th className="p-3 text-right min-w-[100px] whitespace-nowrap">Action</th>
+                    {role === 'production' ? (
+                      <>
+                        <th className="p-3 text-amber-400">ORDER ID</th>
+                        <th className="p-3">CUSTOMER NAME</th>
+                        <th className="p-3">ASSIGNED DATE</th>
+                        <th className="p-3 text-pink-400">TARGET DELIVERY DATE</th>
+                        <th className="p-3">CURRENT STATUS</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="p-3">Event Date</th>
+                        <th className="p-3">Event Name</th>
+                        <th className="p-3">Event Type</th>
+                        <th className="p-3">Customer Name</th>
+                        <th className="p-3">Order ID</th>
+                        <th className="p-3">Event Time</th>
+                        <th className="p-3">Current Status</th>
+                        <th className="p-3 text-right min-w-[100px] whitespace-nowrap">Action</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900">
-                  {searchResultsEvents.map((ev, idx) => (
-                    <tr key={ev.id || idx} className="hover:bg-zinc-900/50 text-zinc-300 transition-colors">
-                      <td className="p-3 font-mono text-yellow-400 font-bold">{ev.date || 'N/A'}</td>
-                      <td className="p-3 font-bold text-white">{ev.raw?.event_name || ev.eventName || ev.eventType || 'Event Shoot'}</td>
-                      <td className="p-3 text-zinc-300">{ev.eventType || 'N/A'}</td>
-                      <td className="p-3 font-semibold text-zinc-200">{ev.customerName || 'N/A'}</td>
-                      <td className="p-3 font-mono text-indigo-400 font-bold">{ev.orderId || 'N/A'}</td>
-                      <td className="p-3 font-mono text-zinc-400">{ev.eventTime || 'N/A'}</td>
-                      <td className="p-3">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-zinc-300 border border-zinc-700 inline-block">
-                          {ev.currentStage || ev.eventClass || 'N/A'}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right whitespace-nowrap min-w-[100px]">
-                        <button
-                          onClick={() => setPopupLeadId(ev.raw?.lead_id || ev.orderId)}
-                          className="inline-block px-3 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] rounded-md transition-all shadow-sm cursor-pointer whitespace-nowrap min-w-max"
-                          style={{ whiteSpace: 'nowrap' }}
+                  {searchResultsEvents.map((ev, idx) => {
+                    if (role === 'production') {
+                      const leadId = ev.raw?.lead_id || ev.orderId;
+                      const leadObj = leads.find(l => l.lead_id === leadId);
+                      const linkedOrder = orders.find(o => o.lead_id === leadId || o.order_id === ev.orderId);
+                      const prodRecord = production?.find(p => p.tracking_id === leadId || p.order_id === leadId || p.tracking_id === ev.orderId || (p as any).order_id === ev.orderId);
+                      
+                      const oId = linkedOrder?.order_id || prodRecord?.order_id || ev.orderId || leadId || '—';
+                      const cName = leadObj?.customer_name || linkedOrder?.client_name || ev.customerName || '—';
+                      const aDate = getProductionAssignedDate(oId, leadId, prodRecord, editorAssignments);
+                      const tDate = formatDateDMY(prodRecord?.target_delivery_date || prodRecord?.expected_delivery_date || leadObj?.delivery_target_date || ev.targetDeliveryDate);
+                      const cStatus = prodRecord?.production_status || prodRecord?.editing_status || linkedOrder?.current_stage || leadObj?.status || ev.currentStage || 'Active';
+
+                      return (
+                        <tr 
+                          key={ev.id || idx} 
+                          onClick={() => setPopupLeadId(leadId)}
+                          className="hover:bg-zinc-900/50 text-zinc-300 transition-colors cursor-pointer"
                         >
-                          Details
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                          <td className="p-3 font-mono text-amber-400 font-bold">{oId}</td>
+                          <td className="p-3 font-bold text-white">{cName}</td>
+                          <td className="p-3 font-mono text-zinc-300">{aDate}</td>
+                          <td className="p-3 font-mono text-pink-400 font-bold">{tDate}</td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-amber-300 border border-zinc-700 inline-block">
+                              {cStatus}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return (
+                      <tr key={ev.id || idx} className="hover:bg-zinc-900/50 text-zinc-300 transition-colors">
+                        <td className="p-3 font-mono text-yellow-400 font-bold">{ev.date || 'N/A'}</td>
+                        <td className="p-3 font-bold text-white">{ev.raw?.event_name || ev.eventName || ev.eventType || 'Event Shoot'}</td>
+                        <td className="p-3 text-zinc-300">{ev.eventType || 'N/A'}</td>
+                        <td className="p-3 font-semibold text-zinc-200">{ev.customerName || 'N/A'}</td>
+                        <td className="p-3 font-mono text-indigo-400 font-bold">{ev.orderId || 'N/A'}</td>
+                        <td className="p-3 font-mono text-zinc-400">{ev.eventTime || 'N/A'}</td>
+                        <td className="p-3">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-zinc-300 border border-zinc-700 inline-block">
+                            {ev.currentStage || ev.eventClass || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right whitespace-nowrap min-w-[100px]">
+                          <button
+                            onClick={() => setPopupLeadId(ev.raw?.lead_id || ev.orderId)}
+                            className="inline-block px-3 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] rounded-md transition-all shadow-sm cursor-pointer whitespace-nowrap min-w-max"
+                            style={{ whiteSpace: 'nowrap' }}
+                          >
+                            Details
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1225,17 +1306,65 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                             <table className="w-full text-left border-collapse">
                               <thead>
                                 <tr className="border-b border-zinc-900 bg-zinc-950/80">
-                                  <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">EVENT NAME / CUSTOMER</th>
-                                  <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">EVENT TYPE</th>
-                                  <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">START</th>
-                                  <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">END</th>
-                                  <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">STATUS</th>
+                                  {role === 'production' ? (
+                                    <>
+                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-amber-400">ORDER ID</th>
+                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-400">CUSTOMER NAME</th>
+                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-400">ASSIGNED DATE</th>
+                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-pink-400">TARGET DELIVERY DATE</th>
+                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-400">CURRENT STATUS</th>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">EVENT NAME / CUSTOMER</th>
+                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">EVENT TYPE</th>
+                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">START</th>
+                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">END</th>
+                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">STATUS</th>
+                                    </>
+                                  )}
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-zinc-900/60">
                                 {selectedEvs.map((ev) => {
                                   const col = getColorClasses(ev.eventClass);
                                   const times = parseEventTimes(ev.eventTime);
+
+                                  if (role === 'production') {
+                                    const leadId = ev.raw?.lead_id || ev.orderId;
+                                    const leadObj = leads.find(l => l.lead_id === leadId);
+                                    const linkedOrder = orders.find(o => o.lead_id === leadId || o.order_id === ev.orderId);
+                                    const prodRecord = production?.find(p => p.tracking_id === leadId || p.order_id === leadId || p.tracking_id === ev.orderId || (p as any).order_id === ev.orderId);
+                                    
+                                    const oId = linkedOrder?.order_id || prodRecord?.order_id || ev.orderId || leadId || '—';
+                                    const cName = leadObj?.customer_name || linkedOrder?.client_name || ev.customerName || '—';
+                                    const aDate = getProductionAssignedDate(oId, leadId, prodRecord, editorAssignments);
+                                    const tDate = formatDateDMY(prodRecord?.target_delivery_date || prodRecord?.expected_delivery_date || leadObj?.delivery_target_date || ev.targetDeliveryDate || ev.date);
+                                    const cStatus = prodRecord?.production_status || prodRecord?.editing_status || linkedOrder?.current_stage || leadObj?.status || ev.currentStage || 'Active';
+
+                                    return (
+                                      <tr 
+                                        key={ev.id}
+                                        id={`table_ev_row_${ev.id}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setPopupLeadId(leadId);
+                                        }}
+                                        className="hover:bg-zinc-900/30 transition cursor-pointer"
+                                      >
+                                        <td className="p-4 font-mono text-xs font-bold text-amber-400">{oId}</td>
+                                        <td className="p-4 text-xs sm:text-sm font-bold text-zinc-100">{cName}</td>
+                                        <td className="p-4 font-mono text-xs text-zinc-300">{aDate}</td>
+                                        <td className="p-4 font-mono text-xs font-bold text-pink-400">{tDate}</td>
+                                        <td className="p-4">
+                                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 border rounded-md uppercase inline-block bg-zinc-800 text-amber-300 border-zinc-700">
+                                            {cStatus}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    );
+                                  }
+
                                   return (
                                     <tr 
                                       key={ev.id}
@@ -1284,6 +1413,53 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                             {selectedEvs.map((ev) => {
                               const col = getColorClasses(ev.eventClass);
                               const times = parseEventTimes(ev.eventTime);
+
+                              if (role === 'production') {
+                                const leadId = ev.raw?.lead_id || ev.orderId;
+                                const leadObj = leads.find(l => l.lead_id === leadId);
+                                const linkedOrder = orders.find(o => o.lead_id === leadId || o.order_id === ev.orderId);
+                                const prodRecord = production?.find(p => p.tracking_id === leadId || p.order_id === leadId || p.tracking_id === ev.orderId || (p as any).order_id === ev.orderId);
+                                
+                                const oId = linkedOrder?.order_id || prodRecord?.order_id || ev.orderId || leadId || '—';
+                                const cName = leadObj?.customer_name || linkedOrder?.client_name || ev.customerName || '—';
+                                const aDate = getProductionAssignedDate(oId, leadId, prodRecord, editorAssignments);
+                                const tDate = formatDateDMY(prodRecord?.target_delivery_date || prodRecord?.expected_delivery_date || leadObj?.delivery_target_date || ev.targetDeliveryDate || ev.date);
+                                const cStatus = prodRecord?.production_status || prodRecord?.editing_status || linkedOrder?.current_stage || leadObj?.status || ev.currentStage || 'Active';
+
+                                return (
+                                  <div
+                                    key={ev.id}
+                                    id={`mobile_ev_row_${ev.id}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPopupLeadId(leadId);
+                                    }}
+                                    className="p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/80 flex flex-col gap-2 transition active:scale-[0.99] cursor-pointer"
+                                  >
+                                    <div className="flex justify-between items-start gap-2">
+                                      <div>
+                                        <span className="text-[10px] font-mono uppercase text-amber-400 font-bold block">ORDER ID: {oId}</span>
+                                        <span className="text-sm font-bold text-zinc-100">{cName}</span>
+                                      </div>
+                                      <span className="text-[9px] font-mono px-2 py-0.5 border rounded-md font-bold uppercase shrink-0 bg-zinc-800 text-amber-300 border-zinc-700">
+                                        {cStatus}
+                                      </span>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2 mt-1 pt-2 border-t border-zinc-900/40 text-xs font-mono">
+                                      <div>
+                                        <span className="text-[9px] text-zinc-500 block">ASSIGNED DATE</span>
+                                        <span className="text-zinc-300">{aDate}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-[9px] text-zinc-500 block">TARGET DELIVERY</span>
+                                        <span className="text-pink-400 font-bold">{tDate}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              }
+
                               return (
                                 <div
                                   key={ev.id}
@@ -1810,21 +1986,31 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
               <table className="w-full text-left text-xs border-collapse min-w-max">
                 <thead>
                   <tr className="bg-zinc-950/70 text-zinc-405 font-bold border-b border-zinc-850 text-[10px] uppercase font-mono tracking-wider">
-                    <th className="p-3.5 pl-5">Order ID</th>
-                    <th className="p-3.5">Customer Name</th>
-                    <th className="p-3.5">Event Name</th>
-                    <th className="p-3.5">Current Status</th>
-                    {role === 'operations' ? (
-                      <th className="p-3.5">Assigned Team</th>
-                    ) : role === 'production' ? (
-                      <th className="p-3.5">Assigned Editor</th>
+                    {role === 'production' ? (
+                      <>
+                        <th className="p-3.5 pl-5 text-amber-400">ORDER ID</th>
+                        <th className="p-3.5">CUSTOMER NAME</th>
+                        <th className="p-3.5">ASSIGNED DATE</th>
+                        <th className="p-3.5 text-pink-400">TARGET DELIVERY DATE</th>
+                        <th className="p-3.5 pr-5">CURRENT STATUS</th>
+                      </>
                     ) : (
                       <>
-                        <th className="p-3.5">Payment Status</th>
-                        <th className="p-3.5 text-right">Outstanding Balance</th>
+                        <th className="p-3.5 pl-5">Order ID</th>
+                        <th className="p-3.5">Customer Name</th>
+                        <th className="p-3.5">Event Name</th>
+                        <th className="p-3.5">Current Status</th>
+                        {role === 'operations' ? (
+                          <th className="p-3.5">Assigned Team</th>
+                        ) : (
+                          <>
+                            <th className="p-3.5">Payment Status</th>
+                            <th className="p-3.5 text-right">Outstanding Balance</th>
+                          </>
+                        )}
+                        <th className="p-3.5 text-right pr-5 min-w-[100px] whitespace-nowrap">Action</th>
                       </>
                     )}
-                    <th className="p-3.5 text-right pr-5 min-w-[100px] whitespace-nowrap">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900/60">
@@ -1851,6 +2037,45 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                       const linkedOrder = orders.find((o) => o.lead_id === lead.lead_id);
                       const orderIdDisplay = linkedOrder?.order_id || lead.lead_id;
                       const prodRecord = production?.find(p => p.tracking_id === lead.lead_id || p.order_id === lead.lead_id || p.tracking_id === orderIdDisplay || (p as any).order_id === orderIdDisplay);
+
+                      if (role === 'production') {
+                        const customerName = lead.customer_name || linkedOrder?.client_name || '—';
+                        const assignedDate = getProductionAssignedDate(orderIdDisplay, lead.lead_id, prodRecord, editorAssignments);
+                        const targetDeliveryDate = formatDateDMY(prodRecord?.target_delivery_date || prodRecord?.expected_delivery_date || lead.delivery_target_date || popupDate);
+                        const currentStatus = prodRecord?.production_status || prodRecord?.editing_status || linkedOrder?.current_stage || lead.status || 'Active';
+
+                        return (
+                          <tr 
+                            key={lead.lead_id} 
+                            onClick={() => {
+                              window.dispatchEvent(new CustomEvent("calendar-action-click", { detail: { leadId: lead.lead_id, role, orderId: orderIdDisplay } }));
+                              window.dispatchEvent(new CustomEvent("calendar-action-click-deferred", { detail: { leadId: lead.lead_id, role, orderId: orderIdDisplay } }));
+                              setPopupDate(null);
+                              setPopupLeadId(null);
+                            }}
+                            className="hover:bg-zinc-900/30 text-zinc-300 transition-all cursor-pointer"
+                          >
+                            <td className="p-3.5 pl-5 font-mono text-[11px] font-bold text-amber-400">
+                              {orderIdDisplay}
+                            </td>
+                            <td className="p-3.5 font-bold text-white">
+                              {customerName}
+                            </td>
+                            <td className="p-3.5 font-mono text-[11px] text-zinc-300">
+                              {assignedDate}
+                            </td>
+                            <td className="p-3.5 font-mono text-[11px] font-bold text-pink-400">
+                              {targetDeliveryDate}
+                            </td>
+                            <td className="p-3.5 pr-5">
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-amber-300 border border-zinc-700">
+                                {currentStatus}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      }
+
                       const paymentRecord = payments?.find(p => p.order_id === orderIdDisplay || p.lead_id === lead.lead_id);
                       const assigns = staffAssignments ? staffAssignments.filter(x => x.order_id === lead.lead_id || x.order_id === orderIdDisplay) : [];
 
@@ -1880,10 +2105,6 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                           {role === 'operations' ? (
                             <td className="p-3.5 font-mono text-[11px] text-indigo-300">
                               {staffNames}
-                            </td>
-                          ) : role === 'production' ? (
-                            <td className="p-3.5 font-mono text-[11px] text-fuchsia-300">
-                              {editorName}
                             </td>
                           ) : (
                             <>

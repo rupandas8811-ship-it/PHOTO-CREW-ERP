@@ -400,51 +400,53 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
           </div>
 
           {/* Section 4: Uploaded Verification Proof Images & Handover Docs */}
-          <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4 sm:p-5 space-y-4">
-            <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2 border-b border-zinc-800 pb-2">
-              <Camera className="w-4 h-4 text-emerald-400" /> Uploaded Proofs & Handover Docs ({proofRecords.length})
-            </h4>
-            
-            {proofRecords.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {proofRecords.map((rec, idx) => (
-                  <div key={rec.id || idx} className="bg-zinc-950/80 p-3 rounded-lg border border-zinc-800/80 space-y-2">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <span className="block text-[11px] font-bold text-white">{rec.equipmentName}</span>
-                        <span className="text-[10px] text-zinc-400">By: {rec.uploadedBy} • {rec.uploadedAt}</span>
+          {!(currentRole === 'Operations Team' || currentRole === 'Operation Staff') && (
+            <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4 sm:p-5 space-y-4">
+              <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2 border-b border-zinc-800 pb-2">
+                <Camera className="w-4 h-4 text-emerald-400" /> Uploaded Proofs & Handover Docs ({proofRecords.length})
+              </h4>
+              
+              {proofRecords.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {proofRecords.map((rec, idx) => (
+                    <div key={rec.id || idx} className="bg-zinc-950/80 p-3 rounded-lg border border-zinc-800/80 space-y-2">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="block text-[11px] font-bold text-white">{rec.equipmentName}</span>
+                          <span className="text-[10px] text-zinc-400">By: {rec.uploadedBy} • {rec.uploadedAt}</span>
+                        </div>
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-mono">
+                          {rec.status}
+                        </span>
                       </div>
-                      <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-mono">
-                        {rec.status}
-                      </span>
+
+                      {rec.photoUrl && (
+                        <SafeProofImage url={rec.photoUrl} alt={rec.equipmentName} label="View Full Image" />
+                      )}
+
+                      {rec.rawFootageLink && (
+                        <div className="p-2 bg-indigo-950/40 border border-indigo-800/50 rounded-lg">
+                          <span className="block text-[9px] font-mono text-indigo-300 font-bold uppercase mb-0.5">Raw Footage Link</span>
+                          <a 
+                            href={rec.rawFootageLink.startsWith('http') ? rec.rawFootageLink : `https://${rec.rawFootageLink}`}
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-xs text-indigo-400 hover:underline font-mono break-all inline-flex items-center gap-1"
+                          >
+                            <Video className="w-3 h-3 shrink-0" /> Open Cloud Folder
+                          </a>
+                        </div>
+                      )}
                     </div>
-
-                    {rec.photoUrl && (
-                      <SafeProofImage url={rec.photoUrl} alt={rec.equipmentName} label="View Full Image" />
-                    )}
-
-                    {rec.rawFootageLink && (
-                      <div className="p-2 bg-indigo-950/40 border border-indigo-800/50 rounded-lg">
-                        <span className="block text-[9px] font-mono text-indigo-300 font-bold uppercase mb-0.5">Raw Footage Link</span>
-                        <a 
-                          href={rec.rawFootageLink.startsWith('http') ? rec.rawFootageLink : `https://${rec.rawFootageLink}`}
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-xs text-indigo-400 hover:underline font-mono break-all inline-flex items-center gap-1"
-                        >
-                          <Video className="w-3 h-3 shrink-0" /> Open Cloud Folder
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="p-4 text-center border border-zinc-800/60 rounded-lg bg-zinc-950/40 text-xs text-zinc-500 italic">
-                No proof images or handover links uploaded for this event yet.
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 text-center border border-zinc-800/60 rounded-lg bg-zinc-950/40 text-xs text-zinc-500 italic">
+                  No proof images or handover links uploaded for this event yet.
+                </div>
+              )}
+            </div>
+          )}
 
         </div>
 

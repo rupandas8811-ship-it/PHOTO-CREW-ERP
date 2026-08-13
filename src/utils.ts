@@ -600,33 +600,44 @@ export function parseQtyAndText(raw: any): { qty: number; text: string } {
 
   if (!text) return { qty: 1, text: "" };
 
-  // 1. Extract and strip any (Qty X) or (quantity X) or (Qty: X) occurrences anywhere in text
+  let foundQtyFromPattern: number | null = null;
+  // 1. Extract any (Qty X), (quantity X), (Qty: X) occurrences anywhere in text
   const qtyPatterns = /\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*(\d+)\s*[\)\]\-]?/gi;
   let match;
   while ((match = qtyPatterns.exec(text)) !== null) {
     if (match[1]) {
       const parsedQty = parseInt(match[1], 10);
       if (!isNaN(parsedQty) && parsedQty >= 1) {
-        qty = parsedQty;
+        if (foundQtyFromPattern === null) {
+          foundQtyFromPattern = parsedQty;
+        }
       }
     }
   }
 
-  // Remove ALL (Qty X) / (quantity X) / (Qty: X) patterns from text
+  // Remove ALL (Qty X) / (quantity X) / (Qty: X) patterns completely from text
   text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
 
-  // 2. Check for leading quantity: e.g. "2 Lead Photographer", "2 x Traditional Photos", "2 - Traditional Photos"
+  // 2. Check for leading quantity: e.g. "2 Lead Photographer", "2 x Traditional Photos", "2 × Traditional Photos"
   const leadingMatch = text.match(/^(\d+)\s*[\*xX×\-–—]?\s*(.*)$/);
   if (leadingMatch) {
     const parsedQty = parseInt(leadingMatch[1], 10);
     if (!isNaN(parsedQty) && parsedQty >= 1) {
-      qty = parsedQty;
+      if (typeof raw !== "object" && foundQtyFromPattern === null) {
+        qty = parsedQty;
+      }
     }
     text = leadingMatch[2] ? leadingMatch[2].trim() : "";
     text = text.replace(/^[xX×\*\-–—]\s*/, "").trim();
   }
 
-  // 3. Clean trailing punctuation
+  if (typeof raw !== "object" && foundQtyFromPattern !== null) {
+    qty = foundQtyFromPattern;
+  }
+
+  // Clean any leftover (Qty X) or trailing/leading punctuation
+  text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
+  text = text.replace(/^[\*\-•xX×]\s*/, "").trim();
   text = text.replace(/[\(\[\-–—:]+$/, "").trim();
 
   return { qty: isNaN(qty) || qty < 1 ? 1 : qty, text };
