@@ -2226,8 +2226,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
               finalStatus = 'Follow Up';
             }
             const teamData = l.Team_member || l.Team_Members || l.team_members || l.Team_members || l.team_member || '';
+            const finalQuoteAmt = l.Final_Quotation_Amount ?? l.final_quotation_amount ?? l.final_amount ?? null;
             return { 
               ...l, 
+              Final_Quotation_Amount: finalQuoteAmt,
               Team_member: teamData, 
               Team_Members: teamData, 
               team_members: teamData,

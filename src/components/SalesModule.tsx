@@ -3926,7 +3926,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
          initEventsReporting(selectedLead);
          setConfirmForm(prev => ({
             ...prev,
-            quotation_amount: Number(selectedLead.Final_Quotation_Amount) || Number(selectedLead.final_amount) || 0
+            quotation_amount: Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_quotation_amount) || Number(wizardLeadData.final_amount) || Number(selectedLead.final_amount) || 0
          }));
       }
     }
@@ -6443,7 +6443,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             state: wizardLeadData.state,
             pincode: wizardLeadData.pincode,
             sales_staff_name: effectiveSalesName,
-            sales_staff_mobile: effectiveSalesMobile
+            sales_staff_mobile: effectiveSalesMobile,
+            Quotation_Discount: cleanDiscount,
+            Additional_Services_Cost: cleanAdditional,
+            Final_Quotation_Amount: cleanFinalAmt
           };
         });
 
@@ -11819,7 +11822,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                             setConfirmForm({
                                               ...confirmForm,
                                               package_name: packages?.find((p) => String(p.package_id) === String(lead.Select_Package_Option))?.package_name || lead.Select_Package_Option || '',
-                                              quotation_amount: Number(lead.Final_Quotation_Amount) || Number((lead as any).final_amount) || Number(lead.budget) || (lead.lead_id === selectedLead?.lead_id ? Number(wizardLeadData.final_amount) : 0) || 0,
+                                              quotation_amount: Number(lead.Final_Quotation_Amount) || Number((lead as any).final_quotation_amount) || Number((lead as any).final_amount) || (lead.lead_id === selectedLead?.lead_id ? Number(wizardLeadData.final_amount) : 0) || 0,
                                               advance_received: calcAdvance,
                                               event_date: lead.event_date || today,
                                               event_time: lead.event_time || ''
