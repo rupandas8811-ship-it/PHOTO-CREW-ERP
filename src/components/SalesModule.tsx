@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useRole, mapUserFieldsFromDb, INITIAL_PACKAGES, getStatusRank, isFollowUpDateTimeReached } from './RoleContext';
 import { supabaseClient } from '../supabaseClient';
@@ -320,8 +320,8 @@ export function buildStep3EventPayloads(
     deliverablesJson,
     flatTeamMembers,
     flatDeliverables,
-    teamMembersText: JSON.stringify(flatTeamMembers),
-    deliverablesText: JSON.stringify(flatDeliverables)
+    teamMembersText: teamMembersJson.length > 1 ? JSON.stringify(teamMembersJson) : JSON.stringify(flatTeamMembers),
+    deliverablesText: deliverablesJson.length > 1 ? JSON.stringify(deliverablesJson) : JSON.stringify(flatDeliverables)
   };
 }
 
@@ -3073,6 +3073,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   
   const [step3AutoSaveStatus, setStep3AutoSaveStatus] = useState<'saving' | 'saved' | 'error' | null>(null);
 
+  const step3SaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const saveStep3DataRealtime = async (
     updatedInclusions: Record<string, string[]>,
     updatedDeliverables: Record<string, string[]>,
@@ -3108,11 +3110,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     );
 
     const updatePayload: any = {
-      Team_member: safeTeamMembersText,
       Team_Members: safeTeamMembersText,
-      team_members: safeTeamMembersText,
-      deliverables_description: safeDeliverablesText,
+      Add_Deliverable: safeDeliverablesText,
       Select_Package_Option: pkgId,
+      _explicit_step3_save: true
     };
 
     if (cleanPkgCost !== null && cleanPkgCost !== undefined) {
@@ -3120,118 +3121,126 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       updatePayload.budget = cleanPkgCost;
     }
 
-    try {
-      // Direct Supabase update to ensure public.leads.Team_member is immediately saved
-      try {
-        const { data: dbResult, error: dbError } = await supabaseClient
-          .from('leads')
-          .update({
-            Team_member: safeTeamMembersText,
-            Team_Members: safeTeamMembersText,
-            team_members: safeTeamMembersText,
-            deliverables_description: safeDeliverablesText,
-            Select_Package_Option: pkgId,
-            ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? { package_price: cleanPkgCost, budget: cleanPkgCost } : {})
-          })
-          .eq('lead_id', leadId)
-          .select('*');
-        console.log('TEAM MEMBERS DB RESULT', { data: dbResult, error: dbError });
-      } catch (dbErr) {
-        console.warn("Direct Supabase update warning:", dbErr);
-      }
-
-      // Update using RoleContext to keep the local leads array perfectly in sync
-      await updateLead(leadId, updatePayload);
-      setStep3AutoSaveStatus('saved');
-      
-      // Update local context manually to ensure instant visual sync in modal
-      if (selectedLead) {
-        setSelectedLead(prev => {
-          if (!prev) return null;
-          return {
-            ...prev,
-            Team_member: safeTeamMembersText,
-            Team_Members: safeTeamMembersText,
-            team_members: safeTeamMembersText,
-            deliverables_description: safeDeliverablesText,
-            Select_Package_Option: pkgId,
-            ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? {
-              package_price: cleanPkgCost,
-              budget: cleanPkgCost
-            } : {})
-          };
-        });
-      }
-      
-      // Also sync wizardLeadData deliverables and team members state
-      setWizardLeadData(prev => ({
-        ...prev,
-        Team_member: safeTeamMembersText,
-        Team_Members: safeTeamMembersText,
-        team_members: safeTeamMembersText,
-        deliverables: deliverablesText,
-        deliverables_description: deliverablesText,
-        Select_Package_Option: pkgId,
-        ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? {
-          package_price: cleanPkgCost,
-          package_cost: cleanPkgCost,
-          budget: cleanPkgCost
-        } : {})
-      }));
-
-      // Also save / update lead_packages record in Supabase
-      try {
-        const isTeamEmpty = teamMembersText === '[]' || teamMembersText === '';
-        const isDelEmpty = deliverablesText === '[]' || deliverablesText === '';
-
-        const packagePayload = {
-          lead_id: leadId,
-          package_id: pkgId,
-          package_name: wizardLeadData.package_name || (pkgId === 'Custom Package' || pkgId === 'custom_package' ? 'Custom Package' : `Package ${pkgId}`),
-          package_cost: cleanPkgCost || 0,
-          quantity: 1,
-          total_amount: cleanPkgCost || 0,
-          discount: quoteDiscount || 0,
-          final_amount: (cleanPkgCost || 0) + (quoteAdditional || 0) - (quoteDiscount || 0),
-          Team_Members_Included: teamMembersJson,
-          editable_inclusions: updatedInclusions,
-          deliverables_descriptionn: deliverablesJson, // keeping typo just in case other code uses it, but adding deliverables_json too
-          deliverables_json: deliverablesJson,
-          deliverables_description: deliverablesText,
-          editable_deliverables: updatedDeliverables,
-          updated_at: new Date().toISOString()
-        };
-
-        const { data: existingLps } = await supabaseClient
-          .from('lead_packages')
-          .select('*')
-          .eq('lead_id', leadId);
-        
-        let targetLpId = `LP-${leadId}-${pkgId}`;
-        
-        if (existingLps && existingLps.length > 0) {
-          const matched = existingLps.find(lp => String(lp.package_id) === String(pkgId)) || existingLps[0];
-          targetLpId = matched.lead_package_id || matched.id || targetLpId;
-          await supabaseClient
-            .from('lead_packages')
-            .update(packagePayload)
-            .eq(matched.lead_package_id ? 'lead_package_id' : 'id', targetLpId);
-        } else {
-          await supabaseClient
-            .from('lead_packages')
-            .insert({
-              ...packagePayload,
-              lead_package_id: targetLpId,
-              created_at: new Date().toISOString()
-            });
-        }
-      } catch (e) {
-        console.warn("Could not update lead_packages in saveStep3DataRealtime:", e);
-      }
-    } catch (err) {
-      console.error("Exception in saveStep3DataRealtime:", err);
-      setStep3AutoSaveStatus('error');
+    if (step3SaveTimeoutRef.current) {
+      clearTimeout(step3SaveTimeoutRef.current);
     }
+
+    step3SaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        // Direct Supabase update to ensure public.leads.Team_Members is immediately saved
+        try {
+          const { data: dbResult, error: dbError } = await supabaseClient
+            .from('leads')
+            .update({
+              Team_Members: safeTeamMembersText,
+              Add_Deliverable: safeDeliverablesText,
+              Select_Package_Option: pkgId,
+              ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? { package_price: cleanPkgCost, budget: cleanPkgCost } : {})
+            })
+            .eq('lead_id', leadId)
+            .select('*');
+          console.log('TEAM MEMBERS SAVED', { leadId, Team_Members: safeTeamMembersText });
+          console.log('DELIVERABLES SAVED', { leadId, Add_Deliverable: safeDeliverablesText });
+          console.log('TEAM MEMBERS DB RESULT', { data: dbResult, error: dbError });
+        } catch (dbErr) {
+          console.warn("Direct Supabase update warning:", dbErr);
+        }
+
+        // Update using RoleContext to keep the local leads array perfectly in sync
+        await updateLead(leadId, updatePayload);
+        setStep3AutoSaveStatus('saved');
+        
+        // Update local context manually to ensure instant visual sync in modal
+        if (selectedLead) {
+          setSelectedLead(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              Team_member: safeTeamMembersText,
+              Team_Members: safeTeamMembersText,
+              team_members: safeTeamMembersText,
+              Add_Deliverable: safeDeliverablesText,
+              deliverables_description: safeDeliverablesText,
+              Select_Package_Option: pkgId,
+              ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? {
+                package_price: cleanPkgCost,
+                budget: cleanPkgCost
+              } : {})
+            };
+          });
+        }
+        
+        // Also sync wizardLeadData deliverables and team members state
+        setWizardLeadData(prev => ({
+          ...prev,
+          Team_member: safeTeamMembersText,
+          Team_Members: safeTeamMembersText,
+          team_members: safeTeamMembersText,
+          Add_Deliverable: safeDeliverablesText,
+          deliverables: deliverablesText,
+          deliverables_description: deliverablesText,
+          Select_Package_Option: pkgId,
+          ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? {
+            package_price: cleanPkgCost,
+            package_cost: cleanPkgCost,
+            budget: cleanPkgCost
+          } : {})
+        }));
+
+        // Also save / update lead_packages record in Supabase
+        try {
+          const isTeamEmpty = teamMembersText === '[]' || teamMembersText === '';
+          const isDelEmpty = deliverablesText === '[]' || deliverablesText === '';
+
+          const packagePayload = {
+            lead_id: leadId,
+            package_id: pkgId,
+            package_name: wizardLeadData.package_name || (pkgId === 'Custom Package' || pkgId === 'custom_package' ? 'Custom Package' : `Package ${pkgId}`),
+            package_cost: cleanPkgCost || 0,
+            quantity: 1,
+            total_amount: cleanPkgCost || 0,
+            discount: quoteDiscount || 0,
+            final_amount: (cleanPkgCost || 0) + (quoteAdditional || 0) - (quoteDiscount || 0),
+            Team_Members_Included: teamMembersJson,
+            editable_inclusions: updatedInclusions,
+            deliverables_descriptionn: deliverablesJson, // keeping typo just in case other code uses it, but adding deliverables_json too
+            deliverables_json: deliverablesJson,
+            deliverables_description: deliverablesText,
+            editable_deliverables: updatedDeliverables,
+            updated_at: new Date().toISOString()
+          };
+
+          const { data: existingLps } = await supabaseClient
+            .from('lead_packages')
+            .select('*')
+            .eq('lead_id', leadId);
+          
+          let targetLpId = `LP-${leadId}-${pkgId}`;
+          
+          if (existingLps && existingLps.length > 0) {
+            const matched = existingLps.find(lp => String(lp.package_id) === String(pkgId)) || existingLps[0];
+            targetLpId = matched.lead_package_id || matched.id || targetLpId;
+            await supabaseClient
+              .from('lead_packages')
+              .update(packagePayload)
+              .eq(matched.lead_package_id ? 'lead_package_id' : 'id', targetLpId);
+          } else {
+            await supabaseClient
+              .from('lead_packages')
+              .insert({
+                ...packagePayload,
+                lead_package_id: targetLpId,
+                created_at: new Date().toISOString()
+              });
+          }
+        } catch (e) {
+          console.warn("Could not update lead_packages in saveStep3DataRealtime:", e);
+        }
+      } catch (err) {
+        console.error("Exception in saveStep3DataRealtime:", err);
+        setStep3AutoSaveStatus('error');
+      }
+    }, 400);
   };
 
   const getCleanSalesStaffName = (rawName?: any, leadObj?: Lead | null): string => {
@@ -3644,8 +3653,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               setQuoteAdditional(Number(data.Additional_Services_Cost));
             }
 
-            const rawTeamData = data?.Team_member || data?.Team_Members || (data as any)?.team_members || primaryLp?.Team_Members_Included || primaryLp?.editable_inclusions;
-            console.log('TEAM MEMBERS LOADED', { leadId: targetLeadId, Team_member: rawTeamData });
+            const rawTeamData = data?.Team_Members || data?.Team_member || (data as any)?.team_members || primaryLp?.Team_Members_Included || primaryLp?.editable_inclusions;
+            console.log('TEAM MEMBERS LOADED', { leadId: targetLeadId, Team_Members: rawTeamData });
             if (rawTeamData) {
               const loadedInclusions = parseTeamMembersJsonToRecord(rawTeamData, effectivePkgId, crmEvents);
               if (Object.keys(loadedInclusions).length > 0) {
@@ -3653,7 +3662,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               }
             }
 
-            const rawDelData = primaryLp?.deliverables_descriptionn || primaryLp?.editable_deliverables || data?.deliverables_description;
+            const rawDelData = data?.Add_Deliverable || primaryLp?.deliverables_descriptionn || primaryLp?.editable_deliverables || data?.deliverables_description;
+            console.log('DELIVERABLES LOADED', { leadId: targetLeadId, Add_Deliverable: rawDelData });
             if (rawDelData) {
               const loadedDeliverables = parseDeliverablesJsonToRecord(rawDelData, effectivePkgId, crmEvents);
               if (Object.keys(loadedDeliverables).length > 0) {
@@ -5533,7 +5543,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const matchedPkg = (packages || []).find(p => p.package_id === matchedPkgId);
 
     // 1. Load Deliverables
-    const rawDelData = primaryLP?.deliverables_descriptionn || primaryLP?.editable_deliverables || fullLead.deliverables_description || latestQuote?.deliverables_description || matchedPkg?.deliverables;
+    const rawDelData = fullLead.Add_Deliverable || primaryLP?.deliverables_descriptionn || primaryLP?.editable_deliverables || fullLead.deliverables_description || latestQuote?.deliverables_description || matchedPkg?.deliverables;
     if (rawDelData) {
       const newDeliverables = parseDeliverablesJsonToRecord(rawDelData, matchedPkgId, fullLead.events || crmEvents);
       setEditableDeliverables(newDeliverables);
@@ -5542,8 +5552,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
 
     // 2. Load Team Members
-    const rawTeamData = fullLead.Team_member || fullLead.Team_Members || (fullLead as any)?.team_members || primaryLP?.Team_Members_Included || primaryLP?.editable_inclusions || matchedPkg?.team_members;
-    console.log('TEAM MEMBERS LOADED in openCRMModal', { leadId: fullLead.lead_id, Team_member: rawTeamData });
+    const rawTeamData = fullLead.Team_Members || fullLead.Team_member || (fullLead as any)?.team_members || primaryLP?.Team_Members_Included || primaryLP?.editable_inclusions || matchedPkg?.team_members;
+    console.log('TEAM MEMBERS LOADED in openCRMModal', { leadId: fullLead.lead_id, Team_Members: rawTeamData });
     if (rawTeamData) {
       const newInclusions = parseTeamMembersJsonToRecord(rawTeamData, matchedPkgId, fullLead.events || crmEvents);
       setEditableInclusions(newInclusions);

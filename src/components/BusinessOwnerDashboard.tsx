@@ -34,7 +34,10 @@ import {
   Ban,
   BarChart3,
   ExternalLink,
-  Image as ImageIcon
+  Image as ImageIcon,
+  TrendingUp,
+  Briefcase,
+  Video
 } from 'lucide-react';
 import { OwnerStaffPerformanceReport } from './OwnerModule';
 import { BusinessOwnerCardDetailModal } from './BusinessOwnerCardDetailModal';
@@ -347,6 +350,37 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     return filteredOrders.filter(o => o.current_stage !== 'Order Closed' && o.current_stage !== 'Closed' && o.current_stage !== 'Event Cancelled').length;
   }, [filteredOrders]);
 
+  const salesStats = useMemo(() => {
+    const total = filteredLeads.length;
+    const confirmed = filteredLeads.filter(l => {
+      const matchingOrder = orders.find(o => o.lead_id === l.lead_id || o.order_id === l.lead_id);
+      const sLower = (l.current_status || l.status || '').toLowerCase();
+      return sLower.includes('confirm') || matchingOrder;
+    }).length;
+    const rate = total > 0 ? Math.round((confirmed / total) * 100) : 0;
+    return { total, confirmed, rate };
+  }, [filteredLeads, orders]);
+
+  const opsStats = useMemo(() => {
+    const total = filteredOperations.length;
+    const completed = filteredOperations.filter(op => {
+      const sLower = (op.operations_status || op.status || '').toLowerCase();
+      return sLower.includes('complete') || sLower.includes('delivered') || sLower.includes('closed');
+    }).length;
+    const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return { total, completed, rate };
+  }, [filteredOperations]);
+
+  const prodStats = useMemo(() => {
+    const total = filteredProduction.length;
+    const completed = filteredProduction.filter(prod => {
+      const sLower = (prod.production_status || prod.editing_status || prod.status || '').toLowerCase();
+      return sLower.includes('complete') || sLower.includes('delivered') || sLower.includes('closed') || sLower.includes('verified');
+    }).length;
+    const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return { total, completed, rate };
+  }, [filteredProduction]);
+
   const outstandingPaymentTotal = useMemo(() => {
     return filteredOrders.reduce((sum, o) => {
       const pay = payments.find(p => p.order_id === o.order_id || p.lead_id === o.lead_id);
@@ -357,6 +391,12 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
 
   // Clickable card modal state
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleOpenCard = (e: any) => setSelectedCard(e.detail);
+    window.addEventListener('open-business-owner-card', handleOpenCard);
+    return () => window.removeEventListener('open-business-owner-card', handleOpenCard);
+  }, []);
 
   // Configs for Overview Card details
   const modalData = useMemo(() => {
@@ -369,6 +409,66 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     }
     if (selectedCard === 'overview_approval') {
       return waitingApprovalOrders;
+    }
+    if (selectedCard === 'overview_sales') {
+      return filteredLeads.map(l => {
+        const matchingOrder = orders.find(o => o.lead_id === l.lead_id || o.order_id === l.lead_id);
+        const isConfirmed = (l.current_status || l.status || '').toLowerCase().includes('confirm') || !!matchingOrder;
+        return { ...l, isConfirmed };
+      });
+    }
+    if (selectedCard === 'overview_ops') {
+      return filteredOperations;
+    }
+    if (selectedCard === 'overview_prod') {
+      return filteredProduction;
+    }
+    if (selectedCard === 'overview_acceptance') {
+      return filteredProduction.filter(prod => {
+        const sLower = (prod.production_status || prod.editing_status || prod.status || '').toLowerCase();
+        return sLower.includes('client accept') || sLower.includes('accepted') || sLower.includes('approved');
+      });
+    }
+    if (selectedCard === 'overview_closed') {
+      return filteredOrders.filter(o => o.current_stage === 'Order Closed' || o.current_stage === 'Closed');
+    }
+    if (selectedCard === 'overview_sales') {
+      return [
+        { key: 'lead_id', label: 'Lead ID', render: (item: any) => <span className="font-mono text-zinc-400">{item.lead_id}</span> },
+        { key: 'customer_name', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customer_name}</span> },
+        { key: 'status', label: 'Status', render: (item: any) => <span className={`px-2.5 py-1 rounded-lg font-bold font-mono text-[10px] ${item.isConfirmed ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-zinc-800 text-zinc-400'}`}>{item.current_status || item.status || 'Active'}</span> },
+        { key: 'sales_person', label: 'Sales Person', render: (item: any) => <span className="text-zinc-400">{item.sales_person || 'Unassigned'}</span> }
+      ];
+    }
+    if (selectedCard === 'overview_ops') {
+      return [
+        { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-400">{item.order_id || item.lead_id}</span> },
+        { key: 'event_type', label: 'Event Type', render: (item: any) => <span className="font-bold text-white">{item.event_type}</span> },
+        { key: 'status', label: 'Status', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold font-mono text-[10px]">{item.operations_status || item.status || 'Active'}</span> },
+        { key: 'assigned', label: 'Assigned Crew', render: (item: any) => <span className="text-zinc-400">{item.assigned_photographer || item.assigned_videographer || item.primary_assigned || 'Unassigned'}</span> }
+      ];
+    }
+    if (selectedCard === 'overview_prod') {
+      return [
+        { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-400">{item.order_id || item.tracking_id}</span> },
+        { key: 'event_type', label: 'Project Type', render: (item: any) => <span className="font-bold text-white">{item.event_type || item.project_type || 'Editing'}</span> },
+        { key: 'status', label: 'Status', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-pink-500/10 text-pink-400 border border-pink-500/20 font-bold font-mono text-[10px]">{item.production_status || item.editing_status || item.status || 'Active'}</span> },
+        { key: 'editor', label: 'Editor', render: (item: any) => <span className="text-zinc-400">{item.editor || item.assigned_editor || 'Unassigned'}</span> }
+      ];
+    }
+    if (selectedCard === 'overview_acceptance') {
+      return [
+        { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-400">{item.order_id || item.tracking_id}</span> },
+        { key: 'event_type', label: 'Project Type', render: (item: any) => <span className="font-bold text-white">{item.event_type || item.project_type || 'Editing'}</span> },
+        { key: 'status', label: 'Status', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold font-mono text-[10px]">{item.production_status || item.editing_status || item.status || 'Approved'}</span> }
+      ];
+    }
+    if (selectedCard === 'overview_closed') {
+      return [
+        { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-400">{item.order_id}</span> },
+        { key: 'customer_name', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customer_name}</span> },
+        { key: 'status', label: 'Status', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold font-mono text-[10px]">{item.current_stage || 'Closed'}</span> }
+      ];
     }
     if (selectedCard === 'overview_outstanding') {
       return filteredOrders.map(o => {
@@ -450,6 +550,46 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
           totalValue: `${modalData.length} Projects`,
           accentColor: 'amber' as const,
           filterDescription: 'This list displays all projects currently waiting for review and final closure by the Business Owner.'
+        };
+      case 'overview_sales':
+        return {
+          title: 'Sales Performance Details',
+          totalLabel: 'Total Leads',
+          totalValue: `${salesStats.total}`,
+          accentColor: 'amber' as const,
+          filterDescription: 'This list displays all leads generated and processed within the selected date range.'
+        };
+      case 'overview_ops':
+        return {
+          title: 'Operations Performance Details',
+          totalLabel: 'Total Events',
+          totalValue: `${opsStats.total}`,
+          accentColor: 'blue' as const,
+          filterDescription: 'This list displays all operational events assigned and executed within the selected date range.'
+        };
+      case 'overview_prod':
+        return {
+          title: 'Production Performance Details',
+          totalLabel: 'Total Projects',
+          totalValue: `${prodStats.total}`,
+          accentColor: 'pink' as const,
+          filterDescription: 'This list displays all production and editing projects active within the selected date range.'
+        };
+      case 'overview_acceptance':
+        return {
+          title: 'Client Acceptance Details',
+          totalLabel: 'Approved Projects',
+          totalValue: `${modalData.length}`,
+          accentColor: 'emerald' as const,
+          filterDescription: 'This list displays all projects that have been accepted by the client.'
+        };
+      case 'overview_closed':
+        return {
+          title: 'Orders Closed Details',
+          totalLabel: 'Closed Orders',
+          totalValue: `${modalData.length}`,
+          accentColor: 'emerald' as const,
+          filterDescription: 'This list displays all fully closed orders within the date range.'
         };
       case 'overview_outstanding':
         return {
@@ -1012,6 +1152,93 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
               </div>
             </div>
 
+          </div>
+
+          {/* PERFORMANCE OVERVIEW CARDS */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 mt-6">
+            {/* Sales Performance */}
+            <div 
+              onClick={() => setSelectedCard('overview_sales')}
+              className="bg-gradient-to-b from-amber-950/20 to-zinc-950 border border-amber-500/20 rounded-2xl p-5 shadow-xl hover:border-amber-500/60 hover:from-amber-950/30 hover:to-zinc-900 transition-all duration-200 relative overflow-hidden group cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-mono uppercase tracking-wider font-bold text-amber-400/90">
+                  Sales Performance
+                </span>
+                <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 group-hover:scale-110 transition-transform">
+                  <TrendingUp className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-3">
+                <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-white">
+                  {salesStats.confirmed} <span className="text-sm text-zinc-500">/ {salesStats.total}</span>
+                </div>
+                <p className="text-[11px] text-zinc-400 mt-1 flex items-center justify-between gap-1">
+                  <span>Confirmed Leads</span>
+                  <span className="text-amber-400 font-bold font-mono">{salesStats.rate}% CR</span>
+                </p>
+              </div>
+              <div className="mt-4 pt-3 border-t border-amber-500/10 flex items-center justify-between text-[11px] font-mono text-zinc-400">
+                <span className="group-hover:text-amber-400 transition-colors font-bold">Click to view details</span>
+                <ArrowUpRight className="w-3.5 h-3.5 text-amber-500/50 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+              </div>
+            </div>
+
+            {/* Operations Performance */}
+            <div 
+              onClick={() => setSelectedCard('overview_ops')}
+              className="bg-gradient-to-b from-blue-950/20 to-zinc-950 border border-blue-500/20 rounded-2xl p-5 shadow-xl hover:border-blue-500/60 hover:from-blue-950/30 hover:to-zinc-900 transition-all duration-200 relative overflow-hidden group cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-mono uppercase tracking-wider font-bold text-blue-400/90">
+                  Operations Performance
+                </span>
+                <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 group-hover:scale-110 transition-transform">
+                  <Briefcase className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-3">
+                <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-white">
+                  {opsStats.completed} <span className="text-sm text-zinc-500">/ {opsStats.total}</span>
+                </div>
+                <p className="text-[11px] text-zinc-400 mt-1 flex items-center justify-between gap-1">
+                  <span>Completed Events</span>
+                  <span className="text-blue-400 font-bold font-mono">{opsStats.rate}% Done</span>
+                </p>
+              </div>
+              <div className="mt-4 pt-3 border-t border-blue-500/10 flex items-center justify-between text-[11px] font-mono text-zinc-400">
+                <span className="group-hover:text-blue-400 transition-colors font-bold">Click to view details</span>
+                <ArrowUpRight className="w-3.5 h-3.5 text-blue-500/50 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+              </div>
+            </div>
+
+            {/* Production Performance */}
+            <div 
+              onClick={() => setSelectedCard('overview_prod')}
+              className="bg-gradient-to-b from-pink-950/20 to-zinc-950 border border-pink-500/20 rounded-2xl p-5 shadow-xl hover:border-pink-500/60 hover:from-pink-950/30 hover:to-zinc-900 transition-all duration-200 relative overflow-hidden group cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-mono uppercase tracking-wider font-bold text-pink-400/90">
+                  Production Performance
+                </span>
+                <div className="p-2 rounded-xl bg-pink-500/10 border border-pink-500/20 text-pink-400 group-hover:scale-110 transition-transform">
+                  <Video className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="mt-3">
+                <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-white">
+                  {prodStats.completed} <span className="text-sm text-zinc-500">/ {prodStats.total}</span>
+                </div>
+                <p className="text-[11px] text-zinc-400 mt-1 flex items-center justify-between gap-1">
+                  <span>Completed Projects</span>
+                  <span className="text-pink-400 font-bold font-mono">{prodStats.rate}% Done</span>
+                </p>
+              </div>
+              <div className="mt-4 pt-3 border-t border-pink-500/10 flex items-center justify-between text-[11px] font-mono text-zinc-400">
+                <span className="group-hover:text-pink-400 transition-colors font-bold">Click to view details</span>
+                <ArrowUpRight className="w-3.5 h-3.5 text-pink-500/50 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+              </div>
+            </div>
           </div>
 
           {/* Quick Overview Summary Banner */}
@@ -1959,6 +2186,16 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
           <div className="text-lg font-black font-mono text-rose-400 mt-0.5">{formatINR(totalOutSum)}</div>
         </div>
 
+        <div 
+          onClick={() => setSelectedCard('summary_completed')}
+          className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5 hover:bg-zinc-900 hover:border-zinc-750 hover:scale-[1.02] cursor-pointer transition-all duration-200"
+        >
+          <div className="text-[10px] font-mono text-zinc-500 uppercase font-bold flex items-center justify-between">
+            <span>Completed</span>
+            <span className="text-[9px] text-zinc-600">Details &rarr;</span>
+          </div>
+          <div className="text-lg font-black font-mono text-amber-400 mt-0.5">{completedCount} Projects</div>
+        </div>
         <div 
           onClick={() => setSelectedCard('summary_closed')}
           className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5 col-span-2 sm:col-span-1 hover:bg-zinc-900 hover:border-zinc-750 hover:scale-[1.02] cursor-pointer transition-all duration-200"

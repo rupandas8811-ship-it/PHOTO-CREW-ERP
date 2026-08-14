@@ -6466,30 +6466,34 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     const timestamp = new Date().toISOString();
     const finalUpdates = { ...updates };
 
+    const isExplicitStep3Save = (finalUpdates as any)._explicit_step3_save === true;
+    delete (finalUpdates as any)._explicit_step3_save;
+
     // CRITICAL SAFETY GUARD: Prevent accidental overwrites of valuable fields with empty/default values
     // if the existing record already has valid data.
-    if (prevLead) {
-      if ('deliverables_description' in finalUpdates) {
-        const newVal = finalUpdates.deliverables_description;
-        const prevVal = prevLead.deliverables_description;
+    if (prevLead && !isExplicitStep3Save) {
+      if ('Add_Deliverable' in finalUpdates || 'deliverables_description' in finalUpdates) {
+        const newVal = finalUpdates.Add_Deliverable ?? finalUpdates.deliverables_description;
+        const prevVal = prevLead.Add_Deliverable ?? prevLead.deliverables_description;
         if ((!newVal || newVal === '[]' || newVal === '') && (prevVal && prevVal !== '[]' && prevVal !== '')) {
-          console.warn(`[SAFETY] Prevented accidental overwrite of deliverables_description. Retaining existing data.`);
+          console.warn(`[SAFETY] Prevented accidental overwrite of Add_Deliverable. Retaining existing data.`);
+          delete finalUpdates.Add_Deliverable;
           delete finalUpdates.deliverables_description;
+        } else if (newVal !== undefined) {
+          finalUpdates.Add_Deliverable = newVal;
         }
       }
 
       if ('Team_Members' in finalUpdates || 'Team_member' in finalUpdates || 'team_members' in finalUpdates) {
-        const newVal = (finalUpdates as any).Team_member ?? (finalUpdates as any).Team_Members ?? (finalUpdates as any).team_members;
-        const prevVal = (prevLead as any).Team_member || (prevLead as any).Team_Members || (prevLead as any).team_members;
+        const newVal = (finalUpdates as any).Team_Members ?? (finalUpdates as any).Team_member ?? (finalUpdates as any).team_members;
+        const prevVal = (prevLead as any).Team_Members || (prevLead as any).Team_member || (prevLead as any).team_members;
         if ((!newVal || newVal === '[]' || newVal === '') && (prevVal && prevVal !== '[]' && prevVal !== '')) {
-          console.warn(`[SAFETY] Prevented accidental overwrite of Team_member/Team_Members. Retaining existing data.`);
+          console.warn(`[SAFETY] Prevented accidental overwrite of Team_Members. Retaining existing data.`);
           delete (finalUpdates as any).Team_Members;
           delete (finalUpdates as any).Team_member;
           delete (finalUpdates as any).team_members;
         } else if (newVal !== undefined) {
-          (finalUpdates as any).Team_member = newVal;
           (finalUpdates as any).Team_Members = newVal;
-          (finalUpdates as any).team_members = newVal;
         }
       }
       

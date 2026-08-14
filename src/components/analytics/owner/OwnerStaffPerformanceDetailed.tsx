@@ -735,25 +735,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
       {/* TOP HEADER & GLOBAL CONTROLS                         */}
       {/* ---------------------------------------------------- */}
       <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-2xl space-y-5">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-zinc-900 pb-4">
-          {/* ECOSYSTEM TAB SELECTOR */}
-          <div className="w-full lg:w-64">
-            <select
-              value={activeTab}
-              onChange={(e) => {
-                const val = e.target.value as 'sales' | 'operations' | 'production';
-                setActiveTab(val);
-                setSelectedStaffFilter('All');
-                setCurrentPage(1);
-                setSortConfig({ key: val === 'sales' ? 'conversionRate' : 'completionRate', direction: 'desc' });
-              }}
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-xs font-bold font-mono text-white focus:outline-none focus:border-amber-500 transition-colors shadow-inner cursor-pointer"
-            >
-              <option value="sales">Sales Performance</option>
-              <option value="operations">Operations Performance</option>
-              <option value="production">Production Performance</option>
-            </select>
-          </div>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-end gap-4 border-b border-zinc-900 pb-4">
           
           <button
             onClick={() => setShowFilters(!showFilters)}
@@ -856,19 +838,41 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
       {/* 16 & 17. HIGH-LEVEL WORKFLOW & ECOSYSTEM VISUALIZER   */}
       {/* ---------------------------------------------------- */}
       <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-5 shadow-xl space-y-4">
-        <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-zinc-900 pb-3 gap-4">
           <div className="flex items-center gap-2">
             <Activity className="w-4 h-4 text-amber-500" />
             <h3 className="text-xs font-black uppercase tracking-widest text-zinc-300 font-mono">
               Business Performance Ecosystem Pipeline
             </h3>
           </div>
-          <span className="text-[10px] font-mono text-zinc-500">Live Database Flow Metrics</span>
+          <div className="flex items-center gap-4">
+            <span className="text-[10px] font-mono text-zinc-500 hidden md:block">Live Database Flow Metrics</span>
+            <div className="w-full md:w-64">
+              <select
+                value={activeTab}
+                onChange={(e) => {
+                  const val = e.target.value as 'sales' | 'operations' | 'production';
+                  setActiveTab(val);
+                  setSelectedStaffFilter('All');
+                  setCurrentPage(1);
+                  setSortConfig({ key: val === 'sales' ? 'conversionRate' : 'completionRate', direction: 'desc' });
+                }}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2 text-xs font-bold font-mono text-white focus:outline-none focus:border-amber-500 transition-colors shadow-inner cursor-pointer"
+              >
+                <option value="sales">Sales Performance</option>
+                <option value="operations">Operations Performance</option>
+                <option value="production">Production Performance</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
           {/* Stage 1: Sales */}
-          <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex flex-col justify-between space-y-2 relative group hover:border-amber-500/40 transition-colors">
+          <div 
+            onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_sales' }))}
+            className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex flex-col justify-between space-y-2 relative group hover:border-amber-500/40 transition-colors cursor-pointer"
+          >
             <div className="flex items-center justify-between text-zinc-400 text-[10px] font-mono uppercase">
               <span>1. Sales Team</span>
               <DollarSign className="w-3.5 h-3.5 text-amber-400" />
@@ -883,7 +887,10 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
           </div>
 
           {/* Stage 2: Operations */}
-          <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex flex-col justify-between space-y-2 relative group hover:border-blue-500/40 transition-colors">
+          <div 
+            onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_ops' }))}
+            className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex flex-col justify-between space-y-2 relative group hover:border-blue-500/40 transition-colors cursor-pointer"
+          >
             <div className="flex items-center justify-between text-zinc-400 text-[10px] font-mono uppercase">
               <span>2. Operations</span>
               <Briefcase className="w-3.5 h-3.5 text-blue-400" />
@@ -898,7 +905,10 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
           </div>
 
           {/* Stage 3: Production */}
-          <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex flex-col justify-between space-y-2 relative group hover:border-purple-500/40 transition-colors">
+          <div 
+            onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_prod' }))}
+            className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex flex-col justify-between space-y-2 relative group hover:border-purple-500/40 transition-colors cursor-pointer"
+          >
             <div className="flex items-center justify-between text-zinc-400 text-[10px] font-mono uppercase">
               <span>3. Production</span>
               <Layers className="w-3.5 h-3.5 text-purple-400" />
@@ -913,7 +923,10 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
           </div>
 
           {/* Stage 4: Client Acceptance */}
-          <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex flex-col justify-between space-y-2 relative group hover:border-emerald-500/40 transition-colors">
+          <div 
+            onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_acceptance' }))}
+            className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex flex-col justify-between space-y-2 relative group hover:border-emerald-500/40 transition-colors cursor-pointer"
+          >
             <div className="flex items-center justify-between text-zinc-400 text-[10px] font-mono uppercase">
               <span>4. Acceptance</span>
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
@@ -928,7 +941,10 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
           </div>
 
           {/* Stage 5: Orders Closed */}
-          <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex flex-col justify-between space-y-2 relative group hover:border-emerald-500/40 transition-colors">
+          <div 
+            onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_closed' }))}
+            className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex flex-col justify-between space-y-2 relative group hover:border-emerald-500/40 transition-colors cursor-pointer"
+          >
             <div className="flex items-center justify-between text-zinc-400 text-[10px] font-mono uppercase">
               <span>5. Orders Closed</span>
               <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
@@ -1111,43 +1127,50 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
         <div className="space-y-6">
           {/* Summary Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
-            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between">
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_ops' }))}
+              className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-blue-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Operations Staff</span>
               <div className="text-xl font-black text-white mt-1">{opsData.summary.totalOpsStaff}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Field Team</span>
             </div>
 
-            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between">
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_ops' }))}
+              className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-blue-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Total Events</span>
               <div className="text-xl font-black text-blue-400 mt-1">{opsData.summary.totalEventsAssigned}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Assigned Events</span>
             </div>
 
-            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between">
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_ops' }))}
+              className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-blue-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Events Started</span>
               <div className="text-xl font-black text-purple-400 mt-1">{opsData.summary.totalEventsStarted}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">In Progress</span>
             </div>
 
-            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between">
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_ops' }))}
+              className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-blue-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Events Completed</span>
               <div className="text-xl font-black text-emerald-400 mt-1">{opsData.summary.totalEventsCompleted}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Footage Captured</span>
             </div>
 
-            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between">
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_ops' }))}
+              className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-blue-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Pending Events</span>
               <div className="text-xl font-black text-amber-400 mt-1">{opsData.summary.totalPending}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Upcoming</span>
             </div>
 
-            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between">
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_ops' }))}
+              className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-blue-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Completion Rate</span>
               <div className="text-xl font-black text-emerald-400 mt-1">{opsData.summary.overallCompletionRate}%</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Fulfillment %</span>
             </div>
 
-            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between">
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_ops' }))}
+              className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-blue-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Avg Event Time</span>
               <div className="text-lg font-black text-cyan-400 mt-1">{opsData.summary.avgCompletionTime}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Turnaround</span>
@@ -1355,55 +1378,64 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
         <div className="space-y-6">
           {/* Summary Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-3">
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_prod' }))}
+              className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-purple-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Production Staff</span>
               <div className="text-xl font-black text-white mt-1">{prodData.summary.totalProdStaff}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Video Editors</span>
             </div>
 
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_prod' }))}
+              className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-purple-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Deliverables</span>
               <div className="text-xl font-black text-purple-400 mt-1">{prodData.summary.totalDeliverablesAssigned}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Assigned Projects</span>
             </div>
 
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_prod' }))}
+              className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-purple-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Editing Started</span>
               <div className="text-xl font-black text-blue-400 mt-1">{prodData.summary.totalEditingStarted}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Timeline Active</span>
             </div>
 
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_prod' }))}
+              className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-purple-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Customer Review</span>
               <div className="text-xl font-black text-amber-400 mt-1">{prodData.summary.totalCustomerReview}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Sent to Client</span>
             </div>
 
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_prod' }))}
+              className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-purple-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Editing Completed</span>
               <div className="text-xl font-black text-cyan-400 mt-1">{prodData.summary.totalEditingCompleted}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Export Done</span>
             </div>
 
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_prod' }))}
+              className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-purple-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Client Acceptance</span>
               <div className="text-xl font-black text-emerald-400 mt-1">{prodData.summary.totalClientAcceptance}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Approved</span>
             </div>
 
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_prod' }))}
+              className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-purple-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Completed Total</span>
               <div className="text-xl font-black text-emerald-400 mt-1">{prodData.summary.totalCompletedDeliverables}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Finalized</span>
             </div>
 
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_prod' }))}
+              className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-purple-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Pending</span>
               <div className="text-xl font-black text-rose-400 mt-1">{prodData.summary.totalPendingDeliverables}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">In Queue</span>
             </div>
 
-            <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between">
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_prod' }))}
+              className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-purple-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Completion Rate</span>
               <div className="text-xl font-black text-purple-400 mt-1">{prodData.summary.overallCompletionRate}%</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Output %</span>

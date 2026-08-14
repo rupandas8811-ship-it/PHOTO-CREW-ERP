@@ -251,6 +251,7 @@ export interface Lead {
   Select_Package_Option?: string;
   Specify_Custom_Lead_Source_Name?: string | null;
   package_price?: number;
+  Add_Deliverable?: string;
   deliverables_description?: string;
   Team_Members?: string;
   Team_member?: string;
