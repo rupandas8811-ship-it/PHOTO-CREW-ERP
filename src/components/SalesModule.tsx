@@ -283,6 +283,8 @@ export function buildStep3EventPayloads(
   return {
     teamMembersJson,
     deliverablesJson,
+    flatTeamMembers,
+    flatDeliverables,
     teamMembersText: JSON.stringify(flatTeamMembers),
     deliverablesText: JSON.stringify(flatDeliverables)
   };
@@ -368,6 +370,23 @@ export function parseTeamMembersJsonToRecord(
       result[pkgId] = generalList;
       result['Custom Package'] = generalList;
       result['custom_package'] = generalList;
+      if (eventsList && eventsList.length > 0) {
+        eventsList.forEach((ev: any) => {
+          if (!ev) return;
+          const evId = ev.id || ev.event_id;
+          const evName = ev.event_name || ev.event_type;
+          if (evId) {
+            if (!result[`${pkgId}_${evId}`]) result[`${pkgId}_${evId}`] = generalList;
+            if (!result[`Custom Package_${evId}`]) result[`Custom Package_${evId}`] = generalList;
+            if (!result[`custom_package_${evId}`]) result[`custom_package_${evId}`] = generalList;
+          }
+          if (evName) {
+            if (!result[`${pkgId}_${evName}`]) result[`${pkgId}_${evName}`] = generalList;
+            if (!result[`Custom Package_${evName}`]) result[`Custom Package_${evName}`] = generalList;
+            if (!result[`custom_package_${evName}`]) result[`custom_package_${evName}`] = generalList;
+          }
+        });
+      }
     }
   } else if (parsed && typeof parsed === 'object') {
     Object.keys(parsed).forEach(k => {
@@ -466,6 +485,23 @@ export function parseDeliverablesJsonToRecord(
       result[pkgId] = generalList;
       result['Custom Package'] = generalList;
       result['custom_package'] = generalList;
+      if (eventsList && eventsList.length > 0) {
+        eventsList.forEach((ev: any) => {
+          if (!ev) return;
+          const evId = ev.id || ev.event_id;
+          const evName = ev.event_name || ev.event_type;
+          if (evId) {
+            if (!result[`${pkgId}_${evId}`]) result[`${pkgId}_${evId}`] = generalList;
+            if (!result[`Custom Package_${evId}`]) result[`Custom Package_${evId}`] = generalList;
+            if (!result[`custom_package_${evId}`]) result[`custom_package_${evId}`] = generalList;
+          }
+          if (evName) {
+            if (!result[`${pkgId}_${evName}`]) result[`${pkgId}_${evName}`] = generalList;
+            if (!result[`Custom Package_${evName}`]) result[`Custom Package_${evName}`] = generalList;
+            if (!result[`custom_package_${evName}`]) result[`custom_package_${evName}`] = generalList;
+          }
+        });
+      }
     }
   } else if (parsed && typeof parsed === 'object') {
     Object.keys(parsed).forEach(k => {
@@ -2982,7 +3018,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     setStep3AutoSaveStatus('saving');
 
     const activeEventsList = (activeTab === 'create' && createEvents.length > 0) ? createEvents : (crmEvents && crmEvents.length > 0 ? crmEvents : []);
-    const { teamMembersJson, deliverablesJson, teamMembersText, deliverablesText } = buildStep3EventPayloads(
+    const { teamMembersJson, deliverablesJson, flatTeamMembers, teamMembersText, deliverablesText } = buildStep3EventPayloads(
       pkgId,
       activeEventsList,
       updatedInclusions,
@@ -2990,8 +3026,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     );
 
     const safeTeamMembersText = teamMembersText;
-
     const safeDeliverablesText = deliverablesText;
+
+    console.log('TEAM MEMBERS SAVE', { leadId, teamMembers: flatTeamMembers, serialized: safeTeamMembersText });
 
     const cleanPkgCost = packageCostOverride !== undefined ? packageCostOverride : (
       wizardLeadData.package_cost !== "" && wizardLeadData.package_cost != null && !isNaN(Number(wizardLeadData.package_cost))
@@ -3002,7 +3039,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     );
 
     const updatePayload: any = {
+      Team_member: safeTeamMembersText,
       Team_Members: safeTeamMembersText,
+      team_members: safeTeamMembersText,
       deliverables_description: safeDeliverablesText,
       Select_Package_Option: pkgId,
     };
@@ -3013,6 +3052,25 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
 
     try {
+      // Direct Supabase update to ensure public.leads.Team_member is immediately saved
+      try {
+        const { data: dbResult, error: dbError } = await supabaseClient
+          .from('leads')
+          .update({
+            Team_member: safeTeamMembersText,
+            Team_Members: safeTeamMembersText,
+            team_members: safeTeamMembersText,
+            deliverables_description: safeDeliverablesText,
+            Select_Package_Option: pkgId,
+            ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? { package_price: cleanPkgCost, budget: cleanPkgCost } : {})
+          })
+          .eq('lead_id', leadId)
+          .select('*');
+        console.log('TEAM MEMBERS DB RESULT', { data: dbResult, error: dbError });
+      } catch (dbErr) {
+        console.warn("Direct Supabase update warning:", dbErr);
+      }
+
       // Update using RoleContext to keep the local leads array perfectly in sync
       await updateLead(leadId, updatePayload);
       setStep3AutoSaveStatus('saved');
@@ -3023,7 +3081,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           if (!prev) return null;
           return {
             ...prev,
+            Team_member: safeTeamMembersText,
             Team_Members: safeTeamMembersText,
+            team_members: safeTeamMembersText,
             deliverables_description: safeDeliverablesText,
             Select_Package_Option: pkgId,
             ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? {
@@ -3034,9 +3094,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         });
       }
       
-      // Also sync wizardLeadData deliverables state
+      // Also sync wizardLeadData deliverables and team members state
       setWizardLeadData(prev => ({
         ...prev,
+        Team_member: safeTeamMembersText,
+        Team_Members: safeTeamMembersText,
+        team_members: safeTeamMembersText,
         deliverables: deliverablesText,
         deliverables_description: deliverablesText,
         Select_Package_Option: pkgId,
@@ -3092,24 +3155,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               lead_package_id: targetLpId,
               created_at: new Date().toISOString()
             });
-        }
-        
-        if (setLeadPackages) {
-          setLeadPackages(prev => {
-            const idx = prev.findIndex(lp => (lp.lead_package_id === targetLpId) || (lp.id === targetLpId));
-            const fullLpRecord = {
-              lead_package_id: targetLpId,
-              id: targetLpId,
-              ...packagePayload
-            } as LeadPackage;
-            if (idx >= 0) {
-              const next = [...prev];
-              next[idx] = fullLpRecord;
-              return next;
-            } else {
-              return [...prev, fullLpRecord];
-            }
-          });
         }
       } catch (e) {
         console.warn("Could not update lead_packages in saveStep3DataRealtime:", e);
@@ -3497,7 +3542,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
           const { data, error } = await supabaseClient
             .from('leads')
-            .select('Team_Members, deliverables_description, package_price, budget, Select_Package_Option, Quotation_Discount, Additional_Services_Cost, Final_Quotation_Amount, notes_special_customizations')
+            .select('*')
             .eq('lead_id', targetLeadId)
             .maybeSingle();
           
@@ -3530,7 +3575,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               setQuoteAdditional(Number(data.Additional_Services_Cost));
             }
 
-            const rawTeamData = primaryLp?.Team_Members_Included || primaryLp?.editable_inclusions || data?.Team_Members;
+            const rawTeamData = data?.Team_member || data?.Team_Members || (data as any)?.team_members || primaryLp?.Team_Members_Included || primaryLp?.editable_inclusions;
+            console.log('TEAM MEMBERS LOADED', { leadId: targetLeadId, Team_member: rawTeamData });
             if (rawTeamData) {
               const loadedInclusions = parseTeamMembersJsonToRecord(rawTeamData, effectivePkgId, crmEvents);
               if (Object.keys(loadedInclusions).length > 0) {
@@ -4032,8 +4078,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         ? leadObj.deliverables_description 
         : deliverablesText;
         
-      const activeTeamMembersText = (teamMembersText === '[]' && leadObj.Team_Members && leadObj.Team_Members !== '[]')
-        ? leadObj.Team_Members
+      const activeTeamMembersText = (teamMembersText === '[]' && (leadObj.Team_member || leadObj.Team_Members) && (leadObj.Team_member !== '[]' || leadObj.Team_Members !== '[]'))
+        ? (leadObj.Team_member || leadObj.Team_Members)
         : teamMembersText;
         
       let finalBasePkgSum = basePkgSum;
@@ -4147,14 +4193,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           remarks: updatedRemarks,
           deliverables: activeDeliverablesText,
           deliverables_description: activeDeliverablesText,
-          Team_Members: activeTeamMembersText
+          Team_member: activeTeamMembersText,
+          Team_Members: activeTeamMembersText,
+          team_members: activeTeamMembersText
         }));
         await updateLead(leadObj.lead_id, {
           budget: finalAmt,
           status: 'Quotation Sent' as CurrentStage,
           package_price: finalBasePkgSum,
           deliverables_description: activeDeliverablesText,
+          Team_member: activeTeamMembersText,
           Team_Members: activeTeamMembersText,
+          team_members: activeTeamMembersText,
           notes_special_customizations: leadObj.notes_special_customizations,
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
           Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
@@ -4188,7 +4238,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           status: 'Quotation Sent' as CurrentStage,
           package_price: finalBasePkgSum,
           deliverables_description: activeDeliverablesText,
+          Team_member: activeTeamMembersText,
           Team_Members: activeTeamMembersText,
+          team_members: activeTeamMembersText,
           notes_special_customizations: leadObj.notes_special_customizations,
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
           Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
@@ -5420,7 +5472,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
 
     // 2. Load Team Members
-    const rawTeamData = primaryLP?.Team_Members_Included || primaryLP?.editable_inclusions || fullLead.Team_Members || matchedPkg?.team_members;
+    const rawTeamData = fullLead.Team_member || fullLead.Team_Members || (fullLead as any)?.team_members || primaryLP?.Team_Members_Included || primaryLP?.editable_inclusions || matchedPkg?.team_members;
+    console.log('TEAM MEMBERS LOADED in openCRMModal', { leadId: fullLead.lead_id, Team_member: rawTeamData });
     if (rawTeamData) {
       const newInclusions = parseTeamMembersJsonToRecord(rawTeamData, matchedPkgId, fullLead.events || crmEvents);
       setEditableInclusions(newInclusions);
@@ -5839,7 +5892,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead?.Select_Package_Option || 'Custom Package';
       const currentEvents = selectedLead ? crmEvents : createEvents;
 
-      const { teamMembersJson, deliverablesJson, teamMembersText, deliverablesText } = buildStep3EventPayloads(
+      const { teamMembersJson, deliverablesJson, flatTeamMembers, teamMembersText, deliverablesText } = buildStep3EventPayloads(
         pkgId,
         currentEvents,
         editableInclusions,
@@ -5869,15 +5922,45 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const effectiveSalesMobile = getEffectiveSalesStaffMobile();
 
       const safeTeamMembersText = teamMembersText;
-
       const safeDeliverablesText = deliverablesText;
 
       if (targetLeadId && targetLeadId !== 'DRAFT-LEAD' && supabaseClient) {
+        console.log('TEAM MEMBERS SAVE in handleSavePackageOnly', { leadId: targetLeadId, teamMembers: flatTeamMembers, serialized: safeTeamMembersText });
+        
+        try {
+          const { data: dbResult, error: dbError } = await supabaseClient
+            .from('leads')
+            .update({
+              budget: cleanPkgCost,
+              package_price: cleanPkgCost,
+              deliverables_description: safeDeliverablesText,
+              Team_member: safeTeamMembersText,
+              Team_Members: safeTeamMembersText,
+              team_members: safeTeamMembersText,
+              notes_special_customizations: wizardLeadData.notes,
+              remarks: updatedRemarks,
+              Select_Package_Option: pkgId,
+              sales_staff_name: effectiveSalesName,
+              sales_staff_mobile: effectiveSalesMobile,
+              Quotation_Discount: cleanDiscount,
+              Additional_Services_Cost: cleanAdditional,
+              Final_Quotation_Amount: cleanFinalAmt,
+              events: updatedEvents
+            })
+            .eq('lead_id', targetLeadId)
+            .select('*');
+          console.log('TEAM MEMBERS DB RESULT handleSavePackageOnly', { data: dbResult, error: dbError });
+        } catch (dbErr) {
+          console.warn("Direct Supabase update warning in handleSavePackageOnly:", dbErr);
+        }
+
         await updateLead(targetLeadId, {
           budget: cleanPkgCost,
           package_price: cleanPkgCost,
           deliverables_description: safeDeliverablesText,
+          Team_member: safeTeamMembersText,
           Team_Members: safeTeamMembersText,
+          team_members: safeTeamMembersText,
           notes_special_customizations: wizardLeadData.notes,
           remarks: updatedRemarks,
           Select_Package_Option: pkgId,
@@ -5935,23 +6018,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 lead_package_id: targetLpId,
                 created_at: new Date().toISOString()
               });
-          }
-
-          if (setLeadPackages) {
-            setLeadPackages(prev => {
-              const idx = prev.findIndex(lp => lp.lead_package_id === targetLpId);
-              const fullLpRecord = {
-                lead_package_id: targetLpId,
-                ...packagePayload
-              } as LeadPackage;
-              if (idx >= 0) {
-                const next = [...prev];
-                next[idx] = fullLpRecord;
-                return next;
-              } else {
-                return [...prev, fullLpRecord];
-              }
-            });
           }
         } catch (lpErr) {
           console.warn("Could not upsert lead_packages record:", lpErr);
@@ -6190,7 +6256,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           return;
         }
         const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead.Select_Package_Option || 'Custom Package';
-        const { teamMembersJson, deliverablesJson, teamMembersText, deliverablesText } = buildStep3EventPayloads(
+        const { teamMembersJson, deliverablesJson, flatTeamMembers, teamMembersText, deliverablesText } = buildStep3EventPayloads(
           pkgId,
           crmEvents,
           editableInclusions,
@@ -6215,14 +6281,48 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         const effectiveSalesMobile = getEffectiveSalesStaffMobile();
 
         const safeTeamMembersText = teamMembersText;
-
         const safeDeliverablesText = deliverablesText;
+
+        console.log('TEAM MEMBERS SAVE in handleStep3Submit', { leadId: selectedLead.lead_id, teamMembers: flatTeamMembers, serialized: safeTeamMembersText });
+
+        try {
+          const { data: dbResult, error: dbError } = await supabaseClient
+            .from('leads')
+            .update({
+              budget: cleanPkgCost,
+              package_price: cleanPkgCost,
+              deliverables_description: safeDeliverablesText,
+              Team_member: safeTeamMembersText,
+              Team_Members: safeTeamMembersText,
+              team_members: safeTeamMembersText,
+              notes_special_customizations: wizardLeadData.notes,
+              remarks: updatedRemarks,
+              Select_Package_Option: pkgId,
+              client_residence_address: wizardLeadData.client_residence_address,
+              city: wizardLeadData.city,
+              state: wizardLeadData.state,
+              pincode: cleanPincode,
+              sales_staff_name: effectiveSalesName,
+              sales_staff_mobile: effectiveSalesMobile,
+              Quotation_Discount: cleanDiscount,
+              Additional_Services_Cost: cleanAdditional,
+              Final_Quotation_Amount: cleanFinalAmt,
+              events: updatedEvents
+            })
+            .eq('lead_id', selectedLead.lead_id)
+            .select('*');
+          console.log('TEAM MEMBERS DB RESULT handleStep3Submit', { data: dbResult, error: dbError });
+        } catch (dbErr) {
+          console.warn("Direct Supabase update warning in handleStep3Submit:", dbErr);
+        }
 
         await updateLead(selectedLead.lead_id, {
           budget: cleanPkgCost,
           package_price: cleanPkgCost,
           deliverables_description: safeDeliverablesText,
+          Team_member: safeTeamMembersText,
           Team_Members: safeTeamMembersText,
+          team_members: safeTeamMembersText,
           notes_special_customizations: wizardLeadData.notes,
           remarks: updatedRemarks,
           Select_Package_Option: pkgId,
@@ -6242,7 +6342,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           ...prev,
           deliverables: safeDeliverablesText,
           deliverables_description: safeDeliverablesText,
+          Team_member: safeTeamMembersText,
           Team_Members: safeTeamMembersText,
+          team_members: safeTeamMembersText,
           package_cost: cleanPkgCost ?? prev.package_cost,
           package_price: cleanPkgCost ?? prev.package_price,
           selected_package_id: pkgId,
@@ -6260,7 +6362,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             budget: cleanPkgCost ?? prev.budget,
             package_price: cleanPkgCost ?? prev.package_price,
             deliverables_description: safeDeliverablesText,
+            Team_member: safeTeamMembersText,
             Team_Members: safeTeamMembersText,
+            team_members: safeTeamMembersText,
             notes_special_customizations: wizardLeadData.notes,
             remarks: updatedRemarks,
             Select_Package_Option: pkgId,

@@ -79,7 +79,9 @@ const extractTeamMembersConfig = (lead: any, leadPkgs: any[]): { event_id?: stri
   };
 
   const rawCandidates = [
+    lead?.Team_member,
     lead?.Team_Members,
+    (lead as any)?.team_members,
     lead?.Team_Members_Included,
     leadPkgs?.[0]?.Team_Members_Included,
     leadPkgs?.[0]?.editable_inclusions,

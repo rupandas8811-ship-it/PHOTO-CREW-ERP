@@ -253,6 +253,8 @@ export interface Lead {
   package_price?: number;
   deliverables_description?: string;
   Team_Members?: string;
+  Team_member?: string;
+  team_members?: string;
   notes_special_customizations?: string;
   quotation_discount?: number;
   additional_services_cost?: number;

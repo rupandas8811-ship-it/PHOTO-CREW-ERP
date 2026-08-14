@@ -1241,7 +1241,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'whatsapp_number', 'address', 'client_residence_address', 'city', 'state', 'pincode', 'desired_event_shoot_type', 'Select_Package_Option',
         'total_pax', 'reference_source', 
         'lead_value', 'lead_score', 'booking_status', 'reporting_time', 'Reporting_date', 'package_price', 'deliverables_description', 
-        'notes_special_customizations', 'quotation_discount', 'additional_services_cost', 'Quotation_Discount', 'Additional_Services_Cost', 'Specify_Custom_Lead_Source_Name', 'Final_Quotation_Amount', 'Quotation_Discount', 'Additional_Services_Cost', 'Specify_Custom_Lead_Source_Name', 'Final_Quotation_Amount', 'sales_staff_name', 'sales_staff_mobile'
+        'Team_member', 'Team_Members', 'team_members', 'Team_members', 'team_member',
+        'notes_special_customizations', 'quotation_discount', 'additional_services_cost', 'Quotation_Discount', 'Additional_Services_Cost', 'Specify_Custom_Lead_Source_Name', 'Final_Quotation_Amount', 'sales_staff_name', 'sales_staff_mobile'
       ],
       orders: [
         'order_id', 'lead_id', 'customer_name', 'mobile', 'event_type', 'custom_event_type', 'custom_event_name', 'shoot_type', 'event_date', 
@@ -1249,6 +1250,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'balance_amount', 'order_status', 'current_stage', 'sales_person', 'created_at', 
         'updated_by', 'updated_at', 'whatsapp_number', 'client_residence_address', 'city', 'state', 'pincode', 'Select_Package_Option', 
         'desired_event_shoot_type', 'reporting_time', 'Reporting_date', 'package_price', 'deliverables_description', 
+        'Team_member', 'Team_Members', 'team_members', 'Team_members', 'team_member',
         'notes_special_customizations', 'quotation_discount', 'additional_services_cost', 'Quotation_Discount', 'Additional_Services_Cost', 'Specify_Custom_Lead_Source_Name', 'Final_Quotation_Amount',
         'total_pax', 'reference_source', 'lead_value', 'lead_score', 'booking_status'
       ],
@@ -2202,7 +2204,16 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             if (finalStatus === 'Follow-up' || finalStatus === 'Follow-Up') {
               finalStatus = 'Follow Up';
             }
-            return { ...l, status: finalStatus, current_status: finalStatus, events: evts };
+            const teamData = l.Team_member || l.Team_Members || l.team_members || l.Team_members || l.team_member || '';
+            return { 
+              ...l, 
+              Team_member: teamData, 
+              Team_Members: teamData, 
+              team_members: teamData,
+              status: finalStatus, 
+              current_status: finalStatus, 
+              events: evts 
+            };
           });
           setLeads(parsedLeads);
         }
@@ -6395,12 +6406,18 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         }
       }
 
-      if ('Team_Members' in finalUpdates) {
-        const newVal = finalUpdates.Team_Members;
-        const prevVal = prevLead.Team_Members;
+      if ('Team_Members' in finalUpdates || 'Team_member' in finalUpdates || 'team_members' in finalUpdates) {
+        const newVal = (finalUpdates as any).Team_member ?? (finalUpdates as any).Team_Members ?? (finalUpdates as any).team_members;
+        const prevVal = (prevLead as any).Team_member || (prevLead as any).Team_Members || (prevLead as any).team_members;
         if ((!newVal || newVal === '[]' || newVal === '') && (prevVal && prevVal !== '[]' && prevVal !== '')) {
-          console.warn(`[SAFETY] Prevented accidental overwrite of Team_Members. Retaining existing data.`);
-          delete finalUpdates.Team_Members;
+          console.warn(`[SAFETY] Prevented accidental overwrite of Team_member/Team_Members. Retaining existing data.`);
+          delete (finalUpdates as any).Team_Members;
+          delete (finalUpdates as any).Team_member;
+          delete (finalUpdates as any).team_members;
+        } else if (newVal !== undefined) {
+          (finalUpdates as any).Team_member = newVal;
+          (finalUpdates as any).Team_Members = newVal;
+          (finalUpdates as any).team_members = newVal;
         }
       }
       
@@ -6417,11 +6434,11 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       if ('package_price' in finalUpdates) {
         const newVal = finalUpdates.package_price;
         const prevVal = prevLead.package_price;
-        if ((newVal === null || newVal === undefined || newVal === 0 || newVal === '') && (prevVal !== null && prevVal !== undefined && prevVal !== 0 && prevVal !== '')) {
+        if ((newVal === null || newVal === undefined || newVal === 0 || (newVal as any) === '') && (prevVal !== null && prevVal !== undefined && prevVal !== 0 && (prevVal as any) !== '')) {
           console.warn(`[SAFETY] Prevented accidental overwrite of package_price. Retaining existing data.`);
           delete finalUpdates.package_price;
           // Also protect budget since they are often synced
-          if ('budget' in finalUpdates && (finalUpdates.budget === null || finalUpdates.budget === undefined || finalUpdates.budget === 0 || finalUpdates.budget === '')) {
+          if ('budget' in finalUpdates && (finalUpdates.budget === null || finalUpdates.budget === undefined || finalUpdates.budget === 0 || (finalUpdates.budget as any) === '')) {
              delete finalUpdates.budget;
           }
         }
@@ -6525,9 +6542,13 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     setLeads((prev) =>
       prev.map((ld) => {
         if (ld.lead_id === leadId) {
+          const teamVal = (finalUpdates as any).Team_member ?? (finalUpdates as any).Team_Members ?? (finalUpdates as any).team_members ?? ld.Team_member ?? ld.Team_Members;
           const updated = {
             ...ld,
             ...finalUpdates,
+            Team_member: teamVal,
+            Team_Members: teamVal,
+            team_members: teamVal,
             updated_at: timestamp
           };
           const parsed = deserializeLeadEvents(updated.notes_special_customizations);

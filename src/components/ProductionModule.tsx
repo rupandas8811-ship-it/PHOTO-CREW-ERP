@@ -287,7 +287,7 @@ const StaffSelectDropdown = React.memo(({
 }: StaffSelectDropdownProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const { isDataLoading, refreshData } = useRole();
+  const { isDataLoading, refreshData, production } = useRole();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
