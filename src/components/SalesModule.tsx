@@ -2974,6 +2974,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   // Confirm Order Form State
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [isCustomerInfoExpanded, setIsCustomerInfoExpanded] = useState(true);
   const [confirmForm, setConfirmForm] = useState({
     package_name: '',
     quotation_amount: 0,
@@ -11930,41 +11931,95 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       {/* Confirmation Modal to Officially Log and Book Contract */}
       {showConfirmModal && selectedLead && (
-        <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-4 backdrop-blur-md overflow-y-auto">
-          <div id="confirm_booking_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-lg w-full shadow-2xl p-5 space-y-4 max-h-[90vh] flex flex-col my-auto">
+        <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-3 sm:p-4 md:p-6 backdrop-blur-md overflow-hidden">
+          <div id="confirm_booking_modal" className="bg-slate-850 border border-slate-750 rounded-2xl overflow-hidden max-w-lg md:max-w-xl w-full shadow-2xl p-4 sm:p-5 md:p-6 space-y-3.5 max-h-[92vh] flex flex-col my-auto">
             
+            {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
-              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
-                <span>💍</span> Booking Confirmation & Contract Form
+              <h4 className="font-bold text-slate-100 text-sm sm:text-base flex items-center gap-2 font-sans">
+                <span className="text-base sm:text-lg">💍</span>
+                <span>Booking Confirmation & Contract Form</span>
               </h4>
               <button 
                 onClick={() => setShowConfirmModal(false)}
-                className="text-slate-500 hover:text-slate-350 cursor-pointer"
+                className="text-slate-500 hover:text-slate-300 p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Close"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 text-[11px] space-y-1 shrink-0">
-              <p className="text-slate-400">Client: <strong className="text-slate-200">{selectedLead.customer_name}</strong></p>
-              <p className="text-slate-400">Type: <strong className="text-slate-200">{selectedLead.event_type === 'Other' ? (selectedLead.custom_event_name || selectedLead.custom_event_type || 'Other') : selectedLead.event_type}</strong></p>
-              <p className="text-slate-400">Address: <strong className="text-slate-200">{selectedLead.event_location}</strong></p>
-            </div>
+            {/* Collapsible & Scrollable Customer Information Card */}
+            {(() => {
+              const combinedType = (selectedLead.events && selectedLead.events.length > 0)
+                ? selectedLead.events
+                    .map(ev => ev.event_name || ev.event_type)
+                    .filter(Boolean)
+                    .join(', ') || selectedLead.event_type || 'Event'
+                : (selectedLead.event_type === 'Other'
+                    ? (selectedLead.custom_event_name || selectedLead.custom_event_type || 'Other')
+                    : (selectedLead.event_type || 'Event'));
 
-            <form onSubmit={handleConfirmOrderSubmit} className="space-y-3 text-xs overflow-y-auto pr-1 flex-1 custom-scrollbar">
+              return (
+                <div className="bg-slate-900/90 rounded-xl border border-slate-800 overflow-hidden shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomerInfoExpanded(!isCustomerInfoExpanded)}
+                    className="w-full px-3.5 py-2.5 flex items-center justify-between text-left text-xs font-semibold text-slate-200 hover:bg-slate-800/60 transition-colors cursor-pointer select-none"
+                  >
+                    <span className="flex items-center gap-1.5 text-slate-200">
+                      Customer Information
+                    </span>
+                    <span className="flex items-center gap-1 text-slate-400 text-[11px] font-medium">
+                      <span>{isCustomerInfoExpanded ? 'Hide' : 'Show'}</span>
+                      {isCustomerInfoExpanded ? (
+                        <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                      )}
+                    </span>
+                  </button>
+
+                  {isCustomerInfoExpanded && (
+                    <div className="px-3.5 pb-3 pt-1 border-t border-slate-800/60 max-h-36 sm:max-h-44 overflow-y-auto custom-scrollbar text-xs">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-slate-300">
+                        <div>
+                          <span className="text-slate-400 font-medium text-[11px] block">Client Name</span>
+                          <strong className="text-slate-100 font-semibold text-xs">{selectedLead.customer_name || 'N/A'}</strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-medium text-[11px] block">Mobile Number</span>
+                          <strong className="text-slate-100 font-mono font-semibold text-xs">{selectedLead.mobile || 'N/A'}</strong>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <span className="text-slate-400 font-medium text-[11px] block">Address</span>
+                          <strong className="text-slate-100 font-semibold text-xs break-words">{selectedLead.event_location || 'N/A'}</strong>
+                        </div>
+                        <div className="sm:col-span-2 pt-1 border-t border-slate-800/60">
+                          <span className="text-slate-400 font-medium text-[11px] block">Type</span>
+                          <strong className="text-amber-400 font-semibold text-xs">{combinedType}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Form Body - Scrollable */}
+            <form onSubmit={handleConfirmOrderSubmit} className="space-y-3.5 text-xs overflow-y-auto pr-1 flex-1 custom-scrollbar">
               
-              {/* Product package */}
+              {/* Product package name - Read-Only */}
               <div>
-                <label className="block font-medium text-slate-400 mb-1">
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                   Product Package Name *
                 </label>
                 <input
                   type="text"
-                  required
-                  placeholder="Royal Destination Platinum"
-                  value={confirmForm.package_name}
-                  onChange={(e) => setConfirmForm({ ...confirmForm, package_name: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1 px-2.5 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  readOnly
+                  disabled
+                  value={confirmForm.package_name || packages?.find((p) => String(p.package_id) === String(selectedLead.Select_Package_Option))?.package_name || selectedLead.Select_Package_Option || 'Custom Selected Package'}
+                  className="w-full h-9 bg-slate-900/80 border border-slate-750 rounded-lg px-3 text-slate-200 text-xs font-medium focus:outline-none opacity-85 cursor-not-allowed select-none shadow-inner"
                 />
               </div>
 
@@ -11974,28 +12029,49 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   <span>📅 Events & Reporting Details *</span>
                   <span className="text-[10px] text-slate-400 font-normal">Set reporting time for crew</span>
                 </label>
-                <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 space-y-3">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-3.5 space-y-3">
                   {selectedLead?.events && selectedLead.events.length > 0 ? (
                     selectedLead.events.map((ev, i) => {
                       const key = ev.id || `ev_${i}`;
                       const repData = eventsReporting[key] || {
-                        reporting_date: ev.reporting_date || (ev as any).Reporting_date || ev.event_date || '',
-                        reporting_time: ev.reporting_time || ''
+                        reporting_date: ev.reporting_date || (ev as any).Reporting_date || ev.event_date || ev.event_start_date || selectedLead.Reporting_date || (selectedLead as any).reporting_date || selectedLead.event_date || '',
+                        reporting_time: ev.reporting_time || selectedLead.reporting_time || ''
                       };
+
+                      const startDateStr = formatDDMMYYYY(ev.event_start_date || ev.event_date);
+                      const startTimeStr = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : (selectedLead.event_time ? convertTo12Hour(selectedLead.event_time) : 'TBD');
+                      const endTimeStr = ev.event_end_time ? convertTo12Hour(ev.event_end_time) : '';
+                      const eventTimeDisplay = endTimeStr ? `${startTimeStr} – ${endTimeStr}` : startTimeStr;
+
                       return (
-                        <div key={key} className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-2.5 space-y-2">
+                        <div key={key} className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-3 space-y-2.5">
                           <div className="flex items-center justify-between border-b border-slate-800/60 pb-1.5">
-                            <span className="text-xs font-bold text-amber-400 font-sans">
-                              {ev.event_name || ev.event_type || `Event #${i + 1}`}
+                            <span className="text-xs font-bold text-amber-400 font-sans tracking-wide">
+                              {selectedLead.events.length > 1 ? `EVENT ${i + 1}` : 'EVENT DETAILS'}
                             </span>
-                            <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
-                              <span>📅 {ev.event_date ? formatDDMMYYYY(ev.event_date) : 'TBD'}</span>
-                              <span>•</span>
-                              <span>⏰ {ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'TBD'}</span>
+                            <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800">
+                              {ev.event_shoot_type || selectedLead.shoot_type || 'Shoot'}
+                            </span>
+                          </div>
+
+                          {/* Event Name, Date, Time info */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-900/60 p-2.5 rounded-md border border-slate-800/60 text-[11px]">
+                            <div>
+                              <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Name</span>
+                              <span className="text-slate-200 font-semibold">{ev.event_name || ev.event_type || 'Event'}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Date</span>
+                              <span className="text-slate-200 font-semibold font-mono">{startDateStr}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Time</span>
+                              <span className="text-slate-200 font-semibold font-mono">{eventTimeDisplay}</span>
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                          {/* Reporting Date & Reporting Time */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
                             <div>
                               <label className="block text-[10px] font-mono font-bold uppercase text-slate-400 mb-1">
                                 Reporting Date *
@@ -12013,7 +12089,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                     }
                                   }));
                                 }}
-                                className="w-full h-8 bg-slate-900 border border-slate-750 rounded-md px-2 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
                               />
                             </div>
                             <div>
@@ -12033,7 +12109,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                     }
                                   }));
                                 }}
-                                className="w-full h-8 bg-slate-900 border border-slate-750 rounded-md px-2 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
                               />
                             </div>
                           </div>
@@ -12041,16 +12117,34 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       );
                     })
                   ) : (
-                    <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-2.5 space-y-2">
+                    <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-3 space-y-2.5">
                       <div className="flex items-center justify-between border-b border-slate-800/60 pb-1.5">
-                        <span className="text-xs font-bold text-amber-400 font-sans">
-                          {selectedLead.event_type || 'Event'}
+                        <span className="text-xs font-bold text-amber-400 font-sans tracking-wide">
+                          EVENT DETAILS
                         </span>
-                        <div className="text-[10px] text-slate-400 font-mono">
-                          📅 {selectedLead.event_date ? formatDDMMYYYY(selectedLead.event_date) : 'TBD'}
+                        <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800">
+                          {selectedLead.shoot_type || 'Shoot'}
+                        </span>
+                      </div>
+
+                      {/* Single Event Info */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-900/60 p-2.5 rounded-md border border-slate-800/60 text-[11px]">
+                        <div>
+                          <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Name</span>
+                          <span className="text-slate-200 font-semibold">{selectedLead.event_type === 'Other' ? (selectedLead.custom_event_name || selectedLead.custom_event_type || 'Other') : (selectedLead.event_type || 'General Event')}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Date</span>
+                          <span className="text-slate-200 font-semibold font-mono">{formatDDMMYYYY(selectedLead.event_date)}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Time</span>
+                          <span className="text-slate-200 font-semibold font-mono">{selectedLead.event_time ? convertTo12Hour(selectedLead.event_time) : 'TBD'}</span>
                         </div>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+
+                      {/* Reporting Inputs */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
                         <div>
                           <label className="block text-[10px] font-mono font-bold uppercase text-slate-400 mb-1">
                             Reporting Date *
@@ -12068,7 +12162,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 }
                               }));
                             }}
-                            className="w-full h-8 bg-slate-900 border border-slate-750 rounded-md px-2 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
                           />
                         </div>
                         <div>
@@ -12088,7 +12182,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 }
                               }));
                             }}
-                            className="w-full h-8 bg-slate-900 border border-slate-750 rounded-md px-2 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
                           />
                         </div>
                       </div>
@@ -12101,7 +12195,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               {/* Package cost and advance */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-medium text-slate-400 mb-1">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                     Final Package Amount (₹) *
                   </label>
                   <input
@@ -12109,70 +12203,71 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     required
                     readOnly
                     value={confirmForm.quotation_amount}
-                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono opacity-80 cursor-not-allowed"
+                    className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-3 text-slate-100 text-xs focus:outline-none font-mono opacity-80 cursor-not-allowed"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-medium text-slate-400 mb-1">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                     Advance Collected (₹)
                   </label>
                   <input
                     type="number"
                     value={confirmForm.advance_received}
                     onChange={(e) => setConfirmForm({ ...confirmForm, advance_received: Number(e.target.value) })}
-                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+                    className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-3 text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
                   />
                 </div>
               </div>
 
-              {/* Payment Mode */}
-              <div>
-                <label className="block font-medium text-slate-400 mb-1">
-                  Payment Mode
-                </label>
-                <select
-                  value={confirmForm.payment_mode}
-                  onChange={(e) => setConfirmForm({ ...confirmForm, payment_mode: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                >
-                  <option value="UPI">UPI (GPay/PhonePe)</option>
-                  <option value="Cash">Cash Handover</option>
-                  <option value="Bank Transfer">Bank NFT/RTGS/IMPS</option>
-                  <option value="Card">Credit/Debit Card</option>
-                  <option value="Cheque">Cheque Deposit</option>
-                </select>
-              </div>
+              {/* Payment Mode & Payment Tracking ID in a responsive 2-column layout */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Payment Mode
+                  </label>
+                  <select
+                    value={confirmForm.payment_mode}
+                    onChange={(e) => setConfirmForm({ ...confirmForm, payment_mode: e.target.value })}
+                    className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-3 text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  >
+                    <option value="UPI">UPI (GPay/PhonePe)</option>
+                    <option value="Cash">Cash Handover</option>
+                    <option value="Bank Transfer">Bank NFT/RTGS/IMPS</option>
+                    <option value="Card">Credit/Debit Card</option>
+                    <option value="Cheque">Cheque Deposit</option>
+                  </select>
+                </div>
 
-              {/* Payment Tracking ID / Transaction Reference Number */}
-              <div>
-                <label className="block font-medium text-slate-400 mb-1">
-                  Payment Tracking ID / Transaction Reference Number *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Enter Payment Tracking ID / Reference Number (e.g. TXN12345678)"
-                  value={confirmForm.transaction_id || ''}
-                  onChange={(e) => setConfirmForm({ ...confirmForm, transaction_id: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
-                />
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Payment Tracking / Ref Number *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. TXN12345678"
+                    value={confirmForm.transaction_id || ''}
+                    onChange={(e) => setConfirmForm({ ...confirmForm, transaction_id: e.target.value })}
+                    className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-3 text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
               </div>
 
               {/* Balance due readout */}
-              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center justify-between">
-                <span className="text-slate-350">Remaining Balance Due:</span>
-                <strong className="text-emerald-400 font-mono font-black text-sm">
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-between">
+                <span className="text-xs text-slate-300">Remaining Balance Due:</span>
+                <strong className="text-emerald-400 font-mono font-bold text-sm sm:text-base">
                   {formatINR(Math.max(0, confirmForm.quotation_amount - confirmForm.advance_received))}
                 </strong>
               </div>
 
-              {/* Buttons */}
-              <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
+              {/* Bottom Action Buttons */}
+              <div className="flex items-center justify-end gap-2.5 border-t border-slate-800 pt-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowConfirmModal(false)}
-                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs"
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs font-medium transition-colors"
                 >
                   Cancel
                 </button>
@@ -12180,7 +12275,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   type="submit"
                   id="btn_confirm_submit"
                   disabled={isSaving}
-                  className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-950/20 text-xs"
+                  className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-950/20 text-xs transition-all"
                 >
                   <span>{isSaving ? 'Processing...' : 'Approve & Book Contract'}</span>
                   {!isSaving && <ArrowRight className="w-3.5 h-3.5" />}
