@@ -1290,7 +1290,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ],
       payments: [
         'payment_id', 'order_id', 'quotation_amount', 'advance_received', 'balance_due', 
-        'final_payment_received', 'payment_date', 'payment_proof_url', 'payment_status'
+        'final_payment_received', 'payment_date', 'payment_proof_url', 'payment_status',
+        'transaction_id', 'Payment_type', 'payment_type', 'payment_collection_status', 'additional_received'
       ],
       activity_logs: [
         'log_id', 'user_name', 'role', 'action', 'module', 'record_id', 'timestamp', 
@@ -1324,6 +1325,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'staff_id', 'name', 'mobile', 'whatsapp_number', 'email', 'role', 'department', 'status', 'joining_date', 
         'profile_photo', 'notes', 'production_role_speciality', 'experience', 'employee_id', 'city', 'Skill', 'Staff_Type',
         'created_by', 'updated_by', 'created_at', 'updated_at'
+      ],
+      lead_events: [
+        'id', 'lead_id', 'event_type', 'event_name', 'event_shoot_type', 'event_date', 
+        'event_end_date', 'event_start_time', 'event_end_time', 'event_location', 
+        'google_maps_link', 'guest_pax', 'staff_pax', 'assigned_staff_names', 
+        'assigned_staff_mobiles', 'reporting_date', 'Reporting_date', 'reporting_time',
+        'created_at', 'updated_at'
       ]
     };
 
@@ -2195,7 +2203,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
                   event_start_date: e.event_start_date || e.event_date || '',
                   event_end_date: e.event_end_date || e.Event_End_Date || l.Event_End_Date || '',
                   event_start_time: e.event_start_time || '',
-                  event_end_time: e.event_end_time || ''
+                  event_end_time: e.event_end_time || '',
+                  reporting_date: e.reporting_date || e.Reporting_date || '',
+                  Reporting_date: e.Reporting_date || e.reporting_date || '',
+                  reporting_time: e.reporting_time || ''
                 }));
             }
             if (evts.length === 0 && l.notes_special_customizations) {
@@ -3523,6 +3534,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       throw new Error(`Lead record with ID "${leadId}" was not found in local cache.`);
     }
 
+    const cleanTxnId = (transactionId && typeof transactionId === 'string' && transactionId.trim() !== '' && transactionId.trim() !== 'N/A' && transactionId.trim() !== 'null' && transactionId.trim() !== 'NULL') ? transactionId.trim() : null;
     const resolvedRemarks = `${targetLead.remarks || ''}\n[Booking Confirmed Update ${new Date().toISOString().split('T')[0]}]: ${notes || 'No extra notes'}. Payment Mode: ${paymentMode || 'N/A'}`;
     const timestamp = new Date().toISOString();
 
@@ -3537,7 +3549,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       final_package_amount: quotationAmount,
       advance_collected: advanceReceived,
       payment_mode: paymentMode || 'N/A',
-      transaction_id: transactionId || 'N/A',
+      transaction_id: cleanTxnId || undefined,
       contract_notes: notes || 'No extra notes',
       event_date: eventDate || targetLead.event_date,
       event_time: eventTime || targetLead.event_time,
@@ -3718,21 +3730,60 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         advance_received: advanceReceived,
         balance_due: quotationAmount - advanceReceived,
         final_payment_received: 0,
+        payment_date: new Date().toISOString().split('T')[0],
         payment_proof_url: undefined,
         payment_status: advanceReceived >= quotationAmount ? 'Fully Paid' : (advanceReceived > 0 ? 'Partially Paid' : 'Pending'),
-        transaction_id: transactionId || undefined,
+        transaction_id: cleanTxnId || undefined,
+        Payment_type: 'Advance Payment',
+        payment_type: 'Advance Payment',
       };
       const rPay = await pushInsert('payments', newPayment);
       if (!rPay?.success) throw new Error("Failed to insert Payment: " + rPay?.error);
+
+      setPayments(prev => {
+        const exists = prev.some(p => p.payment_id === paymentId);
+        if (exists) {
+          return prev.map(p => p.payment_id === paymentId ? { ...p, ...newPayment } : p);
+        }
+        return [...prev, newPayment];
+      });
     } else if (existingPaymentId) {
-      const rPay = await pushUpdate('payments', 'payment_id', existingPaymentId, {
+      const updatedPaymentPayload = {
         quotation_amount: quotationAmount,
         advance_received: advanceReceived,
         balance_due: quotationAmount - advanceReceived,
+        payment_date: new Date().toISOString().split('T')[0],
         payment_status: advanceReceived >= quotationAmount ? 'Fully Paid' : (advanceReceived > 0 ? 'Partially Paid' : 'Pending'),
-        transaction_id: transactionId || undefined,
-      });
+        transaction_id: cleanTxnId || undefined,
+        Payment_type: 'Advance Payment',
+        payment_type: 'Advance Payment'
+      };
+      const rPay = await pushUpdate('payments', 'payment_id', existingPaymentId, updatedPaymentPayload);
       if (!rPay?.success) throw new Error("Failed to update Payment: " + rPay?.error);
+
+      setPayments(prev => prev.map(p => p.payment_id === existingPaymentId ? { ...p, ...updatedPaymentPayload } : p));
+    }
+
+    // Persist advance payment in payment history
+    if (advanceReceived > 0) {
+      const historyKey = `payment_history_${masterOrderId}`;
+      const existingHistoryStr = localStorage.getItem(historyKey);
+      let historyList: any[] = [];
+      if (existingHistoryStr) {
+        try { historyList = JSON.parse(existingHistoryStr); } catch (e) {}
+      }
+      if (!historyList.some((h: any) => h.paymentType === 'Advance Payment')) {
+        historyList.unshift({
+          date: new Date().toISOString(),
+          amount: advanceReceived,
+          transactionId: cleanTxnId || '',
+          paymentMode: paymentMode || 'UPI',
+          paymentType: 'Advance Payment',
+          updatedBy: currentUserName || 'System',
+          notes: 'Initial advance payment on order confirmation'
+        });
+        localStorage.setItem(historyKey, JSON.stringify(historyList));
+      }
     }
 
     // Operations
@@ -5173,6 +5224,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     isFullyPaid = outstanding === 0;
     const resolvedProofUrl = proofUrl || 'https://photocrew-receipts.s3.amazonaws.com/rec-custom.pdf';
     const finalPaymentType = paymentType || (targetPayment as any).Payment_type || targetPayment.payment_type || undefined;
+    const cleanTxnId = (transactionId && typeof transactionId === 'string' && transactionId.trim() !== '' && transactionId.trim() !== 'N/A' && transactionId.trim() !== 'null' && transactionId.trim() !== 'NULL') ? transactionId.trim() : null;
+    const resolvedTxnId = cleanTxnId !== null ? cleanTxnId : (targetPayment.transaction_id || undefined);
 
     const rPay = await pushUpdate('payments', 'payment_id', targetPayment.payment_id, {
       final_payment_received: targetPayment.final_payment_received + actualAmountReceived,
@@ -5180,7 +5233,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       payment_date: paymentDate,
       payment_proof_url: resolvedProofUrl,
       payment_status: isFullyPaid ? 'Fully Paid' : 'Partially Paid',
-      transaction_id: transactionId || targetPayment.transaction_id || undefined,
+      transaction_id: resolvedTxnId,
       Payment_type: finalPaymentType
     });
     if (!rPay?.success) {
@@ -5196,7 +5249,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         payment_date: paymentDate,
         payment_proof_url: resolvedProofUrl,
         payment_status: isFullyPaid ? 'Fully Paid' : 'Partially Paid',
-        transaction_id: transactionId || targetPayment.transaction_id || undefined,
+        transaction_id: resolvedTxnId,
         Payment_type: finalPaymentType,
         payment_type: finalPaymentType
       };
@@ -5222,7 +5275,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         historyList.push({
           date: targetPayment.payment_date || new Date().toISOString(),
           amount: targetPayment.advance_received,
-          transactionId: 'ADVANCE-INITIAL',
+          transactionId: targetPayment.transaction_id || '',
           paymentMode: 'Bank Transfer',
           paymentType: (targetPayment as any).Payment_type || targetPayment.payment_type || 'Advance Payment',
           updatedBy: 'System',
@@ -5235,7 +5288,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     historyList.push({
       date: new Date().toISOString(), // Use current date/time automatically as requested
       amount: actualAmountReceived,
-      transactionId: transactionId || 'TXN-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
+      transactionId: cleanTxnId || '',
       paymentMode: paymentMode || 'UPI',
       paymentType: finalPaymentType || 'Shoot Time Payment',
       updatedBy: currentUserName || 'System',
@@ -6533,7 +6586,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           staff_pax: String(ev.staff_pax) !== '' && ev.staff_pax != null ? Number(ev.staff_pax) : null,
           assigned_staff_names: ev.assigned_staff_names || '',
           assigned_staff_mobiles: ev.assigned_staff_mobiles || '',
-          reporting_date: ev.reporting_date || null,
+          reporting_date: ev.reporting_date || (ev as any).Reporting_date || null,
+          Reporting_date: ev.reporting_date || (ev as any).Reporting_date || null,
           reporting_time: ev.reporting_time || null
         };
 

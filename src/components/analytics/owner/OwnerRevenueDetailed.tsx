@@ -156,8 +156,9 @@ export const OwnerRevenueDetailed: React.FC = () => {
           historyList.push({
             date: p.payment_date || order?.created_at || new Date().toISOString(),
             amount: adv,
-            transactionId: 'ADVANCE-INITIAL',
+            transactionId: p.transaction_id || '',
             paymentMode: 'Bank Transfer',
+            paymentType: (p as any)?.Payment_type || p?.payment_type || 'Advance Payment',
             updatedBy: 'System',
             notes: 'Initial advance payment'
           });
@@ -166,8 +167,9 @@ export const OwnerRevenueDetailed: React.FC = () => {
           historyList.push({
             date: p.payment_date || order?.created_at || new Date().toISOString(),
             amount: finalRecv,
-            transactionId: p.transaction_id || 'FINAL-INITIAL',
+            transactionId: p.transaction_id || '',
             paymentMode: 'Bank Transfer',
+            paymentType: (p as any)?.Payment_type || p?.payment_type || 'Final Payment',
             updatedBy: 'System',
             notes: 'Recorded final payment'
           });

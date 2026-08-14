@@ -20,6 +20,7 @@ export const PaymentsModule: React.FC = () => {
   const [payDate, setPayDate] = useState('');
   const [proofUrl, setProofUrl] = useState('');
   const [transactionId, setTransactionId] = useState('');
+  const [paymentType, setPaymentType] = useState('');
 
   const handleSelectPayment = (orderId: string) => {
     setSelectedOrderId(orderId);
@@ -28,11 +29,16 @@ export const PaymentsModule: React.FC = () => {
     setProofUrl('');
     const existingPayment = payments.find((p) => p.order_id === orderId);
     setTransactionId(existingPayment?.transaction_id || '');
+    setPaymentType((existingPayment as any)?.Payment_type || existingPayment?.payment_type || '');
   };
 
   const handlePaySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOrderId || isSaving) return;
+    if (!paymentType || paymentType === '') {
+      alert('Please select a Payment Type *');
+      return;
+    }
     if (!payAmount || Number(payAmount) <= 0) {
       alert('Amount must be positive.');
       return;
@@ -40,7 +46,7 @@ export const PaymentsModule: React.FC = () => {
 
     try {
       setIsSaving(true);
-      await recordPayment(selectedOrderId, Number(payAmount), payDate, proofUrl, transactionId);
+      await recordPayment(selectedOrderId, Number(payAmount), payDate, proofUrl, transactionId, 'UPI', 'Recorded via ledger', paymentType);
       setSelectedOrderId(null);
       alert('Payment balance recorded successfully. Stage updated in master ledger!');
     } catch (err: any) {
@@ -218,6 +224,24 @@ export const PaymentsModule: React.FC = () => {
                         <p className="font-bold text-emerald-400 mt-0.5">{paymentItem.transaction_id}</p>
                       </div>
                     )}
+
+                    {/* Payment Type Selection */}
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-1.5 font-mono">
+                        Payment Type *
+                      </label>
+                      <select
+                        required
+                        value={paymentType}
+                        onChange={(e) => setPaymentType(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-850 rounded-xl py-3 px-4 text-xs text-zinc-100 font-mono focus:outline-none focus:ring-1 focus:ring-rose-500 font-bold"
+                      >
+                        <option value="">-- Select Payment Type * --</option>
+                        <option value="Shoot Time Payment">Shoot Time Payment</option>
+                        <option value="Advance Payment">Advance Payment</option>
+                        <option value="Final Payment">Final Payment</option>
+                      </select>
+                    </div>
 
                     {/* Commit Input */}
                     <div>

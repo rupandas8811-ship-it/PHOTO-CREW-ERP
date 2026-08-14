@@ -2985,6 +2985,29 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     transaction_id: '',
   });
 
+  // Final Reporting Details State per event
+  const [eventsReporting, setEventsReporting] = useState<Record<string, { reporting_date: string, reporting_time: string }>>({});
+
+  const initEventsReporting = (lead: Lead | null | undefined) => {
+    if (!lead) return;
+    const initialMap: Record<string, { reporting_date: string, reporting_time: string }> = {};
+    if (lead.events && Array.isArray(lead.events) && lead.events.length > 0) {
+      lead.events.forEach((ev, idx) => {
+        const key = ev.id || `ev_${idx}`;
+        initialMap[key] = {
+          reporting_date: ev.reporting_date || (ev as any).Reporting_date || ev.event_date || ev.event_start_date || lead.Reporting_date || (lead as any).reporting_date || lead.event_date || '',
+          reporting_time: ev.reporting_time || lead.reporting_time || ''
+        };
+      });
+    } else {
+      initialMap['default'] = {
+        reporting_date: lead.Reporting_date || (lead as any).reporting_date || lead.event_date || '',
+        reporting_time: lead.reporting_time || ''
+      };
+    }
+    setEventsReporting(initialMap);
+  };
+
   const [showFinalReportingModal, setShowFinalReportingModal] = useState(false);
   const [finalReportingForm, setFinalReportingForm] = useState<Record<string, { reporting_date: string, reporting_time: string }>>({});
 
@@ -3899,6 +3922,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     if (showConfirmModal) {
       triggerAutoScrollAndFocus('#confirm_booking_modal', 150);
       if (selectedLead) {
+         initEventsReporting(selectedLead);
          setConfirmForm(prev => ({
             ...prev,
             quotation_amount: Number(selectedLead.Final_Quotation_Amount) || Number(selectedLead.final_amount) || 0
@@ -9068,12 +9092,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     e.preventDefault();
     if (!selectedLead || isSaving) return;
 
-    if (!areReportingDetailsComplete(selectedLead)) {
-      setShowConfirmModal(false);
-      openReportingDetailsModal(selectedLead, "Please complete and save the Reporting Details before confirming the order.");
-      return;
-    }
-
     if (!confirmForm.event_date) {
       showToastMsg("Please select Confirmed Event Date.", "error");
       return;
@@ -9092,8 +9110,67 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return;
     }
 
+    // Validate that each event has a Reporting Date and Reporting Time
+    if (selectedLead.events && selectedLead.events.length > 0) {
+      for (let i = 0; i < selectedLead.events.length; i++) {
+        const ev = selectedLead.events[i];
+        const key = ev.id || `ev_${i}`;
+        const rep = eventsReporting[key];
+        const evTitle = ev.event_name || ev.event_type || `Event ${i + 1}`;
+        if (!rep?.reporting_date || !rep.reporting_date.trim()) {
+          showToastMsg(`Please enter Reporting Date for ${evTitle}.`, "error");
+          return;
+        }
+        if (!rep?.reporting_time || !rep.reporting_time.trim()) {
+          showToastMsg(`Please enter Reporting Time for ${evTitle}.`, "error");
+          return;
+        }
+      }
+    } else {
+      const rep = eventsReporting['default'];
+      if (!rep?.reporting_date || !rep.reporting_date.trim()) {
+        showToastMsg("Please enter Reporting Date.", "error");
+        return;
+      }
+      if (!rep?.reporting_time || !rep.reporting_time.trim()) {
+        showToastMsg("Please enter Reporting Time.", "error");
+        return;
+      }
+    }
+
     try {
       setIsSaving(true);
+
+      // Save each event's reporting details to lead_events table in Supabase
+      if (selectedLead.events && selectedLead.events.length > 0) {
+        const updatedEvents = selectedLead.events.map((ev, idx) => {
+          const key = ev.id || `ev_${idx}`;
+          const rep = eventsReporting[key] || { reporting_date: '', reporting_time: '' };
+          return {
+            ...ev,
+            reporting_date: rep.reporting_date || ev.reporting_date || ev.event_date || '',
+            Reporting_date: rep.reporting_date || (ev as any).Reporting_date || ev.event_date || '',
+            reporting_time: rep.reporting_time || ev.reporting_time || ''
+          };
+        });
+
+        await updateLead(selectedLead.lead_id, {
+          events: updatedEvents,
+          Reporting_date: updatedEvents[0]?.reporting_date || '',
+          reporting_time: updatedEvents[0]?.reporting_time || ''
+        });
+      } else {
+        const rep = eventsReporting['default'] || { reporting_date: '', reporting_time: '' };
+        await updateLead(selectedLead.lead_id, {
+          Reporting_date: rep.reporting_date,
+          reporting_time: rep.reporting_time
+        });
+      }
+
+      const firstRepTime = (selectedLead.events && selectedLead.events.length > 0)
+        ? eventsReporting[selectedLead.events[0].id || 'ev_0']?.reporting_time
+        : eventsReporting['default']?.reporting_time;
+
       await confirmOrder(
         selectedLead.lead_id,
         confirmForm.package_name,
@@ -9103,7 +9180,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         confirmForm.event_time,
         confirmForm.payment_mode,
         confirmForm.notes,
-        undefined,
+        firstRepTime,
         confirmForm.transaction_id
       );
 
@@ -9481,10 +9558,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   id="btn_confirm_order"
                   onClick={() => {
                     if (!selectedLead) return;
-                    if (!areReportingDetailsComplete(selectedLead)) {
-                      openReportingDetailsModal(selectedLead, "Please complete and save the Reporting Details before confirming the order.");
-                      return;
-                    }
                     const today = new Date().toISOString().split('T')[0];
                     const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
                     const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
@@ -9498,6 +9571,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       event_date: selectedLead.event_date || today,
                       event_time: selectedLead.event_time || ''
                     });
+                    initEventsReporting(selectedLead);
                     setShowConfirmModal(true);
                   }}
                   className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold py-2.5 px-4 rounded-xl shadow-lg shadow-emerald-950/20 text-xs transition-all cursor-pointer"
@@ -11736,11 +11810,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                             setOpenDropdownLeadId(null);
                                             handleSelectLead(lead);
 
-                                            if (!areReportingDetailsComplete(lead)) {
-                                              openReportingDetailsModal(lead, "Please complete and save the Reporting Details before confirming the order.");
-                                              return;
-                                            }
-
                                             const today = new Date().toISOString().split('T')[0];
                                             const linkedOrder = orders?.find(o => o.lead_id === lead.lead_id);
                                             const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
@@ -11754,6 +11823,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                               event_date: lead.event_date || today,
                                               event_time: lead.event_time || ''
                                             });
+                                            initEventsReporting(lead);
                                             setShowConfirmModal(true);
                                           }}
                                           className="w-full h-8 px-3 text-xs font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-white rounded-lg border border-emerald-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
@@ -11860,10 +11930,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       {/* Confirmation Modal to Officially Log and Book Contract */}
       {showConfirmModal && selectedLead && (
-        <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-4 backdrop-blur-md">
-          <div id="confirm_booking_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4">
+        <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-4 backdrop-blur-md overflow-y-auto">
+          <div id="confirm_booking_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-lg w-full shadow-2xl p-5 space-y-4 max-h-[90vh] flex flex-col my-auto">
             
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
               <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
                 <span>💍</span> Booking Confirmation & Contract Form
               </h4>
@@ -11875,13 +11945,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </button>
             </div>
 
-            <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 text-[11px] space-y-1">
+            <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 text-[11px] space-y-1 shrink-0">
               <p className="text-slate-400">Client: <strong className="text-slate-200">{selectedLead.customer_name}</strong></p>
               <p className="text-slate-400">Type: <strong className="text-slate-200">{selectedLead.event_type === 'Other' ? (selectedLead.custom_event_name || selectedLead.custom_event_type || 'Other') : selectedLead.event_type}</strong></p>
               <p className="text-slate-400">Address: <strong className="text-slate-200">{selectedLead.event_location}</strong></p>
             </div>
 
-            <form onSubmit={handleConfirmOrderSubmit} className="space-y-2.5 text-xs">
+            <form onSubmit={handleConfirmOrderSubmit} className="space-y-3 text-xs overflow-y-auto pr-1 flex-1 custom-scrollbar">
               
               {/* Product package */}
               <div>
@@ -11897,22 +11967,132 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1 px-2.5 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 />
               </div>
-              {/* Event Date & Time Block */}
+
+              {/* Event Date & Reporting Details Section */}
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-2">Confirmed Event Dates</label>
-                <div className="bg-slate-900 border border-slate-800 rounded-lg p-2 space-y-2">
+                <label className="block text-xs font-semibold text-amber-400 mb-1.5 flex items-center justify-between">
+                  <span>📅 Events & Reporting Details *</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Set reporting time for crew</span>
+                </label>
+                <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 space-y-3">
                   {selectedLead?.events && selectedLead.events.length > 0 ? (
-                    selectedLead.events.map((ev, i) => (
-                      <div key={i} className="flex flex-col gap-0.5 border-b border-slate-800/50 pb-2 last:border-0 last:pb-0">
-                        <span className="text-[11px] font-semibold text-amber-500">{ev.event_name || ev.event_type || 'Event'}</span>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-slate-400 font-mono">📅 {ev.event_date || 'TBD'}</span>
-                          <span className="text-[10px] text-slate-400 font-mono">⏰ {ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'TBD'}</span>
+                    selectedLead.events.map((ev, i) => {
+                      const key = ev.id || `ev_${i}`;
+                      const repData = eventsReporting[key] || {
+                        reporting_date: ev.reporting_date || (ev as any).Reporting_date || ev.event_date || '',
+                        reporting_time: ev.reporting_time || ''
+                      };
+                      return (
+                        <div key={key} className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-2.5 space-y-2">
+                          <div className="flex items-center justify-between border-b border-slate-800/60 pb-1.5">
+                            <span className="text-xs font-bold text-amber-400 font-sans">
+                              {ev.event_name || ev.event_type || `Event #${i + 1}`}
+                            </span>
+                            <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
+                              <span>📅 {ev.event_date ? formatDDMMYYYY(ev.event_date) : 'TBD'}</span>
+                              <span>•</span>
+                              <span>⏰ {ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'TBD'}</span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                            <div>
+                              <label className="block text-[10px] font-mono font-bold uppercase text-slate-400 mb-1">
+                                Reporting Date *
+                              </label>
+                              <input
+                                type="date"
+                                required
+                                value={repData.reporting_date || ''}
+                                onChange={(e) => {
+                                  setEventsReporting(prev => ({
+                                    ...prev,
+                                    [key]: {
+                                      ...(prev[key] || { reporting_time: '' }),
+                                      reporting_date: e.target.value
+                                    }
+                                  }));
+                                }}
+                                className="w-full h-8 bg-slate-900 border border-slate-750 rounded-md px-2 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-mono font-bold uppercase text-slate-400 mb-1">
+                                Reporting Time *
+                              </label>
+                              <input
+                                type="time"
+                                required
+                                value={repData.reporting_time || ''}
+                                onChange={(e) => {
+                                  setEventsReporting(prev => ({
+                                    ...prev,
+                                    [key]: {
+                                      ...(prev[key] || { reporting_date: '' }),
+                                      reporting_time: e.target.value
+                                    }
+                                  }));
+                                }}
+                                className="w-full h-8 bg-slate-900 border border-slate-750 rounded-md px-2 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-2.5 space-y-2">
+                      <div className="flex items-center justify-between border-b border-slate-800/60 pb-1.5">
+                        <span className="text-xs font-bold text-amber-400 font-sans">
+                          {selectedLead.event_type || 'Event'}
+                        </span>
+                        <div className="text-[10px] text-slate-400 font-mono">
+                          📅 {selectedLead.event_date ? formatDDMMYYYY(selectedLead.event_date) : 'TBD'}
                         </div>
                       </div>
-                    ))
-                  ) : (
-                    <div className="text-[10px] text-slate-500 text-center py-1">No events scheduled.</div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                        <div>
+                          <label className="block text-[10px] font-mono font-bold uppercase text-slate-400 mb-1">
+                            Reporting Date *
+                          </label>
+                          <input
+                            type="date"
+                            required
+                            value={eventsReporting['default']?.reporting_date || selectedLead.Reporting_date || (selectedLead as any).reporting_date || selectedLead.event_date || ''}
+                            onChange={(e) => {
+                              setEventsReporting(prev => ({
+                                ...prev,
+                                default: {
+                                  ...(prev['default'] || { reporting_time: '' }),
+                                  reporting_date: e.target.value
+                                }
+                              }));
+                            }}
+                            className="w-full h-8 bg-slate-900 border border-slate-750 rounded-md px-2 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-mono font-bold uppercase text-slate-400 mb-1">
+                            Reporting Time *
+                          </label>
+                          <input
+                            type="time"
+                            required
+                            value={eventsReporting['default']?.reporting_time || selectedLead.reporting_time || ''}
+                            onChange={(e) => {
+                              setEventsReporting(prev => ({
+                                ...prev,
+                                default: {
+                                  ...(prev['default'] || { reporting_date: '' }),
+                                  reporting_time: e.target.value
+                                }
+                              }));
+                            }}
+                            className="w-full h-8 bg-slate-900 border border-slate-750 rounded-md px-2 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
                 <input type="hidden" value={confirmForm.event_date || ''} />

@@ -1217,8 +1217,9 @@ export const PendingPaymentsReport: React.FC = () => {
             historyList.push({
               date: targetPayment?.payment_date || new Date().toISOString(),
               amount: adv,
-              transactionId: 'ADVANCE-INITIAL',
+              transactionId: targetPayment?.transaction_id || '',
               paymentMode: 'Bank Transfer',
+              paymentType: (targetPayment as any)?.Payment_type || targetPayment?.payment_type || 'Advance Payment',
               updatedBy: 'System',
               notes: 'Initial advance payment'
             });
@@ -1227,8 +1228,9 @@ export const PendingPaymentsReport: React.FC = () => {
             historyList.push({
               date: targetPayment?.payment_date || new Date().toISOString(),
               amount: finalRecv,
-              transactionId: targetPayment?.transaction_id || 'FINAL-INITIAL',
+              transactionId: targetPayment?.transaction_id || '',
               paymentMode: 'Bank Transfer',
+              paymentType: (targetPayment as any)?.Payment_type || targetPayment?.payment_type || 'Final Payment',
               updatedBy: 'System',
               notes: 'Recorded final payment'
             });
@@ -1352,7 +1354,7 @@ export const PendingPaymentsReport: React.FC = () => {
                                 });
                               } catch(e) {}
                               
-                              const displayType = h.paymentType || (paymentObj ? ((paymentObj as any).Payment_type || paymentObj.payment_type) : '') || (viewDetailsRecord?.payment ? ((viewDetailsRecord.payment as any).Payment_type || viewDetailsRecord.payment.payment_type) : '') || 'Shoot Time Payment';
+                              const displayType = h.paymentType || (paymentObj ? ((paymentObj as any).Payment_type || paymentObj.payment_type) : '') || (viewDetailsRecord?.payment ? ((viewDetailsRecord.payment as any).Payment_type || viewDetailsRecord.payment.payment_type) : '') || 'Advance Payment';
 
                               return (
                                 <tr key={index} className="hover:bg-zinc-900/20 text-zinc-300">
