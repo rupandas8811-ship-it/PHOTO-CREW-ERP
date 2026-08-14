@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useId } from 'react';
+import { createPortal } from 'react-dom';
 import { convertTo12Hour } from '../utils';
 
 interface EventDropdownCellProps {
@@ -9,18 +10,99 @@ interface EventDropdownCellProps {
 
 export const EventDropdownCell: React.FC<EventDropdownCellProps> = ({ type, items, events }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
+
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const instanceId = useId();
+
+  const updatePosition = () => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    const desiredWidth = 240;
+    const menuWidth = Math.min(desiredWidth, vw - 24);
+
+    let left = rect.left;
+    if (left + menuWidth > vw - 12) {
+      left = Math.max(12, vw - menuWidth - 12);
+    }
+    if (left < 12) {
+      left = 12;
+    }
+
+    const spaceBelow = vh - rect.bottom - 8;
+    const spaceAbove = rect.top - 8;
+
+    let top = rect.bottom + 4;
+    let maxHeight = Math.max(100, Math.min(300, spaceBelow));
+
+    if (spaceBelow < 160 && spaceAbove > spaceBelow) {
+      maxHeight = Math.max(100, Math.min(300, spaceAbove));
+      top = Math.max(12, rect.top - maxHeight - 4);
+    }
+
+    setCoords({
+      top,
+      left,
+      width: menuWidth,
+      maxHeight,
+    });
+  };
 
   useEffect(() => {
-    if (!isOpen) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+    const handleCloseOthers = (e: Event) => {
+      const customEv = e as CustomEvent<{ id: string }>;
+      if (customEv.detail?.id !== instanceId) {
         setIsOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('close-all-event-dropdowns', handleCloseOthers);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('close-all-event-dropdowns', handleCloseOthers);
+    };
+  }, [instanceId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    updatePosition();
+
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (buttonRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setIsOpen(false);
+    };
+
+    const handleScrollOrResize = () => {
+      if (buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect();
+        if (rect.bottom < 0 || rect.top > window.innerHeight) {
+          setIsOpen(false);
+          return;
+        }
+        updatePosition();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside, true);
+    document.addEventListener('touchstart', handleClickOutside, true);
+    window.addEventListener('resize', handleScrollOrResize, { passive: true });
+    window.addEventListener('scroll', handleScrollOrResize, { passive: true, capture: true });
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside, true);
+      document.removeEventListener('touchstart', handleClickOutside, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
     };
   }, [isOpen]);
 
@@ -52,13 +134,20 @@ export const EventDropdownCell: React.FC<EventDropdownCellProps> = ({ type, item
   const count = `(${items.length})`;
 
   return (
-    <div className="relative inline-block text-left w-[125px] h-[38px]" ref={containerRef}>
+    <div className="relative inline-block text-left w-[125px] h-[38px]">
       <div className="absolute inset-0 flex items-center justify-center">
         <button
+          ref={buttonRef}
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            setIsOpen(!isOpen);
+            if (!isOpen) {
+              window.dispatchEvent(new CustomEvent('close-all-event-dropdowns', { detail: { id: instanceId } }));
+              updatePosition();
+              setIsOpen(true);
+            } else {
+              setIsOpen(false);
+            }
           }}
           className="w-full min-h-[38px] h-auto py-1 px-2 flex items-center justify-center gap-1 text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 rounded transition-colors cursor-pointer select-none border border-indigo-500/20 font-mono leading-tight text-center relative z-10"
         >
@@ -70,9 +159,16 @@ export const EventDropdownCell: React.FC<EventDropdownCellProps> = ({ type, item
         </button>
       </div>
 
-      {isOpen && (
+      {isOpen && coords && typeof document !== 'undefined' && createPortal(
         <div 
-          className="absolute left-0 top-full mt-1.5 w-60 rounded-xl bg-zinc-950 border border-zinc-800 shadow-2xl py-2 z-[100] max-h-80 overflow-y-auto select-none"
+          ref={menuRef}
+          className="fixed rounded-xl bg-zinc-950 border border-zinc-800 shadow-2xl py-2 z-[99999] overflow-y-auto select-none animate-in fade-in zoom-in-95 duration-100"
+          style={{
+            top: `${coords.top}px`,
+            left: `${coords.left}px`,
+            width: `${coords.width}px`,
+            maxHeight: `${coords.maxHeight}px`,
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           {type === 'name' && events && events.length > 0 ? (
@@ -108,7 +204,8 @@ export const EventDropdownCell: React.FC<EventDropdownCellProps> = ({ type, item
               </div>
             ))
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

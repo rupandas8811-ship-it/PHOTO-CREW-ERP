@@ -1,40 +1,70 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { convertTo12Hour } from '../utils';
+import React, { useState, useRef, useEffect, useId } from 'react';
+import { createPortal } from 'react-dom';
+import { Calendar } from 'lucide-react';
 
 interface UnifiedEventDropdownCellProps {
   lead: any;
 }
 
-export const UnifiedEventDropdownCell: React.FC<UnifiedEventDropdownCellProps> = ({ lead }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [openUpward, setOpenUpward] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
+// Helper to convert date to DD-MM-YYYY
+function formatDateDDMMYYYY(dateStr?: string): string {
+  if (!dateStr || dateStr === '—' || dateStr === 'N/A' || dateStr === 'null') return '—';
+  // Handle ISO string or YYYY-MM-DD
+  const clean = dateStr.split('T')[0].trim();
+  const parts = clean.split('-');
+  if (parts.length === 3 && parts[0].length === 4) {
+    const [yyyy, mm, dd] = parts;
+    return `${dd.padStart(2, '0')}-${mm.padStart(2, '0')}-${yyyy}`;
+  }
+  // Handle DD/MM/YYYY or DD-MM-YYYY
+  if (clean.includes('/')) {
+    const slashParts = clean.split('/');
+    if (slashParts.length === 3) {
+      if (slashParts[2].length === 4) {
+        return `${slashParts[0].padStart(2, '0')}-${slashParts[1].padStart(2, '0')}-${slashParts[2]}`;
       }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (isOpen && containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      if (spaceBelow < 220 && rect.top > 220) {
-        setOpenUpward(true);
-      } else {
-        setOpenUpward(false);
+      if (slashParts[0].length === 4) {
+        return `${slashParts[2].padStart(2, '0')}-${slashParts[1].padStart(2, '0')}-${slashParts[0]}`;
       }
     }
-  }, [isOpen]);
+  }
+  return clean;
+}
+
+// Helper to format time to 12-hour format: 08:31 PM
+function formatTime12H(timeStr?: string): string {
+  if (!timeStr || timeStr === '—' || timeStr === 'N/A' || timeStr === 'null') return '';
+  const trimmed = timeStr.trim();
+  if (trimmed.toUpperCase().includes('AM') || trimmed.toUpperCase().includes('PM')) {
+    return trimmed;
+  }
+  const parts = trimmed.split(':');
+  if (parts.length >= 2) {
+    const h = parseInt(parts[0], 10);
+    const m = parts[1].slice(0, 2);
+    if (!isNaN(h)) {
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 || 12;
+      return `${h12.toString().padStart(2, '0')}:${m} ${ampm}`;
+    }
+  }
+  return trimmed;
+}
+
+export const UnifiedEventDropdownCell: React.FC<UnifiedEventDropdownCellProps> = ({ lead }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [coords, setCoords] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+    openUpward: boolean;
+  } | null>(null);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const instanceId = useId();
 
   // Extract events array for this lead or order
   let eventsList: Array<{
@@ -73,104 +103,233 @@ export const UnifiedEventDropdownCell: React.FC<UnifiedEventDropdownCellProps> =
     }];
   }
 
-  const isSingle = eventsList.length === 1;
+  // Function to calculate exact floating coordinates
+  const updatePosition = () => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
 
-  // Active event to display on button
-  const activeIndex = selectedIndex !== null ? selectedIndex : 0;
-  const activeEvent = eventsList[activeIndex] || eventsList[0];
+    // Floating popup width
+    const popupWidth = Math.min(230, vw - 24);
 
-  // Button title formatting
-  let buttonTitle = activeEvent.event_name || 'Event 1';
-  if (!isSingle && selectedIndex === null) {
-    buttonTitle = 'Select Event';
-  }
+    // Horizontal placement: align near button, ensure clamped within viewport
+    let left = rect.left;
+    if (left + popupWidth > vw - 12) {
+      left = Math.max(12, vw - popupWidth - 12);
+    }
+    if (left < 12) {
+      left = 12;
+    }
 
-  const formattedStartTime = activeEvent.event_start_time ? convertTo12Hour(activeEvent.event_start_time) : '';
+    // Vertical placement: calculate space above vs below
+    const spaceBelow = vh - rect.bottom - 8;
+    const spaceAbove = rect.top - 8;
+
+    let openUpward = false;
+    let top = rect.bottom + 6;
+    let maxHeight = Math.max(140, Math.min(320, spaceBelow));
+
+    if (spaceBelow < 180 && spaceAbove > spaceBelow) {
+      openUpward = true;
+      maxHeight = Math.max(140, Math.min(320, spaceAbove));
+      top = Math.max(12, rect.top - maxHeight - 6);
+    }
+
+    setCoords({
+      top,
+      left,
+      width: popupWidth,
+      maxHeight,
+      openUpward,
+    });
+  };
+
+  // Ensure only one dropdown is open across the entire app
+  useEffect(() => {
+    const handleCloseOthers = (e: Event) => {
+      const customEv = e as CustomEvent<{ id: string }>;
+      if (customEv.detail?.id !== instanceId) {
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener('close-all-event-dropdowns', handleCloseOthers);
+    return () => {
+      window.removeEventListener('close-all-event-dropdowns', handleCloseOthers);
+    };
+  }, [instanceId]);
+
+  // Handle outside clicks, resize, scroll repositioning
+  useEffect(() => {
+    if (!isOpen) return;
+
+    updatePosition();
+
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (buttonRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setIsOpen(false);
+    };
+
+    const handleScrollOrResize = () => {
+      if (buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect();
+        if (rect.bottom < 0 || rect.top > window.innerHeight) {
+          setIsOpen(false);
+          return;
+        }
+        updatePosition();
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick, true);
+    document.addEventListener('touchstart', handleOutsideClick, true);
+    window.addEventListener('resize', handleScrollOrResize, { passive: true });
+    window.addEventListener('scroll', handleScrollOrResize, { passive: true, capture: true });
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick, true);
+      document.removeEventListener('touchstart', handleOutsideClick, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+    };
+  }, [isOpen, eventsList.length]);
+
+  const toggleDropdown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isOpen) {
+      window.dispatchEvent(new CustomEvent('close-all-event-dropdowns', { detail: { id: instanceId } }));
+      updatePosition();
+      setIsOpen(true);
+    } else {
+      setIsOpen(false);
+    }
+  };
 
   return (
-    <div className="relative inline-block text-left w-full max-w-[220px]" ref={containerRef}>
+    <div className="inline-block text-left" ref={containerRef}>
       <button
+        ref={buttonRef}
         type="button"
-        onClick={(e) => {
-          if (isSingle) return;
-          e.stopPropagation();
-          setIsOpen(!isOpen);
-        }}
-        className={`w-full text-left px-2.5 py-1.5 rounded-xl transition-all font-sans group shadow-sm flex flex-col gap-0.5 ${
-          isSingle 
-            ? 'bg-transparent border-0 p-0 shadow-none cursor-default' 
-            : 'bg-zinc-900/90 hover:bg-zinc-850 border border-zinc-800 hover:border-indigo-500/50 cursor-pointer'
+        onClick={toggleDropdown}
+        className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer shadow-xs whitespace-nowrap select-none ${
+          isOpen
+            ? 'bg-sky-500/25 text-sky-300 border border-sky-400/60 ring-2 ring-sky-500/20'
+            : 'bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 hover:text-sky-300 border border-sky-500/30 hover:border-sky-500/50'
         }`}
-        title={buttonTitle}
+        title="Click to View Event Details"
       >
-        <div className="flex items-center justify-between w-full gap-1">
-          <span className="text-xs font-bold text-indigo-300 group-hover:text-indigo-200 truncate flex items-center gap-1.5">
-            {!isSingle && (
-              <span className="text-[10px] text-indigo-400 shrink-0">{isOpen ? '▲' : '▾'}</span>
-            )}
-            <span className="truncate">{buttonTitle}</span>
-          </span>
-        </div>
-
-        <div className="text-[10.5px] font-mono text-zinc-400 truncate flex items-center gap-1">
-          <span>{activeEvent.event_date || '—'}</span>
-          {formattedStartTime && <span className="text-zinc-500">• {formattedStartTime}</span>}
-        </div>
-
-        {activeEvent.shoot_type && (
-          <div className="text-[10px] font-mono uppercase text-zinc-500 truncate">
-            {activeEvent.shoot_type}
-          </div>
-        )}
+        <Calendar className="w-3.5 h-3.5 shrink-0 text-sky-400" />
+        <span>Click to View</span>
       </button>
 
-      {isOpen && !isSingle && (
+      {isOpen && coords && typeof document !== 'undefined' && createPortal(
         <div
-          className={`absolute left-0 z-[150] min-w-full w-[220px] max-w-[calc(100vw-32px)] rounded-xl bg-zinc-950 border border-zinc-800 shadow-2xl p-1.5 space-y-1 select-none max-h-60 overflow-y-auto ${
-            openUpward ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-          }`}
+          ref={menuRef}
+          className="fixed rounded-xl bg-slate-900 border border-slate-750 shadow-2xl overflow-hidden z-[99999] animate-in fade-in zoom-in-95 duration-100 backdrop-blur-md"
+          style={{
+            top: `${coords.top}px`,
+            left: `${coords.left}px`,
+            width: `${coords.width}px`,
+            maxHeight: `${coords.maxHeight}px`,
+          }}
           onClick={(e) => e.stopPropagation()}
         >
-          {eventsList.map((ev, idx) => {
-            const startTimeStr = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '';
-            const isSelected = selectedIndex === idx;
+          <div className="overflow-y-auto max-h-[inherit]">
+            {eventsList.length <= 1 ? (
+              // Single Event Display
+              (() => {
+                const ev = eventsList[0];
+                const evFormattedDate = formatDateDDMMYYYY(ev.event_date);
+                const evFormattedTime = formatTime12H(ev.event_start_time) || '—';
+                return (
+                  <div className="p-3.5 space-y-3 font-sans">
+                    <div>
+                      <span className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase block">
+                        EVENT
+                      </span>
+                      <span className="text-xs font-bold text-white block mt-0.5">
+                        {ev.event_name || 'Event 1'}
+                      </span>
+                    </div>
 
-            return (
-              <div
-                key={idx}
-                onClick={() => {
-                  setSelectedIndex(idx);
-                  setIsOpen(false);
-                }}
-                className={`p-2 rounded-lg border text-left cursor-pointer transition-all ${
-                  isSelected
-                    ? 'bg-indigo-950/80 border-indigo-500/60 text-white'
-                    : 'bg-zinc-900/70 border-zinc-850 hover:bg-zinc-850 text-zinc-300'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-1">
-                  <span className="text-xs font-bold text-indigo-300 truncate">
-                    {ev.event_name || `Event ${idx + 1}`}
-                  </span>
-                  {isSelected && (
-                    <span className="text-[10px] text-indigo-400 font-mono shrink-0">✓</span>
-                  )}
-                </div>
-                <div className="text-[10.5px] font-mono text-zinc-400 truncate mt-0.5">
-                  <span>{ev.event_date || '—'}</span>
-                  {startTimeStr && <span className="text-zinc-500"> • {startTimeStr}</span>}
-                </div>
-                {ev.shoot_type && (
-                  <div className="text-[10px] font-mono uppercase text-zinc-500 truncate mt-0.5">
-                    {ev.shoot_type}
+                    <div className="border-t border-slate-800/80 pt-2">
+                      <span className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase block">
+                        DATE
+                      </span>
+                      <span className="text-xs font-semibold text-slate-200 font-mono block mt-0.5">
+                        {evFormattedDate}
+                      </span>
+                    </div>
+
+                    <div className="border-t border-slate-800/80 pt-2">
+                      <span className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase block">
+                        TIME
+                      </span>
+                      <span className="text-xs font-semibold text-slate-200 font-mono block mt-0.5">
+                        {evFormattedTime}
+                      </span>
+                    </div>
+
+                    {ev.shoot_type && (
+                      <div className="border-t border-slate-800/80 pt-2">
+                        <span className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase block">
+                          SHOOT TYPE
+                        </span>
+                        <span className="text-[11px] font-medium text-sky-400 block mt-0.5">
+                          {ev.shoot_type}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                )}
+                );
+              })()
+            ) : (
+              // Multiple Events Display
+              <div className="p-2.5 space-y-2 font-sans">
+                <div className="px-1 py-0.5 text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider border-b border-slate-800/80 pb-1.5 flex items-center justify-between">
+                  <span>Events</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 font-mono">
+                    {eventsList.length} Total
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {eventsList.map((ev, idx) => {
+                    const evFormattedDate = formatDateDDMMYYYY(ev.event_date);
+                    const evFormattedTime = formatTime12H(ev.event_start_time);
+                    return (
+                      <div
+                        key={idx}
+                        className="p-2 rounded-lg bg-slate-800/60 border border-slate-750/70 hover:bg-slate-800 transition-colors"
+                      >
+                        <div className="text-xs font-bold text-white">
+                          {ev.event_name || `Event ${idx + 1}`}
+                        </div>
+                        <div className="text-[11px] font-mono text-slate-300 mt-1 flex items-center gap-1.5 flex-wrap">
+                          <span>{evFormattedDate}</span>
+                          {evFormattedTime && (
+                            <>
+                              <span className="text-slate-500">·</span>
+                              <span className="text-sky-300">{evFormattedTime}</span>
+                            </>
+                          )}
+                        </div>
+                        {ev.shoot_type && (
+                          <div className="text-[10px] text-sky-400/90 font-medium mt-1">
+                            {ev.shoot_type}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            );
-          })}
-        </div>
+            )}
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
 };
-

@@ -452,6 +452,8 @@ export interface Payment {
   payment_collection_status?: string;
   additional_received?: number;
   transaction_id?: string;
+  Payment_type?: string;
+  payment_type?: string;
 }
 
 export interface CalendarMemo {

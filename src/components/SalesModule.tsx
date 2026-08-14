@@ -213,23 +213,34 @@ export function buildStep3EventPayloads(
   editableDeliverables: Record<string, any[]>
 ) {
   const effectivePkgId = pkgId || 'Custom Package';
-  const eventsList = (currentEvents && currentEvents.length > 0) ? currentEvents : [null];
+  const hasEvents = currentEvents && currentEvents.length > 0;
+  const isMultiEvent = hasEvents && currentEvents.length > 1;
+  const eventsList = hasEvents ? currentEvents : [null];
 
   const teamMembersJson = eventsList.map((event, idx) => {
     const evId = event?.id || event?.event_id || `event_${idx + 1}`;
     const evName = event?.event_name || event?.event_type || 'Unnamed Event';
 
-    const keysToTry = [
-      `${effectivePkgId}_${evId}`,
-      `${effectivePkgId}_${evName}`,
-      `Custom Package_${evId}`,
-      `Custom Package_${evName}`,
-      `custom_package_${evId}`,
-      `custom_package_${evName}`,
-      effectivePkgId,
-      'Custom Package',
-      'custom_package'
-    ];
+    const keysToTry = isMultiEvent
+      ? [
+          `${effectivePkgId}_${evId}`,
+          `${effectivePkgId}_${evName}`,
+          `Custom Package_${evId}`,
+          `Custom Package_${evName}`,
+          `custom_package_${evId}`,
+          `custom_package_${evName}`
+        ]
+      : [
+          `${effectivePkgId}_${evId}`,
+          `${effectivePkgId}_${evName}`,
+          `Custom Package_${evId}`,
+          `Custom Package_${evName}`,
+          `custom_package_${evId}`,
+          `custom_package_${evName}`,
+          effectivePkgId,
+          'Custom Package',
+          'custom_package'
+        ];
 
     let list: any[] = [];
     for (const k of keysToTry) {
@@ -250,17 +261,26 @@ export function buildStep3EventPayloads(
     const evId = event?.id || event?.event_id || `event_${idx + 1}`;
     const evName = event?.event_name || event?.event_type || 'Unnamed Event';
 
-    const keysToTry = [
-      `${effectivePkgId}_${evId}`,
-      `${effectivePkgId}_${evName}`,
-      `Custom Package_${evId}`,
-      `Custom Package_${evName}`,
-      `custom_package_${evId}`,
-      `custom_package_${evName}`,
-      effectivePkgId,
-      'Custom Package',
-      'custom_package'
-    ];
+    const keysToTry = isMultiEvent
+      ? [
+          `${effectivePkgId}_${evId}`,
+          `${effectivePkgId}_${evName}`,
+          `Custom Package_${evId}`,
+          `Custom Package_${evName}`,
+          `custom_package_${evId}`,
+          `custom_package_${evName}`
+        ]
+      : [
+          `${effectivePkgId}_${evId}`,
+          `${effectivePkgId}_${evName}`,
+          `Custom Package_${evId}`,
+          `Custom Package_${evName}`,
+          `custom_package_${evId}`,
+          `custom_package_${evName}`,
+          effectivePkgId,
+          'Custom Package',
+          'custom_package'
+        ];
 
     let list: any[] = [];
     for (const k of keysToTry) {
@@ -277,8 +297,23 @@ export function buildStep3EventPayloads(
     };
   });
 
-  const flatTeamMembers = teamMembersJson.flatMap(e => e.team_members || []);
-  const flatDeliverables = deliverablesJson.flatMap(e => e.deliverables || []);
+  let flatTeamMembers: { name: string; qty: number }[] = [];
+  const eventTeamMembers = teamMembersJson.flatMap(e => e.team_members || []);
+  if (eventTeamMembers.length > 0) {
+    flatTeamMembers = eventTeamMembers;
+  } else {
+    const pkgList = editableInclusions[effectivePkgId] || editableInclusions['Custom Package'] || editableInclusions['custom_package'] || [];
+    flatTeamMembers = formatListToStructuredObjects(pkgList);
+  }
+
+  let flatDeliverables: { name: string; qty: number }[] = [];
+  const eventDeliverables = deliverablesJson.flatMap(e => e.deliverables || []);
+  if (eventDeliverables.length > 0) {
+    flatDeliverables = eventDeliverables;
+  } else {
+    const pkgList = editableDeliverables[effectivePkgId] || editableDeliverables['Custom Package'] || editableDeliverables['custom_package'] || [];
+    flatDeliverables = formatListToStructuredObjects(pkgList);
+  }
 
   return {
     teamMembersJson,
@@ -323,13 +358,8 @@ export function parseTeamMembersJsonToRecord(
         const { qty, text } = parseQtyAndText(item);
         if (text) generalList.push(combineQtyAndText(qty, text));
       } else if (item && typeof item === 'object') {
-        const rawName = item.role || item.member_name || item.name || item.text || item.title || '';
-        const { qty: parsedQty, text: parsedText } = parseQtyAndText(rawName);
-        const itemQty = item.qty || item.quantity || parsedQty || 1;
-
-        if (parsedText) {
-          generalList.push(combineQtyAndText(itemQty, parsedText));
-        } else {
+        const isEventStructure = (item.event_name || item.event_type || item.event_id) && (Array.isArray(item.team_members) || Array.isArray(item.members));
+        if (isEventStructure) {
           const evName = item.event_name || item.event_type;
           const evId = item.event_id;
           const membersList = Array.isArray(item.team_members) ? item.team_members : (Array.isArray(item.members) ? item.members : []);
@@ -362,30 +392,38 @@ export function parseTeamMembersJsonToRecord(
               }
             }
           }
+        } else {
+          const rawName = item.role || item.member_name || item.name || item.text || item.title || '';
+          const { qty: parsedQty, text: parsedText } = parseQtyAndText(rawName);
+          const q = Number(item.qty || item.quantity || item.count || parsedQty || 1);
+          const itemQty = isNaN(q) || q < 1 ? 1 : q;
+          if (parsedText) {
+            generalList.push(combineQtyAndText(itemQty, parsedText));
+          }
         }
       }
     });
 
-    if (generalList.length > 0 || Object.keys(result).length === 0) {
+    if (generalList.length > 0) {
       result[pkgId] = generalList;
       result['Custom Package'] = generalList;
       result['custom_package'] = generalList;
-      if (eventsList && eventsList.length > 0) {
-        eventsList.forEach((ev: any) => {
-          if (!ev) return;
-          const evId = ev.id || ev.event_id;
-          const evName = ev.event_name || ev.event_type;
+      if (eventsList && eventsList.length === 1) {
+        const singleEv = eventsList[0];
+        if (singleEv) {
+          const evId = singleEv.id || singleEv.event_id;
+          const evName = singleEv.event_name || singleEv.event_type;
           if (evId) {
-            if (!result[`${pkgId}_${evId}`]) result[`${pkgId}_${evId}`] = generalList;
-            if (!result[`Custom Package_${evId}`]) result[`Custom Package_${evId}`] = generalList;
-            if (!result[`custom_package_${evId}`]) result[`custom_package_${evId}`] = generalList;
+            result[`${pkgId}_${evId}`] = generalList;
+            result[`Custom Package_${evId}`] = generalList;
+            result[`custom_package_${evId}`] = generalList;
           }
           if (evName) {
-            if (!result[`${pkgId}_${evName}`]) result[`${pkgId}_${evName}`] = generalList;
-            if (!result[`Custom Package_${evName}`]) result[`Custom Package_${evName}`] = generalList;
-            if (!result[`custom_package_${evName}`]) result[`custom_package_${evName}`] = generalList;
+            result[`${pkgId}_${evName}`] = generalList;
+            result[`Custom Package_${evName}`] = generalList;
+            result[`custom_package_${evName}`] = generalList;
           }
-        });
+        }
       }
     }
   } else if (parsed && typeof parsed === 'object') {
@@ -435,13 +473,8 @@ export function parseDeliverablesJsonToRecord(
         const { qty, text } = parseQtyAndText(item);
         if (text) generalList.push(combineQtyAndText(qty, text));
       } else if (item && typeof item === 'object') {
-        const rawName = item.name || item.deliverable || item.title || item.text || '';
-        const { qty: parsedQty, text: parsedText } = parseQtyAndText(rawName);
-        const itemQty = item.qty || item.quantity || parsedQty || 1;
-
-        if (parsedText) {
-          generalList.push(combineQtyAndText(itemQty, parsedText));
-        } else {
+        const isEventStructure = (item.event_name || item.event_type || item.event_id) && (Array.isArray(item.deliverables) || Array.isArray(item.deliverables_list));
+        if (isEventStructure) {
           const evName = item.event_name || item.event_type;
           const evId = item.event_id;
           let deliverables: string[] = [];
@@ -450,12 +483,16 @@ export function parseDeliverablesJsonToRecord(
               const { qty, text } = parseQtyAndText(d);
               return text ? combineQtyAndText(qty, text) : '';
             }).filter(Boolean);
+          } else if (Array.isArray(item.deliverables_list)) {
+            deliverables = item.deliverables_list.map((d: any) => {
+              const { qty, text } = parseQtyAndText(d);
+              return text ? combineQtyAndText(qty, text) : '';
+            }).filter(Boolean);
           }
 
-          if (evName === 'General' || !evName || evName === 'Unnamed Event' || (eventsList.length <= 1)) {
+          if (evName === 'General' || !evName || evName === 'Unnamed Event') {
             generalList = [...generalList, ...deliverables];
-          }
-          if (evName !== 'General' && evName) {
+          } else {
             if (deliverables.length > 0) {
               result[`${pkgId}_${evName}`] = deliverables;
               result[`Custom Package_${evName}`] = deliverables;
@@ -477,30 +514,38 @@ export function parseDeliverablesJsonToRecord(
               }
             }
           }
+        } else {
+          const rawName = item.name || item.deliverable || item.title || item.text || '';
+          const { qty: parsedQty, text: parsedText } = parseQtyAndText(rawName);
+          const q = Number(item.qty || item.quantity || item.count || parsedQty || 1);
+          const itemQty = isNaN(q) || q < 1 ? 1 : q;
+          if (parsedText) {
+            generalList.push(combineQtyAndText(itemQty, parsedText));
+          }
         }
       }
     });
 
-    if (generalList.length > 0 || Object.keys(result).length === 0) {
+    if (generalList.length > 0) {
       result[pkgId] = generalList;
       result['Custom Package'] = generalList;
       result['custom_package'] = generalList;
-      if (eventsList && eventsList.length > 0) {
-        eventsList.forEach((ev: any) => {
-          if (!ev) return;
-          const evId = ev.id || ev.event_id;
-          const evName = ev.event_name || ev.event_type;
+      if (eventsList && eventsList.length === 1) {
+        const singleEv = eventsList[0];
+        if (singleEv) {
+          const evId = singleEv.id || singleEv.event_id;
+          const evName = singleEv.event_name || singleEv.event_type;
           if (evId) {
-            if (!result[`${pkgId}_${evId}`]) result[`${pkgId}_${evId}`] = generalList;
-            if (!result[`Custom Package_${evId}`]) result[`Custom Package_${evId}`] = generalList;
-            if (!result[`custom_package_${evId}`]) result[`custom_package_${evId}`] = generalList;
+            result[`${pkgId}_${evId}`] = generalList;
+            result[`Custom Package_${evId}`] = generalList;
+            result[`custom_package_${evId}`] = generalList;
           }
           if (evName) {
-            if (!result[`${pkgId}_${evName}`]) result[`${pkgId}_${evName}`] = generalList;
-            if (!result[`Custom Package_${evName}`]) result[`Custom Package_${evName}`] = generalList;
-            if (!result[`custom_package_${evName}`]) result[`custom_package_${evName}`] = generalList;
+            result[`${pkgId}_${evName}`] = generalList;
+            result[`Custom Package_${evName}`] = generalList;
+            result[`custom_package_${evName}`] = generalList;
           }
-        });
+        }
       }
     }
   } else if (parsed && typeof parsed === 'object') {
@@ -4818,7 +4863,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           ? editableInclusions[customLowerKey]
                           : (editableInclusions[customLowerNameKey] !== undefined
                             ? editableInclusions[customLowerNameKey]
-                            : inclusionsList)))));
+                            : (currentEvents.length === 1 ? inclusionsList : []))))));
 
                 const eventDeliverables = editableDeliverables[eventKey] !== undefined
                   ? editableDeliverables[eventKey]
@@ -4832,7 +4877,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           ? editableDeliverables[customLowerKey]
                           : (editableDeliverables[customLowerNameKey] !== undefined
                             ? editableDeliverables[customLowerNameKey]
-                            : deliverablesList)))));
+                            : (currentEvents.length === 1 ? deliverablesList : []))))));
 
                 const startDateStr = formatDDMMYYYY(event.event_start_date || event.event_date);
                 const endDateRaw = event.event_end_date || (event as any).Event_End_Date || '';
@@ -12894,11 +12939,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                                     const eventInclusions = editableInclusions[eventKey] !== undefined
                                       ? editableInclusions[eventKey]
-                                      : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList);
+                                      : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : (crmEvents.length === 1 ? inclusionsList : []));
 
                                     const eventDeliverables = editableDeliverables[eventKey] !== undefined
                                       ? editableDeliverables[eventKey]
-                                      : (editableDeliverables[nameKey] !== undefined ? editableDeliverables[nameKey] : deliverablesList);
+                                      : (editableDeliverables[nameKey] !== undefined ? editableDeliverables[nameKey] : (crmEvents.length === 1 ? deliverablesList : []));
 
                                     const startDateStr = formatDDMMYYYY(event.event_start_date || event.event_date);
                                     const endDateRaw = event.event_end_date || (event as any).Event_End_Date || '';
@@ -13589,10 +13634,49 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => handleSaveStep(crmWizardStep)}
+              <div className="flex flex-wrap items-center gap-2">
+                {crmWizardStep === 3 && (
+                  <button
+                    type="button"
+                    id="btn_step3_order_confirmed"
+                    onClick={() => {
+                      if (!selectedLead) return;
+                      if (!areReportingDetailsComplete(selectedLead)) {
+                        openReportingDetailsModal(selectedLead, "Please complete and save the Reporting Details before confirming the order.");
+                        return;
+                      }
+                      const today = new Date().toISOString().split('T')[0];
+                      const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
+                      const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
+                      const calcAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : (Number(selectedLead.advance_collected) || Number(wizardLeadData.advance_received) || 0));
+                      
+                      setConfirmForm({
+                        ...confirmForm,
+                        package_name: packages?.find((p) => String(p.package_id) === String(wizardLeadData.selected_package_id || selectedLead.Select_Package_Option))?.package_name || wizardLeadData.selected_package_id || selectedLead.Select_Package_Option || '',
+                        quotation_amount: Number(wizardLeadData.final_amount) || Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_amount) || 0,
+                        advance_received: calcAdvance,
+                        event_date: selectedLead.event_date || today,
+                        event_time: selectedLead.event_time || ''
+                      });
+                      setShowConfirmModal(true);
+                    }}
+                    disabled={isSaving || isCrmLocked || (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')}
+                    className={`px-4 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 border-0 ${
+                      isCrmLocked
+                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 shadow-none' :
+                      (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')
+                        ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shadow-emerald-950/20'
+                    }`}
+                  >
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    <span>ORDER CONFIRMED</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  id="btn_crm_save_step"
+                  onClick={() => handleSaveStep(crmWizardStep)}
                   disabled={isSaving || isCrmLocked || (crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === ''))}
                   className={`px-4 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 border-0 ${
                     isCrmLocked
@@ -13605,7 +13689,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   {isSaving ? (
                     <span className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
                   ) : null}
-                  <span>{isSaving ? 'Saving...' : crmWizardStep === 3 ? 'Save & Process' : 'Save & Next'}</span>
+                  <span>{isSaving ? 'Saving...' : crmWizardStep === 3 ? 'SAVE & FOLLOW-UP' : 'Save & Next'}</span>
                 </button>
               </div>
             </div>

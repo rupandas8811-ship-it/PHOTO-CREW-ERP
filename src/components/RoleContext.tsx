@@ -197,7 +197,8 @@ interface RoleContextType {
     proofUrl?: string,
     transactionId?: string,
     paymentMode?: string,
-    paymentNotes?: string
+    paymentNotes?: string,
+    paymentType?: string
   ) => Promise<void>;
   resetAllData: () => Promise<void>;
   refreshData: () => void;
@@ -5147,7 +5148,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     proofUrl?: string,
     transactionId?: string,
     paymentMode?: string,
-    paymentNotes?: string
+    paymentNotes?: string,
+    paymentType?: string
   ) => {
     let isFullyPaid = false;
     const targetPayment = augmentedPayments.find((p) => p.order_id === orderId);
@@ -5170,6 +5172,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     const outstanding = Math.max(0, targetPayment.quotation_amount - totalPaid);
     isFullyPaid = outstanding === 0;
     const resolvedProofUrl = proofUrl || 'https://photocrew-receipts.s3.amazonaws.com/rec-custom.pdf';
+    const finalPaymentType = paymentType || (targetPayment as any).Payment_type || targetPayment.payment_type || undefined;
 
     const rPay = await pushUpdate('payments', 'payment_id', targetPayment.payment_id, {
       final_payment_received: targetPayment.final_payment_received + actualAmountReceived,
@@ -5177,7 +5180,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       payment_date: paymentDate,
       payment_proof_url: resolvedProofUrl,
       payment_status: isFullyPaid ? 'Fully Paid' : 'Partially Paid',
-      transaction_id: transactionId || targetPayment.transaction_id || undefined
+      transaction_id: transactionId || targetPayment.transaction_id || undefined,
+      Payment_type: finalPaymentType
     });
     if (!rPay?.success) {
       throw new Error("Failed to record payment in database: " + rPay?.error);
@@ -5192,7 +5196,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         payment_date: paymentDate,
         payment_proof_url: resolvedProofUrl,
         payment_status: isFullyPaid ? 'Fully Paid' : 'Partially Paid',
-        transaction_id: transactionId || targetPayment.transaction_id || undefined
+        transaction_id: transactionId || targetPayment.transaction_id || undefined,
+        Payment_type: finalPaymentType,
+        payment_type: finalPaymentType
       };
       if (exists) {
         return prev.map(p => p.payment_id === targetPayment.payment_id ? { ...p, ...updatedPayment } : p);
@@ -5218,6 +5224,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           amount: targetPayment.advance_received,
           transactionId: 'ADVANCE-INITIAL',
           paymentMode: 'Bank Transfer',
+          paymentType: (targetPayment as any).Payment_type || targetPayment.payment_type || 'Advance Payment',
           updatedBy: 'System',
           notes: 'Initial advance payment'
         });
@@ -5230,6 +5237,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       amount: actualAmountReceived,
       transactionId: transactionId || 'TXN-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
       paymentMode: paymentMode || 'UPI',
+      paymentType: finalPaymentType || 'Shoot Time Payment',
       updatedBy: currentUserName || 'System',
       notes: paymentNotes || 'Recorded via update payment'
     });

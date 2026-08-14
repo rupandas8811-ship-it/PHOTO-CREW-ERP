@@ -36,6 +36,7 @@ export const PendingPaymentsReport: React.FC = () => {
   const [paymentNotes, setPaymentNotes] = useState('');
   const [transactionIdInput, setTransactionIdInput] = useState('');
   const [paymentMode, setPaymentMode] = useState('UPI');
+  const [paymentType, setPaymentType] = useState('');
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [viewDetailsRecord, setViewDetailsRecord] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -942,6 +943,9 @@ export const PendingPaymentsReport: React.FC = () => {
                             setPaymentAmount('');
                             setTransactionIdInput('');
                             setPaymentMode('UPI');
+                            const linkedPay = payments.find(p => p.order_id === rec.orderId || (rec.payment && p.payment_id === rec.payment.payment_id));
+                            const existingType = (linkedPay as any)?.Payment_type || linkedPay?.payment_type || (rec.payment as any)?.Payment_type || rec.payment?.payment_type || '';
+                            setPaymentType(existingType);
                             setPaymentNotes('');
                             setModalSuccessMsg('');
                             setModalErrorMsg('');
@@ -1042,6 +1046,29 @@ export const PendingPaymentsReport: React.FC = () => {
               ) : (
                 <>
                   <div className="space-y-1">
+                    <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                      <span>Payment Type</span>
+                      <span className="text-rose-500 font-black">*</span>
+                    </label>
+                    <select
+                      value={paymentType}
+                      onChange={(e) => {
+                        setPaymentType(e.target.value);
+                        if (modalErrorMsg && modalErrorMsg.includes('Payment Type')) {
+                          setModalErrorMsg('');
+                        }
+                      }}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-bold"
+                      required
+                    >
+                      <option value="">-- Select Payment Type * --</option>
+                      <option value="Shoot Time Payment">Shoot Time Payment</option>
+                      <option value="Advance Payment">Advance Payment</option>
+                      <option value="Final Payment">Final Payment</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
                     <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Payment Received</label>
                     <input
                       type="number"
@@ -1109,6 +1136,11 @@ export const PendingPaymentsReport: React.FC = () => {
                   setModalSuccessMsg('');
                   setModalErrorMsg('');
 
+                  if (!paymentType || paymentType.trim() === '') {
+                    setModalErrorMsg('❌ Please select a Payment Type.');
+                    return;
+                  }
+
                   if (!paymentAmount || amt <= 0) {
                     setModalErrorMsg('❌ Please enter a valid payment amount.');
                     return;
@@ -1129,7 +1161,8 @@ export const PendingPaymentsReport: React.FC = () => {
                       undefined, 
                       transactionIdInput,
                       paymentMode,
-                      paymentNotes
+                      paymentNotes,
+                      paymentType
                     );
                     
                     // Show success message inside popup
@@ -1154,7 +1187,7 @@ export const PendingPaymentsReport: React.FC = () => {
                     setIsSaving(false);
                   }
                 }}
-                disabled={isSaving || (currentRecord && currentRecord.remainingAmount === 0) || !paymentAmount || Number(paymentAmount) <= 0}
+                disabled={isSaving || (currentRecord && currentRecord.remainingAmount === 0) || !paymentAmount || Number(paymentAmount) <= 0 || !paymentType}
                 className="flex-1 py-2 rounded-xl text-xs font-bold text-zinc-950 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition uppercase tracking-wider cursor-pointer"
               >
                 {isSaving ? 'Saving...' : 'Save Payment'}
@@ -1290,6 +1323,7 @@ export const PendingPaymentsReport: React.FC = () => {
                           <tr className="bg-zinc-900/55 border-b border-zinc-850 text-zinc-400 font-mono text-[9px] uppercase tracking-wider">
                             <th className="p-3 pl-4">Date & Time</th>
                             <th className="p-3 text-right">Amount</th>
+                            <th className="p-3">Payment Type</th>
                             <th className="p-3">Transaction ID</th>
                             <th className="p-3">Method</th>
                             <th className="p-3">Updated By</th>
@@ -1299,7 +1333,7 @@ export const PendingPaymentsReport: React.FC = () => {
                         <tbody className="divide-y divide-zinc-900/50">
                           {historyList.length === 0 ? (
                             <tr>
-                              <td colSpan={6} className="text-center py-6 text-zinc-500 font-mono text-[10px]">
+                              <td colSpan={7} className="text-center py-6 text-zinc-500 font-mono text-[10px]">
                                 No payment history records found.
                               </td>
                             </tr>
@@ -1318,11 +1352,18 @@ export const PendingPaymentsReport: React.FC = () => {
                                 });
                               } catch(e) {}
                               
+                              const displayType = h.paymentType || (paymentObj ? ((paymentObj as any).Payment_type || paymentObj.payment_type) : '') || (viewDetailsRecord?.payment ? ((viewDetailsRecord.payment as any).Payment_type || viewDetailsRecord.payment.payment_type) : '') || 'Shoot Time Payment';
+
                               return (
                                 <tr key={index} className="hover:bg-zinc-900/20 text-zinc-300">
                                   <td className="p-3 pl-4 font-mono text-[10px]">{displayDate}</td>
                                   <td className="p-3 text-right font-mono font-bold text-emerald-400">
                                     {formatPercentageOrINR(h.amount)}
+                                  </td>
+                                  <td className="p-3 font-medium text-[10px] text-zinc-200">
+                                    <span className="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-750 text-[9px] font-mono font-bold text-zinc-300">
+                                      {displayType}
+                                    </span>
                                   </td>
                                   <td className="p-3 font-mono text-[10px]">
                                     {(!h.transactionId || h.transactionId.trim() === '' || h.transactionId === 'null' || h.transactionId === 'NULL') ? 'N/A' : h.transactionId}
