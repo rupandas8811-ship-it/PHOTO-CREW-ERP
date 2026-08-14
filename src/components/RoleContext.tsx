@@ -1291,7 +1291,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       payments: [
         'payment_id', 'order_id', 'quotation_amount', 'advance_received', 'balance_due', 
         'final_payment_received', 'payment_date', 'payment_proof_url', 'payment_status',
-        'transaction_id', 'Payment_type', 'payment_type', 'payment_collection_status', 'additional_received'
+        'transaction_id', 'payment_type', 'payment_collection_status', 'additional_received'
       ],
       activity_logs: [
         'log_id', 'user_name', 'role', 'action', 'module', 'record_id', 'timestamp', 
@@ -1334,6 +1334,15 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'created_at', 'updated_at'
       ]
     };
+
+    if (table === 'payments' && cloned) {
+      if (!cloned.payment_type && (cloned.Payment_type || cloned['Payment_type'] || cloned['Payment Type'])) {
+        cloned.payment_type = cloned.payment_type || cloned.Payment_type || cloned['Payment_type'] || cloned['Payment Type'];
+      }
+      if (!cloned.transaction_id && (cloned['Transaction ID'] || cloned['Transaction_ID'] || cloned.transactionId)) {
+        cloned.transaction_id = cloned.transaction_id || cloned['Transaction ID'] || cloned['Transaction_ID'] || cloned.transactionId;
+      }
+    }
 
     const validCols = allowedColumns[table];
     if (validCols) {
@@ -5234,7 +5243,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       payment_proof_url: resolvedProofUrl,
       payment_status: isFullyPaid ? 'Fully Paid' : 'Partially Paid',
       transaction_id: resolvedTxnId,
-      Payment_type: finalPaymentType
+      payment_type: finalPaymentType
     });
     if (!rPay?.success) {
       throw new Error("Failed to record payment in database: " + rPay?.error);
