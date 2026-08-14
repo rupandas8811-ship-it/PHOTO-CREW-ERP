@@ -54,6 +54,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
   const { 
     orders, 
     leads, 
+    operations,
     payments, 
     production, 
     editorAssignments,
@@ -133,6 +134,33 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       return dateToCheck >= startDate && dateToCheck <= endDate;
     });
   }, [orders, startDate, endDate, datePreset]);
+
+  const filteredLeads = useMemo(() => {
+    return leads.filter(lead => {
+      const dateToCheck = lead.created_date || lead.created_at?.split('T')[0] || '';
+      if (datePreset === 'all') return true;
+      if (!startDate || !endDate) return true;
+      return dateToCheck >= startDate && dateToCheck <= endDate;
+    });
+  }, [leads, startDate, endDate, datePreset]);
+
+  const filteredOperations = useMemo(() => {
+    return operations.filter(op => {
+      const dateToCheck = op.created_at ? op.created_at.split('T')[0] : '';
+      if (datePreset === 'all') return true;
+      if (!startDate || !endDate) return true;
+      return dateToCheck >= startDate && dateToCheck <= endDate;
+    });
+  }, [operations, startDate, endDate, datePreset]);
+
+  const filteredProduction = useMemo(() => {
+    return production.filter(prod => {
+      const dateToCheck = prod.created_at ? prod.created_at.split('T')[0] : '';
+      if (datePreset === 'all') return true;
+      if (!startDate || !endDate) return true;
+      return dateToCheck >= startDate && dateToCheck <= endDate;
+    });
+  }, [production, startDate, endDate, datePreset]);
 
   const [unlockRequests, setUnlockRequests] = useState<any[]>([]);
 

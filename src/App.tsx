@@ -68,10 +68,26 @@ const MainAppContent: React.FC = () => {
     globalDateRange,
     setGlobalDateRange,
     resetGlobalDateRange,
-    isDataLoading
+    isDataLoading,
+    orders
   } = useRole();
   const [appLoaded, setAppLoaded] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
+
+  useEffect(() => {
+    if (currentRole === 'Business Owner' && orders) {
+      import('./supabaseClient').then(({ supabaseClient }) => {
+        const fetchPending = async () => {
+          const { data: unlocks } = await supabaseClient.from('unlock_requests').select('*').eq('status', 'Pending');
+          const approvalOrders = orders.filter(o => o.current_stage === 'Client Acceptance' || o.current_stage === 'Final Approval');
+          setPendingApprovalCount((unlocks?.length || 0) + approvalOrders.length);
+        };
+        fetchPending();
+      });
+    }
+  }, [currentRole, orders]);
 
   const [showInitialLoader, setShowInitialLoader] = useState(() => {
     return localStorage.getItem('erp_current_user') !== null;
@@ -685,13 +701,14 @@ const MainAppContent: React.FC = () => {
             {[
               { id: 'owner_overview', label: '1. Business Overview', icon: LayoutDashboard, color: 'text-amber-400' },
               { id: 'owner_calendar', label: '2. Event Calendar', icon: Calendar, color: 'text-purple-400' },
-              { id: 'owner_approval', label: '3. Waiting Approval', icon: ShieldCheck, color: 'text-emerald-400' },
+              { id: 'owner_approval', label: '3. Waiting Approval', icon: ShieldCheck, color: 'text-emerald-400', badge: pendingApprovalCount > 0 ? pendingApprovalCount : null },
               { id: 'owner_summary', label: '4. Revenue Summary', icon: FileText, color: 'text-blue-400' },
               { id: 'owner_staff_performance', label: '📊 5. Staff Performance', icon: BarChart3, color: 'text-pink-400' },
-              { id: 'sales_staff_management', label: 'Sales Staff Management', icon: Users, color: 'text-indigo-400' }
+              { id: 'sales_staff_management', label: '6. Sales Staff Management', icon: Users, color: 'text-indigo-400' }
             ].map((tab) => {
               const IconComponent = tab.icon;
               const isSelected = activeTab === tab.id;
+              const isHighlighted = tab.id === 'owner_approval' && pendingApprovalCount > 0;
               return (
                 <button
                   key={tab.id}
@@ -700,11 +717,13 @@ const MainAppContent: React.FC = () => {
                   className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-bold rounded-xl transition-all duration-200 text-left border cursor-pointer border-transparent ${
                     isSelected
                       ? 'bg-gradient-to-r from-zinc-800 to-zinc-900 text-white border-zinc-700 font-bold shadow-md'
-                      : 'text-zinc-400 bg-transparent hover:bg-zinc-900/50 hover:text-white hover:border-zinc-800'
+                      : isHighlighted
+                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
+                        : 'text-zinc-400 bg-transparent hover:bg-zinc-900/50 hover:text-white hover:border-zinc-800'
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
-                    <IconComponent className={`w-4 h-4 flex-shrink-0 ${tab.color}`} />
+                    <IconComponent className={`w-4 h-4 flex-shrink-0 ${isHighlighted && !isSelected ? 'text-amber-400' : tab.color}`} />
                     <span className="tracking-wide">
                       {tab.label}
                       {tab.id === 'notifications' && unreadNotificationsCount > 0 && (
@@ -714,7 +733,14 @@ const MainAppContent: React.FC = () => {
                       )}
                     </span>
                   </div>
-                  <ChevronRightIcon active={isSelected} />
+                  <div className="flex items-center gap-2">
+                    {tab.badge && (
+                      <span className="bg-amber-500 text-black px-2 py-0.5 rounded-full text-[10px] font-black animate-pulse shadow-[0_0_10px_rgba(245,158,11,0.5)]">
+                        {tab.badge}
+                      </span>
+                    )}
+                    <ChevronRightIcon active={isSelected} />
+                  </div>
                 </button>
               );
             })}

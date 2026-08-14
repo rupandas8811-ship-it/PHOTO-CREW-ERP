@@ -260,6 +260,7 @@ export const OperationsLeads: React.FC = () => {
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [showNewProjectsModal, setShowNewProjectsModal] = useState(false);
 
   // Track which order's action dropdown is open
   const [activeMenuOrderId, setActiveMenuOrderId] = useState<string | null>(null);
@@ -1739,7 +1740,17 @@ export const OperationsLeads: React.FC = () => {
     alert(`Shoot marked completed for [${closingOrderId}]!`);
   };
 
+  const newProjects = useMemo(() => {
+    return operationsOrders.filter(o => {
+      const assignedStaffDetails = getAssignedStaffDetailsForOrder(o);
+      const staffStatuses = assignedStaffDetails.map(s => s.staff_status);
+      const calculatedStage = getCalculatedOrderStage(o.current_stage, staffStatuses);
+      return ['Order Confirmed', 'Confirm Order', 'New Order Received'].includes(calculatedStage);
+    });
+  }, [operationsOrders, staffAssignments, leads]);
+
   const stats = useMemo(() => {
+    let newProjectArrived = 0;
     let assignedCrew = 0;
     let eventStarted = 0;
     let eventEnded = 0;
@@ -1751,7 +1762,9 @@ export const OperationsLeads: React.FC = () => {
       const staffStatuses = assignedStaffDetails.map(s => s.staff_status);
       const calculatedStage = getCalculatedOrderStage(o.current_stage, staffStatuses);
 
-      if (['Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Operations Assigned'].includes(calculatedStage)) {
+      if (['Order Confirmed', 'Confirm Order', 'New Order Received'].includes(calculatedStage)) {
+        newProjectArrived++;
+      } else if (['Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Operations Assigned'].includes(calculatedStage)) {
         assignedCrew++;
       } else if (['Event Started', 'Event Start'].includes(calculatedStage)) {
         eventStarted++;
@@ -1765,6 +1778,7 @@ export const OperationsLeads: React.FC = () => {
     });
 
     return {
+      newProjectArrived,
       assignedCrew,
       eventStarted,
       eventEnded,
@@ -1804,9 +1818,10 @@ export const OperationsLeads: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* 1. Results Summary Row - 5 Operations Statuses */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+      {/* 1. Results Summary Row - 6 Operations Statuses */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
         {[
+          { label: "New Project Arrived", val: stats.newProjectArrived, theme: 'cyan' as CameraLensTheme, filterValue: 'Order Confirmed', trendText: 'New', chartPoints: [5, 12, 8, 15, 10, 20, 25] },
           { label: "Assigned Crew", val: stats.assignedCrew, theme: 'purple' as CameraLensTheme, filterValue: 'Assigned Crew', trendText: 'Rostered', chartPoints: [10, 18, 14, 25, 20, 31, 35] },
           { label: "Event Started", val: stats.eventStarted, theme: 'cyan' as CameraLensTheme, filterValue: "Event Started", trendText: 'Live On-Site', chartPoints: [5, 9, 7, 14, 11, 16, 15] },
           { label: "Event Ended", val: stats.eventEnded, theme: 'purple' as CameraLensTheme, filterValue: 'Event Ended', trendText: 'Wrapped', chartPoints: [8, 15, 12, 20, 16, 25, 24] },
@@ -1823,7 +1838,13 @@ export const OperationsLeads: React.FC = () => {
             chartPoints={card.chartPoints}
             activeFilterValue={statusFilter}
             currentFilterValue={card.filterValue}
-            onClick={() => setStatusFilter(statusFilter === card.filterValue ? 'All' : card.filterValue)}
+            onClick={() => {
+              if (card.label === 'New Project Arrived') {
+                setShowNewProjectsModal(true);
+              } else {
+                setStatusFilter(statusFilter === card.filterValue ? 'All' : card.filterValue);
+              }
+            }}
             lensLabel={card.label.slice(0, 10).toUpperCase()}
           />
         ))}
@@ -2971,7 +2992,7 @@ export const OperationsLeads: React.FC = () => {
                                         }}
                                         className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-sky-400 hover:text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 px-3 py-1.5 rounded-lg border border-sky-500/20 transition-all cursor-pointer"
                                       >
-                                        ➕ Add Staff for {task.roleName}
+                                        + Add Staff
                                       </button>
                                     </div>
                                   </div>
@@ -4870,7 +4891,7 @@ export const OperationsLeads: React.FC = () => {
       {/* Image Preview Modal */}
       {imagePreviewModal && createPortal(
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex flex-col items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in duration-200">
             <div className="flex items-center justify-between p-4 border-b border-zinc-800">
               <div>
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">{imagePreviewModal.stage}</h3>
@@ -4907,6 +4928,91 @@ export const OperationsLeads: React.FC = () => {
                   <p className="text-zinc-400 font-mono text-sm">Image not found. Please verify the uploaded image URL.</p>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      , document.body)}
+
+      {/* New Project Arrived Modal */}
+      {showNewProjectsModal && createPortal(
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-[95vw] h-[90vh] flex flex-col shadow-2xl relative overflow-hidden">
+            <div className="p-4 sm:p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
+                  <span className="text-xl">📋</span>
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white tracking-tight">New Project Arrived</h2>
+                  <p className="text-xs text-zinc-400 font-mono mt-0.5">{newProjects.length} Pending Assignment</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowNewProjectsModal(false)}
+                className="w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 text-white flex items-center justify-center transition-colors focus:outline-none cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-auto p-4 shrink-0">
+              <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden w-full">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse whitespace-nowrap text-xs">
+                    <thead>
+                      <tr className="bg-zinc-900 border-b border-zinc-800 text-zinc-400 uppercase tracking-wider font-mono text-[10px]">
+                        <th className="p-3 font-semibold">Order ID</th>
+                        <th className="p-3 font-semibold">Lead ID</th>
+                        <th className="p-3 font-semibold">Customer</th>
+                        <th className="p-3 font-semibold">Mobile</th>
+                        <th className="p-3 font-semibold">Event Name</th>
+                        <th className="p-3 font-semibold">Event Date</th>
+                        <th className="p-3 font-semibold">Start Time</th>
+                        <th className="p-3 font-semibold">End Time</th>
+                        <th className="p-3 font-semibold">Event Type</th>
+                        <th className="p-3 font-semibold">Current Status</th>
+                        <th className="p-3 font-semibold">Assigned Staff</th>
+                        <th className="p-3 font-semibold">Target Delivery Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800/60">
+                      {newProjects.length === 0 ? (
+                        <tr>
+                          <td colSpan={12} className="p-8 text-center text-zinc-500 font-mono">
+                            No new projects arrived.
+                          </td>
+                        </tr>
+                      ) : (
+                        newProjects.map(proj => {
+                          const assignedStaff = getAssignedStaffDetailsForOrder(proj);
+                          const staffNames = assignedStaff.length > 0 ? assignedStaff.map(s => s.staff_name).join(', ') : 'Unassigned';
+                          const projLead = leads.find(l => l.lead_id === proj.lead_id);
+                          return (
+                            <tr key={proj.order_id} className="hover:bg-zinc-800/30 transition-colors">
+                              <td className="p-3 font-mono text-cyan-400 font-bold">{proj.order_id}</td>
+                              <td className="p-3 font-mono text-zinc-300">{proj.lead_id}</td>
+                              <td className="p-3 text-slate-200">{proj.customer_name || 'N/A'}</td>
+                              <td className="p-3 font-mono text-zinc-400">{proj.mobile || projLead?.mobile || 'N/A'}</td>
+                              <td className="p-3 text-slate-300">{proj.custom_event_name || proj.event_type || 'N/A'}</td>
+                              <td className="p-3 font-mono text-zinc-300">{proj.event_date || 'N/A'}</td>
+                              <td className="p-3 font-mono text-zinc-400">{proj.event_time || proj.event_start_time || projLead?.event_time || projLead?.event_start_time || 'N/A'}</td>
+                              <td className="p-3 font-mono text-zinc-400">{proj.event_end_time || projLead?.event_end_time || 'N/A'}</td>
+                              <td className="p-3 text-slate-300">{proj.event_type || 'N/A'}</td>
+                              <td className="p-3">
+                                <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold font-mono tracking-wider bg-zinc-800 text-zinc-300">
+                                  {proj.current_stage || proj.order_status || 'Order Confirmed'}
+                                </span>
+                              </td>
+                              <td className="p-3 text-zinc-400 max-w-[200px] truncate" title={staffNames}>{staffNames}</td>
+                              <td className="p-3 font-mono text-zinc-400">{projLead?.delivery_target_date || 'Not Set'}</td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
         </div>
