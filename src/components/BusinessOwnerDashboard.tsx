@@ -37,12 +37,14 @@ import {
   Image as ImageIcon,
   TrendingUp,
   Briefcase,
-  Video
+  Video,
+  History
 } from 'lucide-react';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
 import { OwnerStaffPerformanceReport } from './OwnerModule';
 import { BusinessOwnerCardDetailModal } from './BusinessOwnerCardDetailModal';
 import { PaymentHistoryModal } from './PaymentHistoryModal';
+import { OrderHistoryModal } from './OrderHistoryModal';
 import { formatINR, formatTime12Hour, deserializeLeadEvents, resolveStorageUrl } from '../utils';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { Order, Lead, Production, Payment } from '../types';
@@ -466,6 +468,22 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
   }, [selectedCard, filteredOrders, waitingApprovalOrders, payments, boCardsData]);
 
   const modalColumns = useMemo(() => {
+    const actionCol = { 
+      key: 'actions', 
+      label: 'Action', 
+      render: (item: any) => (
+        <button
+          type="button"
+          onClick={() => setSelectedHistoryOrder(item)}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
+          title="View Project History & Timeline"
+        >
+          <History className="w-3.5 h-3.5" />
+          <span>History</span>
+        </button>
+      )
+    };
+
     const baseOrderCols = [
       { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-400">{item.order_id || item.lead_id}</span> },
       { key: 'customer_name', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customer_name}</span> },
@@ -491,14 +509,14 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       { key: 'editor', label: 'Editor', render: (item: any) => <span className="text-zinc-400">{item.editor || item.assigned_editor || 'Unassigned'}</span> }
     ];
 
-    if (selectedCard === 'overview_revenue') return [...baseOrderCols, { key: 'quotation_amount', label: 'Quotation Amount', render: (item: any) => <span className="font-mono text-emerald-400 font-bold">{formatINR(item.quotation_amount || 0)}</span> }, { key: 'advance_received', label: 'Advance Received', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.advance_received || 0)}</span> }];
-    if (selectedCard === 'overview_active') return [...baseOrderCols, { key: 'current_stage', label: 'Current Stage', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold font-mono text-[10px]">{item.current_stage || 'In Progress'}</span> }];
-    if (selectedCard === 'overview_approval') return [...baseOrderCols, { key: 'current_stage', label: 'Current Stage', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold font-mono text-[10px]">{item.current_stage || 'Awaiting Approval'}</span> }];
-    if (selectedCard === 'overview_outstanding') return [...baseOrderCols, { key: 'totalRevenue', label: 'Total Revenue', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.totalRevenue || 0)}</span> }, { key: 'paymentReceived', label: 'Received', render: (item: any) => <span className="font-mono text-emerald-400">{formatINR(item.paymentReceived || 0)}</span> }, { key: 'outstandingAmount', label: 'Outstanding Balance', render: (item: any) => <span className="font-mono text-rose-400 font-bold">{formatINR(item.outstandingAmount || 0)}</span> }];
+    if (selectedCard === 'overview_revenue') return [...baseOrderCols, { key: 'quotation_amount', label: 'Quotation Amount', render: (item: any) => <span className="font-mono text-emerald-400 font-bold">{formatINR(item.quotation_amount || 0)}</span> }, { key: 'advance_received', label: 'Advance Received', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.advance_received || 0)}</span> }, actionCol];
+    if (selectedCard === 'overview_active') return [...baseOrderCols, { key: 'current_stage', label: 'Current Stage', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold font-mono text-[10px]">{item.current_stage || 'In Progress'}</span> }, actionCol];
+    if (selectedCard === 'overview_approval') return [...baseOrderCols, { key: 'current_stage', label: 'Current Stage', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold font-mono text-[10px]">{item.current_stage || 'Awaiting Approval'}</span> }, actionCol];
+    if (selectedCard === 'overview_outstanding') return [...baseOrderCols, { key: 'totalRevenue', label: 'Total Revenue', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.totalRevenue || 0)}</span> }, { key: 'paymentReceived', label: 'Received', render: (item: any) => <span className="font-mono text-emerald-400">{formatINR(item.paymentReceived || 0)}</span> }, { key: 'outstandingAmount', label: 'Outstanding Balance', render: (item: any) => <span className="font-mono text-rose-400 font-bold">{formatINR(item.outstandingAmount || 0)}</span> }, actionCol];
 
-    if (selectedCard && selectedCard.startsWith('sales_')) return baseLeadCols;
-    if (selectedCard && selectedCard.startsWith('ops_')) return baseOpsCols;
-    if (selectedCard && selectedCard.startsWith('prod_')) return baseProdCols;
+    if (selectedCard && selectedCard.startsWith('sales_')) return [...baseLeadCols, actionCol];
+    if (selectedCard && selectedCard.startsWith('ops_')) return [...baseOpsCols, actionCol];
+    if (selectedCard && selectedCard.startsWith('prod_')) return [...baseProdCols, actionCol];
 
     return [];
   }, [selectedCard]);
@@ -530,6 +548,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
   }, [selectedCard, totalRevenue, outstandingPaymentTotal, modalData.length, filteredOrders.length]);
   // Review & Close Modal State
   const [reviewModalOrder, setReviewModalOrder] = useState<Order | null>(null);
+  const [selectedHistoryOrder, setSelectedHistoryOrder] = useState<Order | null>(null);
   const [approvalFeedback, setApprovalFeedback] = useState<string | null>(null);
 
   // Calendar Event Selection Modal State
@@ -1374,13 +1393,25 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                               </span>
                             </td>
                             <td className="py-3.5 px-4 text-right">
-                              <button
-                                onClick={() => setReviewModalOrder(order)}
-                                className="px-3.5 py-1.5 rounded-xl bg-amber-500 text-black font-black hover:bg-amber-400 transition-all cursor-pointer text-xs flex items-center gap-1.5 ml-auto shadow-md"
-                              >
-                                <ShieldCheck className="w-3.5 h-3.5" />
-                                <span>Review</span>
-                              </button>
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedHistoryOrder(order)}
+                                  className="px-3 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                                  title="View Project History & Timeline"
+                                >
+                                  <History className="w-3.5 h-3.5" />
+                                  <span>History</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setReviewModalOrder(order)}
+                                  className="px-3.5 py-1.5 rounded-xl bg-amber-500 text-black font-black hover:bg-amber-400 transition-all cursor-pointer text-xs flex items-center gap-1.5 shadow-md"
+                                >
+                                  <ShieldCheck className="w-3.5 h-3.5" />
+                                  <span>Review</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1472,6 +1503,13 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
           }}
         />
       )}
+
+      {/* UNIFIED ORDER HISTORY & TIMELINE AUDIT MODAL */}
+      <OrderHistoryModal
+        isOpen={selectedHistoryOrder !== null}
+        onClose={() => setSelectedHistoryOrder(null)}
+        order={selectedHistoryOrder}
+      />
 
     </div>
   );
@@ -1719,6 +1757,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
   // Clickable summary card state
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [selectedPaymentHistoryOrder, setSelectedPaymentHistoryOrder] = useState<any | null>(null);
+  const [selectedHistoryOrder, setSelectedHistoryOrder] = useState<any | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
   // Combined detailed records
@@ -1796,6 +1835,25 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
   }, [selectedCard, filtered]);
 
   const modalColumns = useMemo(() => {
+    const actionCol = { 
+      key: 'actions', 
+      label: 'Action', 
+      render: (item: any) => (
+        <button
+          type="button"
+          onClick={() => {
+            const fullOrder = orders.find(o => o.order_id === item.orderId || o.lead_id === item.leadId) || item;
+            setSelectedHistoryOrder(fullOrder);
+          }}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
+          title="View Project History & Timeline"
+        >
+          <History className="w-3.5 h-3.5" />
+          <span>History</span>
+        </button>
+      )
+    };
+
     const baseCols = [
       { key: 'orderId', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-400">{item.orderId}</span> },
       { key: 'customerName', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customerName}</span> },
@@ -1807,14 +1865,16 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       return [
         ...baseCols,
         { key: 'totalRevenue', label: 'Total Revenue', render: (item: any) => <span className="font-mono text-emerald-400 font-bold">{formatINR(item.totalRevenue)}</span> },
-        { key: 'paymentReceived', label: 'Received', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.paymentReceived)}</span> }
+        { key: 'paymentReceived', label: 'Received', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.paymentReceived)}</span> },
+        actionCol
       ];
     }
     if (selectedCard === 'summary_payment') {
       return [
         ...baseCols,
         { key: 'totalRevenue', label: 'Total Revenue', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.totalRevenue)}</span> },
-        { key: 'paymentReceived', label: 'Payment Received', render: (item: any) => <span className="font-mono text-emerald-400 font-bold">{formatINR(item.paymentReceived)}</span> }
+        { key: 'paymentReceived', label: 'Payment Received', render: (item: any) => <span className="font-mono text-emerald-400 font-bold">{formatINR(item.paymentReceived)}</span> },
+        actionCol
       ];
     }
     if (selectedCard === 'summary_outstanding') {
@@ -1822,17 +1882,19 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         ...baseCols,
         { key: 'totalRevenue', label: 'Total Revenue', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.totalRevenue)}</span> },
         { key: 'paymentReceived', label: 'Received', render: (item: any) => <span className="font-mono text-emerald-400">{formatINR(item.paymentReceived)}</span> },
-        { key: 'outstanding', label: 'Outstanding Balance', render: (item: any) => <span className="font-mono text-rose-400 font-bold">{formatINR(item.outstanding)}</span> }
+        { key: 'outstanding', label: 'Outstanding Balance', render: (item: any) => <span className="font-mono text-rose-400 font-bold">{formatINR(item.outstanding)}</span> },
+        actionCol
       ];
     }
     if (selectedCard === 'summary_completed' || selectedCard === 'summary_closed') {
       return [
         ...baseCols,
-        { key: 'currentStage', label: 'Current Stage', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-850 font-bold font-mono text-[10px] text-zinc-300">{item.currentStage || 'Completed'}</span> }
+        { key: 'currentStage', label: 'Current Stage', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-850 font-bold font-mono text-[10px] text-zinc-300">{item.currentStage || 'Completed'}</span> },
+        actionCol
       ];
     }
     return [];
-  }, [selectedCard]);
+  }, [selectedCard, orders]);
 
   const modalTitleAndMeta = useMemo(() => {
     switch (selectedCard) {
@@ -2136,13 +2198,14 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
                 <th className="py-3 px-4">Payment Received</th>
                 <th className="py-3 px-4">Outstanding</th>
                 <th className="py-3 px-4">Payment Status</th>
-                <th className="py-3 px-4 text-right">Current Stage</th>
+                <th className="py-3 px-4">Current Stage</th>
+                <th className="py-3 px-4 text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-850 font-mono">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-zinc-500">
+                  <td colSpan={9} className="py-8 text-center text-zinc-500">
                     No matching revenue records found for selected query and date range.
                   </td>
                 </tr>
@@ -2176,10 +2239,24 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
                         {r.paymentStatus}
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 text-right">
+                    <td className="py-3.5 px-4">
                       <span className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px]">
                         {r.currentStage}
                       </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const fullOrder = orders.find(o => o.order_id === r.orderId || o.lead_id === r.leadId) || r;
+                          setSelectedHistoryOrder(fullOrder);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
+                        title="View Complete Project History & Timeline"
+                      >
+                        <History className="w-3.5 h-3.5" />
+                        <span>History</span>
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -2209,6 +2286,13 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         onClose={() => setSelectedPaymentHistoryOrder(null)}
         order={selectedPaymentHistoryOrder}
         payments={payments}
+      />
+
+      {/* ORDER HISTORY & TIMELINE AUDIT MODAL */}
+      <OrderHistoryModal
+        isOpen={selectedHistoryOrder !== null}
+        onClose={() => setSelectedHistoryOrder(null)}
+        order={selectedHistoryOrder}
       />
 
     </div>

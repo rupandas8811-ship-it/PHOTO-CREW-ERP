@@ -4764,6 +4764,37 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }
     }
 
+    // Record status history & proof attachment
+    if (updates.editing_status && nextStage && (previousStage !== nextStage || updates.client_communication_proof)) {
+      const roleParts = (currentUserName && currentUserName.includes('|')) 
+        ? currentUserName.split('|') 
+        : [currentUserName || 'Production Staff', currentRole || 'Production'];
+      const changedBy = roleParts[0];
+      const changedByRole = roleParts[1] || currentRole || 'Production';
+      const proofToRecord = updates.client_communication_proof || updates.customer_communication_proof || (updates as any).proof_url;
+
+      const newHist = {
+        lead_id: leadIdToUpdate || actualTrackingId,
+        order_id: tgtOrder?.order_id || actualTrackingId,
+        old_status: previousStage,
+        new_status: nextStage,
+        changed_by: changedBy,
+        changed_by_role: changedByRole,
+        remarks: updates.remarks || (nextStage === 'Client Acceptance' ? 'Client acceptance approved with communication & consent proof' : `Production status updated to ${nextStage}`),
+        proof_url: proofToRecord || null,
+        created_at: timestamp
+      };
+
+      try {
+        const resHist = await pushInsert('lead_status_history', newHist);
+        if (resHist?.success) {
+          setStatusHistory(prev => [...prev, newHist as any]);
+        }
+      } catch (shErr) {
+        console.warn("Failed to insert lead_status_history in updateProduction:", shErr);
+      }
+    }
+
     //  // Disabled to prevent full reload
 
     logActivity(
