@@ -572,6 +572,7 @@ export const ProductionStaffModule: React.FC = () => {
   // 3. Editing Completed Modal
   const [editingCompletedModal, setEditingCompletedModal] = useState<{group: any, actionItem: any} | null>(null);
   const [editingCompletedForm, setEditingCompletedForm] = useState<{confirmation_proof: string, selectedIds: string[]}>({ confirmation_proof: '', selectedIds: [] });
+  const [previewProofModal, setPreviewProofModal] = useState<{ url: string; title: string } | null>(null);
 
   // Auto-scroll popup/modal into view whenever ANY modal popup is opened from Production Staff Dashboard
   useEffect(() => {
@@ -708,6 +709,20 @@ export const ProductionStaffModule: React.FC = () => {
         // Edited Drive Link resolution
         const editedDriveLink = (assignment.Edited_Drive_Link || assignment.edited_drive_link || prod?.edited_drive_link || '').trim();
 
+        // Customer Confirmation Image / Proof resolution
+        const confirmationProof = (
+          assignment.confirmation_proof ||
+          assignment.customer_communication_proof ||
+          assignment.client_communication_proof ||
+          assignment.proof_url ||
+          assignment.proof_image ||
+          assignment.uploaded_proof ||
+          order?.client_communication_proof ||
+          order?.customer_communication_proof ||
+          order?.proof_url ||
+          ''
+        ).trim();
+
         const delivQty = getAssignedDeliverableQty(assignment, targetEvent, lead, order, prod, quotations);
 
         individualDeliverables.push({
@@ -726,6 +741,7 @@ export const ProductionStaffModule: React.FC = () => {
             status: currentStatus,
             rawFootageLink,
             editedDriveLink,
+            confirmationProof,
             assignmentObj: assignment,
             orderObj: order,
             leadObj: lead,
@@ -751,6 +767,7 @@ export const ProductionStaffModule: React.FC = () => {
           eventDate: item.eventDate,
           targetFinishDate: item.targetFinishDate,
           rawFootageLink: item.rawFootageLink,
+          confirmationProof: item.confirmationProof,
           orderObj: item.orderObj,
           leadObj: item.leadObj,
           prodObj: item.prodObj,
@@ -763,6 +780,9 @@ export const ProductionStaffModule: React.FC = () => {
       grp.deliverables.push(item);
       if (!grp.rawFootageLink && item.rawFootageLink) {
         grp.rawFootageLink = item.rawFootageLink;
+      }
+      if (!grp.confirmationProof && item.confirmationProof) {
+        grp.confirmationProof = item.confirmationProof;
       }
       if (item.targetFinishDate && (!grp.targetFinishDate || item.targetFinishDate < grp.targetFinishDate)) {
         grp.targetFinishDate = item.targetFinishDate;
@@ -1028,7 +1048,8 @@ Thank you.`;
       const proofInput = editingCompletedForm.confirmation_proof.trim();
 
       // 1. Upload proof image to Supabase Storage bucket ('img') if file/data-uri, or resolve public URL
-      const uploadedProofUrl = await uploadProofToStorage(proofInput, 'consent_proof');
+      const cleanId = (b.orderId || b.leadId || 'proof').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const uploadedProofUrl = await uploadProofToStorage(proofInput, `cust_confirmation_${cleanId}`);
       if (!uploadedProofUrl || !uploadedProofUrl.trim()) {
         throw new Error("Proof upload failed: Returned Storage URL is null or empty.");
       }
@@ -1037,12 +1058,23 @@ Thank you.`;
 
       const deliverablesToUpdate = b.deliverables.filter((d: any) => editingCompletedForm.selectedIds.includes(d.assignmentId));
 
-      // 2. Save status to editor_assignments table
+      // 2. Save status and proof references to editor_assignments table
       for (const deliv of deliverablesToUpdate) {
-        await updateEditorAssignmentStatus(deliv.assignmentId, 'Editing Completed' as any);
+        await updateEditorAssignmentStatus(deliv.assignmentId, 'Editing Completed' as any, {
+          confirmation_proof: uploadedProofUrl,
+          customer_communication_proof: uploadedProofUrl,
+          proof_url: uploadedProofUrl,
+          proof_image: uploadedProofUrl,
+          uploaded_proof: uploadedProofUrl
+        });
 
         const resAssign = await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, {
-          status: 'Editing Completed'
+          status: 'Editing Completed',
+          confirmation_proof: uploadedProofUrl,
+          customer_communication_proof: uploadedProofUrl,
+          proof_url: uploadedProofUrl,
+          proof_image: uploadedProofUrl,
+          uploaded_proof: uploadedProofUrl
         });
 
         if (resAssign && resAssign.success === false) {
@@ -1348,6 +1380,7 @@ Thank you.`;
                               <th className="px-3.5 py-2.5 font-bold">Raw Footage Received</th>
                               <th className="px-3.5 py-2.5 font-bold">Current Status</th>
                               <th className="px-3.5 py-2.5 font-bold">Edited Drive Link</th>
+                              <th className="px-3.5 py-2.5 font-bold">Customer Proof</th>
                               <th className="px-3.5 py-2.5 font-bold text-center">Action</th>
                             </tr>
                           </thead>
@@ -1469,7 +1502,29 @@ Thank you.`;
                                     )}
                                   </td>
 
-                                  {/* 9. Action Dropdown */}
+                                  {/* 9. Customer Proof */}
+                                  <td className="px-3.5 py-3 whitespace-nowrap font-mono">
+                                    {delivItem.confirmationProof ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => setPreviewProofModal({
+                                          url: resolveStorageUrl(delivItem.confirmationProof) || delivItem.confirmationProof,
+                                          title: `Customer Confirmation Proof - ${delivItem.customerName} (${delivItem.orderId})`
+                                        })}
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/25 rounded-lg text-[10px] font-bold transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+                                        title="Click to view full confirmation image"
+                                      >
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                                        <span>View Proof</span>
+                                      </button>
+                                    ) : (
+                                      <span className="text-zinc-600 italic text-[11px]">
+                                        {['Customer Review', 'Client Review', 'Revision Required'].includes(delivItem.status) ? 'Pending Proof' : '-'}
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  {/* 10. Action Dropdown */}
                                   <td className="px-3.5 py-3 text-center">
                                     <ActionMenuDropdown
                                       dropdownId={`action_dropdown_menu_${delivItem.assignmentId}`}
@@ -1499,9 +1554,26 @@ Thank you.`;
                                         <Eye className="w-4 h-4 text-purple-400" /> View Details
                                       </button>
 
+                                      {/* View Customer Confirmation Proof */}
+                                      {delivItem.confirmationProof && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveDropdownId(null);
+                                            setPreviewProofModal({
+                                              url: resolveStorageUrl(delivItem.confirmationProof) || delivItem.confirmationProof,
+                                              title: `Customer Confirmation Proof - ${delivItem.customerName} (${delivItem.orderId})`
+                                            });
+                                          }}
+                                          className="w-full text-left px-4 py-2.5 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer border-t border-zinc-800/80"
+                                        >
+                                          <CheckCircle2 className="w-4 h-4 text-indigo-400" /> View Customer Proof
+                                        </button>
+                                      )}
+
                                       {/* Locked State Notification */}
                                       {isDelivLocked ? (
-                                        <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-[11px] font-bold flex items-center gap-2">
+                                        <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-[11px] font-bold flex items-center gap-2 border-t border-zinc-800/80">
                                           <Lock className="w-3.5 h-3.5" /> Editing Completed
                                         </div>
                                       ) : (
@@ -1561,7 +1633,7 @@ Thank you.`;
                                                 onClick={() => {
                                                   setActiveDropdownId(null);
                                                   setEditingCompletedModal({ group: grp, actionItem: delivItem });
-                                                  setEditingCompletedForm({ confirmation_proof: '', selectedIds: [delivItem.assignmentId] });
+                                                  setEditingCompletedForm({ confirmation_proof: delivItem.confirmationProof || '', selectedIds: [delivItem.assignmentId] });
                                                 }}
                                                 className="w-full text-left px-4 py-2.5 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
                                               >
@@ -1572,9 +1644,22 @@ Thank you.`;
 
                                           {/* Workflow Step 4: Editing Completed */}
                                           {(delivItem.status === 'Editing Completed' || delivItem.status === 'Editing Complete' || delivItem.status === 'Completed') && (
-                                            <div className="px-4 py-2.5 bg-emerald-500/10 text-emerald-400 text-xs font-bold flex items-center gap-2 border-t border-zinc-800">
-                                              <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Editing Completed
-                                            </div>
+                                            <>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setActiveDropdownId(null);
+                                                  setEditingCompletedModal({ group: grp, actionItem: delivItem });
+                                                  setEditingCompletedForm({ confirmation_proof: delivItem.confirmationProof || '', selectedIds: [delivItem.assignmentId] });
+                                                }}
+                                                className="w-full text-left px-4 py-2 text-xs text-zinc-300 hover:bg-zinc-800 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                              >
+                                                <Upload className="w-3.5 h-3.5 text-indigo-400" /> Update Proof
+                                              </button>
+                                              <div className="px-4 py-2.5 bg-emerald-500/10 text-emerald-400 text-xs font-bold flex items-center gap-2 border-t border-zinc-800">
+                                                <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Editing Completed
+                                              </div>
+                                            </>
                                           )}
                                         </>
                                       )}
@@ -1725,6 +1810,30 @@ Thank you.`;
                                 </div>
                               </div>
 
+                              {/* Customer Confirmation Proof Row */}
+                              <div className="space-y-1 pt-1">
+                                <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Customer Confirmation Proof</div>
+                                <div className="pt-0.5">
+                                  {delivItem.confirmationProof ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setPreviewProofModal({
+                                        url: resolveStorageUrl(delivItem.confirmationProof) || delivItem.confirmationProof,
+                                        title: `Customer Confirmation Proof - ${delivItem.customerName} (${delivItem.orderId})`
+                                      })}
+                                      className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/25 rounded-lg text-xs font-bold transition-all cursor-pointer w-full text-center"
+                                    >
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                                      <span>View Customer Confirmation Proof</span>
+                                    </button>
+                                  ) : (
+                                    <span className="text-zinc-600 italic text-[11px] block py-0.5">
+                                      {['Customer Review', 'Client Review', 'Revision Required'].includes(delivItem.status) ? 'Pending Proof' : 'Not Uploaded'}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
                               {/* Action Button */}
                               <div className="pt-2 border-t border-zinc-800/80">
                                 <ActionMenuDropdown
@@ -1755,9 +1864,26 @@ Thank you.`;
                                     <Eye className="w-4 h-4 text-purple-400" /> View Details
                                   </button>
 
+                                  {/* View Customer Confirmation Proof */}
+                                  {delivItem.confirmationProof && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveDropdownId(null);
+                                        setPreviewProofModal({
+                                          url: resolveStorageUrl(delivItem.confirmationProof) || delivItem.confirmationProof,
+                                          title: `Customer Confirmation Proof - ${delivItem.customerName} (${delivItem.orderId})`
+                                        });
+                                      }}
+                                      className="w-full text-left px-4 py-3 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer border-t border-zinc-800/80"
+                                    >
+                                      <CheckCircle2 className="w-4 h-4 text-indigo-400" /> View Customer Proof
+                                    </button>
+                                  )}
+
                                   {/* Locked State Notification */}
                                   {isDelivLocked ? (
-                                    <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-[11px] font-bold flex items-center gap-2">
+                                    <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-[11px] font-bold flex items-center gap-2 border-t border-zinc-800/80">
                                       <Lock className="w-3.5 h-3.5" /> Editing Completed
                                     </div>
                                   ) : (
@@ -1817,7 +1943,7 @@ Thank you.`;
                                             onClick={() => {
                                               setActiveDropdownId(null);
                                               setEditingCompletedModal({ group: grp, actionItem: delivItem });
-                                              setEditingCompletedForm({ confirmation_proof: '', selectedIds: [delivItem.assignmentId] });
+                                              setEditingCompletedForm({ confirmation_proof: delivItem.confirmationProof || '', selectedIds: [delivItem.assignmentId] });
                                             }}
                                             className="w-full text-left px-4 py-3 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
                                           >
@@ -1828,9 +1954,22 @@ Thank you.`;
 
                                       {/* Workflow Step 4: Editing Completed */}
                                       {(delivItem.status === 'Editing Completed' || delivItem.status === 'Editing Complete' || delivItem.status === 'Completed') && (
-                                        <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-xs font-bold flex items-center gap-2 border-t border-zinc-800">
-                                          <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Editing Completed
-                                        </div>
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setActiveDropdownId(null);
+                                              setEditingCompletedModal({ group: grp, actionItem: delivItem });
+                                              setEditingCompletedForm({ confirmation_proof: delivItem.confirmationProof || '', selectedIds: [delivItem.assignmentId] });
+                                            }}
+                                            className="w-full text-left px-4 py-3 text-xs text-zinc-300 hover:bg-zinc-800 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                          >
+                                            <Upload className="w-3.5 h-3.5 text-indigo-400" /> Update Proof
+                                          </button>
+                                          <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-xs font-bold flex items-center gap-2 border-t border-zinc-800">
+                                            <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Editing Completed
+                                          </div>
+                                        </>
                                       )}
                                     </>
                                   )}
@@ -2130,31 +2269,66 @@ Thank you.`;
                     Customer Confirmation Image / Proof <span className="text-rose-400">*</span>
                   </label>
 
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={async (e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        const compressed = await compressImage(e.target.files[0]);
-                        setEditingCompletedForm({ ...editingCompletedForm, confirmation_proof: compressed });
-                      }
-                    }}
-                    className="w-full text-xs text-zinc-300 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer mb-2"
-                  />
+                  {/* File Upload Field */}
+                  <div className="bg-zinc-950 border border-dashed border-indigo-500/30 hover:border-indigo-500/60 rounded-xl p-3 text-center transition-colors">
+                    <input
+                      type="file"
+                      id="customer_confirmation_file_input"
+                      accept="image/*"
+                      onChange={async (e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          const compressed = await compressImage(e.target.files[0]);
+                          setEditingCompletedForm({ ...editingCompletedForm, confirmation_proof: compressed });
+                        }
+                      }}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="customer_confirmation_file_input"
+                      className="cursor-pointer flex flex-col items-center justify-center gap-1.5 py-1"
+                    >
+                      <Upload className="w-5 h-5 text-indigo-400" />
+                      <span className="text-xs font-bold text-indigo-300">
+                        {editingCompletedForm.confirmation_proof ? 'Change Customer Proof Image' : 'Select Customer Proof Image'}
+                      </span>
+                      <span className="text-[10px] text-zinc-500 font-mono">PNG, JPG, JPEG, WEBP (auto-compressed & uploaded to Supabase)</span>
+                    </label>
+                  </div>
 
-                  <div className="text-[10px] text-zinc-500 text-center uppercase font-mono my-1">- OR ENTER PROOF IMAGE URL / DRIVE LINK -</div>
+                  <div className="text-[10px] text-zinc-500 text-center uppercase font-mono my-2">- OR ENTER DIRECT IMAGE URL / DRIVE LINK -</div>
 
                   <input
                     type="text"
                     placeholder="https://..."
-                    value={editingCompletedForm.confirmation_proof}
+                    value={editingCompletedForm.confirmation_proof.startsWith('data:') ? 'Image attached from file upload' : editingCompletedForm.confirmation_proof}
                     onChange={(e) => setEditingCompletedForm({ ...editingCompletedForm, confirmation_proof: e.target.value })}
                     className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
                   />
                   
+                  {/* Selected Image Thumbnail Preview */}
                   {editingCompletedForm.confirmation_proof && (
-                    <div className="mt-2 text-[11px] text-indigo-400 font-mono font-bold flex items-center gap-1">
-                      <Check className="w-3.5 h-3.5" /> Confirmation Proof Attached
+                    <div className="mt-3 p-3 bg-zinc-950 border border-indigo-500/20 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between text-xs text-indigo-400 font-mono font-bold">
+                        <span className="flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Proof Attached
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setEditingCompletedForm({ ...editingCompletedForm, confirmation_proof: '' })}
+                          className="text-zinc-500 hover:text-rose-400 text-[11px] font-normal cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
+
+                      <div className="relative rounded-lg overflow-hidden border border-zinc-800 max-h-48 bg-zinc-900 flex items-center justify-center">
+                        <img
+                          src={resolveStorageUrl(editingCompletedForm.confirmation_proof) || editingCompletedForm.confirmation_proof}
+                          alt="Customer Confirmation Proof Preview"
+                          referrerPolicy="no-referrer"
+                          className="max-h-48 max-w-full object-contain rounded-lg"
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2182,14 +2356,67 @@ Thank you.`;
                 disabled={isSubmitting || !editingCompletedForm.confirmation_proof.trim() || editingCompletedForm.selectedIds.length === 0}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer shadow-lg shadow-indigo-600/20"
               >
-                {isSubmitting ? 'Saving...' : 'Submit & Mark Editing Completed 🎯'}
+                {isSubmitting ? 'Uploading Proof & Saving...' : 'Submit & Mark Editing Completed 🎯'}
               </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* ========================================================= */}
+      {/* 4. CUSTOMER PROOF IMAGE ZOOM MODAL */}
+      {/* ========================================================= */}
+      {previewProofModal && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950/80">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-sm font-bold text-white truncate">{previewProofModal.title}</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewProofModal.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  referrerPolicy="no-referrer"
+                  className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded-lg flex items-center gap-1 cursor-pointer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open Full View</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewProofModal(null)}
+                  className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
 
+            <div className="p-4 overflow-auto flex-1 flex items-center justify-center bg-black/40 min-h-[300px]">
+              <img
+                src={previewProofModal.url}
+                alt="Customer Confirmation Proof"
+                referrerPolicy="no-referrer"
+                className="max-h-[70vh] max-w-full object-contain rounded-xl shadow-2xl border border-zinc-800"
+              />
+            </div>
+
+            <div className="p-3 border-t border-zinc-800 bg-zinc-950/80 flex items-center justify-between text-xs text-zinc-400">
+              <span className="font-mono text-[11px] truncate max-w-md">{previewProofModal.url}</span>
+              <button
+                type="button"
+                onClick={() => setPreviewProofModal(null)}
+                className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg font-bold cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* PROJECT DETAIL MODAL */}
       {selectedProjectForDetail && (

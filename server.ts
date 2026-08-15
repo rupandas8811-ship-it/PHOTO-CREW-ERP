@@ -82,7 +82,7 @@ async function startServer() {
 
       const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       
-      const base64Data = base64.replace(/^data:image\/\w+;base64,/, '');
+      const base64Data = base64.includes(';base64,') ? base64.split(';base64,')[1] : base64.replace(/^data:[^;]+;base64,/, '');
       const buffer = Buffer.from(base64Data, 'base64');
       
       // Ensure bucket 'img' exists and is public

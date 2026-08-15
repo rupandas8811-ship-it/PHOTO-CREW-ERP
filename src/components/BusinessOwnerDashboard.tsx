@@ -39,6 +39,7 @@ import {
   Briefcase,
   Video
 } from 'lucide-react';
+import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
 import { OwnerStaffPerformanceReport } from './OwnerModule';
 import { BusinessOwnerCardDetailModal } from './BusinessOwnerCardDetailModal';
 import { PaymentHistoryModal } from './PaymentHistoryModal';
@@ -964,69 +965,129 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
             {/* SALES PERFORMANCE */}
             <div className="space-y-3">
               <h3 className="text-xs font-black font-mono tracking-wider text-amber-400 uppercase">Sales Performance</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <div onClick={() => setSelectedCard('sales_total_leads')} className="bg-gradient-to-b from-amber-950/20 to-zinc-950 border border-amber-500/20 rounded-2xl p-4 shadow-xl hover:border-amber-500/60 hover:from-amber-950/30 hover:to-zinc-900 transition-all cursor-pointer group">
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-amber-400/70 mb-2">Total Leads</div>
-                  <div className="text-2xl font-black font-mono text-white group-hover:scale-105 transition-transform origin-left">{boCardsData.salesTotalLeads.length}</div>
-                </div>
-                <div onClick={() => setSelectedCard('sales_total_converted')} className="bg-gradient-to-b from-amber-950/20 to-zinc-950 border border-amber-500/20 rounded-2xl p-4 shadow-xl hover:border-amber-500/60 hover:from-amber-950/30 hover:to-zinc-900 transition-all cursor-pointer group">
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-amber-400/70 mb-2">Total Converted</div>
-                  <div className="text-2xl font-black font-mono text-white group-hover:scale-105 transition-transform origin-left">{boCardsData.salesConverted.length}</div>
-                </div>
-                <div onClick={() => setSelectedCard('sales_total_lost')} className="bg-gradient-to-b from-amber-950/20 to-zinc-950 border border-amber-500/20 rounded-2xl p-4 shadow-xl hover:border-amber-500/60 hover:from-amber-950/30 hover:to-zinc-900 transition-all cursor-pointer group">
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-amber-400/70 mb-2">Total Leads Lost</div>
-                  <div className="text-2xl font-black font-mono text-white group-hover:scale-105 transition-transform origin-left">{boCardsData.salesLost.length}</div>
-                </div>
-                <div onClick={() => setSelectedCard('sales_quotation_followup')} className="bg-gradient-to-b from-amber-950/20 to-zinc-950 border border-amber-500/20 rounded-2xl p-4 shadow-xl hover:border-amber-500/60 hover:from-amber-950/30 hover:to-zinc-900 transition-all cursor-pointer group">
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-amber-400/70 mb-2">Total Quotation Follow-up</div>
-                  <div className="text-2xl font-black font-mono text-white group-hover:scale-105 transition-transform origin-left">{boCardsData.salesFollowup.length}</div>
-                </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <CameraLensStatsCard
+                  label="Total Leads"
+                  val={boCardsData.salesTotalLeads.length}
+                  theme="amber"
+                  trendText="All Inquiries"
+                  lensLabel="PRIME 24mm"
+                  chartPoints={[10, 18, 14, 22, 19, 28, 25]}
+                  onClick={() => setSelectedCard('sales_total_leads')}
+                />
+                <CameraLensStatsCard
+                  label="Total Converted"
+                  val={boCardsData.salesConverted.length}
+                  theme="green"
+                  trendText="Confirmed Deals"
+                  lensLabel="PRIME 35mm"
+                  chartPoints={[8, 12, 15, 20, 24, 30, 32]}
+                  onClick={() => setSelectedCard('sales_total_converted')}
+                />
+                <CameraLensStatsCard
+                  label="Total Leads Lost"
+                  val={boCardsData.salesLost.length}
+                  theme="red"
+                  trendText="Closed / Lost"
+                  lensLabel="TELE 85mm"
+                  chartPoints={[5, 4, 6, 3, 5, 2, 4]}
+                  onClick={() => setSelectedCard('sales_total_lost')}
+                />
+                <CameraLensStatsCard
+                  label="Total Quotation Follow-up"
+                  val={boCardsData.salesFollowup.length}
+                  theme="gold"
+                  trendText="In Negotiation"
+                  lensLabel="CINE 50mm"
+                  chartPoints={[12, 15, 11, 18, 14, 20, 17]}
+                  onClick={() => setSelectedCard('sales_quotation_followup')}
+                />
               </div>
             </div>
 
             {/* OPERATIONS PERFORMANCE */}
             <div className="space-y-3">
               <h3 className="text-xs font-black font-mono tracking-wider text-blue-400 uppercase">Operations Performance</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <div onClick={() => setSelectedCard('ops_new')} className="bg-gradient-to-b from-blue-950/20 to-zinc-950 border border-blue-500/20 rounded-2xl p-4 shadow-xl hover:border-blue-500/60 hover:from-blue-950/30 hover:to-zinc-900 transition-all cursor-pointer group">
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-blue-400/70 mb-2">Total New Projects</div>
-                  <div className="text-2xl font-black font-mono text-white group-hover:scale-105 transition-transform origin-left">{boCardsData.opsNew.length}</div>
-                </div>
-                <div onClick={() => setSelectedCard('ops_completed')} className="bg-gradient-to-b from-blue-950/20 to-zinc-950 border border-blue-500/20 rounded-2xl p-4 shadow-xl hover:border-blue-500/60 hover:from-blue-950/30 hover:to-zinc-900 transition-all cursor-pointer group">
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-blue-400/70 mb-2">Total Completed Shoot Projects</div>
-                  <div className="text-2xl font-black font-mono text-white group-hover:scale-105 transition-transform origin-left">{boCardsData.opsCompleted.length}</div>
-                </div>
-                <div onClick={() => setSelectedCard('ops_upcoming')} className="bg-gradient-to-b from-blue-950/20 to-zinc-950 border border-blue-500/20 rounded-2xl p-4 shadow-xl hover:border-blue-500/60 hover:from-blue-950/30 hover:to-zinc-900 transition-all cursor-pointer group">
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-blue-400/70 mb-2">Total Upcoming Shoots</div>
-                  <div className="text-2xl font-black font-mono text-white group-hover:scale-105 transition-transform origin-left">{boCardsData.opsUpcoming.length}</div>
-                </div>
-                <div onClick={() => setSelectedCard('ops_scheduled')} className="bg-gradient-to-b from-blue-950/20 to-zinc-950 border border-blue-500/20 rounded-2xl p-4 shadow-xl hover:border-blue-500/60 hover:from-blue-950/30 hover:to-zinc-900 transition-all cursor-pointer group">
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-blue-400/70 mb-2">Total Scheduled</div>
-                  <div className="text-2xl font-black font-mono text-white group-hover:scale-105 transition-transform origin-left">{boCardsData.opsScheduled.length}</div>
-                </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <CameraLensStatsCard
+                  label="Total New Projects"
+                  val={boCardsData.opsNew.length}
+                  theme="blue"
+                  trendText="Awaiting Allocation"
+                  lensLabel="PRIME 24mm"
+                  chartPoints={[6, 10, 8, 14, 12, 18, 16]}
+                  onClick={() => setSelectedCard('ops_new')}
+                />
+                <CameraLensStatsCard
+                  label="Total Completed Shoot Projects"
+                  val={boCardsData.opsCompleted.length}
+                  theme="green"
+                  trendText="Shoots Wrapped"
+                  lensLabel="PRIME 50mm"
+                  chartPoints={[14, 18, 22, 28, 32, 38, 42]}
+                  onClick={() => setSelectedCard('ops_completed')}
+                />
+                <CameraLensStatsCard
+                  label="Total Upcoming Shoots"
+                  val={boCardsData.opsUpcoming.length}
+                  theme="cyan"
+                  trendText="Scheduled Fleet"
+                  lensLabel="TELE 135mm"
+                  chartPoints={[8, 12, 10, 16, 14, 20, 19]}
+                  onClick={() => setSelectedCard('ops_upcoming')}
+                />
+                <CameraLensStatsCard
+                  label="Total Scheduled"
+                  val={boCardsData.opsScheduled.length}
+                  theme="indigo"
+                  trendText="Crew Assigned"
+                  lensLabel="ZOOM 24-70"
+                  chartPoints={[10, 14, 12, 18, 16, 22, 21]}
+                  onClick={() => setSelectedCard('ops_scheduled')}
+                />
               </div>
             </div>
 
             {/* PRODUCTION PERFORMANCE */}
             <div className="space-y-3">
               <h3 className="text-xs font-black font-mono tracking-wider text-pink-400 uppercase">Production Performance</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <div onClick={() => setSelectedCard('prod_new')} className="bg-gradient-to-b from-pink-950/20 to-zinc-950 border border-pink-500/20 rounded-2xl p-4 shadow-xl hover:border-pink-500/60 hover:from-pink-950/30 hover:to-zinc-900 transition-all cursor-pointer group">
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-pink-400/70 mb-2">Total New Projects</div>
-                  <div className="text-2xl font-black font-mono text-white group-hover:scale-105 transition-transform origin-left">{boCardsData.prodNew.length}</div>
-                </div>
-                <div onClick={() => setSelectedCard('prod_inprogress')} className="bg-gradient-to-b from-pink-950/20 to-zinc-950 border border-pink-500/20 rounded-2xl p-4 shadow-xl hover:border-pink-500/60 hover:from-pink-950/30 hover:to-zinc-900 transition-all cursor-pointer group">
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-pink-400/70 mb-2">Total In Progress</div>
-                  <div className="text-2xl font-black font-mono text-white group-hover:scale-105 transition-transform origin-left">{boCardsData.prodInProgress.length}</div>
-                </div>
-                <div onClick={() => setSelectedCard('prod_editing_completed')} className="bg-gradient-to-b from-pink-950/20 to-zinc-950 border border-pink-500/20 rounded-2xl p-4 shadow-xl hover:border-pink-500/60 hover:from-pink-950/30 hover:to-zinc-900 transition-all cursor-pointer group">
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-pink-400/70 mb-2">Total Editing Completed</div>
-                  <div className="text-2xl font-black font-mono text-white group-hover:scale-105 transition-transform origin-left">{boCardsData.prodEditingCompleted.length}</div>
-                </div>
-                <div onClick={() => setSelectedCard('prod_client_acceptance')} className="bg-gradient-to-b from-pink-950/20 to-zinc-950 border border-pink-500/20 rounded-2xl p-4 shadow-xl hover:border-pink-500/60 hover:from-pink-950/30 hover:to-zinc-900 transition-all cursor-pointer group">
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-pink-400/70 mb-2">Total Client Acceptance</div>
-                  <div className="text-2xl font-black font-mono text-white group-hover:scale-105 transition-transform origin-left">{boCardsData.prodClientAcceptance.length}</div>
-                </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <CameraLensStatsCard
+                  label="Total New Projects"
+                  val={boCardsData.prodNew.length}
+                  theme="purple"
+                  trendText="Raw Footage Ingest"
+                  lensLabel="PRIME 35mm"
+                  chartPoints={[5, 9, 7, 13, 11, 17, 15]}
+                  onClick={() => setSelectedCard('prod_new')}
+                />
+                <CameraLensStatsCard
+                  label="Total In Progress"
+                  val={boCardsData.prodInProgress.length}
+                  theme="orange"
+                  trendText="Active Cutting"
+                  lensLabel="V-EDIT 50"
+                  chartPoints={[8, 14, 11, 19, 16, 24, 22]}
+                  onClick={() => setSelectedCard('prod_inprogress')}
+                />
+                <CameraLensStatsCard
+                  label="Total Editing Completed"
+                  val={boCardsData.prodEditingCompleted.length}
+                  theme="cyan"
+                  trendText="Render Complete"
+                  lensLabel="MASTER 85"
+                  chartPoints={[12, 16, 14, 22, 20, 26, 28]}
+                  onClick={() => setSelectedCard('prod_editing_completed')}
+                />
+                <CameraLensStatsCard
+                  label="Total Client Acceptance"
+                  val={boCardsData.prodClientAcceptance.length}
+                  theme="green"
+                  trendText="Client Approved"
+                  lensLabel="RELEASE 24"
+                  chartPoints={[15, 20, 18, 26, 24, 32, 35]}
+                  onClick={() => setSelectedCard('prod_client_acceptance')}
+                />
               </div>
             </div>
 
@@ -1945,60 +2006,58 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       </div>
 
       {/* Summary KPI Highlights Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <div 
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+        <CameraLensStatsCard
+          label="Total Revenue"
+          val={totalRevSum}
+          isCurrency={true}
+          currencyFormatter={formatINR}
+          theme="emerald"
+          trendText="Gross Value"
+          lensLabel="PRIME 50mm"
+          chartPoints={[25, 35, 30, 45, 40, 55, 60]}
           onClick={() => setSelectedCard('summary_revenue')}
-          className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5 hover:bg-zinc-900 hover:border-zinc-700 hover:scale-[1.02] cursor-pointer transition-all duration-200"
-        >
-          <div className="text-[10px] font-mono text-zinc-500 uppercase font-bold flex items-center justify-between">
-            <span>Total Revenue</span>
-            <span className="text-[9px] text-zinc-600">Details &rarr;</span>
-          </div>
-          <div className="text-lg font-black font-mono text-white mt-0.5">{formatINR(totalRevSum)}</div>
-        </div>
-
-        <div 
+        />
+        <CameraLensStatsCard
+          label="Payment Received"
+          val={totalRecSum}
+          isCurrency={true}
+          currencyFormatter={formatINR}
+          theme="green"
+          trendText="Collections"
+          lensLabel="CINE 35mm"
+          chartPoints={[20, 28, 25, 38, 35, 48, 52]}
           onClick={() => setSelectedCard('summary_payment')}
-          className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5 hover:bg-zinc-900 hover:border-zinc-750 hover:scale-[1.02] cursor-pointer transition-all duration-200"
-        >
-          <div className="text-[10px] font-mono text-zinc-500 uppercase font-bold flex items-center justify-between">
-            <span>Payment Received</span>
-            <span className="text-[9px] text-zinc-600">Details &rarr;</span>
-          </div>
-          <div className="text-lg font-black font-mono text-emerald-400 mt-0.5">{formatINR(totalRecSum)}</div>
-        </div>
-
-        <div 
+        />
+        <CameraLensStatsCard
+          label="Outstanding"
+          val={totalOutSum}
+          isCurrency={true}
+          currencyFormatter={formatINR}
+          theme="red"
+          trendText="Balance Due"
+          lensLabel="TELE 85mm"
+          chartPoints={[15, 12, 18, 14, 10, 12, 8]}
           onClick={() => setSelectedCard('summary_outstanding')}
-          className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5 hover:bg-zinc-900 hover:border-zinc-750 hover:scale-[1.02] cursor-pointer transition-all duration-200"
-        >
-          <div className="text-[10px] font-mono text-zinc-500 uppercase font-bold flex items-center justify-between">
-            <span>Outstanding</span>
-            <span className="text-[9px] text-zinc-600">Details &rarr;</span>
-          </div>
-          <div className="text-lg font-black font-mono text-rose-400 mt-0.5">{formatINR(totalOutSum)}</div>
-        </div>
-
-        <div 
+        />
+        <CameraLensStatsCard
+          label="Completed"
+          val={completedCount}
+          theme="amber"
+          trendText="Projects Wrapped"
+          lensLabel="PRIME 24mm"
+          chartPoints={[10, 15, 12, 20, 18, 25, 28]}
           onClick={() => setSelectedCard('summary_completed')}
-          className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5 hover:bg-zinc-900 hover:border-zinc-750 hover:scale-[1.02] cursor-pointer transition-all duration-200"
-        >
-          <div className="text-[10px] font-mono text-zinc-500 uppercase font-bold flex items-center justify-between">
-            <span>Completed</span>
-            <span className="text-[9px] text-zinc-600">Details &rarr;</span>
-          </div>
-          <div className="text-lg font-black font-mono text-amber-400 mt-0.5">{completedCount} Projects</div>
-        </div>
-        <div 
+        />
+        <CameraLensStatsCard
+          label="Closed Orders"
+          val={closedCount}
+          theme="blue"
+          trendText="Settled Orders"
+          lensLabel="TELE 135mm"
+          chartPoints={[8, 12, 10, 16, 15, 22, 24]}
           onClick={() => setSelectedCard('summary_closed')}
-          className="bg-zinc-950 border border-zinc-850 rounded-xl p-3.5 col-span-2 sm:col-span-1 hover:bg-zinc-900 hover:border-zinc-750 hover:scale-[1.02] cursor-pointer transition-all duration-200"
-        >
-          <div className="text-[10px] font-mono text-zinc-500 uppercase font-bold flex items-center justify-between">
-            <span>Closed Orders</span>
-            <span className="text-[9px] text-zinc-600">Details &rarr;</span>
-          </div>
-          <div className="text-lg font-black font-mono text-blue-400 mt-0.5">{closedCount} Projects</div>
-        </div>
+        />
       </div>
 
       {showFilters && (

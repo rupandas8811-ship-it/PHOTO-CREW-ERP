@@ -30,10 +30,10 @@ export function resolveStorageUrl(val: any): string | null {
 }
 
 /**
- * Uploads an image (base64 string or File) to Supabase Storage bucket 'img'
+ * Uploads an image (base64 string, File, or Blob) to Supabase Storage bucket 'img'
  * and returns the public URL. If proofInput is already an HTTP/HTTPS URL, returns it directly.
  */
-export async function uploadProofToStorage(proofInput: string | File, filenamePrefix: string = 'proof'): Promise<string> {
+export async function uploadProofToStorage(proofInput: string | File | Blob, filenamePrefix: string = 'proof'): Promise<string> {
   if (!proofInput) {
     throw new Error("No proof image or link provided.");
   }
@@ -47,19 +47,26 @@ export async function uploadProofToStorage(proofInput: string | File, filenamePr
     }
   }
 
-  if (!supabaseClient) {
-    throw new Error("Supabase client is not initialized.");
-  }
-
   let blob: Blob;
   let contentType = 'image/jpeg';
+  let base64DataUri: string | null = null;
 
-  if (proofInput instanceof File) {
+  if (proofInput instanceof File || proofInput instanceof Blob) {
     blob = proofInput;
     contentType = proofInput.type || 'image/jpeg';
+    try {
+      base64DataUri = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(proofInput);
+      });
+    } catch (e) {
+      console.warn("[uploadProofToStorage] Could not generate base64 for fallback:", e);
+    }
   } else if (typeof proofInput === 'string' && proofInput.trim().startsWith('data:')) {
-    const trimmed = proofInput.trim();
-    const parts = trimmed.split(';base64,');
+    base64DataUri = proofInput.trim();
+    const parts = base64DataUri.split(';base64,');
     contentType = parts[0].replace('data:', '') || 'image/jpeg';
     const byteCharacters = atob(parts[1]);
     const byteArrays = [];
@@ -80,32 +87,63 @@ export async function uploadProofToStorage(proofInput: string | File, filenamePr
     throw new Error("Invalid proof input format.");
   }
 
+  const cleanPrefix = filenamePrefix.replace(/[^a-zA-Z0-9_-]/g, '_');
   const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
-  const fileName = `proofs/${filenamePrefix}_${Date.now()}_${Math.floor(Math.random() * 10000)}.${ext}`;
+  const fileName = `proofs/${cleanPrefix}_${Date.now()}_${Math.floor(Math.random() * 10000)}.${ext}`;
 
-  // Upload to 'img' bucket
-  const { error } = await supabaseClient.storage
-    .from('img')
-    .upload(fileName, blob, {
-      contentType,
-      upsert: true
-    });
+  // 1. Try Direct Supabase Client Upload first
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient.storage
+        .from('img')
+        .upload(fileName, blob, {
+          contentType,
+          upsert: true
+        });
 
-  if (error) {
-    console.error("[uploadProofToStorage] Storage upload error:", error);
-    throw new Error(`Supabase Storage Upload Error: ${error.message || JSON.stringify(error)}`);
+      if (!error) {
+        const { data: publicData } = supabaseClient.storage
+          .from('img')
+          .getPublicUrl(fileName);
+
+        if (publicData && publicData.publicUrl) {
+          console.log("[uploadProofToStorage] Uploaded directly to Supabase storage:", publicData.publicUrl);
+          return publicData.publicUrl;
+        }
+      } else {
+        console.warn("[uploadProofToStorage] Direct storage upload warning:", error.message || error);
+      }
+    } catch (directErr) {
+      console.warn("[uploadProofToStorage] Direct storage upload exception:", directErr);
+    }
   }
 
-  const { data: publicData } = supabaseClient.storage
-    .from('img')
-    .getPublicUrl(fileName);
-
-  if (!publicData || !publicData.publicUrl) {
-    throw new Error("Failed to generate public Storage URL for uploaded proof.");
+  // 2. Fallback to Server Proxy /api/upload-proof (Admin client with Service Role key)
+  if (base64DataUri) {
+    try {
+      const resp = await fetch('/api/upload-proof', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          base64: base64DataUri,
+          fileName,
+          contentType
+        })
+      });
+      const resData = await resp.json();
+      if (resData.success && resData.publicUrl) {
+        console.log("[uploadProofToStorage] Uploaded successfully via server admin proxy:", resData.publicUrl);
+        return resData.publicUrl;
+      } else {
+        throw new Error(resData.error || 'Server storage upload failed');
+      }
+    } catch (proxyErr: any) {
+      console.error("[uploadProofToStorage] Server proxy upload exception:", proxyErr);
+      throw new Error(`Supabase Storage Upload Error: ${proxyErr.message || String(proxyErr)}`);
+    }
   }
 
-  console.log("[uploadProofToStorage] Uploaded proof successfully:", publicData.publicUrl);
-  return publicData.publicUrl;
+  throw new Error("Supabase Storage Upload Error: Failed to upload proof image to Supabase Storage.");
 }
 
 /**

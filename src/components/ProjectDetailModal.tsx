@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useRole } from './RoleContext';
 import { 
   X, User, Phone, Mail, MapPin, DollarSign, Calendar, Clock, Film, 
-  CheckCircle, AlertCircle, RefreshCw, Layers, ArrowRight, Shield, FileText, Landmark
+  CheckCircle, CheckCircle2, AlertCircle, RefreshCw, Layers, ArrowRight, Shield, FileText, Landmark, Eye, ExternalLink
 } from 'lucide-react';
-import { formatINR, formatTime12Hour, deserializeLeadEvents } from '../utils';
+import { formatINR, formatTime12Hour, deserializeLeadEvents, resolveStorageUrl } from '../utils';
 import { CurrentStage } from '../types';
 
 interface ProjectDetailModalProps {
@@ -35,8 +35,9 @@ const STAGES_ORDER: CurrentStage[] = [
 ];
 
 export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, onClose, orderId, eventId }) => {
-  const { orders, leads, operations, rawFootage, production, payments, logs, currentRole, equipmentHandovers } = useRole();
+  const { orders, leads, operations, rawFootage, production, payments, logs, currentRole, equipmentHandovers, editorAssignments } = useRole();
   const [activeTab, setActiveTab] = useState<'overview' | 'sales' | 'operations' | 'production' | 'billing'>('overview');
+  const [proofImageZoom, setProofImageZoom] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -249,6 +250,95 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
                   <span className="text-zinc-400 font-bold font-mono tracking-tight bg-zinc-950 px-2.5 py-1 rounded border border-zinc-850">
                     {previousStage || 'N/A'}
                   </span>
+                  {/* Customer Confirmation Image / Proof Card */}
+                  {(() => {
+                    const relatedAssignments = editorAssignments ? editorAssignments.filter((ea) => 
+                      ea.order_id === orderId || 
+                      (prod && ea.production_id === prod.production_id) ||
+                      (lead && ea.order_id === lead.lead_id)
+                    ) : [];
+                    
+                    const rawProofUrl = 
+                      relatedAssignments.find((a) => a.confirmation_proof || a.customer_communication_proof || a.proof_url)?.confirmation_proof ||
+                      relatedAssignments.find((a) => a.customer_communication_proof)?.customer_communication_proof ||
+                      relatedAssignments.find((a) => a.proof_url)?.proof_url ||
+                      order.client_communication_proof ||
+                      order.customer_communication_proof ||
+                      order.proof_url ||
+                      (prod?.remarks?.includes('Proof (') ? prod.remarks.split('Proof (')[1]?.split(')')[0] : null);
+
+                    if (!rawProofUrl) return null;
+
+                    const displayUrl = resolveStorageUrl(rawProofUrl) || rawProofUrl;
+
+                    return (
+                      <div className="md:col-span-12 bg-gradient-to-br from-indigo-950/40 via-zinc-950 to-zinc-950 p-5 rounded-2xl border border-indigo-500/30 space-y-3 font-mono">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-[10px] font-black tracking-widest text-indigo-400 uppercase flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-indigo-400" />
+                            <span>CUSTOMER CONFIRMATION IMAGE / PROOF</span>
+                          </h4>
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30">
+                            Verified Storage Proof
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-zinc-950/80 p-3 rounded-xl border border-zinc-850">
+                          {displayUrl.startsWith('http') || displayUrl.startsWith('data:') ? (
+                            <button
+                              type="button"
+                              onClick={() => setProofImageZoom(displayUrl)}
+                              className="relative group shrink-0 w-24 h-24 rounded-lg overflow-hidden border border-zinc-800 hover:border-indigo-500 transition-all cursor-pointer bg-zinc-900 flex items-center justify-center shadow-md"
+                            >
+                              <img
+                                src={displayUrl}
+                                alt="Customer Confirmation Proof"
+                                referrerPolicy="no-referrer"
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[10px] font-sans font-bold gap-1">
+                                <Eye className="w-3.5 h-3.5" /> Zoom
+                              </div>
+                            </button>
+                          ) : null}
+
+                          <div className="space-y-1.5 flex-1 min-w-0">
+                            <div className="text-xs font-sans font-bold text-white flex items-center gap-2">
+                              <span>Customer Confirmation Proof Attached</span>
+                            </div>
+                            <p className="text-[11px] text-zinc-400 font-mono truncate select-all">
+                              {displayUrl}
+                            </p>
+                            <div className="flex items-center gap-2 pt-1">
+                              {displayUrl.startsWith('http') && (
+                                <a
+                                  href={displayUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  referrerPolicy="no-referrer"
+                                  className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-sans font-bold transition-all shadow cursor-pointer"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                  <span>Open Original File</span>
+                                </a>
+                              )}
+                              {(displayUrl.startsWith('http') || displayUrl.startsWith('data:')) && (
+                                <button
+                                  type="button"
+                                  onClick={() => setProofImageZoom(displayUrl)}
+                                  className="inline-flex items-center gap-1 px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-xs font-sans font-bold transition-all cursor-pointer"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>View Large Preview</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                 </div>
                 <div className="py-3 md:py-0">
                   <span className="text-[10px] text-amber-500 font-mono uppercase tracking-widest block mb-1 font-bold">Current Status</span>
@@ -747,6 +837,95 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
                     </div>
                   </div>
 
+                  {/* Customer Confirmation Image / Proof Card */}
+                  {(() => {
+                    const relatedAssignments = editorAssignments ? editorAssignments.filter((ea) => 
+                      ea.order_id === orderId || 
+                      (prod && ea.production_id === prod.production_id) ||
+                      (lead && ea.order_id === lead.lead_id)
+                    ) : [];
+                    
+                    const rawProofUrl = 
+                      relatedAssignments.find((a) => a.confirmation_proof || a.customer_communication_proof || a.proof_url)?.confirmation_proof ||
+                      relatedAssignments.find((a) => a.customer_communication_proof)?.customer_communication_proof ||
+                      relatedAssignments.find((a) => a.proof_url)?.proof_url ||
+                      order.client_communication_proof ||
+                      order.customer_communication_proof ||
+                      order.proof_url ||
+                      (prod?.remarks?.includes('Proof (') ? prod.remarks.split('Proof (')[1]?.split(')')[0] : null);
+
+                    if (!rawProofUrl) return null;
+
+                    const displayUrl = resolveStorageUrl(rawProofUrl) || rawProofUrl;
+
+                    return (
+                      <div className="md:col-span-12 bg-gradient-to-br from-indigo-950/40 via-zinc-950 to-zinc-950 p-5 rounded-2xl border border-indigo-500/30 space-y-3 font-mono">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-[10px] font-black tracking-widest text-indigo-400 uppercase flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-indigo-400" />
+                            <span>CUSTOMER CONFIRMATION IMAGE / PROOF</span>
+                          </h4>
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30">
+                            Verified Storage Proof
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-zinc-950/80 p-3 rounded-xl border border-zinc-850">
+                          {displayUrl.startsWith('http') || displayUrl.startsWith('data:') ? (
+                            <button
+                              type="button"
+                              onClick={() => setProofImageZoom(displayUrl)}
+                              className="relative group shrink-0 w-24 h-24 rounded-lg overflow-hidden border border-zinc-800 hover:border-indigo-500 transition-all cursor-pointer bg-zinc-900 flex items-center justify-center shadow-md"
+                            >
+                              <img
+                                src={displayUrl}
+                                alt="Customer Confirmation Proof"
+                                referrerPolicy="no-referrer"
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[10px] font-sans font-bold gap-1">
+                                <Eye className="w-3.5 h-3.5" /> Zoom
+                              </div>
+                            </button>
+                          ) : null}
+
+                          <div className="space-y-1.5 flex-1 min-w-0">
+                            <div className="text-xs font-sans font-bold text-white flex items-center gap-2">
+                              <span>Customer Confirmation Proof Attached</span>
+                            </div>
+                            <p className="text-[11px] text-zinc-400 font-mono truncate select-all">
+                              {displayUrl}
+                            </p>
+                            <div className="flex items-center gap-2 pt-1">
+                              {displayUrl.startsWith('http') && (
+                                <a
+                                  href={displayUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  referrerPolicy="no-referrer"
+                                  className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-sans font-bold transition-all shadow cursor-pointer"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                  <span>Open Original File</span>
+                                </a>
+                              )}
+                              {(displayUrl.startsWith('http') || displayUrl.startsWith('data:')) && (
+                                <button
+                                  type="button"
+                                  onClick={() => setProofImageZoom(displayUrl)}
+                                  className="inline-flex items-center gap-1 px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-xs font-sans font-bold transition-all cursor-pointer"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>View Large Preview</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                 </div>
               ) : (
                 <div className="p-8 text-center bg-zinc-900/20 border border-zinc-930 rounded-2xl text-zinc-500 space-y-2">
@@ -856,6 +1035,59 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
         </div>
 
       </div>
+
+      {/* Proof Image Zoom Modal */}
+      {proofImageZoom && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
+          onClick={() => setProofImageZoom(null)}
+        >
+          <div 
+            className="relative max-w-4xl max-h-[90vh] bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl p-2 flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-full flex justify-between items-center px-4 py-2 border-b border-zinc-800 mb-2">
+              <span className="text-xs font-mono font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-indigo-400" />
+                Customer Confirmation Image / Proof
+              </span>
+              <button
+                type="button"
+                onClick={() => setProofImageZoom(null)}
+                className="p-1 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="overflow-auto max-h-[75vh] w-full flex items-center justify-center">
+              <img
+                src={proofImageZoom}
+                alt="Confirmation Proof Full View"
+                referrerPolicy="no-referrer"
+                className="max-w-full max-h-[75vh] object-contain rounded-lg shadow-lg"
+              />
+            </div>
+            <div className="w-full flex justify-end gap-2 pt-3 px-4 pb-2 border-t border-zinc-800 mt-2">
+              <a
+                href={proofImageZoom}
+                target="_blank"
+                rel="noopener noreferrer"
+                referrerPolicy="no-referrer"
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold font-sans flex items-center gap-1.5 cursor-pointer"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> Open Full Image
+              </a>
+              <button
+                type="button"
+                onClick={() => setProofImageZoom(null)}
+                className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-xs font-bold font-sans cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

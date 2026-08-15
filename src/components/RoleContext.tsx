@@ -236,7 +236,8 @@ interface RoleContextType {
   
   editorAssignments: EditorAssignment[];
   assignEditorToProject: (assignment: Omit<EditorAssignment, 'assignment_id' | 'status' | 'assigned_date'>) => Promise<void>;
-  updateEditorAssignmentStatus: (assignmentId: string, status: EditorAssignment['status']) => Promise<void>;
+  updateEditorAssignmentStatus: (assignmentId: string, status: EditorAssignment['status'], extraUpdates?: Partial<Omit<EditorAssignment, 'assignment_id'>>) => Promise<void>;
+  updateEditorAssignment: (assignmentId: string, updates: Partial<Omit<EditorAssignment, 'assignment_id'>>) => Promise<void>;
   deleteEditorAssignment: (assignmentId: string) => Promise<void>;
   globalDateRange: { start: string; end: string };
   setGlobalDateRange: (range: { start: string; end: string }) => void;
@@ -6059,13 +6060,13 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
   };
 
-  const updateEditorAssignmentStatus = async (assignmentId: string, status: EditorAssignment['status']) => {
+  const updateEditorAssignment = async (assignmentId: string, updates: Partial<Omit<EditorAssignment, 'assignment_id'>>) => {
     let targetAssignment: EditorAssignment | undefined;
     
     setEditorAssignments(prev => {
       const updated = prev.map(a => {
         if (a.assignment_id === assignmentId) {
-          targetAssignment = { ...a, status };
+          targetAssignment = { ...a, ...updates };
           return targetAssignment;
         }
         return a;
@@ -6074,7 +6075,30 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       return updated;
     });
 
-    await pushUpdate('editor_assignments', 'assignment_id', assignmentId, { status });
+    await pushUpdate('editor_assignments', 'assignment_id', assignmentId, updates);
+    logActivity(`Updated Editor Task ${assignmentId} fields: ${Object.keys(updates).join(', ')}`, 'Production', assignmentId);
+  };
+
+  const updateEditorAssignmentStatus = async (
+    assignmentId: string,
+    status: EditorAssignment['status'],
+    extraUpdates?: Partial<Omit<EditorAssignment, 'assignment_id'>>
+  ) => {
+    let targetAssignment: EditorAssignment | undefined;
+    
+    setEditorAssignments(prev => {
+      const updated = prev.map(a => {
+        if (a.assignment_id === assignmentId) {
+          targetAssignment = { ...a, status, ...(extraUpdates || {}) };
+          return targetAssignment;
+        }
+        return a;
+      });
+      localStorage.setItem('erp_editor_assignments', JSON.stringify(updated));
+      return updated;
+    });
+
+    await pushUpdate('editor_assignments', 'assignment_id', assignmentId, { status, ...(extraUpdates || {}) });
     logActivity(`Updated Editor Task ${assignmentId} status to: ${status}`, 'Production', assignmentId);
     
     // Defer reading the up-to-date assignment list to correctly calculate and push production updates
