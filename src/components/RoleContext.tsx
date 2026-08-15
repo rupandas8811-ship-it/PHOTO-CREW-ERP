@@ -4771,7 +4771,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         : [currentUserName || 'Production Staff', currentRole || 'Production'];
       const changedBy = roleParts[0];
       const changedByRole = roleParts[1] || currentRole || 'Production';
-      const proofToRecord = updates.client_communication_proof || updates.customer_communication_proof || (updates as any).proof_url;
+      const proofToRecord = updates.client_communication_proof || (updates as any).customer_communication_proof || (updates as any).proof_url;
 
       const newHist = {
         lead_id: leadIdToUpdate || actualTrackingId,

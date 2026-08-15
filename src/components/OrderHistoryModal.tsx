@@ -5,7 +5,7 @@ import {
   Film, FileText, ExternalLink, Eye, X, Search, Filter, ArrowDownUp, 
   ShieldCheck, Image as ImageIcon, Link as LinkIcon, AlertCircle, Play, 
   Send, RefreshCw, ChevronRight, Layers, FileVideo, Download
-} from 'lucide-react';
+, ChevronDown} from 'lucide-react';
 import { useRole } from './RoleContext';
 import { formatINR, resolveStorageUrl, parseCustomerProof } from '../utils';
 
@@ -52,7 +52,11 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
   } = useRole();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  
+  const toggleSection = (section: string) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !(prev[section] ?? true) }));
+  };
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
 
@@ -455,12 +459,9 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
     targetOrderId
   ]);
 
-  // Filtered list based on Search & Category
+  // Filtered list based on Search
   const filteredHistory = useMemo(() => {
     return historyItems.filter(item => {
-      const matchCat = selectedCategory === 'All' || item.category === selectedCategory;
-      if (!matchCat) return false;
-
       if (!searchTerm.trim()) return true;
       const query = searchTerm.toLowerCase();
       return (
@@ -471,7 +472,19 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
         item.formattedDate.toLowerCase().includes(query)
       );
     });
-  }, [historyItems, selectedCategory, searchTerm]);
+  }, [historyItems, searchTerm]);
+
+  const CATEGORY_ORDER = ['Sales', 'Operations', 'Production', 'Client Consent', 'Payment', 'Other'];
+
+  const groupedHistory = useMemo(() => {
+    const groups: Record<string, typeof filteredHistory> = {};
+    filteredHistory.forEach(item => {
+      const cat = item.category || 'Other';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(item);
+    });
+    return groups;
+  }, [filteredHistory]);
 
   if (!isOpen || !order) return null;
 
@@ -524,26 +537,8 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
         </div>
 
         {/* Filter & Search Bar */}
-        <div className="p-3 sm:p-4 bg-zinc-900/40 border-b border-zinc-850 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+        <div className="p-3 sm:p-4 bg-zinc-900/40 border-b border-zinc-850 flex flex-col sm:flex-row items-center justify-end gap-3 shrink-0">
           
-          {/* Category Filter Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 custom-scrollbar">
-            {['All', 'Sales', 'Operations', 'Production', 'Client Consent', 'Payment'].map(cat => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-3 py-1 rounded-lg text-xs font-bold font-mono transition-all whitespace-nowrap cursor-pointer ${
-                  selectedCategory === cat
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border border-zinc-800'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-
           {/* Search & Sort */}
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <div className="relative flex-1 sm:w-64">
@@ -578,10 +573,36 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
               <p className="text-zinc-600 text-xs font-mono">Try switching the category filter or clearing the search box.</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {filteredHistory.map((item, idx) => (
-                <div 
-                  key={item.id} 
+            <div className="space-y-4">
+              {CATEGORY_ORDER.map(cat => {
+                const groupItems = groupedHistory[cat];
+                if (!groupItems || groupItems.length === 0) return null;
+                const isExpanded = expandedSections[cat] ?? true;
+
+                return (
+                  <div key={cat} className="border border-zinc-800 rounded-2xl bg-zinc-900/40 overflow-hidden flex flex-col">
+                    <button
+                      type="button"
+                      onClick={() => toggleSection(cat)}
+                      className="w-full flex items-center justify-between p-4 bg-zinc-900 hover:bg-zinc-800/80 transition-colors border-b border-zinc-800/60 cursor-pointer"
+                    >
+                      <h3 className="text-sm font-bold text-zinc-100 flex items-center gap-2 uppercase tracking-wide">
+                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                        {cat}
+                      </h3>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-zinc-500 font-mono font-bold bg-zinc-950 px-2 py-0.5 rounded-md border border-zinc-800">
+                          {groupItems.length} {groupItems.length === 1 ? 'record' : 'records'}
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                      </div>
+                    </button>
+                    
+                    {isExpanded && (
+                      <div className="p-3 sm:p-4 space-y-3 bg-zinc-950/30">
+                        {groupItems.map((item, idx) => (
+                          <div 
+                            key={item.id} 
                   className="bg-zinc-900/60 hover:bg-zinc-900/90 border border-zinc-800/80 rounded-xl p-3.5 sm:p-4 transition-all space-y-3"
                 >
                   {/* Top Bar: Date, Activity, Category & Status */}
@@ -598,9 +619,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
                         )}
                       </div>
 
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-zinc-950 text-zinc-400 border border-zinc-800">
-                        {item.category}
-                      </span>
+
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
@@ -691,8 +710,13 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
                       </div>
                     </div>
                   )}
-                </div>
-              ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
