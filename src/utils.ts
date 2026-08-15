@@ -831,3 +831,195 @@ export const convertTo12Hour = (timeStr: string | undefined | null): string => {
   const h12 = h % 12 || 12;
   return `${h12.toString().padStart(2, '0')}:${min} ${ampm}`;
 };
+
+export interface ParsedCustomerProof {
+  hasProof: boolean;
+  imageUrl: string | null;
+  linkUrl: string | null;
+  proofType: 'image' | 'link' | 'both' | 'button' | 'none';
+}
+
+/**
+ * Intelligently inspects and extracts saved Customer Confirmation Proof / Image across
+ * editor_assignments, production, and orders records in Supabase.
+ */
+export function parseCustomerProof(
+  assignment: any,
+  prodRec?: any,
+  orderRec?: any
+): ParsedCustomerProof {
+  if (!assignment && !prodRec && !orderRec) {
+    return { hasProof: false, imageUrl: null, linkUrl: null, proofType: 'none' };
+  }
+
+  // 1. Gather all candidate proof strings from the assignment record
+  const assignmentCandidates = assignment ? [
+    assignment.confirmation_proof,
+    assignment.customer_communication_proof,
+    assignment.client_communication_proof,
+    assignment.proof_image,
+    assignment.image_proof,
+    assignment.image_url,
+    assignment.uploaded_proof,
+    assignment.upload_proof,
+    assignment.proof_url,
+    assignment.proof
+  ] : [];
+
+  let rawImageUrl: string | null = null;
+  let rawLinkUrl: string | null = null;
+
+  const isImageValue = (val: string): boolean => {
+    const trimmed = val.trim();
+    if (
+      trimmed.startsWith('data:image/') ||
+      trimmed.startsWith('data:') ||
+      trimmed.startsWith('blob:') ||
+      trimmed.includes('/storage/v1/object/public/img/') ||
+      trimmed.includes('/storage/v1/object/public/') ||
+      trimmed.includes('googleusercontent.com') ||
+      /\.(jpg|jpeg|png|webp|gif|svg|bmp|avif)(\?.*)?$/i.test(trimmed) ||
+      /^(img\/)?proofs\/.*\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(trimmed)
+    ) {
+      return true;
+    }
+    const resolved = resolveStorageUrl(trimmed);
+    if (resolved && (resolved.includes('/img/') || /\.(jpg|jpeg|png|webp|gif|svg|bmp|avif)/i.test(resolved))) {
+      return true;
+    }
+    return false;
+  };
+
+  const isLinkValue = (val: string): boolean => {
+    const trimmed = val.trim();
+    return (
+      trimmed.startsWith('http://') ||
+      trimmed.startsWith('https://') ||
+      trimmed.startsWith('www.') ||
+      trimmed.includes('drive.google.com') ||
+      trimmed.includes('dropbox.com') ||
+      trimmed.includes('mega.nz') ||
+      trimmed.includes('onedrive.live.com') ||
+      trimmed.includes('icloud.com')
+    );
+  };
+
+  const isValidValue = (val: any): val is string => {
+    if (!val || typeof val !== 'string') return false;
+    const trimmed = val.trim();
+    if (!trimmed) return false;
+    const lower = trimmed.toLowerCase();
+    return !['pending', 'null', 'undefined', '-', 'n/a', 'none', 'pending upload', 'not uploaded'].includes(lower);
+  };
+
+  for (const cand of assignmentCandidates) {
+    if (!isValidValue(cand)) continue;
+    const trimmed = cand.trim();
+
+    if (isImageValue(trimmed)) {
+      if (!rawImageUrl) {
+        rawImageUrl = trimmed;
+      }
+    } else if (isLinkValue(trimmed)) {
+      if (!rawLinkUrl) {
+        rawLinkUrl = trimmed;
+      }
+    }
+  }
+
+  // 2. Fallback to prodRec / orderRec if no proof found on assignment and this assignment matches
+  if (!rawImageUrl && !rawLinkUrl) {
+    const fallbackCandidates = [
+      prodRec?.client_communication_proof,
+      prodRec?.customer_communication_proof,
+      prodRec?.proof_url,
+      prodRec?.communication_proof,
+      prodRec?.proof_image,
+      orderRec?.client_communication_proof,
+      orderRec?.customer_communication_proof,
+      orderRec?.proof_url
+    ];
+
+    for (const cand of fallbackCandidates) {
+      if (!isValidValue(cand)) continue;
+      const trimmed = cand.trim();
+
+      if (isImageValue(trimmed)) {
+        if (!rawImageUrl) rawImageUrl = trimmed;
+      } else if (isLinkValue(trimmed)) {
+        if (!rawLinkUrl) rawLinkUrl = trimmed;
+      }
+    }
+  }
+
+  // 3. Check if production remarks contains an uploaded proof URL
+  if (!rawImageUrl && !rawLinkUrl && prodRec?.remarks && typeof prodRec.remarks === 'string') {
+    const match = prodRec.remarks.match(/Proof \((https?:\/\/[^\s)]+)\)/i) || prodRec.remarks.match(/Confirmation Proof:?\s*(https?:\/\/[^\s)]+)/i);
+    if (match && match[1]) {
+      const pUrl = match[1].trim();
+      if (isImageValue(pUrl)) {
+        rawImageUrl = pUrl;
+      } else if (isLinkValue(pUrl)) {
+        rawLinkUrl = pUrl;
+      }
+    }
+  }
+
+  // Format and resolve Image URL
+  let resolvedImageUrl: string | null = null;
+  if (rawImageUrl) {
+    resolvedImageUrl = resolveStorageUrl(rawImageUrl) || rawImageUrl;
+    if (resolvedImageUrl.includes('drive.google.com/file/d/')) {
+      const fileIdMatch = resolvedImageUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      if (fileIdMatch && fileIdMatch[1]) {
+        resolvedImageUrl = `https://lh3.googleusercontent.com/d/${fileIdMatch[1]}`;
+      }
+    } else if (resolvedImageUrl.includes('drive.google.com/open?id=')) {
+      const fileIdMatch = resolvedImageUrl.match(/id=([a-zA-Z0-9_-]+)/);
+      if (fileIdMatch && fileIdMatch[1]) {
+        resolvedImageUrl = `https://lh3.googleusercontent.com/d/${fileIdMatch[1]}`;
+      }
+    }
+  }
+
+  // Format and resolve Link URL
+  let resolvedLinkUrl: string | null = null;
+  if (rawLinkUrl) {
+    resolvedLinkUrl = rawLinkUrl.startsWith('http') ? rawLinkUrl : `https://${rawLinkUrl}`;
+  }
+
+  // Determine proofType according to user specification
+  if (resolvedImageUrl && resolvedLinkUrl && resolvedImageUrl !== resolvedLinkUrl) {
+    return {
+      hasProof: true,
+      imageUrl: resolvedImageUrl,
+      linkUrl: resolvedLinkUrl,
+      proofType: 'both'
+    };
+  }
+
+  if (resolvedImageUrl) {
+    return {
+      hasProof: true,
+      imageUrl: resolvedImageUrl,
+      linkUrl: null,
+      proofType: 'image'
+    };
+  }
+
+  if (resolvedLinkUrl) {
+    return {
+      hasProof: true,
+      imageUrl: null,
+      linkUrl: resolvedLinkUrl,
+      proofType: 'link'
+    };
+  }
+
+  return {
+    hasProof: false,
+    imageUrl: null,
+    linkUrl: null,
+    proofType: 'none'
+  };
+}

@@ -9,7 +9,7 @@ import {
 import { supabaseClient } from '../supabaseClient';
 import { EditorAssignment } from '../types';
 import { ProjectDetailModal } from './ProjectDetailModal';
-import { parseQtyAndText, formatQtyItem, deserializeLeadEvents, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl } from '../utils';
+import { parseQtyAndText, formatQtyItem, deserializeLeadEvents, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof } from '../utils';
 
 // Floating Action Menu Dropdown using React Portal
 interface ActionMenuDropdownProps {
@@ -1504,24 +1504,106 @@ Thank you.`;
 
                                   {/* 9. Customer Proof */}
                                   <td className="px-3.5 py-3 whitespace-nowrap font-mono">
-                                    {delivItem.confirmationProof ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => setPreviewProofModal({
-                                          url: resolveStorageUrl(delivItem.confirmationProof) || delivItem.confirmationProof,
-                                          title: `Customer Confirmation Proof - ${delivItem.customerName} (${delivItem.orderId})`
-                                        })}
-                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/25 rounded-lg text-[10px] font-bold transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98]"
-                                        title="Click to view full confirmation image"
-                                      >
-                                        <CheckCircle2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                                        <span>View Proof</span>
-                                      </button>
-                                    ) : (
-                                      <span className="text-zinc-600 italic text-[11px]">
-                                        {['Customer Review', 'Client Review', 'Revision Required'].includes(delivItem.status) ? 'Pending Proof' : '-'}
-                                      </span>
-                                    )}
+                                    {(() => {
+                                      const proof = parseCustomerProof(delivItem.assignmentObj, delivItem.prodObj, delivItem.orderObj);
+
+                                      if (!proof.hasProof) {
+                                        return (
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 text-zinc-500 border border-zinc-800 text-[11px] font-mono">
+                                            <Clock className="w-3 h-3 text-zinc-600" />
+                                            <span>Pending</span>
+                                          </span>
+                                        );
+                                      }
+
+                                      // CASE 4: Both Image & Link exist
+                                      if (proof.proofType === 'both' && proof.imageUrl && proof.linkUrl) {
+                                        return (
+                                          <div className="inline-flex items-center gap-1.5 flex-wrap">
+                                            <button
+                                              type="button"
+                                              onClick={() => setPreviewProofModal({
+                                                url: proof.imageUrl!,
+                                                title: `Customer Confirmation Image - ${delivItem.customerName} (${delivItem.orderId})`
+                                              })}
+                                              className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 rounded-lg text-[10px] font-bold font-mono transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
+                                              title="Click to view uploaded confirmation image"
+                                            >
+                                              <Eye className="w-3 h-3 text-emerald-400 shrink-0" />
+                                              <span>View Image</span>
+                                            </button>
+                                            <a
+                                              href={proof.linkUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              referrerPolicy="no-referrer"
+                                              className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/25 rounded-lg text-[10px] font-bold font-mono transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
+                                              title={proof.linkUrl}
+                                            >
+                                              <ExternalLink className="w-3 h-3 text-indigo-400 shrink-0" />
+                                              <span>Open Link</span>
+                                            </a>
+                                          </div>
+                                        );
+                                      }
+
+                                      // CASE 2: Image exists
+                                      if (proof.proofType === 'image' && proof.imageUrl) {
+                                        return (
+                                          <button
+                                            type="button"
+                                            onClick={() => setPreviewProofModal({
+                                              url: proof.imageUrl!,
+                                              title: `Customer Confirmation Image - ${delivItem.customerName} (${delivItem.orderId})`
+                                            })}
+                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 rounded-lg text-[10px] font-bold font-mono transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
+                                            title="Click to view full confirmation image"
+                                          >
+                                            <Eye className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                            <span>View Image</span>
+                                          </button>
+                                        );
+                                      }
+
+                                      // CASE 1: Link exists
+                                      if (proof.proofType === 'link' && proof.linkUrl) {
+                                        return (
+                                          <a
+                                            href={proof.linkUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            referrerPolicy="no-referrer"
+                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/25 rounded-lg text-[10px] font-bold font-mono transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
+                                            title={proof.linkUrl}
+                                          >
+                                            <ExternalLink className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                                            <span>View Customer Proof</span>
+                                          </a>
+                                        );
+                                      }
+
+                                      // CASE 3: Button/proof reference
+                                      return (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (proof.imageUrl) {
+                                              setPreviewProofModal({
+                                                url: proof.imageUrl,
+                                                title: `Customer Confirmation Proof - ${delivItem.customerName} (${delivItem.orderId})`
+                                              });
+                                            } else if (proof.linkUrl) {
+                                              window.open(proof.linkUrl, '_blank', 'noopener,noreferrer');
+                                            }
+                                          }}
+                                          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/25 rounded-lg text-[10px] font-bold font-mono transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
+                                          title="View Proof"
+                                        >
+                                          <CheckCircle2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                                          <span>View Proof</span>
+                                        </button>
+                                      );
+                                    })()}
                                   </td>
 
                                   {/* 10. Action Dropdown */}
@@ -1555,21 +1637,31 @@ Thank you.`;
                                       </button>
 
                                       {/* View Customer Confirmation Proof */}
-                                      {delivItem.confirmationProof && (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setActiveDropdownId(null);
-                                            setPreviewProofModal({
-                                              url: resolveStorageUrl(delivItem.confirmationProof) || delivItem.confirmationProof,
-                                              title: `Customer Confirmation Proof - ${delivItem.customerName} (${delivItem.orderId})`
-                                            });
-                                          }}
-                                          className="w-full text-left px-4 py-2.5 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer border-t border-zinc-800/80"
-                                        >
-                                          <CheckCircle2 className="w-4 h-4 text-indigo-400" /> View Customer Proof
-                                        </button>
-                                      )}
+                                      {(() => {
+                                        const proof = parseCustomerProof(delivItem.assignmentObj, delivItem.prodObj, delivItem.orderObj);
+                                        if (!proof.hasProof) return null;
+
+                                        return (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setActiveDropdownId(null);
+                                              if (proof.proofType === 'link' && proof.linkUrl) {
+                                                window.open(proof.linkUrl, '_blank', 'noopener,noreferrer');
+                                              } else if (proof.imageUrl) {
+                                                setPreviewProofModal({
+                                                  url: proof.imageUrl,
+                                                  title: `Customer Confirmation Proof - ${delivItem.customerName} (${delivItem.orderId})`
+                                                });
+                                              }
+                                            }}
+                                            className="w-full text-left px-4 py-2.5 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer border-t border-zinc-800/80"
+                                          >
+                                            <CheckCircle2 className="w-4 h-4 text-indigo-400" />
+                                            <span>{proof.proofType === 'link' ? 'View Customer Proof Link' : 'View Customer Proof Image'}</span>
+                                          </button>
+                                        );
+                                      })()}
 
                                       {/* Locked State Notification */}
                                       {isDelivLocked ? (
@@ -1812,25 +1904,103 @@ Thank you.`;
 
                               {/* Customer Confirmation Proof Row */}
                               <div className="space-y-1 pt-1">
-                                <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Customer Confirmation Proof</div>
+                                <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Customer Proof</div>
                                 <div className="pt-0.5">
-                                  {delivItem.confirmationProof ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => setPreviewProofModal({
-                                        url: resolveStorageUrl(delivItem.confirmationProof) || delivItem.confirmationProof,
-                                        title: `Customer Confirmation Proof - ${delivItem.customerName} (${delivItem.orderId})`
-                                      })}
-                                      className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/25 rounded-lg text-xs font-bold transition-all cursor-pointer w-full text-center"
-                                    >
-                                      <CheckCircle2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                                      <span>View Customer Confirmation Proof</span>
-                                    </button>
-                                  ) : (
-                                    <span className="text-zinc-600 italic text-[11px] block py-0.5">
-                                      {['Customer Review', 'Client Review', 'Revision Required'].includes(delivItem.status) ? 'Pending Proof' : 'Not Uploaded'}
-                                    </span>
-                                  )}
+                                  {(() => {
+                                    const proof = parseCustomerProof(delivItem.assignmentObj, delivItem.prodObj, delivItem.orderObj);
+
+                                    if (!proof.hasProof) {
+                                      return (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900 text-zinc-500 border border-zinc-800 text-xs font-mono">
+                                          <Clock className="w-3.5 h-3.5 text-zinc-600" />
+                                          <span>Pending</span>
+                                        </span>
+                                      );
+                                    }
+
+                                    // CASE 4: Both Image & Link
+                                    if (proof.proofType === 'both' && proof.imageUrl && proof.linkUrl) {
+                                      return (
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <button
+                                            type="button"
+                                            onClick={() => setPreviewProofModal({
+                                              url: proof.imageUrl!,
+                                              title: `Customer Confirmation Image - ${delivItem.customerName} (${delivItem.orderId})`
+                                            })}
+                                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer"
+                                          >
+                                            <Eye className="w-3.5 h-3.5" />
+                                            <span>View Image</span>
+                                          </button>
+                                          <a
+                                            href={proof.linkUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            referrerPolicy="no-referrer"
+                                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/25 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer"
+                                          >
+                                            <ExternalLink className="w-3.5 h-3.5" />
+                                            <span>Open Link</span>
+                                          </a>
+                                        </div>
+                                      );
+                                    }
+
+                                    // CASE 2: Image exists
+                                    if (proof.proofType === 'image' && proof.imageUrl) {
+                                      return (
+                                        <button
+                                          type="button"
+                                          onClick={() => setPreviewProofModal({
+                                            url: proof.imageUrl!,
+                                            title: `Customer Confirmation Image - ${delivItem.customerName} (${delivItem.orderId})`
+                                          })}
+                                          className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer w-full text-center"
+                                        >
+                                          <Eye className="w-3.5 h-3.5" />
+                                          <span>View Image</span>
+                                        </button>
+                                      );
+                                    }
+
+                                    // CASE 1: Link exists
+                                    if (proof.proofType === 'link' && proof.linkUrl) {
+                                      return (
+                                        <a
+                                          href={proof.linkUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          referrerPolicy="no-referrer"
+                                          className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/25 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer w-full text-center"
+                                        >
+                                          <ExternalLink className="w-3.5 h-3.5" />
+                                          <span>View Customer Proof</span>
+                                        </a>
+                                      );
+                                    }
+
+                                    // CASE 3: Button/proof
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (proof.imageUrl) {
+                                            setPreviewProofModal({
+                                              url: proof.imageUrl,
+                                              title: `Customer Confirmation Proof - ${delivItem.customerName} (${delivItem.orderId})`
+                                            });
+                                          } else if (proof.linkUrl) {
+                                            window.open(proof.linkUrl, '_blank', 'noopener,noreferrer');
+                                          }
+                                        }}
+                                        className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/25 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer w-full text-center"
+                                      >
+                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                        <span>View Proof</span>
+                                      </button>
+                                    );
+                                  })()}
                                 </div>
                               </div>
 
@@ -1865,21 +2035,31 @@ Thank you.`;
                                   </button>
 
                                   {/* View Customer Confirmation Proof */}
-                                  {delivItem.confirmationProof && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setActiveDropdownId(null);
-                                        setPreviewProofModal({
-                                          url: resolveStorageUrl(delivItem.confirmationProof) || delivItem.confirmationProof,
-                                          title: `Customer Confirmation Proof - ${delivItem.customerName} (${delivItem.orderId})`
-                                        });
-                                      }}
-                                      className="w-full text-left px-4 py-3 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer border-t border-zinc-800/80"
-                                    >
-                                      <CheckCircle2 className="w-4 h-4 text-indigo-400" /> View Customer Proof
-                                    </button>
-                                  )}
+                                  {(() => {
+                                    const proof = parseCustomerProof(delivItem.assignmentObj, delivItem.prodObj, delivItem.orderObj);
+                                    if (!proof.hasProof) return null;
+
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveDropdownId(null);
+                                          if (proof.proofType === 'link' && proof.linkUrl) {
+                                            window.open(proof.linkUrl, '_blank', 'noopener,noreferrer');
+                                          } else if (proof.imageUrl) {
+                                            setPreviewProofModal({
+                                              url: proof.imageUrl,
+                                              title: `Customer Confirmation Proof - ${delivItem.customerName} (${delivItem.orderId})`
+                                            });
+                                          }
+                                        }}
+                                        className="w-full text-left px-4 py-3 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer border-t border-zinc-800/80"
+                                      >
+                                        <CheckCircle2 className="w-4 h-4 text-indigo-400" />
+                                        <span>{proof.proofType === 'link' ? 'View Customer Proof Link' : 'View Customer Proof Image'}</span>
+                                      </button>
+                                    );
+                                  })()}
 
                                   {/* Locked State Notification */}
                                   {isDelivLocked ? (

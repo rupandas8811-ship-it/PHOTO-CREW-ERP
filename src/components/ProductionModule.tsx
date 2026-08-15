@@ -15,7 +15,7 @@ import { Production, EditingStatus, Staff } from '../types';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { ProjectDetailModal } from './ProjectDetailModal';
-import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem, parseQtyAndText, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl } from '../utils';
+import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem, parseQtyAndText, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof } from '../utils';
 import { AppLogo } from './AppLogo';
 import { StatusText } from './ui/StatusText';
 import { EventDropdownCell } from './EventDropdownCell';
@@ -9462,7 +9462,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     <th className="p-3 font-bold">Assigned Deliverable</th>
                     <th className="p-3 font-bold">Current Status</th>
                     <th className="p-3 font-bold">Upload Link</th>
-                    <th className="p-3 font-bold whitespace-nowrap">PROOF / UPLOADED IMAGE</th>
+                    <th className="p-3 font-bold whitespace-nowrap">Customer Proof</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900 text-zinc-300 font-sans">
@@ -9557,70 +9557,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const linkStr = getSpecificAssignmentLink(assignment);
                       const hasLink = Boolean(linkStr);
 
-                      // Format Google Drive links & URLs for direct image display
-                      const formatImageDisplayUrl = (url: string) => {
-                        if (!url) return '';
-                        const trimmed = url.trim();
-                        if (trimmed.includes('drive.google.com/file/d/')) {
-                          const fileIdMatch = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
-                          if (fileIdMatch && fileIdMatch[1]) {
-                            return `https://lh3.googleusercontent.com/d/${fileIdMatch[1]}`;
-                          }
-                        }
-                        if (trimmed.includes('drive.google.com/open?id=')) {
-                          const fileIdMatch = trimmed.match(/id=([a-zA-Z0-9_-]+)/);
-                          if (fileIdMatch && fileIdMatch[1]) {
-                            return `https://lh3.googleusercontent.com/d/${fileIdMatch[1]}`;
-                          }
-                        }
-                        return trimmed;
-                      };
-
-                      // Extract specific proof/uploaded image for this exact assignment/deliverable record
-                      const getSpecificAssignmentProof = (a: any, prodRec: any): string | null => {
-                        if (!a) return null;
-                        const candidates = [
-                          a.customer_communication_proof,
-                          a.client_communication_proof,
-                          a.confirmation_proof,
-                          a.proof_url,
-                          a.proof,
-                          a.uploaded_proof,
-                          a.image_proof,
-                          a.proof_image,
-                          a.image_url,
-                          a.upload_proof,
-                          a.image
-                        ];
-                        for (const cand of candidates) {
-                          const res = resolveStorageUrl(cand);
-                          if (res) return res;
-                        }
-
-                        // Check prodRec fallback if single assignment or staff matches
-                        if (prodRec) {
-                          const isOnlyAssignment = rawAssignments.length === 1;
-                          const isMatchingStaff = (a.staff_name && prodRec.editor_assigned && a.staff_name.toLowerCase().trim() === prodRec.editor_assigned.toLowerCase().trim());
-                          if (isOnlyAssignment || isMatchingStaff) {
-                            const prodCandidates = [
-                              prodRec.client_communication_proof,
-                              prodRec.customer_communication_proof,
-                              prodRec.proof_url,
-                              prodRec.communication_proof,
-                              prodRec.proof_image
-                            ];
-                            for (const cand of prodCandidates) {
-                              const res = resolveStorageUrl(cand);
-                              if (res) return res;
-                            }
-                          }
-                        }
-
-                        return null;
-                      };
-
-                      const proofImgUrl = getSpecificAssignmentProof(assignment, prod);
-                      const displayProofImgUrl = proofImgUrl ? formatImageDisplayUrl(proofImgUrl) : null;
+                      // Parse Customer Proof according to unified logic across Supabase storage & records
+                      const proof = parseCustomerProof(assignment, prod, order);
 
                       return (
                         <tr key={assignment.assignment_id || idx} className="hover:bg-zinc-900/40 transition-colors">
@@ -9670,24 +9608,91 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               <span className="text-zinc-500 italic text-xs font-mono">Pending Upload</span>
                             )}
                           </td>
-                          <td className="p-3">
-                            {displayProofImgUrl ? (
+                          <td className="p-3 whitespace-nowrap">
+                            {!proof.hasProof ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 text-zinc-500 border border-zinc-800 text-[11px] font-mono">
+                                <Clock className="w-3 h-3 text-zinc-600" />
+                                <span>Pending</span>
+                              </span>
+                            ) : proof.proofType === 'both' && proof.imageUrl && proof.linkUrl ? (
+                              <div className="inline-flex items-center gap-1.5 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewProofModal({
+                                    imageUrl: proof.imageUrl!,
+                                    staffName,
+                                    deliverableName,
+                                    eventName,
+                                    orderId: prod.production_id || orderId
+                                  })}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 font-bold font-mono text-[11px] transition-colors cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
+                                  title="Click to view uploaded confirmation image"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>View Image</span>
+                                </button>
+                                <a
+                                  href={proof.linkUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  referrerPolicy="no-referrer"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/25 font-bold font-mono text-[11px] transition-colors cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
+                                  title={proof.linkUrl}
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                  <span>Open Link</span>
+                                </a>
+                              </div>
+                            ) : proof.proofType === 'image' && proof.imageUrl ? (
                               <button
                                 type="button"
                                 onClick={() => setPreviewProofModal({
-                                  imageUrl: proofImgUrl!,
+                                  imageUrl: proof.imageUrl!,
                                   staffName,
                                   deliverableName,
                                   eventName,
                                   orderId: prod.production_id || orderId
                                 })}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 font-bold text-xs transition-colors cursor-pointer"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 font-bold font-mono text-xs transition-colors cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
+                                title="Click to view full confirmation image"
                               >
                                 <Eye className="w-3.5 h-3.5" />
                                 <span>View Image</span>
                               </button>
+                            ) : proof.proofType === 'link' && proof.linkUrl ? (
+                              <a
+                                href={proof.linkUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                referrerPolicy="no-referrer"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/25 font-bold font-mono text-xs transition-colors cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
+                                title={proof.linkUrl}
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                <span>View Customer Proof</span>
+                              </a>
                             ) : (
-                              <span className="text-zinc-500 italic text-xs font-mono">No Image Uploaded</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (proof.imageUrl) {
+                                    setPreviewProofModal({
+                                      imageUrl: proof.imageUrl,
+                                      staffName,
+                                      deliverableName,
+                                      eventName,
+                                      orderId: prod.production_id || orderId
+                                    });
+                                  } else if (proof.linkUrl) {
+                                    window.open(proof.linkUrl, '_blank', 'noopener,noreferrer');
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/25 font-bold font-mono text-xs transition-colors cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
+                                title="View Proof"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>View Proof</span>
+                              </button>
                             )}
                           </td>
                         </tr>
