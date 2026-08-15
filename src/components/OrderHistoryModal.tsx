@@ -4,7 +4,7 @@ import {
   History, Calendar, Clock, User, CheckCircle2, CheckCircle, DollarSign, 
   Film, FileText, ExternalLink, Eye, X, Search, Filter, ArrowDownUp, 
   ShieldCheck, Image as ImageIcon, Link as LinkIcon, AlertCircle, Play, 
-  Send, RefreshCw, ChevronRight, ChevronDown, Layers, FileVideo, Download
+  Send, RefreshCw, ChevronRight, Layers, FileVideo, Download
 } from 'lucide-react';
 import { useRole } from './RoleContext';
 import { formatINR, resolveStorageUrl, parseCustomerProof } from '../utils';
@@ -52,21 +52,9 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
   } = useRole();
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
-
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    'Sales': true,
-    'Operations': true,
-    'Production': true,
-    'Client Consent': true,
-    'Payment': true,
-    'System': true
-  });
-
-  const toggleSection = (cat: string) => {
-    setExpandedSections(prev => ({ ...prev, [cat]: !prev[cat] }));
-  };
 
   // Extract relevant records for this Order
   const targetOrderId = order?.orderId || order?.order_id || '';
@@ -467,9 +455,12 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
     targetOrderId
   ]);
 
-  // Filtered list based on Search
+  // Filtered list based on Search & Category
   const filteredHistory = useMemo(() => {
     return historyItems.filter(item => {
+      const matchCat = selectedCategory === 'All' || item.category === selectedCategory;
+      if (!matchCat) return false;
+
       if (!searchTerm.trim()) return true;
       const query = searchTerm.toLowerCase();
       return (
@@ -480,23 +471,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
         item.formattedDate.toLowerCase().includes(query)
       );
     });
-  }, [historyItems, searchTerm]);
-
-  const historyByCategory = useMemo(() => {
-    const groups: Record<string, HistoryTimelineItem[]> = {
-      'Sales': [],
-      'Operations': [],
-      'Production': [],
-      'Client Consent': [],
-      'Payment': [],
-      'System': []
-    };
-    filteredHistory.forEach(item => {
-      if (!groups[item.category]) groups[item.category] = [];
-      groups[item.category].push(item);
-    });
-    return groups;
-  }, [filteredHistory]);
+  }, [historyItems, selectedCategory, searchTerm]);
 
   if (!isOpen || !order) return null;
 
@@ -551,9 +526,22 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
         {/* Filter & Search Bar */}
         <div className="p-3 sm:p-4 bg-zinc-900/40 border-b border-zinc-850 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
           
-          <div className="text-sm font-bold text-zinc-200 flex items-center gap-2">
-            <Layers className="w-4 h-4 text-blue-400" />
-            Audit History Timeline
+          {/* Category Filter Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 custom-scrollbar">
+            {['All', 'Sales', 'Operations', 'Production', 'Client Consent', 'Payment'].map(cat => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3 py-1 rounded-lg text-xs font-bold font-mono transition-all whitespace-nowrap cursor-pointer ${
+                  selectedCategory === cat
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border border-zinc-800'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
           </div>
 
           {/* Search & Sort */}
@@ -582,165 +570,129 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
         </div>
 
         {/* Timeline & Table Content */}
-        <div className="p-3 sm:p-5 overflow-y-auto flex-1 space-y-3 custom-scrollbar">
+        <div className="p-3 sm:p-6 overflow-y-auto flex-1 space-y-4 custom-scrollbar">
           {filteredHistory.length === 0 ? (
             <div className="py-16 text-center bg-zinc-900/30 border border-zinc-850 border-dashed rounded-2xl space-y-2">
               <History className="w-10 h-10 text-zinc-700 mx-auto" />
               <p className="text-zinc-400 font-medium text-sm">No historical records found for this filter.</p>
-              <p className="text-zinc-600 text-xs font-mono">Try clearing the search box.</p>
+              <p className="text-zinc-600 text-xs font-mono">Try switching the category filter or clearing the search box.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {['Sales', 'Operations', 'Production', 'Client Consent', 'Payment', 'System'].map(category => {
-                const categoryItems = historyByCategory[category] || [];
-                if (categoryItems.length === 0) return null;
-
-                const isExpanded = expandedSections[category];
-
-                // Ensure they are sorted
-                const sortedItems = [...categoryItems].sort((a, b) => {
-                  const tA = new Date(a.timestamp).getTime();
-                  const tB = new Date(b.timestamp).getTime();
-                  return sortOrder === 'desc' ? tB - tA : tA - tB;
-                });
-
-                return (
-                  <div key={category} className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden shadow-sm">
-                    {/* Accordion Header */}
-                    <button
-                      type="button"
-                      onClick={() => toggleSection(category)}
-                      className="w-full px-4 py-3 flex items-center justify-between bg-zinc-900/50 hover:bg-zinc-900 transition-colors cursor-pointer text-left"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className={`p-1 rounded-md bg-zinc-800 ${isExpanded ? 'text-blue-400' : 'text-zinc-400'}`}>
-                          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                        </div>
-                        <span className="font-bold text-sm text-zinc-100">{category}</span>
-                        <span className="px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 text-[10px] font-mono font-bold">
-                          {sortedItems.length}
-                        </span>
+              {filteredHistory.map((item, idx) => (
+                <div 
+                  key={item.id} 
+                  className="bg-zinc-900/60 hover:bg-zinc-900/90 border border-zinc-800/80 rounded-xl p-3.5 sm:p-4 transition-all space-y-3"
+                >
+                  {/* Top Bar: Date, Activity, Category & Status */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800/60 pb-2.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-300 text-xs font-mono font-bold">
+                        <Calendar className="w-3.5 h-3.5 text-blue-400" />
+                        <span>{item.formattedDate}</span>
+                        {item.formattedTime && item.formattedTime !== 'N/A' && (
+                          <>
+                            <span className="text-zinc-600">•</span>
+                            <span className="text-zinc-400">{item.formattedTime}</span>
+                          </>
+                        )}
                       </div>
-                    </button>
 
-                    {/* Accordion Body */}
-                    {isExpanded && (
-                      <div className="p-3 border-t border-zinc-800/60 bg-zinc-900/20 space-y-3">
-                        {sortedItems.map((item, idx) => (
-                          <div 
-                            key={item.id} 
-                            className="bg-zinc-900/60 hover:bg-zinc-900/90 border border-zinc-800/80 rounded-xl p-3.5 sm:p-4 transition-all space-y-3"
-                          >
-                            {/* Top Bar: Date, Activity, Category & Status */}
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800/60 pb-2.5">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-300 text-xs font-mono font-bold">
-                                  <Calendar className="w-3.5 h-3.5 text-blue-400" />
-                                  <span>{item.formattedDate}</span>
-                                  {item.formattedTime && item.formattedTime !== 'N/A' && (
-                                    <>
-                                      <span className="text-zinc-600">•</span>
-                                      <span className="text-zinc-400">{item.formattedTime}</span>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-zinc-950 text-zinc-400 border border-zinc-800">
+                        {item.category}
+                      </span>
+                    </div>
 
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <div className="text-xs text-zinc-400 font-mono">
-                                  By: <strong className="text-zinc-200">{item.staffName}</strong> {item.staffRole && <span className="text-zinc-500 text-[10px]">({item.staffRole})</span>}
-                                </div>
-
-                                <span className={`px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold border ${item.statusColor}`}>
-                                  {item.status}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Middle Bar: Activity Headline & Description */}
-                            <div className="space-y-1">
-                              <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                                <span className="text-blue-400">⚡</span>
-                                <span>{item.activity}</span>
-                              </h4>
-                              <p className="text-xs text-zinc-300 leading-relaxed font-sans">
-                                {item.description}
-                              </p>
-                            </div>
-
-                            {/* Proofs / Images / Documents section (ALL PROOFS SHOWN) */}
-                            {item.proofs && item.proofs.length > 0 && (
-                              <div className="pt-2 border-t border-zinc-850/80 space-y-2">
-                                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
-                                  <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
-                                  <span>Attached Proofs & Documentation ({item.proofs.length})</span>
-                                </span>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-                                  {item.proofs.map((proof) => {
-                                    if (proof.type === 'image') {
-                                      return (
-                                        <div 
-                                          key={proof.id}
-                                          className="bg-zinc-950 border border-emerald-500/25 rounded-xl p-2.5 flex items-center justify-between gap-3 hover:border-emerald-500/50 transition-all"
-                                        >
-                                          <div className="min-w-0 flex-1">
-                                            <span className="text-xs font-bold text-zinc-200 block truncate" title={proof.label}>
-                                              {proof.label}
-                                            </span>
-                                            <span className="text-[10px] text-emerald-400 font-mono block">Image Attachment</span>
-                                          </div>
-
-                                          <button
-                                            type="button"
-                                            onClick={() => setPreviewImage({
-                                              url: proof.url,
-                                              title: `${proof.label} - ${item.activity}`
-                                            })}
-                                            className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-bold flex items-center gap-1 cursor-pointer shrink-0 transition-colors"
-                                          >
-                                            <Eye className="w-3.5 h-3.5" />
-                                            <span>View Image</span>
-                                          </button>
-                                        </div>
-                                      );
-                                    }
-
-                                    return (
-                                      <div 
-                                        key={proof.id}
-                                        className="bg-zinc-950 border border-blue-500/25 rounded-xl p-2.5 flex items-center justify-between gap-3 hover:border-blue-500/50 transition-all"
-                                      >
-                                        <div className="min-w-0 flex-1">
-                                          <span className="text-xs font-bold text-zinc-200 block truncate" title={proof.label}>
-                                            {proof.label}
-                                          </span>
-                                          <span className="text-[10px] text-blue-400 font-mono block truncate">File / Link</span>
-                                        </div>
-
-                                        <a
-                                          href={proof.url.startsWith('http') ? proof.url : `https://${proof.url}`}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          referrerPolicy="no-referrer"
-                                          className="px-2.5 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-mono font-bold flex items-center gap-1 cursor-pointer shrink-0 transition-colors"
-                                        >
-                                          <ExternalLink className="w-3.5 h-3.5" />
-                                          <span>Open Link</span>
-                                        </a>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="text-xs text-zinc-400 font-mono">
+                        By: <strong className="text-zinc-200">{item.staffName}</strong> {item.staffRole && <span className="text-zinc-500 text-[10px]">({item.staffRole})</span>}
                       </div>
-                    )}
+
+                      <span className={`px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold border ${item.statusColor}`}>
+                        {item.status}
+                      </span>
+                    </div>
                   </div>
-                );
-              })}
+
+                  {/* Middle Bar: Activity Headline & Description */}
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                      <span className="text-blue-400">⚡</span>
+                      <span>{item.activity}</span>
+                    </h4>
+                    <p className="text-xs text-zinc-300 leading-relaxed font-sans">
+                      {item.description}
+                    </p>
+                  </div>
+
+                  {/* Proofs / Images / Documents section (ALL PROOFS SHOWN) */}
+                  {item.proofs && item.proofs.length > 0 && (
+                    <div className="pt-2 border-t border-zinc-850/80 space-y-2">
+                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Attached Proofs & Documentation ({item.proofs.length})</span>
+                      </span>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                        {item.proofs.map((proof) => {
+                          if (proof.type === 'image') {
+                            return (
+                              <div 
+                                key={proof.id}
+                                className="bg-zinc-950 border border-emerald-500/25 rounded-xl p-2.5 flex items-center justify-between gap-3 hover:border-emerald-500/50 transition-all"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <span className="text-xs font-bold text-zinc-200 block truncate" title={proof.label}>
+                                    {proof.label}
+                                  </span>
+                                  <span className="text-[10px] text-emerald-400 font-mono block">Image Attachment</span>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewImage({
+                                    url: proof.url,
+                                    title: `${proof.label} - ${item.activity}`
+                                  })}
+                                  className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-bold flex items-center gap-1 cursor-pointer shrink-0 transition-colors"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>View Image</span>
+                                </button>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div 
+                              key={proof.id}
+                              className="bg-zinc-950 border border-blue-500/25 rounded-xl p-2.5 flex items-center justify-between gap-3 hover:border-blue-500/50 transition-all"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <span className="text-xs font-bold text-zinc-200 block truncate" title={proof.label}>
+                                  {proof.label}
+                                </span>
+                                <span className="text-[10px] text-blue-400 font-mono block truncate">File / Link</span>
+                              </div>
+
+                              <a
+                                href={proof.url.startsWith('http') ? proof.url : `https://${proof.url}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                referrerPolicy="no-referrer"
+                                className="px-2.5 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-mono font-bold flex items-center gap-1 cursor-pointer shrink-0 transition-colors"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                <span>Open Link</span>
+                              </a>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
