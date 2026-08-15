@@ -680,10 +680,10 @@ export const ProductionStaffModule: React.FC = () => {
         // Determine unified status
         let currentStatus = assignment.status || 'Assigned Editor';
 
-        const excludedStatuses = ['Client Acceptance', 'Business Owner Review', 'Project Completed', 'Completed', 'Order Closed', 'Closed'];
+        const excludedStatuses = ['Editing Completed', 'Editing Complete', 'Client Acceptance', 'Business Owner Review', 'Project Completed', 'Completed', 'Order Closed', 'Closed'];
         const operationsOnlyStages = ['Order Confirmed', 'Confirm Order', 'New Order', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Completed', 'Event Ended', 'Footage Handover'];
 
-        // Exclude deliverables that are Client Acceptance / Closed, or where the order is still in Operations without raw footage verification
+        // Exclude deliverables that are Editing Completed / Client Acceptance / Closed, or where the order is still in Operations without raw footage verification
         if (excludedStatuses.includes(currentStatus) || (order && excludedStatuses.includes(order.current_stage)) || (prod && excludedStatuses.includes(prod.editing_status))) {
           return;
         }
@@ -1118,6 +1118,8 @@ Thank you.`;
 
       setEditingCompletedModal(null);
       setEditingCompletedForm({ confirmation_proof: '', selectedIds: [] });
+      await refreshData();
+      showToast("✅ Customer Confirmation Proof saved & task moved to Production Dashboard!");
       alert("✅ Customer Confirmation Proof saved successfully and marked as Editing Completed!");
     } catch (err: any) {
       console.error("[ProductionStaffModule] Error saving confirmation proof:", err);
