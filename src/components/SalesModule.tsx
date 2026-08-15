@@ -6690,7 +6690,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     return () => clearInterval(interval);
   }, [leads]);
 
-  const handleSaveStep2Direct = async () => {
+  const handleSaveStep2Direct = async (passedEvents?: any[]) => {
     const isCreateFlow = activeTab === 'create';
     if (!isCreateFlow && isStep2Locked) {
       showToastMsg("Event details are locked after order confirmation.", "error");
@@ -6703,7 +6703,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }
     setIsSaving(true);
     try {
-      const finalEventsList = (isCreateFlow ? [...createEvents] : [...crmEvents]);
+      const finalEventsList = passedEvents || (isCreateFlow ? [...createEvents] : [...crmEvents]);
       if (finalEventsList.length === 0) {
         showToastMsg("Please add at least one event.", "error");
         setIsSaving(false);
@@ -6822,8 +6822,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           }
         }
 
-        setSelectedPkgIds(['Custom Package']);
-        setWizardLeadData(prev => ({ ...prev, selected_package_id: 'Custom Package', Select_Package_Option: 'Custom Package' }));
+        if (selectedPkgIds.length === 0) {
+          setSelectedPkgIds(['Custom Package']);
+          setWizardLeadData(prev => ({ ...prev, selected_package_id: 'Custom Package', Select_Package_Option: 'Custom Package' }));
+        }
         setWizardStep(3);
       } else {
         const newCompleted = Math.max(crmHighestStep, 2);
@@ -8483,9 +8485,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             total_pax: createForm.total_pax !== '' ? Number(createForm.total_pax) : undefined,
             reference_source: createForm.reference_source,
             booking_status: createForm.booking_status || undefined,
-            Additional_Services_Cost: null,
-            Quotation_Discount: null,
-            Final_Quotation_Amount: null,
             event_type: createForm.event_type || '',
             event_date: createForm.event_date || '',
             event_time: createForm.event_time || '',
@@ -8517,9 +8516,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             total_pax: createForm.total_pax !== '' ? Number(createForm.total_pax) : undefined,
             reference_source: createForm.reference_source,
             booking_status: createForm.booking_status || undefined,
-            Additional_Services_Cost: null,
-            Quotation_Discount: null,
-            Final_Quotation_Amount: null,
             remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
             next_follow_up_date: followUpDate || null,
             follow_up_notes: internalNotes || null,
@@ -8552,11 +8548,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           event_time: createForm.event_time || '12:00',
           event_location: createForm.event_location || 'TBD',
           budget: Number(createForm.budget) || 0,
-            Additional_Services_Cost: null,
-            Quotation_Discount: null,
-            Final_Quotation_Amount: null,
           remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
-            next_follow_up_date: followUpDate || null,
+          next_follow_up_date: followUpDate || null,
             follow_up_notes: internalNotes || null,
           Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || '',
           status: 'Create Quote',
@@ -8772,6 +8765,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         await saveLeadPackages(createdLeadId!, packagesPayload);
       }
 
+      const activePkgId = createForm.Select_Package_Option || selectedPkgIds[0] || 'Custom Package';
+      const activeEventsList = createEvents.length > 0 ? createEvents : [];
+      const { teamMembersText, deliverablesText } = buildStep3EventPayloads(
+        activePkgId,
+        activeEventsList,
+        editableInclusions,
+        editableDeliverables
+      );
+
       await updateLead(createdLeadId!, {
         status: finalStatus as CurrentStage,
         budget: finalTotal,
@@ -8779,8 +8781,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
           Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
           Final_Quotation_Amount: finalTotal,
-        deliverables_description: selectedPkgs.map(p => pkgDeliverables[p.id] || p.deliverables || 'N/A').join('\n'),
-        notes_special_customizations: selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
+        deliverables_description: deliverablesText || selectedPkgs.map(p => pkgDeliverables[p.id] || p.deliverables || 'N/A').join('\n'),
+        notes_special_customizations: teamMembersText || selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
         sales_staff_name: salesStaffName,
         sales_staff_mobile: salesStaffMobile,
         client_residence_address: createForm.client_residence_address,

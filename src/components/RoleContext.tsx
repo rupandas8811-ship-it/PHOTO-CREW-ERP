@@ -3327,6 +3327,13 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     });
 
     logActivity(`Created Lead: ${newLead.customer_name}`, 'Sales', leadId, 'N/A', 'New Lead');
+    
+    setLeads((prev) => {
+      // Avoid duplicate insert if already exists
+      if (prev.some(l => l.lead_id === leadId)) return prev;
+      return [newLead, ...prev];
+    });
+
     return leadId;
   };
 
@@ -6615,6 +6622,22 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           finalUpdates.Final_Package_Amount = Number(newVal);
           (finalUpdates as any).final_package_amount = Number(newVal);
           finalUpdates.Final_Quotation_Amount = Number(newVal);
+        }
+      }
+      if ('Additional_Services_Cost' in finalUpdates) {
+        const newVal = finalUpdates.Additional_Services_Cost;
+        const prevVal = prevLead.Additional_Services_Cost;
+        if ((newVal === null || newVal === undefined || (newVal as any) === '') && (prevVal !== null && prevVal !== undefined && (prevVal as any) !== '')) {
+          console.warn(`[SAFETY] Prevented accidental overwrite of Additional_Services_Cost. Retaining existing data.`);
+          finalUpdates.Additional_Services_Cost = prevVal;
+        }
+      }
+      if ('Quotation_Discount' in finalUpdates) {
+        const newVal = finalUpdates.Quotation_Discount;
+        const prevVal = prevLead.Quotation_Discount;
+        if ((newVal === null || newVal === undefined || (newVal as any) === '') && (prevVal !== null && prevVal !== undefined && (prevVal as any) !== '')) {
+          console.warn(`[SAFETY] Prevented accidental overwrite of Quotation_Discount. Retaining existing data.`);
+          finalUpdates.Quotation_Discount = prevVal;
         }
       }
     }
