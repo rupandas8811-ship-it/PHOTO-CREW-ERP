@@ -551,9 +551,22 @@ async function startServer() {
   app.post('/api/db/delete', async (req, res) => {
     const { table, matchColumn, matchValue } = req.body;
     try {
+      if (!table || !matchColumn || matchValue === undefined || matchValue === null) {
+        return res.status(400).json({ success: false, error: 'Missing required parameters for deletion' });
+      }
       const db = getServerSupabase();
       console.log(`[Server DB Delete] Deleting from ${table} where ${matchColumn}=${matchValue}`);
-      const { data, error } = await db.from(table).delete().eq(matchColumn, matchValue).select();
+      let { data, error } = await db.from(table).delete().eq(matchColumn, matchValue).select();
+
+      // Fallback for packages table if column is named id instead of package_id
+      if (error && table === 'packages' && matchColumn === 'package_id') {
+        const fallbackRes = await db.from('packages').delete().eq('id', matchValue).select();
+        if (!fallbackRes.error) {
+          data = fallbackRes.data;
+          error = null;
+        }
+      }
+
       if (error) {
         console.error(`[Server DB Delete Error] ${table}`, error);
         return res.status(400).json({ success: false, error: error.message });

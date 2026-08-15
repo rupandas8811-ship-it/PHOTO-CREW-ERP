@@ -5814,27 +5814,50 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const deletePackage = async (packageId: string) => {
-    try {
-      if (supabaseClient) {
-        const pkg = packages.find(p => p.package_id === packageId);
-        const pkgName = pkg ? pkg.package_name : packageId;
-
-        const { error } = await supabaseClient
-          .from('packages')
-          .delete()
-          .eq('package_id', packageId);
-
-        if (error) {
-          throw error;
-        }
-
-        setPackages((prev) => prev.filter((p) => p.package_id !== packageId));
-        logActivity(`Deleted Package: ${pkgName}`, 'Sales', packageId, 'Active', 'Deleted');
-      } else {
-        throw new Error('Supabase client is not initialized.');
-      }
-    } catch (err: any) {
+    if (!packageId || typeof packageId !== 'string' || !packageId.trim()) {
+      const err = new Error('Invalid package identifier. Cannot delete without a valid package ID.');
       console.error(err);
+      throw err;
+    }
+
+    try {
+      const targetId = packageId.trim();
+      const pkg = packages.find(p => p.package_id === targetId);
+      const pkgName = pkg ? pkg.package_name : targetId;
+
+      // 1. Perform database delete through pushDelete (uses server-side proxy with service role key & direct Supabase delete)
+      const result = await pushDelete('packages', 'package_id', targetId);
+      
+      // If pushDelete reported failure, retry directly on Supabase targeting 'id' or 'package_id'
+      if (!result.success && supabaseClient) {
+        try {
+          const { error: idError } = await supabaseClient.from('packages').delete().eq('id', targetId);
+          if (!idError) {
+            result.success = true;
+          }
+        } catch (_) {}
+      }
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to delete package from database. Please check your connection and permissions.');
+      }
+
+      // 2. Remove from local storage fallback store
+      try {
+        const localKey = 'erp_local_packages';
+        const existingLocalStr = localStorage.getItem(localKey);
+        if (existingLocalStr) {
+          const localRecords = JSON.parse(existingLocalStr);
+          const filtered = localRecords.filter((r: any) => r && r.package_id !== targetId && r.id !== targetId);
+          localStorage.setItem(localKey, JSON.stringify(filtered));
+        }
+      } catch (_) {}
+
+      // 3. Update local React state only after confirmed database deletion
+      setPackages((prev) => prev.filter((p) => p.package_id !== targetId));
+      logActivity(`Deleted Package: ${pkgName}`, 'Sales', targetId, 'Active', 'Deleted');
+    } catch (err: any) {
+      console.error('[deletePackage Error]', err);
       throw err;
     }
   };
