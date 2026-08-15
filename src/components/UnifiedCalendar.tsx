@@ -51,6 +51,7 @@ export interface CalendarEvent {
     | 'Calendar Memo';
   date: string; // "YYYY-MM-DD"
   customerName: string;
+  eventName?: string;
   mobile: string;
   eventType: string;
   eventTime: string;
@@ -470,7 +471,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
             date: dateToUse,
             customerName: ld.customer_name,
             mobile: ld.mobile,
-            eventType: `${evName} (${evType})`,
+            eventName: evName, eventType: evType,
             eventTime: evStartTime,
             eventLocation: evLoc,
             currentStage: statusClean || ld.status,
@@ -1330,7 +1331,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
     setPopupLeadId(ev.raw?.lead_id || ev.orderId);
   }
 }}
-                                className={`p-2 rounded-xl text-xs flex flex-col gap-1 transition ${col.card}`}
+                                className={`p-2 rounded-xl text-xs flex flex-col gap-1 transition cursor-pointer w-full hover:brightness-110 active:scale-95 ${col.card}`}
                               >
                                 <span className="font-bold text-zinc-100 line-clamp-1">{ev.customerName}</span>
                                 {role === 'production' ? (
@@ -1340,7 +1341,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                                     )}
                                     <div className="flex items-center gap-1 text-[9px] text-zinc-400 font-mono">
                                       <Clock className="w-2.5 h-2.5" />
-                                      <span>{ev.eventType}</span>
+                                      <span>{ev.eventName || ev.eventType}</span>
                                     </div>
                                     <div className="text-[9px] font-mono text-pink-400 font-bold">Due: {ev.targetDeliveryDate || ev.date}</div>
                                   </>
@@ -1413,12 +1414,12 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
     setPopupLeadId(ev.raw?.lead_id || ev.orderId);
   }
 }}
-                        className={`p-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all cursor-pointer ${col.card}`}
+                        className={`p-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all cursor-pointer w-full hover:brightness-110 active:scale-[0.99] ${col.card}`}
                       >
                         <div className="space-y-1.5">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-[10px] font-mono uppercase px-2 py-0.5 bg-zinc-900 text-zinc-400 rounded-md border border-zinc-800">
-                              {ev.eventType}
+                              {ev.eventName || ev.eventType}
                             </span>
                             <span className={`text-[10px] px-2 py-0.5 border rounded-md font-mono font-bold shadow ${col.badge}`}>
                               {ev.currentStage || ev.eventClass}
@@ -1509,7 +1510,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
     setPopupLeadId(ev.raw?.lead_id || ev.orderId);
   }
 }}
-                          className={`p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition cursor-pointer ${col.card}`}
+                          className={`p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition cursor-pointer w-full hover:brightness-110 active:scale-[0.99] ${col.card}`}
                         >
                           <div className="flex items-start gap-3 w-full sm:w-auto">
                             <div className="flex flex-col items-center bg-zinc-950 px-3 py-2 rounded-xl text-center min-w-max border border-zinc-900">
@@ -1527,7 +1528,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                                   {ev.eventClass}
                                 </span>
                                 <span className="text-[10px] font-mono text-zinc-550 border-l border-zinc-800 pl-2">
-                                  {ev.eventType}
+                                  {ev.eventName || ev.eventType}
                                 </span>
                               </div>
                               <h4 className="text-xs font-bold text-white">
@@ -2079,7 +2080,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                                         {ev.packageName && <span className="text-[9px] font-mono text-zinc-500 block mt-0.5">{ev.packageName}</span>}
                                       </td>
                                       <td className="p-4">
-                                        <span className="text-xs font-mono text-zinc-300">{ev.eventType}</span>
+                                        <span className="text-xs font-mono text-zinc-300">{ev.eventName || ev.eventType}</span>
                                       </td>
                                       <td className="p-4">
                                         <span className="text-xs font-mono text-zinc-400">{times.start}</span>
@@ -2167,7 +2168,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                                       setPopupLeadId(ev.raw?.lead_id || ev.orderId);
                                     }
                                   }}
-                                  className={`p-3.5 rounded-xl border flex flex-col gap-2 transition active:scale-[0.99] cursor-pointer ${col.card}`}
+                                  className={`p-3.5 rounded-xl border flex flex-col gap-2 transition active:scale-[0.99] cursor-pointer w-full hover:brightness-110 ${col.card}`}
                                 >
                                   <div className="flex justify-between items-start gap-2">
                                     <div>
@@ -2182,7 +2183,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                                   <div className="grid grid-cols-2 gap-2 mt-1 pt-2 border-t border-zinc-900/40 text-xs font-mono">
                                     <div>
                                       <span className="text-[9px] text-zinc-500 block">EVENT TYPE</span>
-                                      <span className="text-zinc-300">{ev.eventType}</span>
+                                      <span className="text-zinc-300">{ev.eventName || ev.eventType}</span>
                                     </div>
                                     <div>
                                       <span className="text-[9px] text-zinc-500 block">TIME</span>

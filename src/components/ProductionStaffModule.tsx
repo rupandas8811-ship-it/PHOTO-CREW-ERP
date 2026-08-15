@@ -198,7 +198,7 @@ const compressImage = (file: File): Promise<string> => {
 };
 
 // Helper to extract Raw Footage Drive Link across Operations / Raw Footage / Production / Editor Assignment sources
-const getRawFootageDriveLink = (assignment: any, prod: any, order: any, lead: any, operations: any[]): string => {
+const getRawFootageDriveLink = (assignment: any, prod: any, order: any, lead: any, operations: any[], rawFootage?: any[]): string => {
   const orderId = order?.order_id || prod?.order_id || assignment?.order_id || prod?.tracking_id;
   const leadId = lead?.lead_id || order?.lead_id || prod?.lead_id || assignment?.production_id;
   const trackingId = prod?.tracking_id || assignment?.production_id;
@@ -222,12 +222,41 @@ const getRawFootageDriveLink = (assignment: any, prod: any, order: any, lead: an
     return opsLink.trim();
   }
 
-  // 2. Check assignment object direct field
+  // 2. Check Raw Footage table matching order_id or tracking_id or lead_id
+  const rf = (rawFootage || []).find(f => 
+    (orderId && (f.order_id === orderId || f.lead_id === orderId)) || 
+    (trackingId && (f.tracking_id === trackingId || f.order_id === trackingId)) ||
+    (leadId && (f.lead_id === leadId || f.order_id === leadId))
+  );
+  if (rf?.server_path && typeof rf.server_path === 'string' && rf.server_path.trim() !== '' && !rf.server_path.startsWith('s3://')) {
+    return rf.server_path.trim();
+  }
+
+  // 3. Check Order table
+  if (order && (order as any).raw_footage_link && typeof (order as any).raw_footage_link === 'string' && ((order as any).raw_footage_link as string).trim() !== '') {
+    return ((order as any).raw_footage_link as string).trim();
+  }
+  if (order && (order as any).raw_footage_drive_link && typeof (order as any).raw_footage_drive_link === 'string' && ((order as any).raw_footage_drive_link as string).trim() !== '') {
+    return ((order as any).raw_footage_drive_link as string).trim();
+  }
+  if (order && (order as any).consolidated_drive_link && typeof (order as any).consolidated_drive_link === 'string' && ((order as any).consolidated_drive_link as string).trim() !== '') {
+    return ((order as any).consolidated_drive_link as string).trim();
+  }
+
+  // 4. Check Lead table
+  if (lead && (lead as any).raw_footage_link && typeof (lead as any).raw_footage_link === 'string' && ((lead as any).raw_footage_link as string).trim() !== '') {
+    return ((lead as any).raw_footage_link as string).trim();
+  }
+  if (lead && (lead as any).raw_footage_drive_link && typeof (lead as any).raw_footage_drive_link === 'string' && ((lead as any).raw_footage_drive_link as string).trim() !== '') {
+    return ((lead as any).raw_footage_drive_link as string).trim();
+  }
+
+  // 5. Check assignment object direct field
   if ((assignment as any)?.raw_footage_link && typeof (assignment as any).raw_footage_link === 'string' && ((assignment as any).raw_footage_link as string).trim() !== '') {
     return ((assignment as any).raw_footage_link as string).trim();
   }
 
-  // 3. Check Production object direct fields
+  // 6. Check Production object direct fields
   if (prod?.raw_footage_drive_link && typeof prod.raw_footage_drive_link === 'string' && prod.raw_footage_drive_link.trim() !== '') {
     return prod.raw_footage_drive_link.trim();
   }
@@ -235,7 +264,10 @@ const getRawFootageDriveLink = (assignment: any, prod: any, order: any, lead: an
     return prod.raw_footage_location.trim();
   }
 
-  // 4. Fallback for raw_footage_location
+  // 7. Fallback for raw_footage server_path or raw_footage_location
+  if (rf?.server_path && typeof rf.server_path === 'string' && rf.server_path.trim() !== '') {
+    return rf.server_path.trim();
+  }
   if (prod?.raw_footage_location && typeof prod.raw_footage_location === 'string' && prod.raw_footage_location.trim() !== '') {
     return prod.raw_footage_location.trim();
   }
@@ -464,6 +496,7 @@ export const ProductionStaffModule: React.FC = () => {
     orders, 
     operations, 
     production,
+    rawFootage,
     editorAssignments, 
     quotations,
     updateEditorAssignmentStatus, 
@@ -659,7 +692,7 @@ export const ProductionStaffModule: React.FC = () => {
         }
 
         // Raw Footage Drive Link resolution across Operations / Raw Footage / Production / Assignment sources
-        const rawFootageLink = getRawFootageDriveLink(assignment, prod, order, lead, operations);
+        const rawFootageLink = getRawFootageDriveLink(assignment, prod, order, lead, operations, rawFootage);
 
         // Event Name, Type & Date resolution across Lead / Order / Production sources
         const targetEvent = getTargetEventForAssignment(lead, order, prod, assignment);
@@ -774,7 +807,7 @@ export const ProductionStaffModule: React.FC = () => {
         overallStatus
       };
     });
-  }, [staffName, resolvedStaffId, currentUser, editorAssignments, orders, leads, production, operations, quotations]);
+  }, [staffName, resolvedStaffId, currentUser, editorAssignments, orders, leads, production, operations, quotations, rawFootage]);
 
   const getStatusBadge = (status: string) => {
     switch(status) {
@@ -1307,9 +1340,12 @@ Thank you.`;
                         <table className="w-full text-left border-collapse min-w-max">
                           <thead>
                             <tr className="bg-zinc-900/50 border-b border-zinc-800 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
+                              <th className="px-3.5 py-2.5 font-bold">Order ID</th>
+                              <th className="px-3.5 py-2.5 font-bold">Customer Name</th>
                               <th className="px-3.5 py-2.5 font-bold">Event Name</th>
-                              <th className="px-3.5 py-2.5 font-bold">Deliverable</th>
-                              <th className="px-3.5 py-2.5 font-bold text-center">Qty</th>
+                              <th className="px-3.5 py-2.5 font-bold">Assigned Task</th>
+                              <th className="px-3.5 py-2.5 font-bold">Target Delivery Date</th>
+                              <th className="px-3.5 py-2.5 font-bold">Raw Footage Received</th>
                               <th className="px-3.5 py-2.5 font-bold">Current Status</th>
                               <th className="px-3.5 py-2.5 font-bold">Edited Drive Link</th>
                               <th className="px-3.5 py-2.5 font-bold text-center">Action</th>
@@ -1323,10 +1359,27 @@ Thank you.`;
                               const delivQty = delivItem.qty || getAssignedDeliverableQty(delivItem.assignmentObj, delivItem.targetEventObj, delivItem.leadObj, delivItem.orderObj, delivItem.prodObj, quotations);
                               const parsedDeliv = parseQtyAndText(delivItem.deliverable);
                               const delivName = parsedDeliv.text || delivItem.deliverable;
+                              const effectiveRawFootageLink = delivItem.rawFootageLink || grp.rawFootageLink;
 
                               return (
                                 <tr key={delivItem.assignmentId} className="hover:bg-zinc-900/40 transition-colors">
-                                  {/* Event Name */}
+                                  {/* 1. Order ID */}
+                                  <td className="px-3.5 py-3 font-mono font-bold text-violet-400 whitespace-nowrap">
+                                    {delivItem.orderId}
+                                  </td>
+
+                                  {/* 2. Customer Name */}
+                                  <td className="px-3.5 py-3 font-bold text-white whitespace-nowrap">
+                                    <div>{delivItem.customerName}</div>
+                                    {delivItem.customerMobile && (
+                                      <div className="text-[10px] text-emerald-400 font-mono font-normal flex items-center gap-1 mt-0.5">
+                                        <span>📞</span>
+                                        <span>{delivItem.customerMobile}</span>
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  {/* 3. Event Name */}
                                   <td className="px-3.5 py-3 font-semibold text-purple-300">
                                     <div className="flex items-center gap-2">
                                       <span className="text-zinc-200 font-bold">{delivItem.eventName || 'N/A'}</span>
@@ -1336,29 +1389,68 @@ Thank you.`;
                                     )}
                                   </td>
 
-                                  {/* Deliverable Name */}
+                                  {/* 4. Assigned Task (Deliverable) */}
                                   <td className="px-3.5 py-3 font-bold text-zinc-300">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1.5">
                                       <span>🎯 {delivName}</span>
+                                      {delivQty > 1 && (
+                                        <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 font-mono text-[10px] border border-zinc-800">
+                                          x{delivQty}
+                                        </span>
+                                      )}
                                     </div>
                                     <span className="text-[10px] text-zinc-500 font-mono font-normal block mt-0.5">{delivItem.assignmentId}</span>
                                   </td>
 
-                                  {/* Qty */}
-                                  <td className="px-3.5 py-3 font-mono font-bold text-center">
-                                    <span className="px-2.5 py-0.5 rounded bg-zinc-900 text-zinc-200 text-xs border border-zinc-800">
-                                      {delivQty}
-                                    </span>
+                                  {/* 5. Target Delivery Date */}
+                                  <td className="px-3.5 py-3 font-mono text-xs text-zinc-200 font-bold whitespace-nowrap">
+                                    {delivItem.targetFinishDate || grp.targetFinishDate || 'Not set'}
                                   </td>
 
-                                  {/* Status */}
+                                  {/* 6. Raw Footage Received */}
+                                  <td className="px-3.5 py-3 font-mono whitespace-nowrap">
+                                    {effectiveRawFootageLink && (effectiveRawFootageLink.startsWith('http://') || effectiveRawFootageLink.startsWith('https://')) ? (
+                                      <a
+                                        href={effectiveRawFootageLink.startsWith('http') ? effectiveRawFootageLink : `https://${effectiveRawFootageLink}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        referrerPolicy="no-referrer"
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+                                        title={effectiveRawFootageLink}
+                                      >
+                                        <FileVideo className="w-3.5 h-3.5 shrink-0" />
+                                        <span>View Raw Footage</span>
+                                        <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
+                                      </a>
+                                    ) : effectiveRawFootageLink && effectiveRawFootageLink.trim() !== '' && effectiveRawFootageLink !== 'Pending' && effectiveRawFootageLink !== 'N/A' ? (
+                                      <a
+                                        href={effectiveRawFootageLink.startsWith('http') ? effectiveRawFootageLink : `https://${effectiveRawFootageLink}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        referrerPolicy="no-referrer"
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm"
+                                        title={effectiveRawFootageLink}
+                                      >
+                                        <FileVideo className="w-3.5 h-3.5 shrink-0" />
+                                        <span>View Raw Footage</span>
+                                        <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
+                                      </a>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-zinc-900 text-zinc-500 border border-zinc-800 text-[11px] font-mono">
+                                        <Clock className="w-3 h-3 text-zinc-600" />
+                                        <span>Pending</span>
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  {/* 7. Current Status */}
                                   <td className="px-3.5 py-3 whitespace-nowrap">
                                     <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border ${delivBadge.color}`}>
                                       {delivBadge.label}
                                     </span>
                                   </td>
 
-                                  {/* Edited Link */}
+                                  {/* 8. Edited Drive Link */}
                                   <td className="px-3.5 py-3 font-mono">
                                     {delivItem.editedDriveLink && (delivItem.editedDriveLink.startsWith('http://') || delivItem.editedDriveLink.startsWith('https://')) ? (
                                       <a
@@ -1377,7 +1469,7 @@ Thank you.`;
                                     )}
                                   </td>
 
-                                  {/* Action Dropdown */}
+                                  {/* 9. Action Dropdown */}
                                   <td className="px-3.5 py-3 text-center">
                                     <ActionMenuDropdown
                                       dropdownId={`action_dropdown_menu_${delivItem.assignmentId}`}
@@ -1504,9 +1596,22 @@ Thank you.`;
                           const delivQty = delivItem.qty || getAssignedDeliverableQty(delivItem.assignmentObj, delivItem.targetEventObj, delivItem.leadObj, delivItem.orderObj, delivItem.prodObj, quotations);
                           const parsedDeliv = parseQtyAndText(delivItem.deliverable);
                           const delivName = parsedDeliv.text || delivItem.deliverable;
+                          const effectiveRawFootageLink = delivItem.rawFootageLink || grp.rawFootageLink;
 
                           return (
                             <div key={delivItem.assignmentId} className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-3.5 space-y-3">
+                              {/* Order ID & Customer */}
+                              <div className="flex items-start justify-between gap-2 pb-2 border-b border-zinc-800/60">
+                                <div>
+                                  <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Order ID</div>
+                                  <span className="font-mono font-bold text-violet-400 text-xs">{delivItem.orderId}</span>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Customer</div>
+                                  <span className="font-bold text-white text-xs">{delivItem.customerName}</span>
+                                </div>
+                              </div>
+
                               {/* Event Name & Qty */}
                               <div className="flex items-start justify-between gap-3">
                                 <div className="space-y-1 min-w-0 flex-1">
@@ -1529,14 +1634,62 @@ Thank you.`;
                                 </div>
                               </div>
 
-                              {/* Deliverable Name */}
-                              <div className="space-y-1">
-                                <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Deliverable</div>
-                                <div className="text-sm font-bold text-purple-300 break-words flex items-start gap-1.5">
-                                  <span className="shrink-0 mt-0.5">🎯</span>
-                                  <span className="flex-1">{delivName}</span>
+                              {/* Deliverable Name (Assigned Task) & Target Delivery Date */}
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1 min-w-0">
+                                  <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Assigned Task</div>
+                                  <div className="text-xs font-bold text-purple-300 break-words flex items-start gap-1.5">
+                                    <span className="shrink-0 mt-0.5">🎯</span>
+                                    <span className="flex-1">{delivName}</span>
+                                  </div>
+                                  <span className="text-[9px] text-zinc-500 font-mono block mt-0.5">{delivItem.assignmentId}</span>
                                 </div>
-                                <span className="text-[9px] text-zinc-500 font-mono block mt-0.5">{delivItem.assignmentId}</span>
+
+                                <div className="space-y-1 min-w-0 text-right">
+                                  <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Target Delivery</div>
+                                  <span className="font-mono text-xs text-zinc-200 font-bold block pt-0.5">
+                                    {delivItem.targetFinishDate || grp.targetFinishDate || 'Not set'}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Raw Footage Received */}
+                              <div className="space-y-1">
+                                <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Raw Footage Received</div>
+                                <div>
+                                  {effectiveRawFootageLink && (effectiveRawFootageLink.startsWith('http://') || effectiveRawFootageLink.startsWith('https://')) ? (
+                                    <a
+                                      href={effectiveRawFootageLink.startsWith('http') ? effectiveRawFootageLink : `https://${effectiveRawFootageLink}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      referrerPolicy="no-referrer"
+                                      className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-bold transition-all cursor-pointer w-full text-center"
+                                      title={effectiveRawFootageLink}
+                                    >
+                                      <FileVideo className="w-3.5 h-3.5 shrink-0" />
+                                      <span>View Raw Footage</span>
+                                      <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
+                                    </a>
+                                  ) : effectiveRawFootageLink && effectiveRawFootageLink.trim() !== '' && effectiveRawFootageLink !== 'Pending' && effectiveRawFootageLink !== 'N/A' ? (
+                                    <a
+                                      href={effectiveRawFootageLink.startsWith('http') ? effectiveRawFootageLink : `https://${effectiveRawFootageLink}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      referrerPolicy="no-referrer"
+                                      className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-bold transition-all cursor-pointer w-full text-center"
+                                      title={effectiveRawFootageLink}
+                                    >
+                                      <FileVideo className="w-3.5 h-3.5 shrink-0" />
+                                      <span>View Raw Footage</span>
+                                      <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
+                                    </a>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-zinc-950 text-zinc-500 border border-zinc-800 text-[11px] font-mono">
+                                      <Clock className="w-3 h-3 text-zinc-600" />
+                                      <span>Pending</span>
+                                    </span>
+                                  )}
+                                </div>
                               </div>
 
                               {/* Status & Edited Drive Link */}

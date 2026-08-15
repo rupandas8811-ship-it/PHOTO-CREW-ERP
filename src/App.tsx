@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { supabaseClient } from './supabaseClient';
 import { RoleProvider, useRole } from './components/RoleContext';
 import { RoleSwitcher } from './components/RoleSwitcher';
 import { Dashboard } from './components/Dashboard';
@@ -69,25 +70,101 @@ const MainAppContent: React.FC = () => {
     setGlobalDateRange,
     resetGlobalDateRange,
     isDataLoading,
-    orders
+    orders,
+    production
   } = useRole();
   const [appLoaded, setAppLoaded] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
+  const [unlockRequests, setUnlockRequests] = useState<any[]>([]);
 
   useEffect(() => {
-    if (currentRole === 'Business Owner' && orders) {
-      import('./supabaseClient').then(({ supabaseClient }) => {
-        const fetchPending = async () => {
-          const { data: unlocks } = await supabaseClient.from('unlock_requests').select('*').eq('status', 'Pending');
-          const approvalOrders = orders.filter(o => o.current_stage === 'Client Acceptance' || o.current_stage === 'Final Approval');
-          setPendingApprovalCount((unlocks?.length || 0) + approvalOrders.length);
-        };
+    if (currentRole !== 'Business Owner' || !supabaseClient) return;
+
+    let isMounted = true;
+    const fetchPending = async () => {
+      const { data: unlocks } = await supabaseClient.from('unlock_requests').select('*');
+      if (isMounted && unlocks) {
+        setUnlockRequests(unlocks);
+      }
+    };
+    fetchPending();
+
+    const channel = supabaseClient
+      .channel('app_rt_unlock_requests')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'unlock_requests' }, () => {
         fetchPending();
-      });
-    }
-  }, [currentRole, orders]);
+      })
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabaseClient.removeChannel(channel);
+    };
+  }, [currentRole]);
+
+  const pendingApprovalCount = useMemo(() => {
+    if (currentRole !== 'Business Owner' || !orders) return 0;
+
+    const validApprovalStages = [
+      'client acceptance',
+      'client accepted',
+      'customer acceptance',
+      'business owner review',
+      'final approval',
+      'accepted',
+      'approved'
+    ];
+    const isApprovalStage = (st?: string) => {
+      if (!st) return false;
+      const lower = st.trim().toLowerCase();
+      return validApprovalStages.some(s => lower === s || lower.includes('client acceptance'));
+    };
+    const isClosedStage = (st?: string) => {
+      if (!st) return false;
+      const lower = st.trim().toLowerCase();
+      return lower === 'order closed' || lower === 'closed' || lower === 'project closed' || lower === 'completed' || lower === 'project completed';
+    };
+
+    const candidatesMap = new Map<string, any>();
+
+    const addCandidate = (baseOrder: any, relatedProd?: any) => {
+      const key = baseOrder.order_id || baseOrder.lead_id;
+      if (!key) return;
+
+      const currentStage = baseOrder.current_stage || relatedProd?.editing_status || relatedProd?.production_status || 'Client Acceptance';
+      if (isClosedStage(currentStage) || isClosedStage(relatedProd?.editing_status) || isClosedStage(baseOrder.order_status)) {
+        return;
+      }
+
+      const orderMatch = isApprovalStage(baseOrder.current_stage) || isApprovalStage(baseOrder.order_status);
+      const prodMatch = relatedProd && (
+        isApprovalStage(relatedProd.editing_status) ||
+        isApprovalStage(relatedProd.production_status) ||
+        isApprovalStage(relatedProd.customer_review_status)
+      );
+
+      if (orderMatch || prodMatch) {
+        if (!candidatesMap.has(key)) {
+          candidatesMap.set(key, baseOrder);
+        }
+      }
+    };
+
+    orders.forEach(o => {
+      const relatedProd = production?.find((p: any) => p.tracking_id === o.lead_id || p.order_id === o.lead_id || p.tracking_id === o.order_id);
+      addCandidate(o, relatedProd);
+    });
+    production?.forEach((p: any) => {
+      const relatedOrder = orders.find(o => o.lead_id === p.tracking_id || o.order_id === p.tracking_id || o.lead_id === p.order_id);
+      if (relatedOrder) {
+        addCandidate(relatedOrder, p);
+      }
+    });
+
+    const pendingUnlocks = unlockRequests.filter(u => u.request_status === 'Pending' || u.status === 'Pending');
+    return pendingUnlocks.length + candidatesMap.size;
+  }, [currentRole, orders, production, unlockRequests]);
 
   const [showInitialLoader, setShowInitialLoader] = useState(() => {
     return localStorage.getItem('erp_current_user') !== null;

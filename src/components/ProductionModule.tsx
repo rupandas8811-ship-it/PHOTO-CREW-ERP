@@ -7,7 +7,7 @@ import {
   Play, CheckCircle2, UserCheck, Eye, EyeOff, Calendar, Lock, Layers, AlertCircle, Ban, RefreshCw, Clock,
   PlusSquare, ArrowRight, CheckSquare, AlertTriangle, Truck, Users, BarChart3, TrendingUp, Sparkles, UserPlus, ChevronRight,
   Aperture, Camera, Sliders, ShieldCheck, Image, Download, Printer, FileSpreadsheet, FileText, Search,
-  Trash2, X, Mail, MessageSquare, Edit3, MapPin, Plus, Phone, ExternalLink
+  Trash2, X, Mail, MessageSquare, Edit3, MapPin, Plus, Phone, ExternalLink, FileVideo
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
@@ -10724,26 +10724,52 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       <thead className="bg-zinc-900/40 sticky top-0 border-b border-zinc-900">
                         <tr className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
                           <th className="px-4 py-3 font-bold">Order ID</th>
+                          <th className="px-4 py-3 font-bold">Customer Name</th>
                           <th className="px-4 py-3 font-bold">Event Name</th>
-                          <th className="px-4 py-3 font-bold">Deliverable</th>
+                          <th className="px-4 py-3 font-bold">Assigned Task</th>
                           <th className="px-4 py-3 font-bold">Target Delivery Date</th>
+                          <th className="px-4 py-3 font-bold">Raw Footage Received</th>
                           <th className="px-4 py-3 font-bold">Current Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-900 font-sans text-xs text-zinc-300">
                         {staffTasks.map(task => {
                           const correlatedProj = (production || []).find(p => p.production_id === task.production_id);
-                          const { order } = resolveOrderAndLead(correlatedProj);
+                          const { order, lead } = resolveOrderAndLead(correlatedProj);
                           const trackingId = correlatedProj?.tracking_id;
                           const orderId = order?.order_id && order?.order_id !== 'NULL' && order?.order_id !== 'NIL' ? order?.order_id : (trackingId || 'N/A');
+                          const customerName = lead?.customer_name || order?.customer_name || correlatedProj?.customer_name || 'Client';
                           const eventName = order?.event_type || order?.custom_event_name || 'Project';
+                          const rawFootageLink = getRawFootageDriveLink(correlatedProj);
 
                           return (
                             <tr key={task.assignment_id} className="hover:bg-zinc-900/30 transition-colors">
                               <td className="px-4 py-3 font-mono font-bold text-violet-400">{orderId}</td>
-                              <td className="px-4 py-3 font-medium">{eventName}</td>
+                              <td className="px-4 py-3 font-semibold text-white">{customerName}</td>
+                              <td className="px-4 py-3 font-medium text-purple-300">{eventName}</td>
                               <td className="px-4 py-3 font-medium text-amber-100">{task.speciality || 'Editor'}</td>
-                              <td className="px-4 py-3 font-mono text-[10px] text-zinc-400">{task.target_finish_date || '—'}</td>
+                              <td className="px-4 py-3 font-mono text-[10px] text-zinc-400">{task.target_finish_date || correlatedProj?.target_delivery_date || '—'}</td>
+                              <td className="px-4 py-3">
+                                {rawFootageLink && (rawFootageLink.startsWith('http://') || rawFootageLink.startsWith('https://')) ? (
+                                  <a
+                                    href={rawFootageLink.startsWith('http') ? rawFootageLink : `https://${rawFootageLink}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    referrerPolicy="no-referrer"
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-md text-[11px] font-bold transition-all cursor-pointer"
+                                    title={rawFootageLink}
+                                  >
+                                    <FileVideo className="w-3.5 h-3.5 shrink-0" />
+                                    <span>View Raw Footage</span>
+                                    <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
+                                  </a>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-zinc-500 text-[11px] font-mono">
+                                    <Clock className="w-3 h-3 text-zinc-600" />
+                                    <span>Pending</span>
+                                  </span>
+                                )}
+                              </td>
                               <td className="px-4 py-3">
                                 <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider ${
                                   task.status === 'Completed'

@@ -1243,7 +1243,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'total_pax', 'reference_source', 
         'lead_value', 'lead_score', 'booking_status', 'reporting_time', 'Reporting_date', 'package_price', 'deliverables_description', 
         'Team_member', 'Team_Members', 'team_members', 'Team_members', 'team_member',
-        'notes_special_customizations', 'quotation_discount', 'additional_services_cost', 'Quotation_Discount', 'Additional_Services_Cost', 'Specify_Custom_Lead_Source_Name', 'Final_Quotation_Amount', 'sales_staff_name', 'sales_staff_mobile'
+        'notes_special_customizations', 'quotation_discount', 'additional_services_cost', 'Quotation_Discount', 'Additional_Services_Cost', 'Specify_Custom_Lead_Source_Name', 'Final_Quotation_Amount', 'Final_Package_Amount', 'final_package_amount', 'advance_collected', 'booking_date', 'booking_time', 'payment_mode', 'transaction_id', 'contract_notes', 'quotation_locked', 'package_name', 'sales_staff_name', 'sales_staff_mobile'
       ],
       orders: [
         'order_id', 'lead_id', 'customer_name', 'mobile', 'event_type', 'custom_event_type', 'custom_event_name', 'shoot_type', 'event_date', 
@@ -2227,9 +2227,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             }
             const teamData = l.Team_member || l.Team_Members || l.team_members || l.Team_members || l.team_member || '';
             const finalQuoteAmt = l.Final_Quotation_Amount ?? l.final_quotation_amount ?? l.final_amount ?? null;
+            const finalPkgAmt = l.Final_Package_Amount ?? l.final_package_amount ?? finalQuoteAmt;
             return { 
               ...l, 
-              Final_Quotation_Amount: finalQuoteAmt,
+              Final_Quotation_Amount: finalQuoteAmt !== null && finalQuoteAmt !== undefined && !isNaN(Number(finalQuoteAmt)) ? Number(finalQuoteAmt) : null,
+              Final_Package_Amount: finalPkgAmt !== null && finalPkgAmt !== undefined && !isNaN(Number(finalPkgAmt)) ? Number(finalPkgAmt) : null,
+              final_package_amount: finalPkgAmt !== null && finalPkgAmt !== undefined && !isNaN(Number(finalPkgAmt)) ? Number(finalPkgAmt) : undefined,
               Team_member: teamData, 
               Team_Members: teamData, 
               team_members: teamData,
@@ -3557,7 +3560,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       booking_date: new Date().toISOString().split('T')[0],
       booking_time: new Date().toLocaleTimeString(),
       package_name: packageName,
+      Final_Package_Amount: quotationAmount,
       final_package_amount: quotationAmount,
+      Final_Quotation_Amount: quotationAmount,
       advance_collected: advanceReceived,
       payment_mode: paymentMode || 'N/A',
       transaction_id: cleanTxnId || undefined,
@@ -6519,6 +6524,32 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           }
         }
       }
+
+      if ('Final_Package_Amount' in finalUpdates || 'final_package_amount' in finalUpdates || 'Final_Quotation_Amount' in finalUpdates) {
+        const newVal = (finalUpdates as any).Final_Package_Amount ?? (finalUpdates as any).final_package_amount ?? (finalUpdates as any).Final_Quotation_Amount;
+        const prevVal = (prevLead as any).Final_Package_Amount ?? (prevLead as any).final_package_amount ?? (prevLead as any).Final_Quotation_Amount;
+        if ((newVal === null || newVal === undefined || newVal === 0 || (newVal as any) === '') && (prevVal !== null && prevVal !== undefined && prevVal !== 0 && (prevVal as any) !== '')) {
+          console.warn(`[SAFETY] Prevented accidental overwrite of Final_Package_Amount. Retaining existing data.`);
+          finalUpdates.Final_Package_Amount = Number(prevVal);
+          (finalUpdates as any).final_package_amount = Number(prevVal);
+          finalUpdates.Final_Quotation_Amount = Number(prevVal);
+        } else if (newVal !== undefined && newVal !== null && !isNaN(Number(newVal)) && Number(newVal) > 0) {
+          finalUpdates.Final_Package_Amount = Number(newVal);
+          (finalUpdates as any).final_package_amount = Number(newVal);
+          finalUpdates.Final_Quotation_Amount = Number(newVal);
+        }
+      }
+    }
+
+    if (prevLead && isExplicitStep3Save) {
+      if ('Final_Package_Amount' in finalUpdates || 'final_package_amount' in finalUpdates || 'Final_Quotation_Amount' in finalUpdates) {
+        const newVal = (finalUpdates as any).Final_Package_Amount ?? (finalUpdates as any).final_package_amount ?? (finalUpdates as any).Final_Quotation_Amount;
+        if (newVal !== undefined && newVal !== null && !isNaN(Number(newVal))) {
+          finalUpdates.Final_Package_Amount = Number(newVal);
+          (finalUpdates as any).final_package_amount = Number(newVal);
+          finalUpdates.Final_Quotation_Amount = Number(newVal);
+        }
+      }
     }
 
     let updatedEvents: LeadEvent[] | undefined;
@@ -6620,9 +6651,13 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       prev.map((ld) => {
         if (ld.lead_id === leadId) {
           const teamVal = (finalUpdates as any).Team_member ?? (finalUpdates as any).Team_Members ?? (finalUpdates as any).team_members ?? ld.Team_member ?? ld.Team_Members;
+          const finalPkgVal = (finalUpdates as any).Final_Package_Amount ?? (finalUpdates as any).final_package_amount ?? (finalUpdates as any).Final_Quotation_Amount ?? ld.Final_Package_Amount ?? ld.final_package_amount ?? ld.Final_Quotation_Amount;
           const updated = {
             ...ld,
             ...finalUpdates,
+            Final_Package_Amount: finalPkgVal !== undefined && finalPkgVal !== null && !isNaN(Number(finalPkgVal)) ? Number(finalPkgVal) : null,
+            final_package_amount: finalPkgVal !== undefined && finalPkgVal !== null && !isNaN(Number(finalPkgVal)) ? Number(finalPkgVal) : undefined,
+            Final_Quotation_Amount: finalPkgVal !== undefined && finalPkgVal !== null && !isNaN(Number(finalPkgVal)) ? Number(finalPkgVal) : null,
             Team_member: teamVal,
             Team_Members: teamVal,
             team_members: teamVal,

@@ -262,6 +262,7 @@ export interface Lead {
   Additional_Services_Cost?: number | null;
   Quotation_Discount?: number | null;
   Final_Quotation_Amount?: number | null;
+  Final_Package_Amount?: number | null;
   total_pax?: number;
   reference_source?: string;
   lead_value?: number;

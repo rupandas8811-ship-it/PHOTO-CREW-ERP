@@ -3079,7 +3079,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     updatedInclusions: Record<string, string[]>,
     updatedDeliverables: Record<string, string[]>,
     activePkgId?: string,
-    packageCostOverride?: number | null
+    packageCostOverride?: number | null,
+    discountOverride?: number | null,
+    additionalOverride?: number | null
   ) => {
     if (isStep3Locked) return;
     const pkgId = activePkgId || wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedPkgIds[0] || 'Custom Package';
@@ -3109,10 +3111,23 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         : (wizardLeadData.budget ? Number(wizardLeadData.budget) : null))
     );
 
+    const cleanDiscount = discountOverride !== undefined ? (discountOverride || 0) : (
+      quoteDiscount === "" || quoteDiscount == null || isNaN(Number(quoteDiscount)) ? 0 : Number(quoteDiscount)
+    );
+    const cleanAdditional = additionalOverride !== undefined ? (additionalOverride || 0) : (
+      quoteAdditional === "" || quoteAdditional == null || isNaN(Number(quoteAdditional)) ? 0 : Number(quoteAdditional)
+    );
+    const cleanFinalAmt = Math.max(0, (cleanPkgCost || 0) + cleanAdditional - cleanDiscount);
+
     const updatePayload: any = {
       Team_Members: safeTeamMembersText,
       Add_Deliverable: safeDeliverablesText,
       Select_Package_Option: pkgId,
+      Quotation_Discount: cleanDiscount,
+      Additional_Services_Cost: cleanAdditional,
+      Final_Quotation_Amount: cleanFinalAmt,
+      Final_Package_Amount: cleanFinalAmt,
+      final_package_amount: cleanFinalAmt,
       _explicit_step3_save: true
     };
 
@@ -3127,7 +3142,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     step3SaveTimeoutRef.current = setTimeout(async () => {
       try {
-        // Direct Supabase update to ensure public.leads.Team_Members is immediately saved
+        // Direct Supabase update to ensure public.leads.Team_Members and Final_Package_Amount are immediately saved
         try {
           const { data: dbResult, error: dbError } = await supabaseClient
             .from('leads')
@@ -3135,12 +3150,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               Team_Members: safeTeamMembersText,
               Add_Deliverable: safeDeliverablesText,
               Select_Package_Option: pkgId,
+              Quotation_Discount: cleanDiscount,
+              Additional_Services_Cost: cleanAdditional,
+              Final_Quotation_Amount: cleanFinalAmt,
+              Final_Package_Amount: cleanFinalAmt,
               ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? { package_price: cleanPkgCost, budget: cleanPkgCost } : {})
             })
             .eq('lead_id', leadId)
             .select('*');
           console.log('TEAM MEMBERS SAVED', { leadId, Team_Members: safeTeamMembersText });
-          console.log('DELIVERABLES SAVED', { leadId, Add_Deliverable: safeDeliverablesText });
+          console.log('FINAL PACKAGE AMOUNT SAVED', { leadId, Final_Package_Amount: cleanFinalAmt });
           console.log('TEAM MEMBERS DB RESULT', { data: dbResult, error: dbError });
         } catch (dbErr) {
           console.warn("Direct Supabase update warning:", dbErr);
@@ -3162,6 +3181,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               Add_Deliverable: safeDeliverablesText,
               deliverables_description: safeDeliverablesText,
               Select_Package_Option: pkgId,
+              Quotation_Discount: cleanDiscount,
+              Additional_Services_Cost: cleanAdditional,
+              Final_Quotation_Amount: cleanFinalAmt,
+              Final_Package_Amount: cleanFinalAmt,
+              final_package_amount: cleanFinalAmt,
               ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? {
                 package_price: cleanPkgCost,
                 budget: cleanPkgCost
@@ -3180,6 +3204,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           deliverables: deliverablesText,
           deliverables_description: deliverablesText,
           Select_Package_Option: pkgId,
+          final_amount: cleanFinalAmt,
           ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? {
             package_price: cleanPkgCost,
             package_cost: cleanPkgCost,
@@ -4668,7 +4693,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               <input
                 type="number"
                 value={quoteDiscount || ''}
-                onChange={(e) => setQuoteDiscount(Number(e.target.value))}
+                onChange={(e) => {
+                  const rawVal = e.target.value;
+                  const discNum = rawVal === '' ? 0 : Number(rawVal);
+                  setQuoteDiscount(rawVal === '' ? 0 : discNum);
+                  const currentPkg = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || 'Custom Package';
+                  saveStep3DataRealtime(editableInclusions, editableDeliverables, currentPkg, undefined, discNum, quoteAdditional);
+                }}
                 placeholder="0"
                 className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 font-mono transition-all"
               />
@@ -4682,7 +4713,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               <input
                 type="number"
                 value={quoteAdditional || ''}
-                onChange={(e) => setQuoteAdditional(Number(e.target.value))}
+                onChange={(e) => {
+                  const rawVal = e.target.value;
+                  const addNum = rawVal === '' ? 0 : Number(rawVal);
+                  setQuoteAdditional(rawVal === '' ? 0 : addNum);
+                  const currentPkg = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || 'Custom Package';
+                  saveStep3DataRealtime(editableInclusions, editableDeliverables, currentPkg, undefined, quoteDiscount, addNum);
+                }}
                 placeholder="0"
                 className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 font-mono transition-all"
               />
@@ -5629,7 +5666,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       // Order Confirmed Rule fields
       confirmed_event_date: fullLead.booking_date || fullLead.event_date || '',
       confirmed_event_time: fullLead.booking_time || fullLead.event_time || '',
-      final_amount: fullLead.final_package_amount || fullLead.Final_Quotation_Amount || 0,
+      final_amount: (fullLead.Final_Package_Amount !== null && fullLead.Final_Package_Amount !== undefined && !isNaN(Number(fullLead.Final_Package_Amount)) && Number(fullLead.Final_Package_Amount) > 0)
+        ? Number(fullLead.Final_Package_Amount)
+        : (Number(fullLead.final_package_amount) || Number(fullLead.Final_Quotation_Amount) || (Number((fullLead as any).final_amount) > 0 ? Number((fullLead as any).final_amount) : 0)),
       advance_received: fullLead.advance_collected || 0,
       total_pax: fullLead.total_pax || 0,
       reference_source: fullLead.reference_source || '',
@@ -5652,7 +5691,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     });
     setConfirmForm({
       package_name: packages?.find((p) => String(p.package_id) === String(lead.Select_Package_Option))?.package_name || lead.Select_Package_Option || '',
-      quotation_amount: Number(lead.Final_Quotation_Amount) || Number((lead as any).final_amount) || 0,
+      quotation_amount: Number(fullLead.Final_Package_Amount) || Number((fullLead as any).final_package_amount) || Number(fullLead.Final_Quotation_Amount) || Number((fullLead as any).final_amount) || (Number(wizardLeadData.final_amount) > 0 ? Number(wizardLeadData.final_amount) : 0),
       advance_received: 0,
       event_date: lead.event_date || '',
       event_time: lead.event_time || '',
@@ -6025,6 +6064,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               Quotation_Discount: cleanDiscount,
               Additional_Services_Cost: cleanAdditional,
               Final_Quotation_Amount: cleanFinalAmt,
+              Final_Package_Amount: cleanFinalAmt,
               events: updatedEvents
             })
             .eq('lead_id', targetLeadId)
@@ -6049,6 +6089,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           Quotation_Discount: cleanDiscount,
           Additional_Services_Cost: cleanAdditional,
           Final_Quotation_Amount: cleanFinalAmt,
+          Final_Package_Amount: cleanFinalAmt,
+          final_package_amount: cleanFinalAmt,
+          _explicit_step3_save: true,
           events: updatedEvents
         });
 
@@ -6387,6 +6430,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               Quotation_Discount: cleanDiscount,
               Additional_Services_Cost: cleanAdditional,
               Final_Quotation_Amount: cleanFinalAmt,
+              Final_Package_Amount: cleanFinalAmt,
               events: updatedEvents
             })
             .eq('lead_id', selectedLead.lead_id)
@@ -6415,6 +6459,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           Quotation_Discount: cleanDiscount,
           Additional_Services_Cost: cleanAdditional,
           Final_Quotation_Amount: cleanFinalAmt,
+          Final_Package_Amount: cleanFinalAmt,
+          final_package_amount: cleanFinalAmt,
+          _explicit_step3_save: true,
           events: updatedEvents
         });
 
@@ -6428,7 +6475,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           package_cost: cleanPkgCost ?? prev.package_cost,
           package_price: cleanPkgCost ?? prev.package_price,
           selected_package_id: pkgId,
-          Select_Package_Option: pkgId
+          Select_Package_Option: pkgId,
+          final_amount: cleanFinalAmt
         }));
 
         const newCompleted = Math.max(crmHighestStep, 3);
@@ -6456,7 +6504,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             sales_staff_mobile: effectiveSalesMobile,
             Quotation_Discount: cleanDiscount,
             Additional_Services_Cost: cleanAdditional,
-            Final_Quotation_Amount: cleanFinalAmt
+            Final_Quotation_Amount: cleanFinalAmt,
+            Final_Package_Amount: cleanFinalAmt,
+            final_package_amount: cleanFinalAmt
           };
         });
 
@@ -9087,7 +9137,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setConfirmForm(prev => ({
         ...prev,
         package_name: packages?.find((p) => String(p.package_id) === String(updatedLead.Select_Package_Option))?.package_name || updatedLead.Select_Package_Option || prev.package_name || '',
-        quotation_amount: Number(updatedLead.Final_Quotation_Amount) || Number((updatedLead as any).final_amount) || Number(updatedLead.budget) || (updatedLead.lead_id === selectedLead?.lead_id ? Number(wizardLeadData.final_amount) : 0) || prev.quotation_amount || 0,
+        quotation_amount: Number(updatedLead.Final_Package_Amount) || Number((updatedLead as any).final_package_amount) || Number(updatedLead.Final_Quotation_Amount) || Number((updatedLead as any).final_amount) || Number(updatedLead.budget) || (updatedLead.lead_id === selectedLead?.lead_id ? Number(wizardLeadData.final_amount) : 0) || prev.quotation_amount || 0,
         advance_received: calcAdvance || prev.advance_received || 0,
         event_date: updatedLead.event_date || prev.event_date || today,
         event_time: updatedLead.event_time || prev.event_time || ''
@@ -9111,7 +9161,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return;
     }
 
-    if (confirmForm.quotation_amount === undefined || confirmForm.quotation_amount === 0 || isNaN(confirmForm.quotation_amount)) {
+    const effectiveFinalAmt = Number(confirmForm.quotation_amount) || Number(selectedLead.Final_Package_Amount) || Number((selectedLead as any).final_package_amount) || Number(selectedLead.Final_Quotation_Amount) || (Number(wizardLeadData.final_amount) > 0 ? Number(wizardLeadData.final_amount) : 0);
+    if (!effectiveFinalAmt || effectiveFinalAmt <= 0 || isNaN(effectiveFinalAmt)) {
       showToastMsg("Please enter Final Amount.", "error");
       return;
     }
@@ -9188,7 +9239,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       await confirmOrder(
         selectedLead.lead_id,
         confirmForm.package_name,
-        Number(confirmForm.quotation_amount),
+        effectiveFinalAmt,
         Number(confirmForm.advance_received),
         confirmForm.event_date,
         confirmForm.event_time,
@@ -9580,7 +9631,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     setConfirmForm({
                       ...confirmForm,
                       package_name: packages?.find((p) => String(p.package_id) === String(selectedLead.Select_Package_Option))?.package_name || selectedLead.Select_Package_Option || '',
-                      quotation_amount: Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_amount) || Number(wizardLeadData.final_amount) || 0,
+                      quotation_amount: Number(selectedLead.Final_Package_Amount) || Number((selectedLead as any).final_package_amount) || Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_amount) || Number(wizardLeadData.final_amount) || 0,
                       advance_received: calcAdvance,
                       event_date: selectedLead.event_date || today,
                       event_time: selectedLead.event_time || ''
@@ -11832,7 +11883,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                             setConfirmForm({
                                               ...confirmForm,
                                               package_name: packages?.find((p) => String(p.package_id) === String(lead.Select_Package_Option))?.package_name || lead.Select_Package_Option || '',
-                                              quotation_amount: Number(lead.Final_Quotation_Amount) || Number((lead as any).final_quotation_amount) || Number((lead as any).final_amount) || (lead.lead_id === selectedLead?.lead_id ? Number(wizardLeadData.final_amount) : 0) || 0,
+                                              quotation_amount: Number(lead.Final_Package_Amount) || Number((lead as any).final_package_amount) || Number(lead.Final_Quotation_Amount) || Number((lead as any).final_quotation_amount) || Number((lead as any).final_amount) || (lead.lead_id === selectedLead?.lead_id ? Number(wizardLeadData.final_amount) : 0) || 0,
                                               advance_received: calcAdvance,
                                               event_date: lead.event_date || today,
                                               event_time: lead.event_time || ''
@@ -12216,7 +12267,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       type="number"
                       required
                       readOnly
-                      value={confirmForm.quotation_amount}
+                      value={confirmForm.quotation_amount || Number(selectedLead?.Final_Package_Amount) || Number((selectedLead as any)?.final_package_amount) || Number(selectedLead?.Final_Quotation_Amount) || (Number(wizardLeadData.final_amount) > 0 ? Number(wizardLeadData.final_amount) : 0)}
                       className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-3 text-slate-100 text-xs focus:outline-none font-mono opacity-80 cursor-not-allowed"
                     />
                   </div>
@@ -13943,7 +13994,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       setConfirmForm({
                         ...confirmForm,
                         package_name: packages?.find((p) => String(p.package_id) === String(wizardLeadData.selected_package_id || selectedLead.Select_Package_Option))?.package_name || wizardLeadData.selected_package_id || selectedLead.Select_Package_Option || '',
-                        quotation_amount: Number(wizardLeadData.final_amount) || Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_amount) || 0,
+                        quotation_amount: Number(selectedLead.Final_Package_Amount) || Number((selectedLead as any).final_package_amount) || Number(wizardLeadData.final_amount) || Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_amount) || 0,
                         advance_received: calcAdvance,
                         event_date: selectedLead.event_date || today,
                         event_time: selectedLead.event_time || ''
