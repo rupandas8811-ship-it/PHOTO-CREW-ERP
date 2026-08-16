@@ -525,7 +525,18 @@ export const StaffModule: React.FC = () => {
             const staffIdx = assignedNames.indexOf(staffName.toLowerCase());
 
             // Extract ONLY equipment assigned to this staff member
-            const sa = staffAssignments?.find(s => s.order_id === orderId && (s.event_id === ev.id || !s.event_id) && s.staff_name?.toLowerCase() === staffName.toLowerCase());
+            const sa = staffAssignments?.find(s => {
+              if (s.order_id !== orderId) return false;
+              if (s.staff_name?.toLowerCase() !== staffName.toLowerCase()) return false;
+              if (s.event_id && ev.id && s.event_id !== ev.id) return false;
+              if ((!s.event_id || !ev.id) && s.event_name) {
+                const sEvName = s.event_name.trim().toLowerCase();
+                const evName1 = (ev.event_name || '').trim().toLowerCase();
+                const evName2 = (ev.event_type || '').trim().toLowerCase();
+                if (sEvName !== evName1 && sEvName !== evName2) return false;
+              }
+              return true;
+            });
             let assignedEqItems: { name: string; assetId: string }[] = [];
             const mobilesRaw = ev.assigned_staff_mobiles || '';
 
@@ -1088,10 +1099,13 @@ export const StaffModule: React.FC = () => {
 
         // Update database tables: staff_assignments, operations, orders, leads
         if (booking.orderId) {
-          const matchingSA = staffAssignments?.find(sa => 
-            sa.order_id === booking.orderId && 
-            sa.staff_name.toLowerCase() === staffName.toLowerCase()
-          );
+          const matchingSA = staffAssignments?.find(sa => {
+            if (sa.order_id !== booking.orderId) return false;
+            if (sa.staff_name.toLowerCase() !== staffName.toLowerCase()) return false;
+            if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id !== booking.eventId) return false;
+            if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() !== booking.eventName.trim().toLowerCase()) return false;
+            return true;
+          });
 
           if (matchingSA?.assignment_id) {
             await pushUpdate('staff_assignments', 'assignment_id', matchingSA.assignment_id, {
@@ -1330,10 +1344,13 @@ export const StaffModule: React.FC = () => {
           updateAssignmentPayload.raw_footage_link = modalRawFootageLink;
         }
 
-        const matchingSA = staffAssignments?.find(sa => 
-          sa.order_id === booking.orderId && 
-          sa.staff_name.toLowerCase() === staffName.toLowerCase()
-        );
+        const matchingSA = staffAssignments?.find(sa => {
+          if (sa.order_id !== booking.orderId) return false;
+          if (sa.staff_name.toLowerCase() !== staffName.toLowerCase()) return false;
+          if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id !== booking.eventId) return false;
+          if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() !== booking.eventName.trim().toLowerCase()) return false;
+          return true;
+        });
 
         if (matchingSA?.assignment_id) {
           await pushUpdate('staff_assignments', 'assignment_id', matchingSA.assignment_id, {

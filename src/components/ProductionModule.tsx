@@ -3965,14 +3965,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 
                                 return (
                                   <>
-                                    {displayStatus === "Client Acceptance" && (
-                                      <div className="flex flex-col gap-1 w-full items-center mb-1">
-                                        <span className="px-2.5 py-1 bg-purple-500/15 border border-purple-500/30 text-purple-300 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 font-mono">
-                                          ✓ Client Acceptance
-                                        </span>
-                                        <span className="text-[9px] text-zinc-400 font-mono">Awaiting BO Approval</span>
-                                      </div>
-                                    )}
                                     
                                     {isFinished && (
                                       <div className="flex flex-col gap-1 w-full items-center mb-1">
@@ -4091,7 +4083,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                     <div className="flex flex-col gap-0.5">
                       {/* Assign Editor */}
-                      {(displayStatus === "Raw Footage Received" || displayStatus === "Verified Footage" || displayStatus === "Footage Handover Verified" || displayStatus === "Pending") && (
+                      {(displayStatus === "New Project" || displayStatus === "New Project Arrived" || displayStatus === "Raw Footage Received" || displayStatus === "Verified Footage" || displayStatus === "Footage Handover Verified" || displayStatus === "Pending") && (
                         <button
                           type="button"
                           onClick={() => {

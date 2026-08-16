@@ -4050,6 +4050,8 @@ export const OperationsLeads: React.FC = () => {
               const saMatch = staffAssignments.find(sa => {
                 if (sa.order_id !== receivingFootageOrderId) return false;
                 if ((sa.staff_name || '').trim().toLowerCase() !== normStaffName) return false;
+                if (memberEvId && sa.event_id && sa.event_id !== memberEvId) return false;
+                if (!memberEvId && normEvName && sa.event_name && sa.event_name.trim().toLowerCase() !== normEvName) return false;
                 return true;
               });
               if (saMatch) {
@@ -4070,6 +4072,7 @@ export const OperationsLeads: React.FC = () => {
                 }
                 const retBy = (h.returned_by || parsed.staff_name || '').trim().toLowerCase();
                 if (retBy !== normStaffName) return false;
+                if (memberEvId && parsed.event_id && parsed.event_id !== memberEvId) return false;
                 return !!(parsed.raw_footage_link || parsed.drive_link);
               });
               if (hMatch && hMatch.remarks) {
@@ -4817,6 +4820,8 @@ export const OperationsLeads: React.FC = () => {
                                   const saMatch = staffAssignments.find(sa => {
                                     if (sa.order_id !== ord.order_id) return false;
                                     if ((sa.staff_name || '').trim().toLowerCase() !== normStaffName) return false;
+                                    if (memberEvId && sa.event_id && sa.event_id !== memberEvId) return false;
+                                    if (!memberEvId && normEvName && sa.event_name && sa.event_name.trim().toLowerCase() !== normEvName) return false;
                                     return true;
                                   });
                                   if (saMatch) {
@@ -4836,6 +4841,7 @@ export const OperationsLeads: React.FC = () => {
                                     }
                                     const retBy = (h.returned_by || parsed.staff_name || '').trim().toLowerCase();
                                     if (retBy !== normStaffName) return false;
+                                    if (memberEvId && parsed.event_id && parsed.event_id !== memberEvId) return false;
                                     
                                     return !!(parsed.raw_footage_link || parsed.drive_link);
                                   });
