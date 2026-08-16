@@ -906,6 +906,8 @@ const generateQuotationPDF = (
   }[] = [];
 
   if (lead.events && lead.events.length > 0) {
+    // 1. First, create the array of events
+    const unsortedEvents: any[] = [];
     lead.events.forEach((event: any) => {
       const eventKey = `${pkgId}_${event.id}`;
       const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
@@ -924,7 +926,7 @@ const generateQuotationPDF = (
         ? eventDeliverables.filter(Boolean)
         : deliverablesList;
 
-      eventsToRender.push({
+      unsortedEvents.push({
         eventName,
         eventDate: event.event_start_date || event.event_date || "",
         eventTime: event.event_time || event.event_start_time || "",
@@ -934,6 +936,16 @@ const generateQuotationPDF = (
         deliverables: items
       });
     });
+
+    // 2. Sort by event date ascending
+    unsortedEvents.sort((a, b) => {
+      const dateA = new Date(a.eventDate || "9999-12-31").getTime();
+      const dateB = new Date(b.eventDate || "9999-12-31").getTime();
+      return dateA - dateB;
+    });
+
+    // 3. Push to eventsToRender
+    eventsToRender.push(...unsortedEvents);
   } else {
     eventsToRender.push({
       eventName: displayEventType,
@@ -1013,7 +1025,7 @@ const generateQuotationPDF = (
 
       // Deliverables table (show header)
       if (evObj.deliverables.length > 0) {
-        simTable(evObj.deliverables.length, false);
+        simTable(evObj.deliverables.length, true);
       }
     });
 
@@ -1323,11 +1335,12 @@ const generateQuotationPDF = (
   const drawEventDeliverablesTable = (title: string, deliverables: string[]) => {
     if (deliverables.length === 0) return;
 
-    let tableH = 4 + 7.5; 
+    let tableH = 4; // Title spacing
     const mapped = deliverables.map((d, i) => ({ id: String(i), name: d }));
 
     mapped.forEach((item) => {
-      const cleanedItemName = cleanText(item.name || '');
+      let cleanedItemName = cleanText(item.name || '');
+      cleanedItemName = cleanedItemName.replace(/^DELIVERABLES\s*[:-]?\s*/i, '');
       const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
       tableH += Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
     });
@@ -1345,38 +1358,22 @@ const generateQuotationPDF = (
     doc.text(title, 15, currentY);
     currentY += 4;
 
-    if (currentY + 7.5 > 250) {
-      currentY = createNewPage();
-    }
-    doc.setFillColor(30, 41, 59); // Slate-800
-    doc.rect(15, currentY, 180, 7.5, 'F');
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(255, 255, 255);
-    doc.text('DELIVERABLES', 19, currentY + 4.8);
-
-    currentY += 7.5;
-
     doc.setDrawColor(203, 213, 225); 
     doc.setLineWidth(0.2);
 
+    // Draw top border line since we removed the header row
+    doc.line(15, currentY, 195, currentY);
+
     mapped.forEach((item, index) => {
-      const cleanedItemName = cleanText(item.name || '');
+      let cleanedItemName = cleanText(item.name || '');
+      cleanedItemName = cleanedItemName.replace(/^DELIVERABLES\s*[:-]?\s*/i, '');
       const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
       const rowHeight = Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
 
       if (currentY + rowHeight > 250) {
         doc.line(15, currentY, 195, currentY);
         currentY = createNewPage();
-
-        doc.setFillColor(30, 41, 59);
-        doc.rect(15, currentY, 180, 7.5, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.5);
-        doc.setTextColor(255, 255, 255);
-        doc.text('DELIVERABLES (CONTINUED)', 19, currentY + 4.8);
-        currentY += 7.5;
+        doc.line(15, currentY, 195, currentY);
       }
 
       if (index % 2 === 1) {
@@ -3210,7 +3207,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           final_amount: cleanFinalAmt,
           ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? {
             package_price: cleanPkgCost,
-            package_cost: cleanPkgCost,
             budget: cleanPkgCost
           } : {})
         }));
@@ -3224,7 +3220,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             lead_id: leadId,
             package_id: pkgId,
             package_name: wizardLeadData.package_name || (pkgId === 'Custom Package' || pkgId === 'custom_package' ? 'Custom Package' : `Package ${pkgId}`),
-            package_cost: cleanPkgCost || 0,
             quantity: 1,
             total_amount: cleanPkgCost || 0,
             discount: quoteDiscount || 0,
@@ -4668,7 +4663,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 value={wizardLeadData.package_cost !== undefined && wizardLeadData.package_cost !== null ? wizardLeadData.package_cost : (basePkgSum || 0)}
                 onChange={(e) => {
                   const rawVal = e.target.value;
-                  const numVal = rawVal === '' ? '' : Math.max(0, parseInt(rawVal) || 0);
+                  const numVal = rawVal === '' ? '' : rawVal;
                   const parsedNum = rawVal === '' ? 0 : Number(numVal);
                   const currentPkg = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || 'Custom Package';
                   setWizardLeadData(prev => ({
@@ -4898,12 +4893,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               type="number"
               value={wizardLeadData.package_cost !== undefined && wizardLeadData.package_cost !== null ? wizardLeadData.package_cost : (selectedPkg?.price || '')}
               onChange={(e) => {
-                const val = e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0);
+                const val = e.target.value;
                 const numVal = val === '' ? 0 : Number(val);
                 setWizardLeadData(prev => ({
                   ...prev,
-                  package_cost: val === '' ? 0 : val,
-                  package_price: val === '' ? 0 : val,
+                  package_cost: val,
+                  package_price: numVal,
                   budget: numVal,
                   final_quoted_amount: numVal
                 }));
@@ -6109,7 +6104,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             lead_id: targetLeadId,
             package_id: pkgId,
             package_name: wizardLeadData.package_name || (pkgId === 'Custom Package' || pkgId === 'custom_package' ? 'Custom Package' : `Package ${pkgId}`),
-            package_cost: cleanPkgCost || 0,
             quantity: 1,
             total_amount: cleanPkgCost || 0,
             discount: cleanDiscount || 0,
@@ -6154,7 +6148,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         ...prev,
         deliverables: deliverablesText,
         deliverables_description: deliverablesText,
-        package_cost: cleanPkgCost ?? prev.package_cost,
         package_price: cleanPkgCost ?? prev.package_price,
         selected_package_id: pkgId,
         Select_Package_Option: pkgId
@@ -6475,7 +6468,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           Team_member: safeTeamMembersText,
           Team_Members: safeTeamMembersText,
           team_members: safeTeamMembersText,
-          package_cost: cleanPkgCost ?? prev.package_cost,
           package_price: cleanPkgCost ?? prev.package_price,
           selected_package_id: pkgId,
           Select_Package_Option: pkgId,
@@ -13275,12 +13267,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   type="number"
                                   value={wizardLeadData.package_cost !== undefined && wizardLeadData.package_cost !== null ? wizardLeadData.package_cost : (selectedPkg?.price || '')}
                                   onChange={(e) => {
-                                    const val = e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0);
+                                    const val = e.target.value;
                                     const numVal = val === '' ? 0 : Number(val);
                                     setWizardLeadData(prev => ({
                                       ...prev,
-                                      package_cost: val === '' ? 0 : val,
-                                      package_price: val === '' ? 0 : val,
+                                      package_cost: val,
+                                      package_price: numVal,
                                       budget: numVal,
                                       final_quoted_amount: numVal
                                     }));
