@@ -525,10 +525,26 @@ export const StaffModule: React.FC = () => {
             const staffIdx = assignedNames.indexOf(staffName.toLowerCase());
 
             // Extract ONLY equipment assigned to this staff member
+            const sa = staffAssignments?.find(s => s.order_id === orderId && (s.event_id === ev.id || !s.event_id) && s.staff_name?.toLowerCase() === staffName.toLowerCase());
             let assignedEqItems: { name: string; assetId: string }[] = [];
             const mobilesRaw = ev.assigned_staff_mobiles || '';
 
-            if (mobilesRaw.includes(' || EQUIPMENT: JSON:')) {
+            if (sa && sa.equipment) {
+              const eqList = Array.isArray(sa.equipment) 
+                ? sa.equipment 
+                : (typeof sa.equipment === 'string' ? (() => { try { const p = JSON.parse(sa.equipment); return Array.isArray(p) ? p : [sa.equipment]; } catch(e) { return sa.equipment.split(',').map((s: string) => s.trim()).filter(Boolean); } })() : []);
+              
+              assignedEqItems = eqList.filter(Boolean).map((eqStr: string) => {
+                const match = equipment.find(e => 
+                  e.equipment_name.toLowerCase() === eqStr.toLowerCase() || 
+                  e.model.toLowerCase() === eqStr.toLowerCase()
+                );
+                return {
+                  name: eqStr,
+                  assetId: match?.equipment_id || match?.serial_number || `EQ-ASSET-${Math.floor(1000 + Math.random() * 9000)}`
+                };
+              });
+            } else if (mobilesRaw.includes(' || EQUIPMENT: JSON:')) {
               try {
                 const parts = mobilesRaw.split(' || EQUIPMENT: JSON:');
                 const staffEqs = JSON.parse(parts[1]);
@@ -560,24 +576,11 @@ export const StaffModule: React.FC = () => {
                   };
                 });
               }
-            } else if (op?.equipment_kit && assignedNames.length === 1 && staffIdx === 0) {
-              const eqList = op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean);
-              assignedEqItems = eqList.map(eqStr => {
-                const match = equipment.find(e => 
-                  e.equipment_name.toLowerCase() === eqStr.toLowerCase() || 
-                  e.model.toLowerCase() === eqStr.toLowerCase()
-                );
-                return {
-                  name: eqStr,
-                  assetId: match?.equipment_id || match?.serial_number || `EQ-ASSET-${Math.floor(1000 + Math.random() * 9000)}`
-                };
-              });
             }
 
             // Role
             const staffObj = staff?.find(s => s.name.toLowerCase() === staffName.toLowerCase());
             let assignedRole = staffObj ? staffObj.role : 'Crew Member';
-            const sa = staffAssignments?.find(s => s.order_id === orderId && s.staff_name.toLowerCase() === staffName.toLowerCase());
             if (sa?.staff_role) {
               assignedRole = sa.staff_role;
             }
@@ -654,9 +657,12 @@ export const StaffModule: React.FC = () => {
           }
 
           let assignedEqItems: { name: string; assetId: string }[] = [];
-          if (op?.equipment_kit && (!op?.assigned_staff_mobiles || !op.assigned_staff_mobiles.includes('EQUIPMENT:'))) {
-            const eqList = op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean);
-            assignedEqItems = eqList.map(eqStr => {
+          if (sa && sa.equipment) {
+            const eqList = Array.isArray(sa.equipment) 
+              ? sa.equipment 
+              : (typeof sa.equipment === 'string' ? (() => { try { const p = JSON.parse(sa.equipment); return Array.isArray(p) ? p : [sa.equipment]; } catch(e) { return sa.equipment.split(',').map((s: string) => s.trim()).filter(Boolean); } })() : []);
+            
+            assignedEqItems = eqList.filter(Boolean).map((eqStr: string) => {
               const match = equipment.find(e => 
                 e.equipment_name.toLowerCase() === eqStr.toLowerCase() || 
                 e.model.toLowerCase() === eqStr.toLowerCase()
@@ -1962,7 +1968,11 @@ export const StaffModule: React.FC = () => {
                 {(photoModalData.stage === 'Event Start'
                   ? (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0 
                       ? [
-                          { name: 'Asset Collection Photo Proof', assetId: 'Asset Collection', optional: false },
+                          ...photoModalData.booking.equipmentItems.map((eq: any) => ({
+                            name: photoModalData.booking.equipmentItems.length > 1 ? `Asset Collection: ${eq.name}` : 'Asset Collection Photo Proof',
+                            assetId: eq.assetId || eq.name,
+                            optional: false
+                          })),
                           { name: 'Event Start Photo Proof', assetId: 'Event Start', optional: false }
                         ]
                       : [
@@ -1973,12 +1983,22 @@ export const StaffModule: React.FC = () => {
                       { name: 'Event Completion Photo Proof', assetId: 'Event Completion', optional: false }
                     ]
                   : photoModalData.stage === 'Equipment Handover'
-                  ? [
-                      { name: 'Equipment Handover Photo Proof', assetId: 'Equipment Handover', optional: true }
-                    ]
-                  : [
-                      { name: 'Asset Collection Photo Proof', assetId: 'Asset Collection', optional: false }
-                    ]
+                  ? (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0
+                      ? photoModalData.booking.equipmentItems.map((eq: any) => ({
+                          name: photoModalData.booking.equipmentItems.length > 1 ? `Equipment Handover: ${eq.name}` : 'Equipment Handover Photo Proof',
+                          assetId: eq.assetId || eq.name,
+                          optional: true
+                        }))
+                      : []
+                    )
+                  : (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0
+                      ? photoModalData.booking.equipmentItems.map((eq: any) => ({
+                          name: photoModalData.booking.equipmentItems.length > 1 ? `Asset Collection: ${eq.name}` : 'Asset Collection Photo Proof',
+                          assetId: eq.assetId || eq.name,
+                          optional: false
+                        }))
+                      : []
+                    )
                 ).map((item: any, idx: number) => {
                   const currentPhoto = modalPhotos[item.name] || (item.name === 'Equipment Handover Photo Proof' ? modalPhotos['Asset Return Photo Proof'] : undefined);
 

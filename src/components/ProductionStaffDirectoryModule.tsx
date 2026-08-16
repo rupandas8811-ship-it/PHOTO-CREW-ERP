@@ -14,6 +14,7 @@ import * as XLSX from 'xlsx';
 export const ProductionStaffDirectoryModule: React.FC = () => {
   const { 
     productionStaff: staff = [], 
+    users = [],
     addProductionStaff: addStaff, 
     updateProductionStaff: updateStaff, 
     deleteProductionStaff: deleteStaff, 
@@ -135,18 +136,43 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
       Skill: [formSpeciality]
     };
 
+    // Duplicate Check Validation
+    const finalEmail = formEmail.trim() || `${formMobile.trim()}@photocrew.com`;
+    let existingUserIdForDuplicateCheck = null;
+    if (editingStaff) {
+      const match = users.find(u => 
+        (editingStaff.email && u.email?.toLowerCase() === editingStaff.email.toLowerCase()) ||
+        (editingStaff.mobile && u.mobile === editingStaff.mobile) ||
+        (editingStaff.email && u.username?.toLowerCase() === editingStaff.email.toLowerCase())
+      );
+      if (match) existingUserIdForDuplicateCheck = match.id;
+    }
+
+    const isDuplicate = users.find(u => 
+      u.id !== existingUserIdForDuplicateCheck && 
+      ((finalEmail && u.email?.toLowerCase() === finalEmail.toLowerCase()) || 
+       (formMobile.trim() && u.mobile === formMobile.trim()) ||
+       (finalEmail && u.username?.toLowerCase() === finalEmail.toLowerCase()))
+    );
+
+    if (isDuplicate) {
+      alert("Validation Error: This email or mobile number already belongs to another user. Please use a unique email and mobile number.");
+      return;
+    }
+
     setIsSaving(true);
     try {
       if (editingStaff) {
         // Edit Mode
-        // Look up corresponding user in users table by email
-        const userRes = await fetch('/api/db/select', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ table: 'users', select: 'id', matchColumn: 'email', matchValue: editingStaff.email })
-        });
-        const userData = await userRes.json();
-        const userId = userData.data?.[0]?.id;
+        let userId = null;
+        if (editingStaff) {
+           const existingUser = users.find(u => 
+             (editingStaff.email && u.email?.toLowerCase() === editingStaff.email.toLowerCase()) ||
+             (editingStaff.mobile && u.mobile === editingStaff.mobile) ||
+             (editingStaff.email && u.username?.toLowerCase() === editingStaff.email.toLowerCase())
+           );
+           if (existingUser) userId = existingUser.id;
+        }
         
         if (userId) {
             const updateAuthRes = await fetch('/api/auth/update-user', {
@@ -165,6 +191,30 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
             if (!updateAuthData.success) {
                 console.error("Auth update error:", updateAuthData.error);
                 // Non-fatal, just continue mapping staff record
+            }
+
+            // The /api/auth/update-user endpoint doesn't update public.users.password, so we must do it manually here.
+            const userUpdates: any = {};
+            if (formPassword.trim()) {
+              userUpdates.password = formPassword.trim();
+            }
+            if (Object.keys(userUpdates).length > 0) {
+              const dbUpdateRes = await fetch('/api/db/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  table: 'users',
+                  matchColumn: 'id',
+                  matchValue: userId,
+                  updates: userUpdates
+                })
+              });
+              const dbUpdateData = await dbUpdateRes.json();
+              if (!dbUpdateData.success) {
+                  alert(`Failed to update password: ${dbUpdateData.error}`);
+                  setIsSaving(false);
+                  return;
+              }
             }
         }
         

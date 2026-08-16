@@ -352,7 +352,15 @@ export const OperationsLeads: React.FC = () => {
 
   // Track which order's action dropdown is open
   const [activeMenuOrderId, setActiveMenuOrderId] = useState<string | null>(null);
-  const [selectedEquipmentStatus, setSelectedEquipmentStatus] = useState<{ staffName: string, eqReceived: any, eqHandover: any } | null>(null);
+  const [selectedEquipmentStatus, setSelectedEquipmentStatus] = useState<{ 
+    staffName: string; 
+    assignedEquipment: string[];
+    orderId?: string;
+    eventId?: string;
+    eventName?: string;
+    eqReceived?: any; 
+    eqHandover?: any; 
+  } | null>(null);
   const [selectedEventImages, setSelectedEventImages] = useState<{ staffName: string, assetCollection: any, evStart: any, evEnd: any } | null>(null);
   const [imagePreviewModal, setImagePreviewModal] = useState<{ url: string, date: string, time: string, staffName: string, stage: string } | null>(null);
   const [activeMenuItems, setActiveMenuItems] = useState<{ label: string; onClick: () => void }[]>([]);
@@ -866,6 +874,8 @@ export const OperationsLeads: React.FC = () => {
             const st = staff?.find(s => s.name?.toLowerCase() === sa.staff_name?.toLowerCase() || s.staff_id === sa.staff_id);
             const staffTaskStatus = getStaffTaskStatus(ord.order_id, ev.id, evIdx, sa.staff_name, ord, sa.assignment_id, sa.staff_role);
 
+            const saEq = sa.equipment ? (Array.isArray(sa.equipment) ? sa.equipment : (() => { try { const p = JSON.parse(sa.equipment); return Array.isArray(p) ? p : [sa.equipment]; } catch(e) { return sa.equipment.split(',').map((s: string) => s.trim()).filter(Boolean); } })()) : [];
+
             staffDetailsList.push({
               staff_name: sa.staff_name,
               staff_role: sa.staff_role || st?.role || 'Staff',
@@ -880,7 +890,7 @@ export const OperationsLeads: React.FC = () => {
               status: isStaffBusyOnDate(sa.staff_name, ev.event_date || ord.event_date || '', ord.order_id) ? 'Busy' : 'Available',
               staff_status: staffTaskStatus,
               google_maps_link: ev.google_maps_link || lead.google_maps_link || '',
-              assigned_equipment: sa.equipment || [],
+              assigned_equipment: saEq,
               event_time: ev.event_start_time || ord.event_time || ''
             });
           });
@@ -924,9 +934,14 @@ export const OperationsLeads: React.FC = () => {
             const mobileNum = mobilesList[nameIdx] || st?.mobile || '';
             const staffTaskStatus = getStaffTaskStatus(ord.order_id, ev.id, evIdx, name, ord, saMatch?.assignment_id, assignedTask);
 
-            const memberEquipment = (staffEquipments[nameIdx] && Array.isArray(staffEquipments[nameIdx]))
-              ? staffEquipments[nameIdx]
-              : (mobilesRaw.includes(' || EQUIPMENT: ') && nameIdx === 0 ? assignedEquipment : []);
+            let memberEquipment: string[] = [];
+            if (saMatch && saMatch.equipment) {
+              memberEquipment = Array.isArray(saMatch.equipment) ? saMatch.equipment : (() => { try { const p = JSON.parse(saMatch.equipment); return Array.isArray(p) ? p : [saMatch.equipment]; } catch(e) { return saMatch.equipment.split(',').map((s: string) => s.trim()).filter(Boolean); } })();
+            } else if (staffEquipments[nameIdx] && Array.isArray(staffEquipments[nameIdx])) {
+              memberEquipment = staffEquipments[nameIdx];
+            } else if (mobilesRaw.includes(' || EQUIPMENT: ') && nameIdx === 0) {
+              memberEquipment = assignedEquipment;
+            }
 
             staffDetailsList.push({
               staff_name: name,
@@ -952,7 +967,7 @@ export const OperationsLeads: React.FC = () => {
       orderAssignments.forEach((sa, saIdx) => {
         const name = sa.staff_name;
         const st = staff?.find(s => s.name?.toLowerCase() === name.toLowerCase() || s.staff_id === sa.staff_id);
-        const assignedEquipment = sa.equipment || (op?.equipment_kit ? op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
+        const assignedEquipment = sa.equipment ? (Array.isArray(sa.equipment) ? sa.equipment : (() => { try { const p = JSON.parse(sa.equipment); return Array.isArray(p) ? p : [sa.equipment]; } catch(e) { return sa.equipment.split(',').map((s: string) => s.trim()).filter(Boolean); } })()) : [];
         const assignedTask = sa.staff_role || st?.role || 'Staff';
         const staffTaskStatus = getStaffTaskStatus(ord.order_id, undefined, saIdx, name, ord, sa.assignment_id, assignedTask);
 
@@ -3783,11 +3798,18 @@ export const OperationsLeads: React.FC = () => {
       {/* Equipment Status Modal */}
       {selectedEquipmentStatus && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full w-full max-w-lg shadow-2xl relative p-5">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl relative p-5">
             <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-3">
-              <h3 className="text-sm font-bold text-indigo-400 font-mono uppercase">
-                Equipment Verification • {selectedEquipmentStatus.staffName}
-              </h3>
+              <div>
+                <h3 className="text-sm font-bold text-indigo-400 font-mono uppercase">
+                  Equipment Verification • {selectedEquipmentStatus.staffName}
+                </h3>
+                {selectedEquipmentStatus.assignedEquipment && selectedEquipmentStatus.assignedEquipment.length > 0 && (
+                  <div className="text-[11px] text-zinc-400 mt-0.5">
+                    Assigned: <span className="text-zinc-200 font-medium">{selectedEquipmentStatus.assignedEquipment.join(', ')}</span>
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => setSelectedEquipmentStatus(null)}
                 className="text-zinc-400 hover:text-white font-bold cursor-pointer"
@@ -4849,7 +4871,15 @@ export const OperationsLeads: React.FC = () => {
                                     <td className="py-3 px-3.5 text-center whitespace-nowrap">
                                       {hasEqAssigned ? (
                                         <span 
-                                          onClick={() => setSelectedEquipmentStatus({ staffName: member.staff_name, eqReceived: assetCollection, eqHandover })}
+                                          onClick={() => setSelectedEquipmentStatus({ 
+                                            staffName: member.staff_name, 
+                                            assignedEquipment: member.assigned_equipment || [],
+                                            orderId: ord.order_id,
+                                            eventId: memberEvId,
+                                            eventName: member.event_name,
+                                            eqReceived: assetCollection, 
+                                            eqHandover 
+                                          })}
                                           className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline font-bold text-xs"
                                         >
                                           {equipmentStatusText}

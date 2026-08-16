@@ -10,7 +10,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabaseClient } from '../../supabaseClient';
 
 export const OperationsStaffManagement: React.FC = () => {
-  const { currentRole, staff, addStaff, updateStaff, deleteStaff, operations, leads, orders, staffAssignments } = useRole();
+  const { currentRole, staff, users = [], addStaff, updateStaff, deleteStaff, operations, leads, orders, staffAssignments } = useRole();
   const canEdit = currentRole === 'Operations Team' || currentRole === 'Business Owner';
 
   // Modal / Form state
@@ -138,6 +138,31 @@ export const OperationsStaffManagement: React.FC = () => {
       Staff_Type: form.staff_type
     };
 
+    // Duplicate Check Validation
+    const originalStaffForDuplicateCheck = editingId ? staff.find(s => s.staff_id === editingId) : null;
+    let existingUserIdForDuplicateCheck = null;
+    if (originalStaffForDuplicateCheck) {
+      const match = users.find(u => 
+        (originalStaffForDuplicateCheck.email && u.email?.toLowerCase() === originalStaffForDuplicateCheck.email.toLowerCase()) ||
+        (originalStaffForDuplicateCheck.mobile && u.mobile === originalStaffForDuplicateCheck.mobile) ||
+        (originalStaffForDuplicateCheck.email && u.username?.toLowerCase() === originalStaffForDuplicateCheck.email.toLowerCase())
+      );
+      if (match) existingUserIdForDuplicateCheck = match.id;
+    }
+
+    const isDuplicate = users.find(u => 
+      u.id !== existingUserIdForDuplicateCheck && 
+      ((finalEmail && u.email?.toLowerCase() === finalEmail.toLowerCase()) || 
+       (form.mobile && u.mobile === form.mobile) ||
+       (finalEmail && u.username?.toLowerCase() === finalEmail.toLowerCase()))
+    );
+
+    if (isDuplicate) {
+      alert("Validation Error: This email or mobile number already belongs to another user. Please use a unique email and mobile number.");
+      setIsSaving(false);
+      return;
+    }
+
     try {
       setIsSaving(true);
       if (editingId) {
@@ -154,19 +179,60 @@ export const OperationsStaffManagement: React.FC = () => {
           userUpdates.password = password;
         }
 
-        if (targetEmail) {
-          await supabaseClient
-            .from('users')
-            .update(userUpdates)
-            .eq('email', targetEmail)
-            .eq('role', 'Operation Staff');
+        let targetUserId = null;
+        if (originalStaff) {
+          // Identify the correct user by matching the original email or mobile
+          const matchConditions = [];
+          if (originalStaff.email) matchConditions.push(`email.eq.${originalStaff.email}`);
+          if (originalStaff.mobile) matchConditions.push(`mobile.eq.${originalStaff.mobile}`);
+          if (originalStaff.email) matchConditions.push(`username.eq.${originalStaff.email}`);
+          
+          if (matchConditions.length > 0) {
+            const { data: matchedUsers } = await supabaseClient
+              .from('users')
+              .select('id')
+              .or(matchConditions.join(','))
+              .eq('role', 'Operation Staff')
+              .limit(1);
+              
+            if (matchedUsers && matchedUsers.length > 0) {
+              targetUserId = matchedUsers[0].id;
+            }
+          }
         }
-        if (originalStaff?.mobile) {
-          await supabaseClient
+
+        if (targetUserId) {
+          const { error: updateError } = await supabaseClient
             .from('users')
             .update(userUpdates)
-            .eq('mobile', originalStaff.mobile)
-            .eq('role', 'Operation Staff');
+            .eq('id', targetUserId);
+            
+          if (updateError) {
+             console.error("Failed to update user password in users table:", updateError);
+             alert(`Failed to update password: ${updateError.message}`);
+             setIsSaving(false);
+             return;
+          }
+        } else {
+          // Fallback if not found by original staff details
+          if (targetEmail) {
+            const { error: updateError } = await supabaseClient
+              .from('users')
+              .update(userUpdates)
+              .eq('email', targetEmail)
+              .eq('role', 'Operation Staff');
+              
+            if (updateError && password) {
+               console.warn("Fallback update error by email:", updateError);
+            }
+          }
+          if (originalStaff?.mobile) {
+            await supabaseClient
+              .from('users')
+              .update(userUpdates)
+              .eq('mobile', originalStaff.mobile)
+              .eq('role', 'Operation Staff');
+          }
         }
 
         await updateStaff(editingId, submissionPayload);
