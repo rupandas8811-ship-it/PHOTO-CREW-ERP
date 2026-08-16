@@ -544,10 +544,16 @@ export interface StaffAssignment {
   staff_name: string;
   assignment_date: string;
   assignment_status: 'Assigned' | 'Completed' | 'Event Started' | 'Event Completed'
-  | 'Project Completed' | 'Cancelled';
+  | 'Project Completed' | 'Cancelled' | string;
   whatsapp_sent_status?: string;
   task_status?: string;
   updated_by?: string;
+  event_id?: string;
+  event_name?: string;
+  equipment?: string[];
+  mobile?: string;
+  staff_type?: string;
+  raw_footage_link?: string;
 }
 
 export interface LeadStaffAssignmentHistory {

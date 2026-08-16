@@ -349,7 +349,6 @@ export const OperationsLeads: React.FC = () => {
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
-  const [showNewProjectsModal, setShowNewProjectsModal] = useState(false);
 
   // Track which order's action dropdown is open
   const [activeMenuOrderId, setActiveMenuOrderId] = useState<string | null>(null);
@@ -706,19 +705,61 @@ export const OperationsLeads: React.FC = () => {
     event_time?: string;
   }
 
-  const getStaffTaskStatus = (orderId: string, eventId: string | undefined, eventIndex: number, staffName: string, ord: Order): string => {
+  const getStaffTaskStatus = (orderId: string, eventId: string | undefined, eventIndex: number, staffName: string, ord: Order, assignmentId?: string, staffRole?: string): string => {
     if (!staffName) return 'Pending';
     const nameLower = staffName.trim().toLowerCase();
     
-    const sa = staffAssignments?.find(s => s.order_id === orderId && s.staff_name?.toLowerCase() === nameLower);
-    if (sa && sa.task_status && sa.task_status !== 'Pending') {
-      return sa.task_status;
+    // 1. Direct assignment match by assignment_id if available
+    let sa = assignmentId ? staffAssignments?.find(s => s.assignment_id === assignmentId) : undefined;
+    
+    // 2. Match by order_id + staff_name + event_id + staff_role
+    if (!sa) {
+      sa = staffAssignments?.find(s => 
+        s.order_id === orderId && 
+        s.staff_name?.trim().toLowerCase() === nameLower &&
+        (!eventId || eventId === 'gen' || !s.event_id || s.event_id === eventId) &&
+        (!staffRole || s.staff_role?.trim().toLowerCase() === staffRole.trim().toLowerCase())
+      );
     }
-    if (sa && sa.assignment_status && !['Assigned', 'Unassigned'].includes(sa.assignment_status)) {
-      return sa.assignment_status;
+    // Fallback match by order_id + staff_name
+    if (!sa) {
+      sa = staffAssignments?.find(s => 
+        s.order_id === orderId && 
+        s.staff_name?.trim().toLowerCase() === nameLower
+      );
     }
 
-    return 'Assigned Crew';
+    // 3. Check leadEquipmentHistory for live status proof/handover
+    const matchingHist = leadEquipmentHistory?.filter(h => 
+      h.order_id === orderId && 
+      (
+        (h.returned_by || '').trim().toLowerCase() === nameLower ||
+        (() => { try { return JSON.parse(h.remarks || '{}').staff_name?.trim().toLowerCase() === nameLower; } catch(e) { return false; } })()
+      ) &&
+      (!eventId || eventId === 'gen' || (() => { try { return JSON.parse(h.remarks || '{}').event_id === eventId; } catch(e) { return false; } })())
+    ).sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0];
+
+    if (matchingHist) {
+      let histStatus = matchingHist.equipment_status;
+      try {
+        const parsed = JSON.parse(matchingHist.remarks || '{}');
+        if (parsed.current_status) histStatus = parsed.current_status;
+      } catch(e) {}
+      if (histStatus && ['Completed', 'Event Completed', 'Event Ended', 'Event Started', 'Footage Handover', 'Verified Footage'].includes(histStatus)) {
+        return histStatus;
+      }
+    }
+
+    if (sa) {
+      if (sa.task_status) {
+        return sa.task_status;
+      }
+      if (sa.assignment_status && !['Assigned', 'Unassigned'].includes(sa.assignment_status)) {
+        return sa.assignment_status;
+      }
+    }
+
+    return 'Pending';
   };
 
   const isCompletedEvent = (o: Order) => {
@@ -801,10 +842,10 @@ export const OperationsLeads: React.FC = () => {
 
   const getAssignedStaffDetailsForOrder = (ord: Order): AssignedStaffDetails[] => {
     const lead = leads.find(l => l.lead_id === ord.lead_id);
-    const hasExistingAssignments = staffAssignments?.some(sa => sa.order_id === ord.order_id);
+    const orderAssignments = staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id && sa.assignment_status !== 'Cancelled') : [];
     const hasEventsAssignments = lead?.events?.some((ev: any) => ev.assigned_staff_names && ev.assigned_staff_names.trim());
 
-    if (!hasExistingAssignments && !hasEventsAssignments) {
+    if (orderAssignments.length === 0 && !hasEventsAssignments) {
       return [];
     }
 
@@ -812,8 +853,38 @@ export const OperationsLeads: React.FC = () => {
     const op = getOpDetails(ord.order_id);
 
     if (lead?.events && lead.events.length > 0) {
+      const targetLeadPkgs = leadPackages?.filter(lp => lp.lead_id === lead.lead_id) || [];
+      const teamMembersConfig = extractTeamMembersConfig(lead, targetLeadPkgs);
+      const totalEvents = lead.events.length;
+
       lead.events.forEach((ev: any, evIdx: number) => {
-        if (ev.assigned_staff_names && ev.assigned_staff_names.trim()) {
+        const evId = ev.id || '';
+        const evOrderAssignments = orderAssignments.filter(sa => sa.event_id === evId || (!sa.event_id && totalEvents === 1));
+
+        if (evOrderAssignments.length > 0) {
+          evOrderAssignments.forEach((sa, saIdx) => {
+            const st = staff?.find(s => s.name?.toLowerCase() === sa.staff_name?.toLowerCase() || s.staff_id === sa.staff_id);
+            const staffTaskStatus = getStaffTaskStatus(ord.order_id, ev.id, evIdx, sa.staff_name, ord, sa.assignment_id, sa.staff_role);
+
+            staffDetailsList.push({
+              staff_name: sa.staff_name,
+              staff_role: sa.staff_role || st?.role || 'Staff',
+              assigned_task: sa.staff_role || st?.role || 'Staff',
+              staff_type: sa.staff_type || st?.staff_type || 'In-House',
+              mobile: sa.mobile || st?.mobile || '',
+              event_name: ev.event_name || ev.event_type || ord.event_type || 'Event',
+              event_id: ev.id,
+              event_date: ev.event_date || ord.event_date || '',
+              reporting_date: ev.reporting_date || lead.Reporting_date || ev.event_date || '',
+              reporting_time: ev.reporting_time || ord.reporting_time || op?.reporting_time || '',
+              status: isStaffBusyOnDate(sa.staff_name, ev.event_date || ord.event_date || '', ord.order_id) ? 'Busy' : 'Available',
+              staff_status: staffTaskStatus,
+              google_maps_link: ev.google_maps_link || lead.google_maps_link || '',
+              assigned_equipment: sa.equipment || [],
+              event_time: ev.event_start_time || ord.event_time || ''
+            });
+          });
+        } else if (ev.assigned_staff_names && ev.assigned_staff_names.trim()) {
           const names = ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean);
           
           let assignedEquipment: string[] = [];
@@ -833,14 +904,25 @@ export const OperationsLeads: React.FC = () => {
           const cleanMobilesRaw = mobilesRaw.split(' || EQUIPMENT:')[0] || '';
           const mobilesList = cleanMobilesRaw.split(',').map((m: string) => m.trim()).filter(Boolean);
 
+          const includedRoles = getEventRolesForEvent(ev, evIdx, teamMembersConfig, totalEvents);
+          const taskSlotRoles: string[] = [];
+          includedRoles.forEach((roleStr: string) => {
+            const { qty, text } = parseQtyAndText(roleStr);
+            const roleName = (text || roleStr).trim();
+            const targetQty = qty || 1;
+            for (let q = 0; q < targetQty; q++) {
+              taskSlotRoles.push(roleName);
+            }
+          });
+
           names.forEach((name, nameIdx) => {
             const st = staff?.find(s => s.name?.toLowerCase() === name.toLowerCase());
             const saMatch = staffAssignments?.find(sa => sa.order_id === ord.order_id && sa.staff_name?.toLowerCase() === name.toLowerCase());
             const historyMatch = leadStaffAssignmentHistory?.find(h => (h.order_id === ord.order_id || h.lead_id === ord.lead_id) && h.assigned_staff?.toLowerCase().includes(name.toLowerCase()));
 
-            const assignedTask = saMatch?.staff_role || historyMatch?.assigned_role || st?.role || 'Staff';
+            const assignedTask = taskSlotRoles[nameIdx] || saMatch?.staff_role || historyMatch?.assigned_role || st?.role || 'Staff';
             const mobileNum = mobilesList[nameIdx] || st?.mobile || '';
-            const staffTaskStatus = getStaffTaskStatus(ord.order_id, ev.id, evIdx, name, ord);
+            const staffTaskStatus = getStaffTaskStatus(ord.order_id, ev.id, evIdx, name, ord, saMatch?.assignment_id, assignedTask);
 
             const memberEquipment = (staffEquipments[nameIdx] && Array.isArray(staffEquipments[nameIdx]))
               ? staffEquipments[nameIdx]
@@ -866,34 +948,31 @@ export const OperationsLeads: React.FC = () => {
           });
         }
       });
-    } else {
-      const orderAssignments = staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id) : [];
-      if (orderAssignments.length > 0) {
-        orderAssignments.forEach((sa, saIdx) => {
-          const name = sa.staff_name;
-          const st = staff?.find(s => s.name?.toLowerCase() === name.toLowerCase());
-          const assignedEquipment = op?.equipment_kit ? op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
-          const assignedTask = sa.staff_role || st?.role || 'Staff';
-          const staffTaskStatus = getStaffTaskStatus(ord.order_id, undefined, saIdx, name, ord);
+    } else if (orderAssignments.length > 0) {
+      orderAssignments.forEach((sa, saIdx) => {
+        const name = sa.staff_name;
+        const st = staff?.find(s => s.name?.toLowerCase() === name.toLowerCase() || s.staff_id === sa.staff_id);
+        const assignedEquipment = sa.equipment || (op?.equipment_kit ? op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
+        const assignedTask = sa.staff_role || st?.role || 'Staff';
+        const staffTaskStatus = getStaffTaskStatus(ord.order_id, undefined, saIdx, name, ord, sa.assignment_id, assignedTask);
 
-          staffDetailsList.push({
-            staff_name: name,
-            staff_role: assignedTask,
-            assigned_task: assignedTask,
-            staff_type: st?.staff_type || 'In-House',
-            mobile: st?.mobile || '',
-            event_name: ord.event_type || 'Main Event',
-            event_date: ord.event_date || '',
-            reporting_date: ord.Reporting_date || lead?.Reporting_date || ord.event_date || '',
-            reporting_time: ord.reporting_time || op?.reporting_time || '',
-            status: isStaffBusyOnDate(name, ord.event_date || '', ord.order_id) ? 'Busy' : 'Available',
-            staff_status: staffTaskStatus,
-            google_maps_link: lead?.google_maps_link || '',
-            assigned_equipment: assignedEquipment,
-            event_time: ord.event_time || ''
-          });
+        staffDetailsList.push({
+          staff_name: name,
+          staff_role: assignedTask,
+          assigned_task: assignedTask,
+          staff_type: sa.staff_type || st?.staff_type || 'In-House',
+          mobile: sa.mobile || st?.mobile || '',
+          event_name: ord.event_type || 'Main Event',
+          event_date: ord.event_date || '',
+          reporting_date: ord.Reporting_date || lead?.Reporting_date || ord.event_date || '',
+          reporting_time: ord.reporting_time || op?.reporting_time || '',
+          status: isStaffBusyOnDate(name, ord.event_date || '', ord.order_id) ? 'Busy' : 'Available',
+          staff_status: staffTaskStatus,
+          google_maps_link: lead?.google_maps_link || '',
+          assigned_equipment: assignedEquipment,
+          event_time: ord.event_time || ''
         });
-      }
+      });
     }
 
     return staffDetailsList;
@@ -1616,18 +1695,38 @@ export const OperationsLeads: React.FC = () => {
     try {
 
       // Collect ALL assigned staff across all events into activeAssignments so they are recorded correctly per event
-      const allAssignedStaff: { staff_role: string; staff_id: string; staff_name: string; equipment?: string[]; event_id?: string; event_name?: string }[] = [];
+      const allAssignedStaff: { 
+        assignment_id?: string;
+        staff_role: string; 
+        staff_id: string; 
+        staff_name: string; 
+        mobile?: string;
+        staff_type?: string;
+        equipment?: string[]; 
+        event_id?: string; 
+        event_name?: string;
+        task_status?: string;
+        assignment_status?: string;
+      }[] = [];
       Object.entries(eventAllocations).forEach(([evId, alloc]: [string, any]) => {
+        const evMatch = parentLeadInstance?.events?.find((e: any) => e.id === evId);
+        const evName = evMatch?.event_name || evMatch?.event_type || '';
+
         if (alloc.staff && alloc.staff.length > 0) {
           alloc.staff.forEach((st: any) => {
             if (st.staff_name && st.staff_name.trim() !== '') {
                allAssignedStaff.push({
+                 assignment_id: st.id && !st.id.startsWith('slot_') ? st.id : undefined,
                  staff_role: st.staff_role,
                  staff_id: st.staff_id,
                  staff_name: st.staff_name,
+                 mobile: st.mobile || '',
+                 staff_type: st.staff_type || 'In-House',
                  equipment: st.equipment || [],
                  event_id: evId,
-                 event_name: st.event_name || ''
+                 event_name: evName || st.event_name || '',
+                 task_status: st.task_status || 'Pending',
+                 assignment_status: st.assignment_status || 'Assigned'
                });
             }
           });
@@ -1832,15 +1931,6 @@ export const OperationsLeads: React.FC = () => {
     alert(`Shoot marked completed for [${closingOrderId}]!`);
   };
 
-  const newProjects = useMemo(() => {
-    return operationsOrders.filter(o => {
-      const assignedStaffDetails = getAssignedStaffDetailsForOrder(o);
-      const staffStatuses = assignedStaffDetails.map(s => s.staff_status);
-      const calculatedStage = getCalculatedOrderStage(o.current_stage, staffStatuses);
-      return ['Order Confirmed', 'Confirm Order', 'New Order Received'].includes(calculatedStage);
-    });
-  }, [operationsOrders, staffAssignments, leads]);
-
   const stats = useMemo(() => {
     let newProjectArrived = 0;
     let assignedCrew = 0;
@@ -1931,11 +2021,7 @@ export const OperationsLeads: React.FC = () => {
             activeFilterValue={statusFilter}
             currentFilterValue={card.filterValue}
             onClick={() => {
-              if (card.label === 'New Project Arrived') {
-                setShowNewProjectsModal(true);
-              } else {
-                setStatusFilter(statusFilter === card.filterValue ? 'All' : card.filterValue);
-              }
+              setStatusFilter(statusFilter === card.filterValue ? 'All' : card.filterValue);
             }}
             lensLabel={card.label.slice(0, 10).toUpperCase()}
           />
@@ -4585,6 +4671,7 @@ export const OperationsLeads: React.FC = () => {
                               <tr className="bg-zinc-950/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
                                 <th className="py-2.5 px-3.5 font-bold whitespace-nowrap">Staff Name</th>
                                 <th className="py-2.5 px-3.5 font-bold whitespace-nowrap">Assigned Task</th>
+                                <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Task Status</th>
                                 <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Equipment Status</th>
                                 <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Event Images</th>
                                 <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Raw Footage</th>
@@ -4750,6 +4837,9 @@ export const OperationsLeads: React.FC = () => {
                                   <tr key={mIdx} className="hover:bg-zinc-800/30 transition-colors">
                                     <td className="py-3 px-3.5 font-bold text-white font-sans whitespace-nowrap">
                                       {member.staff_name}
+                                    </td>
+                                    <td className="py-3 px-3.5 text-center whitespace-nowrap">
+                                      {statusBadge}
                                     </td>
                                     <td className="py-3 px-3.5 font-sans whitespace-nowrap">
                                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-bold text-xs">
@@ -5021,91 +5111,6 @@ export const OperationsLeads: React.FC = () => {
                   <p className="text-zinc-400 font-mono text-sm">Image not found. Please verify the uploaded image URL.</p>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
-      , document.body)}
-
-      {/* New Project Arrived Modal */}
-      {showNewProjectsModal && createPortal(
-        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-[95vw] h-[90vh] flex flex-col shadow-2xl relative overflow-hidden">
-            <div className="p-4 sm:p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
-                  <span className="text-xl">📋</span>
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-white tracking-tight">New Project Arrived</h2>
-                  <p className="text-xs text-zinc-400 font-mono mt-0.5">{newProjects.length} Pending Assignment</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setShowNewProjectsModal(false)}
-                className="w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 text-white flex items-center justify-center transition-colors focus:outline-none cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-            
-            <div className="flex-1 overflow-auto p-4 shrink-0">
-              <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden w-full">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse whitespace-nowrap text-xs">
-                    <thead>
-                      <tr className="bg-zinc-900 border-b border-zinc-800 text-zinc-400 uppercase tracking-wider font-mono text-[10px]">
-                        <th className="p-3 font-semibold">Order ID</th>
-                        <th className="p-3 font-semibold">Lead ID</th>
-                        <th className="p-3 font-semibold">Customer</th>
-                        <th className="p-3 font-semibold">Mobile</th>
-                        <th className="p-3 font-semibold">Event Name</th>
-                        <th className="p-3 font-semibold">Event Date</th>
-                        <th className="p-3 font-semibold">Start Time</th>
-                        <th className="p-3 font-semibold">End Time</th>
-                        <th className="p-3 font-semibold">Event Type</th>
-                        <th className="p-3 font-semibold">Current Status</th>
-                        <th className="p-3 font-semibold">Assigned Staff</th>
-                        <th className="p-3 font-semibold">Target Delivery Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-800/60">
-                      {newProjects.length === 0 ? (
-                        <tr>
-                          <td colSpan={12} className="p-8 text-center text-zinc-500 font-mono">
-                            No new projects arrived.
-                          </td>
-                        </tr>
-                      ) : (
-                        newProjects.map(proj => {
-                          const assignedStaff = getAssignedStaffDetailsForOrder(proj);
-                          const staffNames = assignedStaff.length > 0 ? assignedStaff.map(s => s.staff_name).join(', ') : 'Unassigned';
-                          const projLead = leads.find(l => l.lead_id === proj.lead_id);
-                          return (
-                            <tr key={proj.order_id} className="hover:bg-zinc-800/30 transition-colors">
-                              <td className="p-3 font-mono text-cyan-400 font-bold">{proj.order_id}</td>
-                              <td className="p-3 font-mono text-zinc-300">{proj.lead_id}</td>
-                              <td className="p-3 text-slate-200">{proj.customer_name || 'N/A'}</td>
-                              <td className="p-3 font-mono text-zinc-400">{proj.mobile || projLead?.mobile || 'N/A'}</td>
-                              <td className="p-3 text-slate-300">{proj.custom_event_name || proj.event_type || 'N/A'}</td>
-                              <td className="p-3 font-mono text-zinc-300">{proj.event_date || 'N/A'}</td>
-                              <td className="p-3 font-mono text-zinc-400">{proj.event_time || proj.event_start_time || projLead?.event_time || projLead?.event_start_time || 'N/A'}</td>
-                              <td className="p-3 font-mono text-zinc-400">{proj.event_end_time || projLead?.event_end_time || 'N/A'}</td>
-                              <td className="p-3 text-slate-300">{proj.event_type || 'N/A'}</td>
-                              <td className="p-3">
-                                <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold font-mono tracking-wider bg-zinc-800 text-zinc-300">
-                                  {proj.current_stage || proj.order_status || 'Order Confirmed'}
-                                </span>
-                              </td>
-                              <td className="p-3 text-zinc-400 max-w-[200px] truncate" title={staffNames}>{staffNames}</td>
-                              <td className="p-3 font-mono text-zinc-400">{projLead?.delivery_target_date || 'Not Set'}</td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
             </div>
           </div>
         </div>

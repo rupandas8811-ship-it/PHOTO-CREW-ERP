@@ -223,9 +223,17 @@ interface RoleContextType {
   saveStaffAssignments: (
     orderId: string, 
     assignments: {
+      assignment_id?: string;
       staff_role: string;
       staff_id: string;
       staff_name: string;
+      mobile?: string;
+      staff_type?: string;
+      equipment?: string[];
+      event_id?: string;
+      event_name?: string;
+      task_status?: string;
+      assignment_status?: string;
     }[]
   ) => Promise<void>;
 
@@ -4102,9 +4110,17 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   const saveStaffAssignments = async (
     orderId: string,
     assignments: {
+      assignment_id?: string;
       staff_role: string;
       staff_id: string;
       staff_name: string;
+      mobile?: string;
+      staff_type?: string;
+      equipment?: string[];
+      event_id?: string;
+      event_name?: string;
+      task_status?: string;
+      assignment_status?: string;
     }[]
   ) => {
     if (!orderId) {
@@ -4197,6 +4213,17 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     const changedByRole = roleParts[1] || currentRole || 'System';
 
     if (assignments.length > 0) {
+      // Keep map of existing assignments to preserve task_status and assignment_status if already present
+      const existingStatusMap = new Map<string, { task_status?: string; assignment_status?: string; assignment_id?: string }>();
+      (staffAssignments || []).filter(sa => sa.order_id === orderId).forEach(sa => {
+        const key = `${(sa.staff_name || '').toLowerCase()}_${sa.event_id || 'gen'}_${(sa.staff_role || '').toLowerCase()}`;
+        const nameKey = (sa.staff_name || '').toLowerCase();
+        existingStatusMap.set(key, { task_status: sa.task_status, assignment_status: sa.assignment_status, assignment_id: sa.assignment_id });
+        if (!existingStatusMap.has(nameKey)) {
+          existingStatusMap.set(nameKey, { task_status: sa.task_status, assignment_status: sa.assignment_status, assignment_id: sa.assignment_id });
+        }
+      });
+
       if (supabaseClient) {
         // Delete all old assignments for this order to allow multiple staff per role without overwriting
         const { error: deleteErr } = await supabaseClient
@@ -4207,6 +4234,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           console.error("Warning: Could not delete old staff assignments:", deleteErr);
         }
       }
+
+      const insertedAssignments: StaffAssignment[] = [];
 
       for (const a of assignments) {
         // STEP 2: SAVE ASSIGNMENT HISTORY
@@ -4222,19 +4251,31 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (!resHist.success) throw new Error(`Error saving assignment history:\n\n${resHist.error}`);
 
         // STEP 3: INSERT CURRENT ASSIGNMENT
-        const assignId = `ASST-${Math.floor(100000 + Math.random() * 900000)}`;
+        const key = `${(a.staff_name || '').toLowerCase()}_${a.event_id || 'gen'}_${(a.staff_role || '').toLowerCase()}`;
+        const nameKey = (a.staff_name || '').toLowerCase();
+        const existingInfo = existingStatusMap.get(key) || existingStatusMap.get(nameKey);
+
+        const assignId = a.assignment_id || existingInfo?.assignment_id || `ASST-${Math.floor(100000 + Math.random() * 900000)}`;
         const assignDate = timestamp.split('T')[0];
 
-        const newAssign = {
+        const newAssign: StaffAssignment = {
           assignment_id: assignId,
           order_id: orderId,
           staff_role: a.staff_role,
           staff_id: a.staff_id,
           staff_name: a.staff_name,
           assignment_date: assignDate,
-          assignment_status: 'Assigned',
+          assignment_status: a.assignment_status || existingInfo?.assignment_status || 'Assigned',
+          task_status: a.task_status || existingInfo?.task_status || 'Pending',
+          event_id: a.event_id || '',
+          event_name: a.event_name || '',
+          equipment: a.equipment || [],
+          mobile: a.mobile || '',
+          staff_type: a.staff_type || 'In-House',
           updated_by: changedBy
         };
+
+        insertedAssignments.push(newAssign);
 
         const resAssign = await pushInsert('staff_assignments', newAssign);
         if (!resAssign.success) {
@@ -4245,6 +4286,11 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           }
         }
       }
+
+      setStaffAssignments(prev => [
+        ...prev.filter(sa => sa.order_id !== orderId),
+        ...insertedAssignments
+      ]);
 
       // STEP 4: UPDATE OPERATIONS TABLE
       let opUpdates: any = {};

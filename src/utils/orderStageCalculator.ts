@@ -128,11 +128,50 @@ export function getAllStaffStatusesForOrder(
   staffAssignments?: StaffAssignment[]
 ): string[] {
   const staffStatusesList: string[] = [];
-  const processedStaff = new Set<string>();
 
   const orderObj = orders?.find(o => o.order_id === orderId);
   const leadObj = leads?.find(l => l.lead_id === (orderObj?.lead_id || orderId));
 
+  const matchingAssignments = staffAssignments?.filter(
+    sa => sa.order_id === orderId && sa.assignment_status !== 'Cancelled'
+  ) || [];
+
+  if (matchingAssignments.length > 0) {
+    matchingAssignments.forEach(sa => {
+      const nameLower = (sa.staff_name || '').trim().toLowerCase();
+      if (!nameLower) return;
+
+      let st = 'Pending';
+      if (updatingStaffName && nameLower === updatingStaffName.trim().toLowerCase() && updatingStaffStatus) {
+        st = updatingStaffStatus;
+      } else {
+        if (currentNextStatuses) {
+          const keysToTry = [
+            `${orderId}_${sa.event_id || 'gen'}_${nameLower}`,
+            `${orderId}_gen_${nameLower}`,
+            `${orderId}_${nameLower}`
+          ];
+          for (const k of keysToTry) {
+            if (currentNextStatuses[k]) {
+              st = currentNextStatuses[k];
+              break;
+            }
+          }
+        }
+        if (st === 'Pending') {
+          if (sa.task_status && !['Assigned', 'Unassigned'].includes(sa.task_status)) {
+            st = sa.task_status;
+          } else if (sa.assignment_status && !['Assigned', 'Unassigned'].includes(sa.assignment_status)) {
+            st = sa.assignment_status;
+          }
+        }
+      }
+      staffStatusesList.push(st);
+    });
+    return staffStatusesList;
+  }
+
+  // Fallback: Read from lead.events if no staffAssignments exist
   if (leadObj?.events && leadObj.events.length > 0) {
     leadObj.events.forEach((ev: any, evIdx: number) => {
       if (ev.assigned_staff_names && ev.assigned_staff_names.trim()) {
@@ -141,7 +180,7 @@ export function getAllStaffStatusesForOrder(
           const nameLower = name.toLowerCase();
           let st = 'Pending';
 
-          if (updatingStaffName && nameLower === updatingStaffName.toLowerCase() && updatingStaffStatus) {
+          if (updatingStaffName && nameLower === updatingStaffName.trim().toLowerCase() && updatingStaffStatus) {
             st = updatingStaffStatus;
           } else {
             if (currentNextStatuses) {
@@ -158,48 +197,9 @@ export function getAllStaffStatusesForOrder(
                 }
               }
             }
-            if (st === 'Pending' && staffAssignments) {
-              const sa = staffAssignments.find(s => s.order_id === orderId && s.staff_name?.toLowerCase() === nameLower);
-              if (sa?.task_status && !['Assigned', 'Unassigned'].includes(sa.task_status)) {
-                st = sa.task_status;
-              }
-            }
           }
           staffStatusesList.push(st);
-          processedStaff.add(nameLower);
         });
-      }
-    });
-  }
-
-  if (staffAssignments) {
-    staffAssignments.filter(sa => sa.order_id === orderId).forEach(sa => {
-      const nameLower = sa.staff_name?.toLowerCase();
-      if (nameLower && !processedStaff.has(nameLower)) {
-        let st = 'Pending';
-        if (updatingStaffName && nameLower === updatingStaffName.toLowerCase() && updatingStaffStatus) {
-          st = updatingStaffStatus;
-        } else {
-          if (currentNextStatuses) {
-            const keysToTry = [
-              `${orderId}_gen_${nameLower}`,
-              `${orderId}_${nameLower}`
-            ];
-            for (const k of keysToTry) {
-              if (currentNextStatuses[k]) {
-                st = currentNextStatuses[k];
-                break;
-              }
-            }
-          }
-          if (st === 'Pending') {
-            if (sa.task_status && !['Assigned', 'Unassigned'].includes(sa.task_status)) {
-              st = sa.task_status;
-            }
-          }
-        }
-        staffStatusesList.push(st);
-        processedStaff.add(nameLower);
       }
     });
   }

@@ -55,15 +55,16 @@ export const TeamAssignments: React.FC = () => {
     // 2. Load from staffAssignments array (multi-roles)
     const saArray = staffAssignments || [];
     saArray.forEach(sa => {
-      // Avoid duplication with above if we already listed them
-      if (list.some(r => r.id === `${sa.order_id}-${sa.staff_role}`)) return;
+      const itemKey = sa.assignment_id || `${sa.order_id}-${sa.staff_role}-${sa.staff_name}`;
+      // Avoid duplication with above if we already listed exact same staff member for this order role
+      if (list.some(r => r.id === itemKey || (r.name.toLowerCase() === (sa.staff_name || '').toLowerCase() && r.role.toLowerCase() === (sa.staff_role || '').toLowerCase() && r.id.startsWith(sa.order_id)))) return;
 
       const order = orders.find(o => o.order_id === sa.order_id);
       const op = operations.find(o => o.order_id === sa.order_id);
       const staffMember = staff.find(s => s.staff_id === sa.staff_id || s.name === sa.staff_name);
       
       list.push({
-        id: sa.assignment_id || `${sa.order_id}-${sa.staff_role}`,
+        id: itemKey,
         role: sa.staff_role,
         name: sa.staff_name,
         mobile: staffMember?.phone || staffMember?.mobile || '—',
