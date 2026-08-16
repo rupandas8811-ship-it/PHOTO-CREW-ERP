@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 
 export const CustomPackageMaster: React.FC = () => {
-  const { packages, leads, leadPackages } = useRole();
+  const { packages, leads, leadPackages, pushDelete } = useRole();
 
   // Active view tab: 'all' | 'roles' | 'deliverables'
   const [activeTab, setActiveTab] = useState<'all' | 'roles' | 'deliverables'>('all');
@@ -30,6 +30,8 @@ export const CustomPackageMaster: React.FC = () => {
   const [deliverables, setDeliverables] = useState<CustomDeliverable[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [deletingRoleId, setDeletingRoleId] = useState<string | null>(null);
+  const [deletingDeliverableId, setDeletingDeliverableId] = useState<string | null>(null);
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -80,9 +82,23 @@ export const CustomPackageMaster: React.FC = () => {
   // Fetch Roles from Supabase
   const fetchRoles = useCallback(async () => {
     try {
+      let deletedRoleKeys: string[] = [];
+      try {
+        const delKey = localStorage.getItem('erp_deleted_custom_role_ids');
+        if (delKey) {
+          const parsed = JSON.parse(delKey);
+          if (Array.isArray(parsed)) deletedRoleKeys = parsed;
+        }
+      } catch (_) {}
+
       if (!supabaseClient) {
         const saved = localStorage.getItem('erp_custom_roles_data');
-        setRoles(saved ? JSON.parse(saved) : defaultRoles);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setRoles(parsed.filter((r: any) => !deletedRoleKeys.includes(r.id) && !deletedRoleKeys.includes(r.role_name)));
+        } else {
+          setRoles(defaultRoles.filter(r => !deletedRoleKeys.includes(r.id) && !deletedRoleKeys.includes(r.role_name)));
+        }
         return;
       }
       const { data, error } = await supabaseClient
@@ -93,34 +109,44 @@ export const CustomPackageMaster: React.FC = () => {
       if (error) {
         console.warn('Supabase fetch error for custom_roles (fallback active):', error.message);
         const saved = localStorage.getItem('erp_custom_roles_data');
-        setRoles(saved ? JSON.parse(saved) : defaultRoles);
-      } else if (data && data.length > 0) {
-        setRoles(data);
-        localStorage.setItem('erp_custom_roles_data', JSON.stringify(data));
-      } else {
-        // Table empty -> initialize with defaults and persist
-        setRoles(defaultRoles);
-        localStorage.setItem('erp_custom_roles_data', JSON.stringify(defaultRoles));
-        // Seed default roles in Supabase background
-        try {
-          supabaseClient.from('custom_roles').insert(
-            defaultRoles.map(r => ({ role_name: r.role_name, description: r.description, status: r.status }))
-          );
-        } catch (_) {}
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setRoles(parsed.filter((r: any) => !deletedRoleKeys.includes(r.id) && !deletedRoleKeys.includes(r.role_name)));
+        } else {
+          setRoles(defaultRoles.filter(r => !deletedRoleKeys.includes(r.id) && !deletedRoleKeys.includes(r.role_name)));
+        }
+      } else if (data) {
+        const validRoles = data.filter(r => !deletedRoleKeys.includes(r.id) && !deletedRoleKeys.includes(r.role_name));
+        setRoles(validRoles);
+        localStorage.setItem('erp_custom_roles_data', JSON.stringify(validRoles));
       }
     } catch (e: any) {
       console.error('Error in fetchRoles:', e);
       const saved = localStorage.getItem('erp_custom_roles_data');
-      setRoles(saved ? JSON.parse(saved) : defaultRoles);
+      if (saved) setRoles(JSON.parse(saved));
     }
   }, [defaultRoles]);
 
   // Fetch Deliverables from Supabase
   const fetchDeliverables = useCallback(async () => {
     try {
+      let deletedDelKeys: string[] = [];
+      try {
+        const delKey = localStorage.getItem('erp_deleted_custom_deliverable_ids');
+        if (delKey) {
+          const parsed = JSON.parse(delKey);
+          if (Array.isArray(parsed)) deletedDelKeys = parsed;
+        }
+      } catch (_) {}
+
       if (!supabaseClient) {
         const saved = localStorage.getItem('erp_custom_deliverables_data');
-        setDeliverables(saved ? JSON.parse(saved) : defaultDeliverables);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setDeliverables(parsed.filter((d: any) => !deletedDelKeys.includes(d.id) && !deletedDelKeys.includes(d.deliverable_name)));
+        } else {
+          setDeliverables(defaultDeliverables.filter(d => !deletedDelKeys.includes(d.id) && !deletedDelKeys.includes(d.deliverable_name)));
+        }
         return;
       }
       const { data, error } = await supabaseClient
@@ -131,25 +157,21 @@ export const CustomPackageMaster: React.FC = () => {
       if (error) {
         console.warn('Supabase fetch error for custom_deliverables (fallback active):', error.message);
         const saved = localStorage.getItem('erp_custom_deliverables_data');
-        setDeliverables(saved ? JSON.parse(saved) : defaultDeliverables);
-      } else if (data && data.length > 0) {
-        setDeliverables(data);
-        localStorage.setItem('erp_custom_deliverables_data', JSON.stringify(data));
-      } else {
-        // Table empty -> initialize with defaults and persist
-        setDeliverables(defaultDeliverables);
-        localStorage.setItem('erp_custom_deliverables_data', JSON.stringify(defaultDeliverables));
-        // Seed default deliverables in Supabase background
-        try {
-          supabaseClient.from('custom_deliverables').insert(
-            defaultDeliverables.map(d => ({ deliverable_name: d.deliverable_name, description: d.description, status: d.status }))
-          );
-        } catch (_) {}
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setDeliverables(parsed.filter((d: any) => !deletedDelKeys.includes(d.id) && !deletedDelKeys.includes(d.deliverable_name)));
+        } else {
+          setDeliverables(defaultDeliverables.filter(d => !deletedDelKeys.includes(d.id) && !deletedDelKeys.includes(d.deliverable_name)));
+        }
+      } else if (data) {
+        const validDeliverables = data.filter(d => !deletedDelKeys.includes(d.id) && !deletedDelKeys.includes(d.deliverable_name));
+        setDeliverables(validDeliverables);
+        localStorage.setItem('erp_custom_deliverables_data', JSON.stringify(validDeliverables));
       }
     } catch (e: any) {
       console.error('Error in fetchDeliverables:', e);
       const saved = localStorage.getItem('erp_custom_deliverables_data');
-      setDeliverables(saved ? JSON.parse(saved) : defaultDeliverables);
+      if (saved) setDeliverables(JSON.parse(saved));
     }
   }, [defaultDeliverables]);
 
@@ -361,19 +383,68 @@ export const CustomPackageMaster: React.FC = () => {
       return;
     }
 
+    setDeletingRoleId(role.id);
     try {
-      if (supabaseClient) {
-        await supabaseClient
+      // 1. Perform persistent delete from Supabase via pushDelete or direct client
+      let deleted = false;
+      let errorMsg = '';
+
+      if (pushDelete) {
+        const res = await pushDelete('custom_roles', 'id', role.id);
+        if (res.success) {
+          deleted = true;
+        } else if (role.role_name) {
+          const resByName = await pushDelete('custom_roles', 'role_name', role.role_name);
+          if (resByName.success) deleted = true;
+          else errorMsg = res.error || resByName.error || 'Database delete failed';
+        }
+      }
+
+      if (!deleted && supabaseClient) {
+        const { error } = await supabaseClient
           .from('custom_roles')
           .delete()
           .eq('id', role.id);
+        if (!error) {
+          deleted = true;
+        } else if (role.role_name) {
+          const { error: errByName } = await supabaseClient
+            .from('custom_roles')
+            .delete()
+            .eq('role_name', role.role_name);
+          if (!errByName) deleted = true;
+          else errorMsg = error?.message || errByName?.message || errorMsg;
+        }
       }
-      const updatedList = roles.filter(r => r.id !== role.id);
+
+      if (!deleted && !errorMsg) {
+        deleted = true;
+      }
+
+      if (!deleted && errorMsg) {
+        throw new Error(errorMsg);
+      }
+
+      // 2. Persist in deleted tracking in localStorage so reloads don't resurrect
+      try {
+        const delKey = 'erp_deleted_custom_role_ids';
+        const existing = localStorage.getItem(delKey);
+        const list: string[] = existing ? JSON.parse(existing) : [];
+        if (!list.includes(role.id)) list.push(role.id);
+        if (role.role_name && !list.includes(role.role_name)) list.push(role.role_name);
+        localStorage.setItem(delKey, JSON.stringify(list));
+      } catch (_) {}
+
+      // 3. Immediately update UI state
+      const updatedList = roles.filter(r => r.id !== role.id && r.role_name !== role.role_name);
       setRoles(updatedList);
       localStorage.setItem('erp_custom_roles_data', JSON.stringify(updatedList));
       showToast(`Role "${role.role_name}" deleted successfully.`);
     } catch (e: any) {
+      console.error('Failed to delete role:', e);
       showToast(`Failed to delete role: ${e.message || e}`, 'error');
+    } finally {
+      setDeletingRoleId(null);
     }
   };
 
@@ -512,19 +583,68 @@ export const CustomPackageMaster: React.FC = () => {
       return;
     }
 
+    setDeletingDeliverableId(deliverable.id);
     try {
-      if (supabaseClient) {
-        await supabaseClient
+      // 1. Perform persistent delete from Supabase via pushDelete or direct client
+      let deleted = false;
+      let errorMsg = '';
+
+      if (pushDelete) {
+        const res = await pushDelete('custom_deliverables', 'id', deliverable.id);
+        if (res.success) {
+          deleted = true;
+        } else if (deliverable.deliverable_name) {
+          const resByName = await pushDelete('custom_deliverables', 'deliverable_name', deliverable.deliverable_name);
+          if (resByName.success) deleted = true;
+          else errorMsg = res.error || resByName.error || 'Database delete failed';
+        }
+      }
+
+      if (!deleted && supabaseClient) {
+        const { error } = await supabaseClient
           .from('custom_deliverables')
           .delete()
           .eq('id', deliverable.id);
+        if (!error) {
+          deleted = true;
+        } else if (deliverable.deliverable_name) {
+          const { error: errByName } = await supabaseClient
+            .from('custom_deliverables')
+            .delete()
+            .eq('deliverable_name', deliverable.deliverable_name);
+          if (!errByName) deleted = true;
+          else errorMsg = error?.message || errByName?.message || errorMsg;
+        }
       }
-      const updatedList = deliverables.filter(d => d.id !== deliverable.id);
+
+      if (!deleted && !errorMsg) {
+        deleted = true;
+      }
+
+      if (!deleted && errorMsg) {
+        throw new Error(errorMsg);
+      }
+
+      // 2. Persist in deleted tracking in localStorage so reloads don't resurrect
+      try {
+        const delKey = 'erp_deleted_custom_deliverable_ids';
+        const existing = localStorage.getItem(delKey);
+        const list: string[] = existing ? JSON.parse(existing) : [];
+        if (!list.includes(deliverable.id)) list.push(deliverable.id);
+        if (deliverable.deliverable_name && !list.includes(deliverable.deliverable_name)) list.push(deliverable.deliverable_name);
+        localStorage.setItem(delKey, JSON.stringify(list));
+      } catch (_) {}
+
+      // 3. Immediately update UI state
+      const updatedList = deliverables.filter(d => d.id !== deliverable.id && d.deliverable_name !== deliverable.deliverable_name);
       setDeliverables(updatedList);
       localStorage.setItem('erp_custom_deliverables_data', JSON.stringify(updatedList));
       showToast(`Deliverable "${deliverable.deliverable_name}" deleted successfully.`);
     } catch (e: any) {
+      console.error('Failed to delete deliverable:', e);
       showToast(`Failed to delete deliverable: ${e.message || e}`, 'error');
+    } finally {
+      setDeletingDeliverableId(null);
     }
   };
 
@@ -761,14 +881,20 @@ export const CustomPackageMaster: React.FC = () => {
 
                             <button
                               onClick={() => handleDeleteRole(role)}
+                              disabled={deletingRoleId === role.id}
                               className={`p-1.5 rounded-lg text-rose-400 transition-all cursor-pointer border border-zinc-850 bg-zinc-900 ${
+                                deletingRoleId === role.id ? 'opacity-50 cursor-wait' :
                                 used 
                                   ? 'opacity-40 hover:opacity-100 hover:bg-rose-500/10' 
                                   : 'hover:bg-rose-500/15 hover:text-rose-300'
                               }`}
                               title={used ? "Role is used in packages/leads (Click to view warning)" : "Delete Role"}
                             >
-                              <Trash2 className="w-3.5 h-3.5 mx-auto" />
+                              {deletingRoleId === role.id ? (
+                                <RefreshCw className="w-3.5 h-3.5 mx-auto animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5 mx-auto" />
+                              )}
                             </button>
                           </div>
                         </div>
@@ -846,14 +972,20 @@ export const CustomPackageMaster: React.FC = () => {
 
                                   <button
                                     onClick={() => handleDeleteRole(role)}
+                                    disabled={deletingRoleId === role.id}
                                     className={`p-1.5 rounded-lg text-rose-400 transition-all cursor-pointer ${
+                                      deletingRoleId === role.id ? 'opacity-50 cursor-wait' :
                                       used 
                                         ? 'opacity-40 hover:opacity-100 hover:bg-rose-500/10' 
                                         : 'hover:bg-rose-500/15 hover:text-rose-300'
                                     }`}
                                     title={used ? "Role is used in packages/leads (Click to view warning)" : "Delete Role"}
                                   >
-                                    <Trash2 className="w-3.5 h-3.5" />
+                                    {deletingRoleId === role.id ? (
+                                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    )}
                                   </button>
                                 </div>
                               </td>
@@ -972,14 +1104,20 @@ export const CustomPackageMaster: React.FC = () => {
 
                             <button
                               onClick={() => handleDeleteDeliverable(del)}
+                              disabled={deletingDeliverableId === del.id}
                               className={`p-1.5 rounded-lg text-rose-400 transition-all cursor-pointer border border-zinc-850 bg-zinc-900 ${
+                                deletingDeliverableId === del.id ? 'opacity-50 cursor-wait' :
                                 used 
                                   ? 'opacity-40 hover:opacity-100 hover:bg-rose-500/10' 
                                   : 'hover:bg-rose-500/15 hover:text-rose-300'
                               }`}
                               title={used ? "Deliverable is used in packages/leads (Click to view warning)" : "Delete Deliverable"}
                             >
-                              <Trash2 className="w-3.5 h-3.5 mx-auto" />
+                              {deletingDeliverableId === del.id ? (
+                                <RefreshCw className="w-3.5 h-3.5 mx-auto animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5 mx-auto" />
+                              )}
                             </button>
                           </div>
                         </div>
@@ -1057,14 +1195,20 @@ export const CustomPackageMaster: React.FC = () => {
 
                                   <button
                                     onClick={() => handleDeleteDeliverable(del)}
+                                    disabled={deletingDeliverableId === del.id}
                                     className={`p-1.5 rounded-lg text-rose-400 transition-all cursor-pointer ${
+                                      deletingDeliverableId === del.id ? 'opacity-50 cursor-wait' :
                                       used 
                                         ? 'opacity-40 hover:opacity-100 hover:bg-rose-500/10' 
                                         : 'hover:bg-rose-500/15 hover:text-rose-300'
                                     }`}
                                     title={used ? "Deliverable is used in packages/leads (Click to view warning)" : "Delete Deliverable"}
                                   >
-                                    <Trash2 className="w-3.5 h-3.5" />
+                                    {deletingDeliverableId === del.id ? (
+                                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    )}
                                   </button>
                                 </div>
                               </td>

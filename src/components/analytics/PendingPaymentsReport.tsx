@@ -58,7 +58,12 @@ export const PendingPaymentsReport: React.FC = () => {
   // Parse event date robustly and compute overdue days
   const getOverdueDays = (eventDateStr: string, remainingAmount: number) => {
     if (!eventDateStr || remainingAmount <= 0) return 0;
-    const [ey, em, ed] = eventDateStr.split('-').map(Number);
+    const clean = eventDateStr.split('T')[0].trim();
+    const parts = clean.split('-');
+    if (parts.length !== 3) return 0;
+    const ey = parseInt(parts[0], 10);
+    const em = parseInt(parts[1], 10);
+    const ed = parseInt(parts[2], 10);
     const eventDate = new Date(ey, em - 1, ed);
     eventDate.setHours(0, 0, 0, 0);
 
@@ -74,12 +79,34 @@ export const PendingPaymentsReport: React.FC = () => {
     return diffDays;
   };
 
-  // Format date to local style like "10 July 2026"
-  const formatEventDate = (dateStr: string) => {
-    if (!dateStr) return 'N/A';
-    const [y, m, d] = dateStr.split('-').map(Number);
-    const dateObj = new Date(y, m - 1, d);
-    return dateObj.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+  // Format date cleanly and timezone-safely e.g. "2026-08-20" -> "20 Aug 2026"
+  const formatEventDate = (dateStr?: string) => {
+    if (!dateStr || dateStr === 'N/A' || dateStr === '—' || dateStr === 'null' || dateStr === 'undefined') return 'N/A';
+    const clean = dateStr.split('T')[0].trim();
+    const parts = clean.split('-');
+    if (parts.length === 3 && parts[0].length === 4) {
+      const yyyy = parts[0];
+      const mm = parseInt(parts[1], 10);
+      const dd = parseInt(parts[2], 10);
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      if (mm >= 1 && mm <= 12 && !isNaN(dd)) {
+        return `${dd} ${months[mm - 1]} ${yyyy}`;
+      }
+    }
+    if (clean.includes('/') || (clean.includes('-') && clean.split('-')[0].length <= 2)) {
+      const sep = clean.includes('/') ? '/' : '-';
+      const subParts = clean.split(sep);
+      if (subParts.length === 3) {
+        const dd = parseInt(subParts[0], 10);
+        const mm = parseInt(subParts[1], 10);
+        const yyyy = subParts[2];
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        if (mm >= 1 && mm <= 12 && !isNaN(dd)) {
+          return `${dd} ${months[mm - 1]} ${yyyy}`;
+        }
+      }
+    }
+    return clean;
   };
   
   // Start date default: 3 months ago to 1 year ahead
@@ -112,7 +139,7 @@ export const PendingPaymentsReport: React.FC = () => {
     }).format(amount);
   };
 
-  // Compile real-time pending payment records from Supabase table: leads
+  // Compile real-time pending payment records from Supabase tables: leads & lead_events
   const allPendingRecords = useMemo(() => {
     const TODAY_STR = new Date().toISOString().split('T')[0];
 
@@ -164,7 +191,16 @@ export const PendingPaymentsReport: React.FC = () => {
         }
       }
 
-      const isOverdue = lead.event_date && lead.event_date < TODAY_STR && remainingAmount > 0;
+      // Read actual confirmed order event data from lead_events (via lead.events)
+      const leadEvents = (lead.events && Array.isArray(lead.events) && lead.events.length > 0)
+        ? lead.events
+        : (lead.event_date ? [{ event_name: lead.event_name || lead.event_type || 'Event', event_type: lead.event_type, event_date: lead.event_date }] : []);
+
+      const primaryEvent = leadEvents[0];
+      const primaryEventDate = primaryEvent?.event_date || primaryEvent?.event_start_date || lead.event_date || '';
+      const eventType = leadEvents.map((e: any) => e.event_name || e.event_type).filter(Boolean).join(', ') || lead.event_type || 'Event';
+
+      const isOverdue = primaryEventDate && primaryEventDate < TODAY_STR && remainingAmount > 0;
       
       // Get the semantic stage of the lead
       const status = lead.current_status || lead.status || 'New Lead';
@@ -185,8 +221,9 @@ export const PendingPaymentsReport: React.FC = () => {
         orderId: order?.order_id || `MOCK-${lead.lead_id.slice(-4)}`,
         customerName: lead.customer_name,
         mobileNumber: lead.mobile,
-        eventType: lead.event_type,
-        eventDate: lead.event_date || '',
+        eventType,
+        eventDate: primaryEventDate,
+        events: leadEvents,
         paymentCompletionDate,
         finalPackageAmount,
         advanceReceived,
@@ -327,20 +364,25 @@ export const PendingPaymentsReport: React.FC = () => {
   // Export functions (PDF, CSV, Excel, Print)
   const downloadCSV = () => {
     const headers = ['Order ID', 'Customer Name', 'Mobile Number', 'Event Type', 'Event Date', 'Completion Date', 'Final Package Amount', 'Total Paid Amount', 'Remaining Amount', 'Payment Status', 'Project Status', 'Last Updated'];
-    const rows = filteredRecords.map(r => [
-      r.orderId,
-      r.customerName,
-      r.mobileNumber,
-      r.eventType,
-      r.eventDate,
-      r.paymentStatus === 'Fully Paid' ? (r.paymentCompletionDate || 'N/A') : 'N/A',
-      r.finalPackageAmount,
-      r.totalPaidAmount,
-      r.paymentStatus === 'Fully Paid' ? 0 : r.remainingAmount,
-      r.paymentStatus === 'Fully Paid' ? 'Fully Paid' : (r.paymentStatus === 'Partial' ? 'Partially Paid' : 'Pending'),
-      r.currentProjectStatus,
-      new Date(r.lastUpdatedDate).toLocaleDateString()
-    ]);
+    const rows = filteredRecords.map(r => {
+      const formattedEvDate = r.events && r.events.length > 1
+        ? r.events.map((e: any) => `${e.event_name || e.event_type || 'Event'}: ${formatEventDate(e.event_date || e.event_start_date)}`).join(' | ')
+        : formatEventDate(r.eventDate);
+      return [
+        r.orderId,
+        r.customerName,
+        r.mobileNumber,
+        r.eventType,
+        formattedEvDate,
+        r.paymentStatus === 'Fully Paid' ? (r.paymentCompletionDate ? formatEventDate(r.paymentCompletionDate) : 'Completed') : 'N/A',
+        r.finalPackageAmount,
+        r.totalPaidAmount,
+        r.paymentStatus === 'Fully Paid' ? 0 : r.remainingAmount,
+        r.paymentStatus === 'Fully Paid' ? 'Fully Paid' : (r.paymentStatus === 'Partial' ? 'Partially Paid' : 'Pending'),
+        r.currentProjectStatus,
+        new Date(r.lastUpdatedDate).toLocaleDateString('en-IN')
+      ];
+    });
 
     const csvContent = "data:text/csv;charset=utf-8," 
       + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
@@ -359,8 +401,11 @@ export const PendingPaymentsReport: React.FC = () => {
     let excelContent = "Order ID\tCustomer Name\tMobile Number\tEvent Type\tEvent Date\tCompletion Date\tFinal Package Amount\tTotal Paid Amount\tRemaining Amount\tPayment Status\tProject Status\tLast Updated\n";
     filteredRecords.forEach(r => {
       const statusStr = r.paymentStatus === 'Fully Paid' ? 'Fully Paid' : (r.paymentStatus === 'Partial' ? 'Partially Paid' : 'Pending');
-      const compDateStr = r.paymentStatus === 'Fully Paid' ? (r.paymentCompletionDate || 'N/A') : 'N/A';
-      excelContent += `${r.orderId}\t${r.customerName}\t${r.mobileNumber}\t${r.eventType}\t${r.eventDate}\t${compDateStr}\t${r.finalPackageAmount}\t${r.totalPaidAmount}\t${r.paymentStatus === 'Fully Paid' ? 0 : r.remainingAmount}\t${statusStr}\t${r.currentProjectStatus}\t${new Date(r.lastUpdatedDate).toLocaleDateString()}\n`;
+      const compDateStr = r.paymentStatus === 'Fully Paid' ? (r.paymentCompletionDate ? formatEventDate(r.paymentCompletionDate) : 'Completed') : 'N/A';
+      const formattedEvDate = r.events && r.events.length > 1
+        ? r.events.map((e: any) => `${e.event_name || e.event_type || 'Event'}: ${formatEventDate(e.event_date || e.event_start_date)}`).join(' | ')
+        : formatEventDate(r.eventDate);
+      excelContent += `${r.orderId}\t${r.customerName}\t${r.mobileNumber}\t${r.eventType}\t${formattedEvDate}\t${compDateStr}\t${r.finalPackageAmount}\t${r.totalPaidAmount}\t${r.paymentStatus === 'Fully Paid' ? 0 : r.remainingAmount}\t${statusStr}\t${r.currentProjectStatus}\t${new Date(r.lastUpdatedDate).toLocaleDateString('en-IN')}\n`;
     });
 
     const blob = new Blob([excelContent], { type: 'application/vnd.ms-excel' });
@@ -453,7 +498,7 @@ export const PendingPaymentsReport: React.FC = () => {
       doc.text(customerShort, 38, currentY + 5);
       doc.text(rec.mobileNumber, 88, currentY + 5);
       doc.text(rec.eventType, 115, currentY + 5);
-      doc.text(rec.eventDate, 150, currentY + 5);
+      doc.text(formatEventDate(rec.eventDate), 150, currentY + 5);
       
       doc.text(`INR ${rec.finalPackageAmount.toLocaleString('en-IN')}`, 180, currentY + 5);
       doc.text(`INR ${rec.totalPaidAmount.toLocaleString('en-IN')}`, 210, currentY + 5);
@@ -862,7 +907,18 @@ export const PendingPaymentsReport: React.FC = () => {
 
                     {/* Event Details */}
                     <td className="px-4 py-4 text-xs">
-                      <span className="font-semibold text-zinc-300">{rec.eventType}</span>
+                      {rec.events && rec.events.length > 1 ? (
+                        <div className="space-y-1">
+                          {rec.events.map((ev: any, idx: number) => (
+                            <div key={ev.id || idx} className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                              <span className="truncate max-w-[160px]">{ev.event_name || ev.event_type || `Event ${idx + 1}`}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="font-semibold text-zinc-300">{rec.eventType}</span>
+                      )}
                     </td>
 
                     {/* Total Amount */}
@@ -886,7 +942,26 @@ export const PendingPaymentsReport: React.FC = () => {
 
                     {/* Event Date */}
                     <td className="px-4 py-4 text-xs text-center font-mono text-zinc-300">
-                      {formattedEventDate}
+                      {rec.events && rec.events.length > 1 ? (
+                        <div className="flex flex-col items-center gap-1">
+                          {rec.events.map((ev: any, idx: number) => {
+                            const d = ev.event_date || ev.event_start_date;
+                            const formatted = formatEventDate(d);
+                            return (
+                              <span
+                                key={ev.id || idx}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900/90 border border-zinc-800 text-[11px] font-mono text-zinc-200"
+                                title={`${ev.event_name || ev.event_type || `Event ${idx + 1}`}: ${formatted}`}
+                              >
+                                <span className="text-[10px] text-indigo-400 font-semibold">{ev.event_name || ev.event_type || `E${idx + 1}`}:</span>
+                                <span>{formatted}</span>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span className="font-mono text-zinc-300">{formattedEventDate}</span>
+                      )}
                     </td>
 
                     {/* Completion Date */}
@@ -1314,6 +1389,33 @@ export const PendingPaymentsReport: React.FC = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* Confirmed event dates section */}
+                {viewDetailsRecord?.events && viewDetailsRecord.events.length > 0 && (
+                  <div>
+                    <h4 className="text-[10px] text-zinc-550 font-bold uppercase tracking-wider mb-2.5 font-mono">Confirmed Event Dates & Schedule</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {viewDetailsRecord.events.map((ev: any, idx: number) => (
+                        <div key={ev.id || idx} className="p-3 bg-zinc-900 rounded-xl border border-zinc-850 space-y-1">
+                          <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                            <span className="text-indigo-400">🎬</span>
+                            {ev.event_name || ev.event_type || `Event ${idx + 1}`}
+                          </span>
+                          <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 pt-1 border-t border-zinc-800/60">
+                            <span>Event Date:</span>
+                            <span className="text-zinc-200 font-semibold">{formatEventDate(ev.event_date || ev.event_start_date)}</span>
+                          </div>
+                          {ev.event_start_time && (
+                            <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
+                              <span>Event Time:</span>
+                              <span className="text-zinc-200">{ev.event_start_time}</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* History table */}
                 <div>

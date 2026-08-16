@@ -63,8 +63,17 @@ const OperationsActionColumn = ({ ord, actionItems, isOpen, setActiveMenuOrderId
   );
 };
 
-const extractTeamMembersConfig = (lead: any, leadPkgs: any[]): { event_id?: string; event_name?: string; team_members: any[] }[] => {
+interface EventTeamMemberConfig {
+  event_id?: string;
+  event_name?: string;
+  package_id?: string;
+  team_members: any[];
+}
+
+const extractTeamMembersConfig = (lead: any, leadPkgs: any[]): EventTeamMemberConfig[] => {
   if (!lead && (!leadPkgs || leadPkgs.length === 0)) return [];
+
+  const configs: EventTeamMemberConfig[] = [];
 
   const parseRaw = (val: any) => {
     if (!val) return null;
@@ -72,106 +81,186 @@ const extractTeamMembersConfig = (lead: any, leadPkgs: any[]): { event_id?: stri
       try {
         return JSON.parse(val);
       } catch (e) {
-        return val.split(/,|\n/).map(s => s.trim()).filter(Boolean);
+        return val.split(/,|\n/).map((s: string) => s.trim()).filter(Boolean);
       }
     }
     return val;
   };
 
-  const rawCandidates = [
-    lead?.Team_member,
+  const processParsedData = (parsed: any, pkgId?: string) => {
+    if (!parsed) return;
+
+    // 1. Array of event-specific objects (e.g. from buildStep3EventPayloads: [{ event_id, event_name, team_members }])
+    if (Array.isArray(parsed)) {
+      parsed.forEach((item: any) => {
+        if (item && typeof item === 'object' && ('event_id' in item || 'event_name' in item || 'event_type' in item || 'team_members' in item || 'inclusions' in item || 'deliverables' in item || 'members' in item)) {
+          const evId = String(item.event_id || item.id || '').trim();
+          const evName = String(item.event_name || item.name || item.event_type || '').trim();
+          const tm = item.team_members || item.inclusions || item.deliverables || item.members || [];
+          const tmList = Array.isArray(tm) ? tm : parseRaw(tm) || [];
+          if (tmList.length > 0) {
+            configs.push({
+              event_id: evId,
+              event_name: evName,
+              package_id: pkgId,
+              team_members: tmList
+            });
+          }
+        }
+      });
+
+      // If it's a flat array of string/role items without event metadata (e.g. ["1 × Photographer"] or [{ name: 'Photographer', qty: 1 }])
+      const isEventArray = parsed.some((item: any) => item && typeof item === 'object' && ('event_id' in item || 'event_name' in item || 'team_members' in item || 'members' in item));
+      if (!isEventArray && parsed.length > 0) {
+        configs.push({
+          event_id: '',
+          event_name: '',
+          package_id: pkgId,
+          team_members: parsed
+        });
+      }
+    } else if (typeof parsed === 'object') {
+      // 2. Dictionary / Key-value map (e.g. editable_inclusions: { "PKG-01_ev_1": [...], "Custom Package_Birthday": [...] })
+      Object.entries(parsed).forEach(([key, val]) => {
+        if (!val) return;
+        const valList = Array.isArray(val) ? val : parseRaw(val) || [val];
+        if (Array.isArray(valList) && valList.length > 0) {
+          let extractedEvId = '';
+          let extractedEvName = '';
+
+          const parts = key.split('_');
+          if (parts.length >= 2) {
+            const suffix = parts.slice(1).join('_');
+            extractedEvId = suffix;
+            extractedEvName = suffix;
+          } else {
+            extractedEvId = key;
+            extractedEvName = key;
+          }
+
+          configs.push({
+            event_id: extractedEvId,
+            event_name: extractedEvName,
+            package_id: pkgId,
+            team_members: valList
+          });
+        }
+      });
+    }
+  };
+
+  // 1. Inspect direct events on lead (lead.events)
+  if (lead?.events && Array.isArray(lead.events) && lead.events.length > 0) {
+    lead.events.forEach((ev: any) => {
+      const tm = ev.team_members || ev.inclusions || ev.Team_Members || ev.team_members_included || [];
+      const parsedTm = Array.isArray(tm) ? tm : parseRaw(tm) || [];
+      if (parsedTm.length > 0) {
+        configs.push({
+          event_id: String(ev.id || ev.event_id || '').trim(),
+          event_name: String(ev.event_name || ev.event_type || '').trim(),
+          team_members: parsedTm
+        });
+      }
+    });
+  }
+
+  // 2. Inspect lead packages (all packages for this lead)
+  if (leadPkgs && Array.isArray(leadPkgs)) {
+    leadPkgs.forEach((lp: any) => {
+      const pkgId = lp.package_id || lp.id;
+      const candidates = [
+        lp.Team_Members_Included,
+        lp.team_members_included,
+        lp.editable_inclusions,
+        lp.Team_Members,
+        lp.team_members
+      ];
+      candidates.forEach(c => {
+        if (c) {
+          const parsed = parseRaw(c);
+          processParsedData(parsed, pkgId);
+        }
+      });
+    });
+  }
+
+  // 3. Inspect lead-level columns
+  const leadCandidates = [
     lead?.Team_Members,
+    lead?.Team_member,
     (lead as any)?.team_members,
     lead?.Team_Members_Included,
-    leadPkgs?.[0]?.Team_Members_Included,
-    leadPkgs?.[0]?.editable_inclusions,
-    leadPkgs?.[0]?.Team_Members
+    (lead as any)?.team_members_included
   ];
-
-  let parsed: any = null;
-  for (const candidate of rawCandidates) {
-    if (candidate) {
-      const p = parseRaw(candidate);
-      if (p) {
-        if (Array.isArray(p) && p.length > 0) {
-          parsed = p;
-          break;
-        } else if (typeof p === 'object' && Object.keys(p).length > 0) {
-          parsed = p;
-          break;
-        }
-      }
+  leadCandidates.forEach(c => {
+    if (c) {
+      const parsed = parseRaw(c);
+      processParsedData(parsed);
     }
-  }
+  });
 
-  if (Array.isArray(parsed)) {
-    if (parsed.length > 0 && typeof parsed[0] === 'object' && parsed[0] !== null && ('team_members' in parsed[0] || 'deliverables' in parsed[0] || 'inclusions' in parsed[0] || 'name' in parsed[0])) {
-      if ('team_members' in parsed[0] || 'inclusions' in parsed[0] || 'deliverables' in parsed[0]) {
-        return parsed.map((item: any) => ({
-          event_id: item.event_id || item.id || '',
-          event_name: item.event_name || item.name || item.event_type || '',
-          team_members: item.team_members || item.inclusions || item.deliverables || []
-        }));
-      }
-    }
-    return [{
-      event_id: '',
-      event_name: '',
-      team_members: parsed
-    }];
-  }
-
-  if (parsed && typeof parsed === 'object') {
-    return Object.entries(parsed).map(([key, val]) => ({
-      event_id: '',
-      event_name: key,
-      team_members: Array.isArray(val) ? val : [val]
-    }));
-  }
-
-  if (lead?.events && Array.isArray(lead.events) && lead.events.length > 0) {
-    const eventConfigs = lead.events.map((ev: any) => {
-      const tm = ev.team_members || ev.inclusions || ev.Team_Members || [];
-      return {
-        event_id: ev.id || ev.event_id || '',
-        event_name: ev.event_name || ev.event_type || '',
-        team_members: Array.isArray(tm) ? tm : parseRaw(tm) || []
-      };
-    }).filter(c => c.team_members.length > 0);
-    if (eventConfigs.length > 0) return eventConfigs;
-  }
-
-  return [];
+  return configs;
 };
 
-const getEventRolesForEvent = (ev: any, index: number, configList: any[]): any[] => {
+const getEventRolesForEvent = (ev: any, index: number, configList: EventTeamMemberConfig[], totalEvents: number = 1): any[] => {
+  if (!ev) return [];
+
+  // 1. Direct event properties
+  const directTm = ev.team_members || ev.inclusions || ev.Team_Members || ev.team_members_included;
+  if (directTm) {
+    if (Array.isArray(directTm) && directTm.length > 0) return directTm;
+    if (typeof directTm === 'string') {
+      try {
+        const parsed = JSON.parse(directTm);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {
+        const list = directTm.split(/,|\n/).map((s: string) => s.trim()).filter(Boolean);
+        if (list.length > 0) return list;
+      }
+    }
+  }
+
   if (!configList || configList.length === 0) return [];
 
-  const evId = (ev.id || ev.event_id || '').toLowerCase().trim();
-  const evName = (ev.event_name || ev.event_type || '').toLowerCase().trim();
-  const evType = (ev.event_type || '').toLowerCase().trim();
+  const evId = String(ev.id || ev.event_id || '').toLowerCase().trim();
+  const evName = String(ev.event_name || '').toLowerCase().trim();
+  const evType = String(ev.event_type || '').toLowerCase().trim();
+  const customName = String(ev.custom_event_name || ev.custom_event_type || '').toLowerCase().trim();
 
+  // 2. Strict ID matching first
   if (evId) {
-    const matchById = configList.find(c => c.event_id && c.event_id.toLowerCase().trim() === evId);
+    const matchById = configList.find(c => {
+      if (!c.event_id) return false;
+      const cId = c.event_id.toLowerCase().trim();
+      return cId === evId || cId.endsWith(`_${evId}`) || cId.endsWith(`-${evId}`);
+    });
     if (matchById && matchById.team_members?.length > 0) return matchById.team_members;
   }
 
-  if (evName || evType) {
+  // 3. Name or Type matching
+  if (evName || evType || customName) {
     const matchByName = configList.find(c => {
       const cName = (c.event_name || '').toLowerCase().trim();
-      return cName && (cName === evName || cName === evType || evName.includes(cName) || cName.includes(evName));
+      if (!cName) return false;
+      
+      const cleanCName = cName.includes('_') ? cName.split('_').slice(1).join('_').trim() : cName;
+
+      return (
+        (evName && (cName === evName || cleanCName === evName)) ||
+        (evType && (cName === evType || cleanCName === evType)) ||
+        (customName && (cName === customName || cleanCName === customName))
+      );
     });
     if (matchByName && matchByName.team_members?.length > 0) return matchByName.team_members;
   }
 
-  if (configList.length === 1 && configList[0].team_members?.length > 0) {
+  // 4. Single-event lead compatibility ONLY
+  // If the lead has strictly 1 event, and there is a config with no specific event_id or matching event, use it.
+  if (totalEvents === 1 && configList.length === 1 && configList[0].team_members?.length > 0) {
     return configList[0].team_members;
   }
 
-  if (configList[index] && configList[index].team_members?.length > 0) {
-    return configList[index].team_members;
-  }
-
+  // Multi-event leads MUST NEVER copy team members from another event or guess by index
   return [];
 };
 
@@ -1193,11 +1282,12 @@ export const OperationsLeads: React.FC = () => {
 
     const initialAllocations: Record<string, any> = {};
     if (targetLead?.events && targetLead.events.length > 0) {
+      const totalEvents = targetLead.events.length;
       targetLead.events.forEach((ev, index) => {
         const evId = ev.id || `EV-N/A-${index}`;
         const staffList: any[] = [];
         
-        const includedRoles = getEventRolesForEvent(ev, index, teamMembersConfig);
+        const includedRoles = getEventRolesForEvent(ev, index, teamMembersConfig, totalEvents);
 
         // Group roles into tasks
         const tasksMap = new Map<string, { roleName: string; targetQty: number }>();
@@ -1213,10 +1303,11 @@ export const OperationsLeads: React.FC = () => {
         });
         const taskGroups = Array.from(tasksMap.values());
 
+        const isMultiEv = totalEvents > 1;
         const orderStaffAssignments = staffAssignments?.filter(sa => 
           sa.order_id === order.order_id && 
           sa.assignment_status !== 'Cancelled' &&
-          (!sa.event_id || sa.event_id === evId)
+          (sa.event_id ? sa.event_id === evId : (!isMultiEv || (sa.event_name && (sa.event_name.toLowerCase() === (ev.event_name || '').toLowerCase() || sa.event_name.toLowerCase() === (ev.event_type || '').toLowerCase()))))
         ) || [];
         const existingNames = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean) : [];
 
@@ -1440,13 +1531,14 @@ export const OperationsLeads: React.FC = () => {
     if (parentLeadInstance?.events) {
        const targetLeadPkgs = leadPackages?.filter(lp => lp.lead_id === parentLeadInstance?.lead_id) || [];
        const teamMembersConfig = extractTeamMembersConfig(parentLeadInstance, targetLeadPkgs);
+       const totalEvents = parentLeadInstance.events.length;
 
        for (let index = 0; index < parentLeadInstance.events.length; index++) {
           const ev = parentLeadInstance.events[index];
           const evId = ev.id || '';
           if (!evId) continue;
           
-          const includedRoles = getEventRolesForEvent(ev, index, teamMembersConfig);
+          const includedRoles = getEventRolesForEvent(ev, index, teamMembersConfig, totalEvents);
           
           if (includedRoles.length > 0) {
             const allocStaff = eventAllocations[evId]?.staff || [];
@@ -2469,6 +2561,7 @@ export const OperationsLeads: React.FC = () => {
                 {(() => {
                   const targetLeadPkgs = leadPackages?.filter(lp => lp.lead_id === parentLeadInstance?.lead_id) || [];
                   const teamMembersConfig = extractTeamMembersConfig(parentLeadInstance, targetLeadPkgs);
+                  const totalEvents = parentLeadInstance?.events?.length || 1;
 
                   return parentLeadInstance?.events && parentLeadInstance.events.map((ev, index) => {
                     const evId = ev.id || `EV-N/A-${index}`;
@@ -2476,7 +2569,7 @@ export const OperationsLeads: React.FC = () => {
                     const allocStaff = allocation.staff || [];
                     
                     const evName = ev.event_name || ev.event_type || 'Unnamed Event';
-                    const includedRoles = getEventRolesForEvent(ev, index, teamMembersConfig);
+                    const includedRoles = getEventRolesForEvent(ev, index, teamMembersConfig, totalEvents);
                     
                     let loadError = null;
                     if (includedRoles.length === 0) {

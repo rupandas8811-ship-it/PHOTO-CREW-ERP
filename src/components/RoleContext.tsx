@@ -204,6 +204,7 @@ interface RoleContextType {
   refreshData: () => void;
   pushInsert: (table: string, record: any) => Promise<{ success: boolean; error?: string; localFallback?: boolean }>;
   pushUpdate: (table: string, matchColumn: string, matchValue: any, updates: any) => Promise<{ success: boolean; error?: string; localFallback?: boolean }>;
+  pushDelete: (table: string, matchColumn: string, matchValue: any) => Promise<{ success: boolean; error?: string }>;
   statusHistory: any[];
   getLeadCurrentStatus: (lead: Lead) => string;
   getLeadCurrentStage: (lead: Lead) => 'Sales' | 'Operations' | 'Production' | 'Completed';
@@ -2310,13 +2311,29 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           }
         }
 
-        // Merge fetched package data with INITIAL_PACKAGES to guarantee all 39 master packages are available
+        // Retrieve deleted package IDs from localStorage so deleted items never resurrect on page reload
+        let deletedPkgIds: string[] = [];
+        try {
+          const delStr = localStorage.getItem('erp_deleted_package_ids');
+          if (delStr) {
+            const parsedDel = JSON.parse(delStr);
+            if (Array.isArray(parsedDel)) deletedPkgIds = parsedDel.map(String);
+          }
+        } catch (_) {}
+
+        // Map fetched package data from database
         const mappedDbPkgs = (finalPackagesData && finalPackagesData.length > 0) 
-          ? finalPackagesData.map(mapDbRecordToPackage) 
+          ? finalPackagesData
+              .map(mapDbRecordToPackage)
+              .filter(p => p && p.package_id && !deletedPkgIds.includes(String(p.package_id)))
           : [];
         
         const pkgMap = new Map<string, Package>();
-        (INITIAL_PACKAGES || []).forEach(p => pkgMap.set(String(p.package_id), p));
+        // Only include INITIAL_PACKAGES that have not been deleted
+        (INITIAL_PACKAGES || [])
+          .filter(p => p && p.package_id && !deletedPkgIds.includes(String(p.package_id)))
+          .forEach(p => pkgMap.set(String(p.package_id), p));
+
         mappedDbPkgs.forEach(p => pkgMap.set(String(p.package_id), p));
 
         setPackages(Array.from(pkgMap.values()));
@@ -5881,7 +5898,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         throw new Error(result.error || 'Failed to delete package from database. Please check your connection and permissions.');
       }
 
-      // 2. Remove from local storage fallback store
+      // 2. Remove from local storage fallback store & record in deleted package IDs
       try {
         const localKey = 'erp_local_packages';
         const existingLocalStr = localStorage.getItem(localKey);
@@ -5890,10 +5907,24 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           const filtered = localRecords.filter((r: any) => r && r.package_id !== targetId && r.id !== targetId);
           localStorage.setItem(localKey, JSON.stringify(filtered));
         }
+
+        const deletedKey = 'erp_deleted_package_ids';
+        const existingDeletedStr = localStorage.getItem(deletedKey);
+        let deletedList: string[] = [];
+        if (existingDeletedStr) {
+          try {
+            const parsed = JSON.parse(existingDeletedStr);
+            if (Array.isArray(parsed)) deletedList = parsed;
+          } catch (_) {}
+        }
+        if (!deletedList.includes(targetId)) {
+          deletedList.push(targetId);
+          localStorage.setItem(deletedKey, JSON.stringify(deletedList));
+        }
       } catch (_) {}
 
       // 3. Update local React state only after confirmed database deletion
-      setPackages((prev) => prev.filter((p) => p.package_id !== targetId));
+      setPackages((prev) => prev.filter((p) => String(p.package_id) !== targetId));
       logActivity(`Deleted Package: ${pkgName}`, 'Sales', targetId, 'Active', 'Deleted');
     } catch (err: any) {
       console.error('[deletePackage Error]', err);
