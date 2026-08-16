@@ -409,6 +409,56 @@ async function startServer() {
     return { success: false, error: lastError?.message || String(lastError) };
   }
 
+  // --- Google Sheets Backup Logic ---
+  const triggerGoogleSheetsBackup = (table: string, action: string, data: any, record_id?: string) => {
+    const GOOGLE_SHEETS_BACKUP_URL = process.env.GOOGLE_SHEETS_BACKUP_URL;
+    const GOOGLE_SHEETS_BACKUP_SECRET = process.env.GOOGLE_SHEETS_BACKUP_SECRET;
+
+    if (!GOOGLE_SHEETS_BACKUP_URL || !GOOGLE_SHEETS_BACKUP_SECRET) {
+      return;
+    }
+
+    // Fire and forget, don't await to avoid blocking Supabase operations
+    (async () => {
+      try {
+        let actual_record_id = record_id;
+        if (!actual_record_id && data) {
+           actual_record_id = data.id || data.lead_id || data.order_id || data.package_id || data.staff_id || data.payment_id || data.assignment_id || "unknown";
+        }
+        
+        if (action === 'delete' && !actual_record_id && data) {
+           actual_record_id = data;
+        }
+
+        const payload = {
+          token: GOOGLE_SHEETS_BACKUP_SECRET,
+          table,
+          record_id: actual_record_id,
+          action,
+          data
+        };
+
+        const response = await fetch(GOOGLE_SHEETS_BACKUP_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          console.error(`[Server Backup Error] Google Sheets Backup failed for ${table} ${action}. Status: ${response.status}`);
+        }
+      } catch (err) {
+        console.error(`[Server Backup Exception] Google Sheets Backup failed for ${table} ${action}:`, err);
+      }
+    })();
+  };
+
+  app.post('/api/sheets-backup', async (req, res) => {
+     const { table, record_id, action, data } = req.body;
+     triggerGoogleSheetsBackup(table, action, data, record_id);
+     res.json({ success: true, message: 'Backup triggered' });
+  });
+
   app.post('/api/db/insert', async (req, res) => {
     const { table, record } = req.body;
     try {
@@ -417,6 +467,9 @@ async function startServer() {
       if (!result.success) {
         return res.status(400).json({ success: false, error: result.error });
       }
+      
+      triggerGoogleSheetsBackup(table, 'insert', result.data?.[0] || record);
+      
       res.json({ success: true, data: result.data });
     } catch (err: any) {
       if (!['activity_logs', 'notifications', 'analytics_snapshots', 'login_logs'].includes(table)) {
@@ -451,6 +504,9 @@ async function startServer() {
       if (!result.success) {
         return res.status(400).json({ success: false, error: result.error });
       }
+      
+      triggerGoogleSheetsBackup(table, 'update', result.data?.[0] || updates, matchValue);
+      
       res.json({ success: true, data: result.data });
     } catch (err: any) {
       if (!['activity_logs', 'notifications', 'analytics_snapshots', 'login_logs'].includes(table)) {
@@ -468,6 +524,9 @@ async function startServer() {
       if (!result.success) {
         return res.status(400).json({ success: false, error: result.error });
       }
+      
+      triggerGoogleSheetsBackup(table, 'upsert', result.data?.[0] || record);
+      
       res.json({ success: true, data: result.data });
     } catch (err: any) {
       if (!['activity_logs', 'notifications', 'analytics_snapshots', 'login_logs'].includes(table)) {
@@ -571,6 +630,9 @@ async function startServer() {
         console.error(`[Server DB Delete Error] ${table}`, error);
         return res.status(400).json({ success: false, error: error.message });
       }
+      
+      triggerGoogleSheetsBackup(table, 'delete', data?.[0] || { deleted_id: matchValue }, matchValue);
+      
       res.json({ success: true, data });
     } catch (err: any) {
       console.error(`[Server DB Delete Exception] ${table}`, err);
