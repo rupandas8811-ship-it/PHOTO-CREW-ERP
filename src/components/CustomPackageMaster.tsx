@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 
 export const CustomPackageMaster: React.FC = () => {
-  const { packages, leads, leadPackages, pushDelete } = useRole();
+  const { packages, leads, leadPackages, pushDelete, orders, staffAssignments } = useRole();
 
   // Active view tab: 'all' | 'roles' | 'deliverables'
   const [activeTab, setActiveTab] = useState<'all' | 'roles' | 'deliverables'>('all');
@@ -32,6 +32,12 @@ export const CustomPackageMaster: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [deletingRoleId, setDeletingRoleId] = useState<string | null>(null);
   const [deletingDeliverableId, setDeletingDeliverableId] = useState<string | null>(null);
+
+  // Delete Confirmation & In-Use Modals state
+  const [roleToDelete, setRoleToDelete] = useState<CustomRole | null>(null);
+  const [inUseRoleModal, setInUseRoleModal] = useState<CustomRole | null>(null);
+  const [deliverableToDelete, setDeliverableToDelete] = useState<CustomDeliverable | null>(null);
+  const [inUseDeliverableModal, setInUseDeliverableModal] = useState<CustomDeliverable | null>(null);
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -195,7 +201,7 @@ export const CustomPackageMaster: React.FC = () => {
     }, 400);
   };
 
-  // Helper to check if a Role is used in any package / lead
+  // Helper to check if a Role is used in any package / lead / order / staff assignment
   const isRoleInUse = (roleNameToCheck: string): boolean => {
     if (!roleNameToCheck) return false;
     const searchTarget = roleNameToCheck.trim().toLowerCase();
@@ -210,6 +216,12 @@ export const CustomPackageMaster: React.FC = () => {
     for (const lead of leads || []) {
       const tm = (lead.Team_Members || '').toLowerCase();
       if (tm.includes(searchTarget)) return true;
+      if (lead.events && Array.isArray(lead.events)) {
+        for (const ev of lead.events) {
+          const evTm = ((ev as any).team_members || (ev as any).assigned_staff_names || (ev as any).roles || '').toLowerCase();
+          if (evTm.includes(searchTarget)) return true;
+        }
+      }
     }
 
     // Check lead packages
@@ -218,10 +230,22 @@ export const CustomPackageMaster: React.FC = () => {
       if (tm.includes(searchTarget)) return true;
     }
 
+    // Check orders
+    for (const ord of orders || []) {
+      const tm = ((ord as any).team_members || (ord as any).Team_Members || '').toLowerCase();
+      if (tm.includes(searchTarget)) return true;
+    }
+
+    // Check staff assignments
+    for (const sa of staffAssignments || []) {
+      const role = (sa.staff_role || '').toLowerCase();
+      if (role === searchTarget || role.includes(searchTarget)) return true;
+    }
+
     return false;
   };
 
-  // Helper to check if a Deliverable is used in any package / lead
+  // Helper to check if a Deliverable is used in any package / lead / order
   const isDeliverableInUse = (deliverableNameToCheck: string): boolean => {
     if (!deliverableNameToCheck) return false;
     const searchTarget = deliverableNameToCheck.trim().toLowerCase();
@@ -241,6 +265,12 @@ export const CustomPackageMaster: React.FC = () => {
     // Check lead packages
     for (const lp of leadPackages || []) {
       const del = (lp.deliverables_description || '').toLowerCase();
+      if (del.includes(searchTarget)) return true;
+    }
+
+    // Check orders
+    for (const ord of orders || []) {
+      const del = ((ord as any).deliverables_description || (ord as any).deliverables || '').toLowerCase();
       if (del.includes(searchTarget)) return true;
     }
 
@@ -369,77 +399,71 @@ export const CustomPackageMaster: React.FC = () => {
     }
   };
 
-  const handleDeleteRole = async (role: CustomRole) => {
-    // Check if used in any package / lead
+  const handleDeleteRole = (role: CustomRole) => {
+    // Check if role is in use
     if (isRoleInUse(role.role_name)) {
       showToast(
-        `Cannot delete "${role.role_name}" because it is currently used in packages or leads. You can deactivate it instead.`,
+        'This role is currently in use and cannot be deleted.',
         'error'
       );
+      setInUseRoleModal(role);
       return;
     }
 
-    if (!window.confirm(`Are you sure you want to permanently delete the custom role "${role.role_name}"?`)) {
-      return;
-    }
+    // Trigger confirmation modal
+    setRoleToDelete(role);
+  };
+
+  const confirmDeleteRole = async () => {
+    if (!roleToDelete) return;
+    const role = roleToDelete;
 
     setDeletingRoleId(role.id);
     try {
-      // 1. Perform persistent delete from Supabase via pushDelete or direct client
-      let deleted = false;
       let errorMsg = '';
 
-      if (pushDelete) {
-        const res = await pushDelete('custom_roles', 'id', role.id);
-        if (res.success) {
-          deleted = true;
-        } else if (role.role_name) {
-          const resByName = await pushDelete('custom_roles', 'role_name', role.role_name);
-          if (resByName.success) deleted = true;
-          else errorMsg = res.error || resByName.error || 'Database delete failed';
-        }
-      }
-
-      if (!deleted && supabaseClient) {
+      // 1. Perform persistent delete from Supabase using the UNIQUE role ID
+      if (supabaseClient) {
         const { error } = await supabaseClient
           .from('custom_roles')
           .delete()
           .eq('id', role.id);
-        if (!error) {
-          deleted = true;
-        } else if (role.role_name) {
-          const { error: errByName } = await supabaseClient
-            .from('custom_roles')
-            .delete()
-            .eq('role_name', role.role_name);
-          if (!errByName) deleted = true;
-          else errorMsg = error?.message || errByName?.message || errorMsg;
+        if (error && error.code !== '42P01') {
+          console.warn('Supabase delete custom_roles error:', error.message);
+          errorMsg = error.message;
         }
       }
 
-      if (!deleted && !errorMsg) {
-        deleted = true;
+      if (pushDelete && (!supabaseClient || errorMsg)) {
+        const res = await pushDelete('custom_roles', 'id', role.id);
+        if (res.success) {
+          errorMsg = '';
+        } else if (!errorMsg) {
+          errorMsg = res.error || 'Database delete failed';
+        }
       }
 
-      if (!deleted && errorMsg) {
+      if (errorMsg) {
         throw new Error(errorMsg);
       }
 
-      // 2. Persist in deleted tracking in localStorage so reloads don't resurrect
+      // 2. Persist in deleted tracking in localStorage using unique ID
       try {
         const delKey = 'erp_deleted_custom_role_ids';
         const existing = localStorage.getItem(delKey);
         const list: string[] = existing ? JSON.parse(existing) : [];
         if (!list.includes(role.id)) list.push(role.id);
-        if (role.role_name && !list.includes(role.role_name)) list.push(role.role_name);
         localStorage.setItem(delKey, JSON.stringify(list));
       } catch (_) {}
 
-      // 3. Immediately update UI state
-      const updatedList = roles.filter(r => r.id !== role.id && r.role_name !== role.role_name);
+      // 3. Immediately update UI state by filtering out the UNIQUE role ID
+      const updatedList = roles.filter(r => r.id !== role.id);
       setRoles(updatedList);
       localStorage.setItem('erp_custom_roles_data', JSON.stringify(updatedList));
-      showToast(`Role "${role.role_name}" deleted successfully.`);
+
+      // 4. Close modal & show success toast
+      setRoleToDelete(null);
+      showToast('Role deleted successfully.', 'success');
     } catch (e: any) {
       console.error('Failed to delete role:', e);
       showToast(`Failed to delete role: ${e.message || e}`, 'error');
@@ -569,77 +593,71 @@ export const CustomPackageMaster: React.FC = () => {
     }
   };
 
-  const handleDeleteDeliverable = async (deliverable: CustomDeliverable) => {
-    // Check if used in any package / lead
+  const handleDeleteDeliverable = (deliverable: CustomDeliverable) => {
+    // Check if deliverable is in use
     if (isDeliverableInUse(deliverable.deliverable_name)) {
       showToast(
-        `Cannot delete "${deliverable.deliverable_name}" because it is currently used in packages or leads. You can deactivate it instead.`,
+        'This deliverable is currently in use and cannot be deleted.',
         'error'
       );
+      setInUseDeliverableModal(deliverable);
       return;
     }
 
-    if (!window.confirm(`Are you sure you want to permanently delete the custom deliverable "${deliverable.deliverable_name}"?`)) {
-      return;
-    }
+    // Trigger confirmation modal
+    setDeliverableToDelete(deliverable);
+  };
+
+  const confirmDeleteDeliverable = async () => {
+    if (!deliverableToDelete) return;
+    const deliverable = deliverableToDelete;
 
     setDeletingDeliverableId(deliverable.id);
     try {
-      // 1. Perform persistent delete from Supabase via pushDelete or direct client
-      let deleted = false;
       let errorMsg = '';
 
-      if (pushDelete) {
-        const res = await pushDelete('custom_deliverables', 'id', deliverable.id);
-        if (res.success) {
-          deleted = true;
-        } else if (deliverable.deliverable_name) {
-          const resByName = await pushDelete('custom_deliverables', 'deliverable_name', deliverable.deliverable_name);
-          if (resByName.success) deleted = true;
-          else errorMsg = res.error || resByName.error || 'Database delete failed';
-        }
-      }
-
-      if (!deleted && supabaseClient) {
+      // 1. Perform persistent delete from Supabase using UNIQUE deliverable ID
+      if (supabaseClient) {
         const { error } = await supabaseClient
           .from('custom_deliverables')
           .delete()
           .eq('id', deliverable.id);
-        if (!error) {
-          deleted = true;
-        } else if (deliverable.deliverable_name) {
-          const { error: errByName } = await supabaseClient
-            .from('custom_deliverables')
-            .delete()
-            .eq('deliverable_name', deliverable.deliverable_name);
-          if (!errByName) deleted = true;
-          else errorMsg = error?.message || errByName?.message || errorMsg;
+        if (error && error.code !== '42P01') {
+          console.warn('Supabase delete custom_deliverables error:', error.message);
+          errorMsg = error.message;
         }
       }
 
-      if (!deleted && !errorMsg) {
-        deleted = true;
+      if (pushDelete && (!supabaseClient || errorMsg)) {
+        const res = await pushDelete('custom_deliverables', 'id', deliverable.id);
+        if (res.success) {
+          errorMsg = '';
+        } else if (!errorMsg) {
+          errorMsg = res.error || 'Database delete failed';
+        }
       }
 
-      if (!deleted && errorMsg) {
+      if (errorMsg) {
         throw new Error(errorMsg);
       }
 
-      // 2. Persist in deleted tracking in localStorage so reloads don't resurrect
+      // 2. Persist in deleted tracking in localStorage using unique ID
       try {
         const delKey = 'erp_deleted_custom_deliverable_ids';
         const existing = localStorage.getItem(delKey);
         const list: string[] = existing ? JSON.parse(existing) : [];
         if (!list.includes(deliverable.id)) list.push(deliverable.id);
-        if (deliverable.deliverable_name && !list.includes(deliverable.deliverable_name)) list.push(deliverable.deliverable_name);
         localStorage.setItem(delKey, JSON.stringify(list));
       } catch (_) {}
 
-      // 3. Immediately update UI state
-      const updatedList = deliverables.filter(d => d.id !== deliverable.id && d.deliverable_name !== deliverable.deliverable_name);
+      // 3. Immediately update UI state by filtering out the UNIQUE deliverable ID
+      const updatedList = deliverables.filter(d => d.id !== deliverable.id);
       setDeliverables(updatedList);
       localStorage.setItem('erp_custom_deliverables_data', JSON.stringify(updatedList));
-      showToast(`Deliverable "${deliverable.deliverable_name}" deleted successfully.`);
+
+      // 4. Close modal & show success toast
+      setDeliverableToDelete(null);
+      showToast('Deliverable deleted successfully.', 'success');
     } catch (e: any) {
       console.error('Failed to delete deliverable:', e);
       showToast(`Failed to delete deliverable: ${e.message || e}`, 'error');
@@ -1404,6 +1422,316 @@ export const CustomPackageMaster: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIRM DELETE ROLE */}
+      {roleToDelete && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div id="delete-role-modal" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden p-6 space-y-5 relative">
+            <div className="flex items-center justify-between border-b border-zinc-850 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wide font-mono">
+                    Delete Custom Role
+                  </h3>
+                  <p className="text-[11px] text-zinc-400 font-sans">
+                    Confirm permanent deletion
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRoleToDelete(null)}
+                className="text-zinc-500 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 transition-all cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-left">
+              <p className="text-xs text-zinc-300 font-sans">
+                Are you sure you want to delete this role?
+              </p>
+              <div className="p-3.5 bg-zinc-950/80 rounded-xl border border-zinc-850 flex items-center gap-3">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <span className="text-xs font-bold text-zinc-100 block truncate">
+                    {roleToDelete.role_name}
+                  </span>
+                  <span className="text-[10px] text-zinc-500 font-mono">
+                    ID: {roleToDelete.id}
+                  </span>
+                </div>
+                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                  roleToDelete.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                }`}>
+                  {roleToDelete.status}
+                </span>
+              </div>
+              <p className="text-[11px] text-rose-400/90 font-sans">
+                This action cannot be undone. The role will be permanently removed from custom roles.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-zinc-850">
+              <button
+                type="button"
+                onClick={() => setRoleToDelete(null)}
+                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-750 text-zinc-300 text-xs font-mono font-bold cursor-pointer transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteRole}
+                disabled={deletingRoleId === roleToDelete.id}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono font-bold cursor-pointer transition-all flex items-center gap-1.5 shadow-lg shadow-rose-600/20"
+              >
+                {deletingRoleId === roleToDelete.id ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: IN-USE ROLE WARNING */}
+      {inUseRoleModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div id="in-use-role-modal" className="bg-zinc-900 border border-amber-500/30 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden p-6 space-y-5 relative">
+            <div className="flex items-center justify-between border-b border-zinc-850 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wide font-mono">
+                    Role In Use
+                  </h3>
+                  <p className="text-[11px] text-zinc-400 font-sans">
+                    Protected from deletion
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInUseRoleModal(null)}
+                className="text-zinc-500 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 transition-all cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-left">
+              <p className="text-xs text-zinc-300 font-sans leading-relaxed">
+                This role is currently in use and cannot be deleted.
+              </p>
+              <div className="p-3.5 bg-zinc-950/80 rounded-xl border border-zinc-850 flex items-center gap-3">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <span className="text-xs font-bold text-zinc-100 block truncate">
+                    {inUseRoleModal.role_name}
+                  </span>
+                  <span className="text-[10px] text-amber-400/80 font-mono">
+                    Referenced in active packages, leads, or orders
+                  </span>
+                </div>
+              </div>
+              <p className="text-[11px] text-zinc-400 font-sans">
+                To preserve project and quote data integrity, active roles in use cannot be deleted. You can <strong className="text-zinc-200">Deactivate</strong> this role to hide it from new quotations.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-zinc-850">
+              <button
+                type="button"
+                onClick={() => setInUseRoleModal(null)}
+                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-750 text-zinc-300 text-xs font-mono font-bold cursor-pointer transition-all"
+              >
+                Close
+              </button>
+              {inUseRoleModal.status === 'Active' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleToggleRoleStatus(inUseRoleModal);
+                    setInUseRoleModal(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-mono font-bold cursor-pointer transition-all"
+                >
+                  Deactivate Role
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIRM DELETE DELIVERABLE */}
+      {deliverableToDelete && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div id="delete-deliverable-modal" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden p-6 space-y-5 relative">
+            <div className="flex items-center justify-between border-b border-zinc-850 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wide font-mono">
+                    Delete Custom Deliverable
+                  </h3>
+                  <p className="text-[11px] text-zinc-400 font-sans">
+                    Confirm permanent deletion
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeliverableToDelete(null)}
+                className="text-zinc-500 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 transition-all cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-left">
+              <p className="text-xs text-zinc-300 font-sans">
+                Are you sure you want to delete this deliverable?
+              </p>
+              <div className="p-3.5 bg-zinc-950/80 rounded-xl border border-zinc-850 flex items-center gap-3">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <span className="text-xs font-bold text-zinc-100 block truncate">
+                    {deliverableToDelete.deliverable_name}
+                  </span>
+                  <span className="text-[10px] text-zinc-500 font-mono">
+                    ID: {deliverableToDelete.id}
+                  </span>
+                </div>
+                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                  deliverableToDelete.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                }`}>
+                  {deliverableToDelete.status}
+                </span>
+              </div>
+              <p className="text-[11px] text-rose-400/90 font-sans">
+                This action cannot be undone. The deliverable will be permanently removed from custom deliverables.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-zinc-850">
+              <button
+                type="button"
+                onClick={() => setDeliverableToDelete(null)}
+                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-750 text-zinc-300 text-xs font-mono font-bold cursor-pointer transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteDeliverable}
+                disabled={deletingDeliverableId === deliverableToDelete.id}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono font-bold cursor-pointer transition-all flex items-center gap-1.5 shadow-lg shadow-rose-600/20"
+              >
+                {deletingDeliverableId === deliverableToDelete.id ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: IN-USE DELIVERABLE WARNING */}
+      {inUseDeliverableModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div id="in-use-deliverable-modal" className="bg-zinc-900 border border-emerald-500/30 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden p-6 space-y-5 relative">
+            <div className="flex items-center justify-between border-b border-zinc-850 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wide font-mono">
+                    Deliverable In Use
+                  </h3>
+                  <p className="text-[11px] text-zinc-400 font-sans">
+                    Protected from deletion
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInUseDeliverableModal(null)}
+                className="text-zinc-500 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 transition-all cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-left">
+              <p className="text-xs text-zinc-300 font-sans leading-relaxed">
+                This deliverable is currently in use and cannot be deleted.
+              </p>
+              <div className="p-3.5 bg-zinc-950/80 rounded-xl border border-zinc-850 flex items-center gap-3">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <span className="text-xs font-bold text-zinc-100 block truncate">
+                    {inUseDeliverableModal.deliverable_name}
+                  </span>
+                  <span className="text-[10px] text-emerald-400/80 font-mono">
+                    Referenced in active packages, leads, or orders
+                  </span>
+                </div>
+              </div>
+              <p className="text-[11px] text-zinc-400 font-sans">
+                To preserve package and quote data integrity, active deliverables in use cannot be deleted. You can <strong className="text-zinc-200">Deactivate</strong> this deliverable to hide it from new quotations.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-zinc-850">
+              <button
+                type="button"
+                onClick={() => setInUseDeliverableModal(null)}
+                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-750 text-zinc-300 text-xs font-mono font-bold cursor-pointer transition-all"
+              >
+                Close
+              </button>
+              {inUseDeliverableModal.status === 'Active' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleToggleDeliverableStatus(inUseDeliverableModal);
+                    setInUseDeliverableModal(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-mono font-bold cursor-pointer transition-all"
+                >
+                  Deactivate Deliverable
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
