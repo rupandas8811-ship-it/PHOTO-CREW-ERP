@@ -1237,6 +1237,15 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
+    if (table === 'staff_assignments') {
+      delete cloned.event_id;
+      delete cloned.event_name;
+      delete cloned.equipment;
+      delete cloned.mobile;
+      delete cloned.staff_type;
+      delete cloned.task_status;
+      delete cloned.updated_by;
+    }
     if (table === 'equipment') {
       cloned.Equipment_Category = cloned.equipment_type || cloned.Equipment_Category || 'Camera';
       cloned.Equipment_Status = cloned.status || cloned.Equipment_Status || 'Active';

@@ -8233,6 +8233,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         
                         // 2. Prepare new assignments across all sections
                         const newAssignments = [];
+                        const newStaffAssignments = [];
                         for (const section of wfEventSections) {
                           for (const item of section.items) {
                             if (!item.editor || item.editor === 'Unassigned') continue;
@@ -8263,6 +8264,17 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 status: finalStatus,
                                 created_at: originalAssignment?.created_at || new Date().toISOString()
                               });
+                              
+                              // Create matching staff_assignment for the Production Staff dashboard
+                              newStaffAssignments.push({
+                                assignment_id: id,
+                                order_id: orderId,
+                                staff_role: st.role || 'Editor',
+                                staff_id: st.staff_id,
+                                staff_name: item.editor,
+                                assignment_date: originalAssignment?.assigned_date || new Date().toISOString().split('T')[0],
+                                assignment_status: finalStatus || 'Assigned'
+                              });
                             }
                           }
                         }
@@ -8272,6 +8284,15 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             .from('editor_assignments')
                             .insert(newAssignments);
                           if (insertError) throw insertError;
+                        }
+                        
+                        if (newStaffAssignments && newStaffAssignments.length > 0) {
+                          const { error: staffInsertError } = await supabaseClient
+                            .from('staff_assignments')
+                            .insert(newStaffAssignments);
+                          if (staffInsertError) {
+                            console.warn("Failed to sync staff_assignments:", staffInsertError);
+                          }
                         }
                         
                         // 3. Update the production record

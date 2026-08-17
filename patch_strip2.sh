@@ -1,4 +1,4 @@
-sed -i '/if (table === '"'"'operations'"'"') {/i\
+sed -i '/if (table === '"'"'equipment'"'"') {/i\
     if (table === '"'"'staff_assignments'"'"') {\
       delete cloned.event_id;\
       delete cloned.event_name;\
