@@ -170,10 +170,7 @@ export const OperationsStaffManagement: React.FC = () => {
         const targetEmail = originalStaff?.email || form.email || finalEmail;
 
         const userUpdates: any = {
-          name: form.name,
-          mobile: form.mobile,
-          email: finalEmail,
-          username: finalEmail
+          name: form.name
         };
         if (password) {
           userUpdates.password = password;
@@ -538,16 +535,35 @@ export const OperationsStaffManagement: React.FC = () => {
             </div>
 
             <div className="min-w-0">
-              <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
-                Mobile Number *
+              <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1 flex items-center justify-between">
+                <span>Mobile Number *</span>
+                {editingId && <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">🔒 Locked (Permanent)</span>}
               </label>
               <input
                 type="text"
                 required
+                disabled={Boolean(editingId)}
+                readOnly={Boolean(editingId)}
                 placeholder="e.g. +91 9876543210"
                 value={form.mobile}
                 onChange={(e) => setForm({ ...form, mobile: e.target.value })}
-                className="w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
+                className={`w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 ${editingId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''}`}
+              />
+            </div>
+
+            <div className="min-w-0">
+              <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1 flex items-center justify-between">
+                <span>Email Address</span>
+                {editingId && <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">🔒 Locked (Permanent)</span>}
+              </label>
+              <input
+                type="email"
+                disabled={Boolean(editingId)}
+                readOnly={Boolean(editingId)}
+                placeholder="e.g. staff@photocrew.pro"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                className={`w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 ${editingId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''}`}
               />
             </div>
 

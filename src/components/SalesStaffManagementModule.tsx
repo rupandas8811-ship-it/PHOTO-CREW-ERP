@@ -89,8 +89,6 @@ export const SalesStaffManagementModule: React.FC = () => {
     try {
       await editUser(selectedUserId, {
         name: editName,
-        email: editEmail,
-        mobile: editMobile,
         employee_id: editEmployeeId,
         active: editActive,
       });
@@ -345,12 +343,18 @@ export const SalesStaffManagementModule: React.FC = () => {
                   <input type="text" required value={editName} onChange={e => setEditName(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition-colors" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">Mobile Number (Login ID) *</label>
-                  <input type="tel" required value={editMobile} onChange={e => setEditMobile(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition-colors" />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Mobile Number (Login ID) *</label>
+                    <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">🔒 Locked (Permanent)</span>
+                  </div>
+                  <input type="tel" disabled readOnly value={editMobile} onChange={e => setEditMobile(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-slate-100 focus:outline-none opacity-60 cursor-not-allowed bg-zinc-900/60" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">Email Address (Optional)</label>
-                  <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition-colors" />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Email Address (Optional)</label>
+                    <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">🔒 Locked (Permanent)</span>
+                  </div>
+                  <input type="email" disabled readOnly value={editEmail} onChange={e => setEditEmail(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-slate-100 focus:outline-none opacity-60 cursor-not-allowed bg-zinc-900/60" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">Employee ID (Optional)</label>

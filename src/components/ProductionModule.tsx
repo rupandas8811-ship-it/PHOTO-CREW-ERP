@@ -1188,7 +1188,8 @@ ${coordinatorName}`;
 
     try {
       if (editingStaffMember) {
-        await updateStaff(editingStaffMember.staff_id, payload);
+        const { mobile: _m, email: _e, ...safePayload } = payload;
+        await updateStaff(editingStaffMember.staff_id, safePayload);
       } else {
         await addStaff(payload);
       }
@@ -5591,7 +5592,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                     auth_id: currentStaff.auth_user_id,
-                    email,
                     password,
                     name,
                     role: 'Editor',
@@ -5604,7 +5604,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 }
               } else if (password && !currentStaff?.auth_user_id) {
                  // Fallback if they were never created in auth system
-                 const computedEmail = email || `${mobile}@photocrew.com`;
+                 const computedEmail = currentStaff?.email || email || `${currentStaff?.mobile || mobile}@photocrew.com`;
                  const res = await fetch('/api/auth/create-user', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -5626,11 +5626,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 });
               }
 
-              // Update explicit record being edited
+              // Update explicit record being edited (mobile and email are permanently locked)
               await updateProductionStaff(editingStaffId, {
                 name,
-                email,
-                mobile,
                 whatsapp_number: whatsapp,
                 Skill: skillsArray as any,
                 staff_type: newStaffType as any,
@@ -5865,16 +5863,27 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
-                        Mobile Number <span className="text-rose-500">*</span>
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">
+                          Mobile Number <span className="text-rose-500">*</span>
+                        </label>
+                        {editingStaffId && (
+                          <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
+                            🔒 Locked (Permanent)
+                          </span>
+                        )}
+                      </div>
                       <input
                         type="tel"
                         required
+                        disabled={Boolean(editingStaffId)}
+                        readOnly={Boolean(editingStaffId)}
                         value={newStaffMobile}
                         onChange={(e) => setNewStaffMobile(e.target.value)}
                         placeholder="e.g. 9876543210"
-                        className="w-full bg-zinc-900 border border-zinc-850 px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans"
+                        className={`w-full bg-zinc-900 border border-zinc-850 px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans ${
+                          editingStaffId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
+                        }`}
                       />
                     </div>
 
@@ -5892,16 +5901,27 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
-                        Email Address <span className="text-rose-500">*</span>
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">
+                          Email Address <span className="text-rose-500">*</span>
+                        </label>
+                        {editingStaffId && (
+                          <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
+                            🔒 Locked (Permanent)
+                          </span>
+                        )}
+                      </div>
                       <input
                         type="email"
                         required
+                        disabled={Boolean(editingStaffId)}
+                        readOnly={Boolean(editingStaffId)}
                         value={newStaffEmail}
                         onChange={(e) => setNewStaffEmail(e.target.value)}
                         placeholder="e.g. rahul@photocrew.com"
-                        className="w-full bg-zinc-900 border border-zinc-850 px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans"
+                        className={`w-full bg-zinc-900 border border-zinc-850 px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans ${
+                          editingStaffId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
+                        }`}
                       />
                     </div>
                     <div>
@@ -10177,13 +10197,24 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                   {/* Mobile */}
                   <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-500 uppercase font-black block">Mobile Number</label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] text-zinc-500 uppercase font-black block">Mobile Number</label>
+                      {editingStaffMember && (
+                        <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
+                          🔒 Locked (Permanent)
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="text"
+                      disabled={Boolean(editingStaffMember)}
+                      readOnly={Boolean(editingStaffMember)}
                       value={staffFormMobile}
                       onChange={(e) => setStaffFormMobile(e.target.value)}
                       placeholder="e.g. +91 98765 43210"
-                      className="w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                      className={`w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none ${
+                        editingStaffMember ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
+                      }`}
                     />
                   </div>
 
@@ -10201,13 +10232,24 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                   {/* Email */}
                   <div className="space-y-1 sm:col-span-2">
-                    <label className="text-[10px] text-zinc-500 uppercase font-black block">Email Address</label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] text-zinc-500 uppercase font-black block">Email Address</label>
+                      {editingStaffMember && (
+                        <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
+                          🔒 Locked (Permanent)
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="email"
+                      disabled={Boolean(editingStaffMember)}
+                      readOnly={Boolean(editingStaffMember)}
                       value={staffFormEmail}
                       onChange={(e) => setStaffFormEmail(e.target.value)}
                       placeholder="e.g. editor@photocrew.pro"
-                      className="w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                      className={`w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none ${
+                        editingStaffMember ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
+                      }`}
                     />
                   </div>
 

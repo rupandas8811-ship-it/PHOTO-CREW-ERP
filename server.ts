@@ -484,6 +484,16 @@ async function startServer() {
     try {
       console.log(`[Server DB Update] Updating ${table} where ${matchColumn}=${matchValue}`, updates);
 
+      // Enforce Staff Mobile and Email Lock Backend (Operations & Production Staff)
+      if (['operations_staff', 'production_staff', 'staff'].includes(table)) {
+        if (updates) {
+          delete updates.mobile;
+          delete updates.phone;
+          delete updates.mobile_number;
+          delete updates.email;
+        }
+      }
+
       // Enforce CRM Lock Backend
       if (table === 'leads' && matchColumn === 'lead_id') {
         const db = getServerSupabase();
@@ -696,9 +706,11 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Service Role Key not configured' });
       }
       
+      const isStaffRole = role && ['Operation Staff', 'production staff', 'Editor', 'Sales Team'].some(r => role.toLowerCase().includes(r.toLowerCase()));
+      
       const updates: any = {};
       if (password) updates.password = password;
-      if (email) updates.email = email;
+      if (email && !isStaffRole) updates.email = email;
       if (name || role) updates.user_metadata = { name, role };
       
       if (Object.keys(updates).length > 0) {
@@ -712,7 +724,7 @@ async function startServer() {
       // Update users table
       const userUpdates: any = { updated_at: new Date().toISOString() };
       if (name) userUpdates.name = name;
-      if (email) userUpdates.email = email;
+      if (email && !isStaffRole) userUpdates.email = email;
       if (role) userUpdates.role = role;
       if (active !== undefined) userUpdates.active = active;
       

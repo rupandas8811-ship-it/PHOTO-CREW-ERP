@@ -118,7 +118,8 @@ export const StaffManagementModule: React.FC = () => {
     };
 
     if (editingStaffId) {
-      updateStaff(editingStaffId, payload);
+      const { mobile: _m, email: _e, ...safePayload } = payload;
+      updateStaff(editingStaffId, safePayload);
       alert('Staff member updated successfully!');
       setEditingStaffId(null);
     } else {
@@ -602,33 +603,55 @@ export const StaffManagementModule: React.FC = () => {
 
             {/* Email */}
             <div className="space-y-1.5">
-              <label className="text-[10px] font-mono text-zinc-400 uppercase font-bold flex items-center gap-1">
-                <span>Email Address (Unique ID)</span>
-                <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-mono text-zinc-400 uppercase font-bold flex items-center gap-1">
+                  <span>Email Address (Unique ID)</span>
+                  <span className="text-rose-500">*</span>
+                </label>
+                {editingStaffId && (
+                  <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
+                    🔒 Locked (Permanent)
+                  </span>
+                )}
+              </div>
               <input
                 type="email"
                 required
+                disabled={Boolean(editingStaffId)}
+                readOnly={Boolean(editingStaffId)}
                 placeholder="e.g. liam@photocrew.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs text-white placeholder-zinc-500 focus:border-violet-500 outline-none font-mono"
+                className={`w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs text-white placeholder-zinc-500 focus:border-violet-500 outline-none font-mono ${
+                  editingStaffId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
+                }`}
               />
             </div>
 
             {/* Mobile */}
             <div className="space-y-1.5">
-              <label className="text-[10px] font-mono text-zinc-400 uppercase font-bold flex items-center gap-1">
-                <span>Mobile Contact Number</span>
-                <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-mono text-zinc-400 uppercase font-bold flex items-center gap-1">
+                  <span>Mobile Contact Number</span>
+                  <span className="text-rose-500">*</span>
+                </label>
+                {editingStaffId && (
+                  <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
+                    🔒 Locked (Permanent)
+                  </span>
+                )}
+              </div>
               <input
                 type="tel"
                 required
+                disabled={Boolean(editingStaffId)}
+                readOnly={Boolean(editingStaffId)}
                 placeholder="e.g. +1 (555) 765-4321"
                 value={mobile}
                 onChange={(e) => setMobile(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs text-white placeholder-zinc-500 focus:border-violet-500 outline-none font-mono"
+                className={`w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs text-white placeholder-zinc-500 focus:border-violet-500 outline-none font-mono ${
+                  editingStaffId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
+                }`}
               />
             </div>
 

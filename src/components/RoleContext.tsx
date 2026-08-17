@@ -1655,6 +1655,13 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           sanitized.staff_id = mapToDbStaffId(sanitized.staff_id);
         }
       }
+      // Enforce permanent lock on staff mobile number and email after creation
+      if (table === 'operations_staff' || table === 'production_staff' || table === 'staff') {
+        delete sanitized.mobile;
+        delete sanitized.phone;
+        delete sanitized.mobile_number;
+        delete sanitized.email;
+      }
       if (table === 'equipment') {
         if (matchColumn === 'equipment_id' && matchValue) {
           finalMatchValue = mapToDbEquipmentId(matchValue);
@@ -5567,14 +5574,28 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
   const updateStaff = async (staffId: string, updates: Partial<Staff>) => {
     const prevStaff = [...staff];
+    const existing = staff.find(s => s.staff_id === staffId);
     const timestamp = new Date().toISOString();
+    
+    // Strip mobile and email so they can never be modified after staff creation
+    const { mobile, phone, mobile_number, email, ...safeUpdates } = updates as any;
+
     const updatedWithMetadata = {
-      ...updates,
+      ...safeUpdates,
+      ...(existing?.mobile ? { mobile: existing.mobile } : {}),
+      ...(existing?.email ? { email: existing.email } : {}),
       updated_by: currentUserName,
       updated_at: timestamp
     };
     setStaff((prev) => prev.map((s) => s.staff_id === staffId ? { ...s, ...updatedWithMetadata } : s));
-    const res = await pushUpdate('operations_staff', 'staff_id', staffId, updatedWithMetadata);
+    
+    const dbPayload = { ...safeUpdates, updated_by: currentUserName, updated_at: timestamp };
+    delete (dbPayload as any).mobile;
+    delete (dbPayload as any).phone;
+    delete (dbPayload as any).mobile_number;
+    delete (dbPayload as any).email;
+
+    const res = await pushUpdate('operations_staff', 'staff_id', staffId, dbPayload);
     if (res.success) {
       logActivity(`Updated Staff Member details: ${staffId}`, 'StaffManagement', staffId);
     } else {
@@ -5624,16 +5645,34 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
   const updateProductionStaff = async (staffId: string, updates: Partial<Staff>) => {
     const prevStaffList = [...productionStaff];
+    const existing = productionStaff.find(s => s.staff_id === staffId);
     const timestamp = new Date().toISOString();
+    
+    // Strip mobile and email so they can never be modified after staff creation
+    const { mobile, phone, mobile_number, email, ...safeUpdates } = updates as any;
+
     const updatedWithMetadata = {
-      ...updates,
+      ...safeUpdates,
+      ...(existing?.mobile ? { mobile: existing.mobile } : {}),
+      ...(existing?.email ? { email: existing.email } : {}),
       updated_by: currentUserName,
       updated_at: timestamp
     };
 
     setProductionStaff((prev) => prev.map((s) => s.staff_id === staffId ? { ...s, ...updatedWithMetadata } : s));
 
-    const dbUpdates = await mapProductionStaffToDb(updatedWithMetadata);
+    const dbPayload = { ...safeUpdates, updated_by: currentUserName, updated_at: timestamp };
+    delete (dbPayload as any).mobile;
+    delete (dbPayload as any).phone;
+    delete (dbPayload as any).mobile_number;
+    delete (dbPayload as any).email;
+
+    const dbUpdates = await mapProductionStaffToDb(dbPayload);
+    delete (dbUpdates as any).mobile;
+    delete (dbUpdates as any).phone;
+    delete (dbUpdates as any).mobile_number;
+    delete (dbUpdates as any).email;
+
     const res = await pushUpdate('production_staff', 'staff_id', staffId, dbUpdates);
     if (res.success) {
       logActivity(`Updated Production Staff Member details: ${staffId}`, 'StaffManagement', staffId);

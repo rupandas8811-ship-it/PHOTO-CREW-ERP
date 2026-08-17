@@ -180,7 +180,6 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ 
                  auth_id: userId, 
-                 email: formEmail.trim(),
                  password: formPassword.trim() || undefined,
                  name: formName.trim(),
                  role: 'production staff',
@@ -864,15 +863,26 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
 
                   {/* Mobile Number */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold block">
-                      Mobile Number *
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold block">
+                        Mobile Number *
+                      </label>
+                      {editingStaff && (
+                        <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
+                          🔒 Locked (Permanent)
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="tel"
+                      disabled={Boolean(editingStaff)}
+                      readOnly={Boolean(editingStaff)}
                       placeholder="e.g. +91 98765 43210"
                       value={formMobile}
                       onChange={(e) => setFormMobile(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      className={`w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 ${
+                        editingStaff ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
+                      }`}
                       required
                     />
                   </div>
@@ -893,15 +903,26 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
 
                   {/* Email Address */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold block">
-                      Email Address *
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold block">
+                        Email Address *
+                      </label>
+                      {editingStaff && (
+                        <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
+                          🔒 Locked (Permanent)
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="email"
+                      disabled={Boolean(editingStaff)}
+                      readOnly={Boolean(editingStaff)}
                       placeholder="e.g. editor@crew.com"
                       value={formEmail}
                       onChange={(e) => setFormEmail(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      className={`w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 ${
+                        editingStaff ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
+                      }`}
                       required
                     />
                   </div>
