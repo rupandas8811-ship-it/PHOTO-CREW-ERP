@@ -11,7 +11,18 @@ import { SafeProofImage } from '../ui/SafeProofImage';
 import { ProjectDetailModal } from '../ProjectDetailModal';
 import { ViewDetailsModal } from './ViewDetailsModal';
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
-import { convertTimeToDbFormat, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem, parseQtyAndText } from '../../utils';
+import { 
+  convertTimeToDbFormat, 
+  triggerAutoScrollAndFocus, 
+  convertTo12Hour, 
+  formatQtyItem, 
+  parseQtyAndText, 
+  generateWhatsAppAssignmentMessage,
+  extractTeamMembersConfig,
+  getEventRolesForEvent,
+  getEventTeamMemberStaffMapping,
+  EventTeamMemberConfig
+} from '../../utils';
 import { supabaseClient } from '../../supabaseClient';
 import { getCalculatedOrderStage, getStageRank } from '../../utils/orderStageCalculator';
 
@@ -61,220 +72,6 @@ const OperationsActionColumn = ({ ord, actionItems, isOpen, setActiveMenuOrderId
       </div>
     </div>
   );
-};
-
-interface EventTeamMemberConfig {
-  event_id?: string;
-  event_name?: string;
-  package_id?: string;
-  team_members: any[];
-}
-
-const extractTeamMembersConfig = (lead: any, leadPkgs: any[]): EventTeamMemberConfig[] => {
-  if (!lead && (!leadPkgs || leadPkgs.length === 0)) return [];
-
-  const configs: EventTeamMemberConfig[] = [];
-
-  const parseRaw = (val: any) => {
-    if (!val) return null;
-    if (typeof val === 'string') {
-      try {
-        return JSON.parse(val);
-      } catch (e) {
-        return val.split(/,|\n/).map((s: string) => s.trim()).filter(Boolean);
-      }
-    }
-    return val;
-  };
-
-  const processParsedData = (parsed: any, pkgId?: string) => {
-    if (!parsed) return;
-
-    // 1. Array of event-specific objects (e.g. from buildStep3EventPayloads: [{ event_id, event_name, team_members }])
-    if (Array.isArray(parsed)) {
-      parsed.forEach((item: any) => {
-        if (item && typeof item === 'object' && ('event_id' in item || 'event_name' in item || 'event_type' in item || 'team_members' in item || 'inclusions' in item || 'deliverables' in item || 'members' in item)) {
-          const evId = String(item.event_id || item.id || '').trim();
-          const evName = String(item.event_name || item.name || item.event_type || '').trim();
-          const tm = item.team_members || item.inclusions || item.deliverables || item.members || [];
-          const tmList = Array.isArray(tm) ? tm : parseRaw(tm) || [];
-          if (tmList.length > 0) {
-            configs.push({
-              event_id: evId,
-              event_name: evName,
-              package_id: pkgId,
-              team_members: tmList
-            });
-          }
-        }
-      });
-
-      // If it's a flat array of string/role items without event metadata (e.g. ["1 × Drone Operator", "2 × Lead Photographer"])
-      const isEventArray = parsed.some((item: any) => item && typeof item === 'object' && ('event_id' in item || 'event_name' in item || 'team_members' in item || 'members' in item));
-      if (!isEventArray && parsed.length > 0) {
-        configs.push({
-          event_id: '',
-          event_name: '',
-          package_id: pkgId,
-          team_members: parsed
-        });
-      }
-    } else if (typeof parsed === 'object') {
-      // 2. Dictionary / Key-value map (e.g. editable_inclusions: { "PKG-01_ev_1": [...], "Custom Package_Birthday": [...] })
-      Object.entries(parsed).forEach(([key, val]) => {
-        if (!val) return;
-        const valList = Array.isArray(val) ? val : parseRaw(val) || [val];
-        if (Array.isArray(valList) && valList.length > 0) {
-          let extractedEvId = key;
-          let extractedEvName = key;
-
-          if (pkgId && key.toLowerCase().startsWith(`${pkgId.toLowerCase()}_`)) {
-            const rest = key.substring(pkgId.length + 1);
-            extractedEvId = rest;
-            extractedEvName = rest;
-          } else if (key.toLowerCase().startsWith('custom package_')) {
-            const rest = key.substring('custom package_'.length);
-            extractedEvId = rest;
-            extractedEvName = rest;
-          } else if (key.toLowerCase().startsWith('custom_package_')) {
-            const rest = key.substring('custom_package_'.length);
-            extractedEvId = rest;
-            extractedEvName = rest;
-          } else if (key.includes('_')) {
-            const parts = key.split('_');
-            const rest = parts.slice(1).join('_');
-            extractedEvId = rest;
-            extractedEvName = rest;
-          }
-
-          configs.push({
-            event_id: extractedEvId,
-            event_name: extractedEvName,
-            package_id: pkgId,
-            team_members: valList
-          });
-        }
-      });
-    }
-  };
-
-  // 1. Inspect direct events on lead (lead.events)
-  if (lead?.events && Array.isArray(lead.events) && lead.events.length > 0) {
-    lead.events.forEach((ev: any) => {
-      const tm = ev.team_members || ev.inclusions || ev.Team_Members || ev.team_members_included || [];
-      const parsedTm = Array.isArray(tm) ? tm : parseRaw(tm) || [];
-      if (parsedTm.length > 0) {
-        configs.push({
-          event_id: String(ev.id || ev.event_id || '').trim(),
-          event_name: String(ev.event_name || ev.event_type || '').trim(),
-          team_members: parsedTm
-        });
-      }
-    });
-  }
-
-  // 2. Inspect lead packages (all packages for this lead)
-  if (leadPkgs && Array.isArray(leadPkgs)) {
-    leadPkgs.forEach((lp: any) => {
-      const pkgId = lp.package_id || lp.id;
-      const candidates = [
-        lp.Team_Members_Included,
-        lp.team_members_included,
-        lp.editable_inclusions,
-        lp.Team_Members,
-        lp.team_members
-      ];
-      candidates.forEach(c => {
-        if (c) {
-          const parsed = parseRaw(c);
-          processParsedData(parsed, pkgId);
-        }
-      });
-    });
-  }
-
-  // 3. Inspect lead-level columns
-  const leadCandidates = [
-    lead?.Team_Members,
-    lead?.Team_member,
-    (lead as any)?.team_members,
-    lead?.Team_Members_Included,
-    (lead as any)?.team_members_included
-  ];
-  leadCandidates.forEach(c => {
-    if (c) {
-      const parsed = parseRaw(c);
-      processParsedData(parsed);
-    }
-  });
-
-  return configs;
-};
-
-const getEventRolesForEvent = (ev: any, index: number, configList: EventTeamMemberConfig[], totalEvents: number = 1): any[] => {
-  if (!ev) return [];
-
-  // 1. Direct event properties
-  const directTm = ev.team_members || ev.inclusions || ev.Team_Members || ev.team_members_included;
-  if (directTm) {
-    if (Array.isArray(directTm) && directTm.length > 0) return directTm;
-    if (typeof directTm === 'string') {
-      try {
-        const parsed = JSON.parse(directTm);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {
-        const list = directTm.split(/,|\n/).map((s: string) => s.trim()).filter(Boolean);
-        if (list.length > 0) return list;
-      }
-    }
-  }
-
-  if (!configList || configList.length === 0) return [];
-
-  const evId = String(ev.id || ev.event_id || '').toLowerCase().trim();
-  const evName = String(ev.event_name || '').toLowerCase().trim();
-  const evType = String(ev.event_type || '').toLowerCase().trim();
-  const customName = String(ev.custom_event_name || ev.custom_event_type || '').toLowerCase().trim();
-
-  // 2. Strict ID matching first
-  if (evId) {
-    const matchById = configList.find(c => {
-      if (!c.event_id) return false;
-      const cId = c.event_id.toLowerCase().trim();
-      return cId === evId || cId.endsWith(`_${evId}`) || cId.endsWith(`-${evId}`);
-    });
-    if (matchById && matchById.team_members?.length > 0) return matchById.team_members;
-  }
-
-  // 3. Name or Type matching
-  if (evName || evType || customName) {
-    const matchByName = configList.find(c => {
-      const cName = (c.event_name || '').toLowerCase().trim();
-      if (!cName) return false;
-      
-      const cleanCName = cName.includes('_') ? cName.split('_').slice(1).join('_').trim() : cName;
-
-      return (
-        (evName && (cName === evName || cleanCName === evName)) ||
-        (evType && (cName === evType || cleanCName === evType)) ||
-        (customName && (cName === customName || cleanCName === customName))
-      );
-    });
-    if (matchByName && matchByName.team_members?.length > 0) return matchByName.team_members;
-  }
-
-  // 4. Index matching for multi-event configurations
-  if (totalEvents > 1 && configList[index] && configList[index].team_members?.length > 0) {
-    return configList[index].team_members;
-  }
-
-  // 5. Single-event lead fallback: any config with team members
-  if (totalEvents === 1) {
-    const anyValidConfig = configList.find(c => c.team_members && c.team_members.length > 0);
-    if (anyValidConfig) return anyValidConfig.team_members;
-  }
-
-  return [];
 };
 
 export const OperationsLeads: React.FC = () => {
@@ -511,40 +308,33 @@ export const OperationsLeads: React.FC = () => {
   }, [selectedLeadPkgs]);
 
   const teamMembersIncluded = useMemo(() => {
-    const leadQuotations = quotations?.filter(q => q.lead_id === parentLeadInstance?.lead_id) || [];
-    leadQuotations.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    const latestQuote = leadQuotations[0];
-    
-    let finalInclusions: string[] = [];
+    if (!parentLeadInstance && !activeOrderInstance) return 'No team members specified.';
+    const targetLeadPkgs = selectedLeadPkgs;
+    const configs = extractTeamMembersConfig(parentLeadInstance, targetLeadPkgs);
+    const events = parentLeadInstance?.events && Array.isArray(parentLeadInstance.events) && parentLeadInstance.events.length > 0
+      ? parentLeadInstance.events
+      : [{ id: 'default', event_name: activeOrderInstance?.event_name || 'Main Event' }];
 
-    if (latestQuote) {
-      let metadata: any = null;
-      if (latestQuote.editableInclusions) {
-        metadata = { editableInclusions: latestQuote.editableInclusions };
-      } else if (latestQuote.terms_conditions && latestQuote.terms_conditions.includes('METADATA:')) {
-        try {
-          const metaStr = latestQuote.terms_conditions.split('METADATA:')[1];
-          metadata = JSON.parse(metaStr);
-        } catch (e) {}
+    const lines: string[] = [];
+    events.forEach((ev: any, idx: number) => {
+      const roles = getEventRolesForEvent(ev, idx, configs, events.length);
+      const evLabel = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || ev.event_name || `Event ${idx + 1}`);
+      if (roles && roles.length > 0) {
+        const formatted = roles.map((r: any) => formatQtyItem(typeof r === 'string' ? r : (r.name || r.role || JSON.stringify(r))));
+        if (events.length > 1) {
+          lines.push(`${evLabel}: ${formatted.join(', ')}`);
+        } else {
+          lines.push(...formatted);
+        }
       }
+    });
 
-      if (metadata && metadata.editableInclusions) {
-         Object.values(metadata.editableInclusions).forEach((incList: any) => {
-           if (Array.isArray(incList)) {
-             incList.forEach(inc => {
-               if (inc) finalInclusions.push(inc);
-             });
-           }
-         });
-      }
-    }
-
-    if (finalInclusions.length > 0) {
-      return finalInclusions.join('\n');
+    if (lines.length > 0) {
+      return lines.join('\n');
     }
 
     return 'No team members finalized in quotation.';
-  }, [quotations, parentLeadInstance]);
+  }, [parentLeadInstance, activeOrderInstance, selectedLeadPkgs]);
 
   // State for completing shoot
   const [closingOrderId, setClosingOrderId] = useState<string | null>(null);
@@ -702,10 +492,45 @@ export const OperationsLeads: React.FC = () => {
 
   // Helper to get assigned staff names for an order
   const getAssignedStaffNamesForOrder = (ord: Order): string[] => {
-    // The Assigned Team count must be generated ONLY from the actual assigned production/operations staff records.
-    const orderAssigns = staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id) : [];
+    // 1. From staffAssignments
+    const orderAssigns = staffAssignments ? staffAssignments.filter(sa => (sa.order_id === ord.order_id || sa.order_id === ord.lead_id) && sa.assignment_status !== 'Cancelled') : [];
     const fromAssigns = orderAssigns.map(sa => sa.staff_name).filter(n => n && n.toLowerCase() !== 'unassigned' && n.toLowerCase() !== 'none');
-    return Array.from(new Set(fromAssigns));
+
+    // 2. From lead.events assigned_staff_names
+    const targetLead = leads?.find(l => l.lead_id === ord.lead_id);
+    const fromEvents: string[] = [];
+    if (targetLead?.events && Array.isArray(targetLead.events)) {
+      targetLead.events.forEach((ev: any) => {
+        if (ev.assigned_staff_names && typeof ev.assigned_staff_names === 'string') {
+          ev.assigned_staff_names.split(',').forEach((n: string) => {
+            const trimmed = n.trim();
+            if (trimmed && trimmed.toLowerCase() !== 'unassigned' && trimmed.toLowerCase() !== 'none') {
+              fromEvents.push(trimmed);
+            }
+          });
+        }
+      });
+    }
+
+    // 3. From operations record
+    const op = operations?.find(o => o.order_id === ord.order_id);
+    const fromOp: string[] = [];
+    if (op) {
+      if (op.photographer_assigned && op.photographer_assigned !== 'Unassigned') fromOp.push(op.photographer_assigned);
+      if (op.videographer_assigned && op.videographer_assigned !== 'Unassigned') fromOp.push(op.videographer_assigned);
+      if (op.drone_operator_assigned && op.drone_operator_assigned !== 'Unassigned') fromOp.push(op.drone_operator_assigned);
+      if (op.assistant_assigned && op.assistant_assigned !== 'Unassigned') fromOp.push(op.assistant_assigned);
+      if (op.assigned_staff) {
+        op.assigned_staff.split(',').forEach((s: string) => {
+          const trimmed = s.trim();
+          if (trimmed && trimmed.toLowerCase() !== 'unassigned' && trimmed.toLowerCase() !== 'none') {
+            fromOp.push(trimmed);
+          }
+        });
+      }
+    }
+
+    return Array.from(new Set([...fromAssigns, ...fromEvents, ...fromOp]));
   };
 
   interface AssignedStaffDetails {
@@ -1011,135 +836,20 @@ export const OperationsLeads: React.FC = () => {
   // Helper to generate personalized WhatsApp message for a staff member
   const generateWhatsAppMessageForStaff = (ord: Order, staffName: string, modalEventAllocations?: any, modalLead?: any, finalAssignments?: any[]) => {
     const lead = modalLead || leads.find(l => l.lead_id === ord.lead_id);
-    
-    const clientName = ord.customer_name;
-    const clientContact = ord.mobile || (lead ? lead.mobile : 'N/A');
-    const customerAddress = lead?.client_residence_address || lead?.address || 'N/A';
-    
-    let text = `Customer Name: ${clientName}\n`;
-    text += `Phone Number: ${clientContact}\n\n`;
+    const op = operations.find(o => o.order_id === ord.order_id);
+    const targetLeadPkgs = leadPackages?.filter(lp => lp.lead_id === (lead?.lead_id || ord.lead_id)) || [];
 
-    let assignedEvents: any[] = [];
-    if (modalEventAllocations && lead?.events && lead.events.length > 0) {
-       Object.keys(modalEventAllocations).forEach(evId => {
-         const alloc = modalEventAllocations[evId];
-         if (alloc.staff && alloc.staff.some((s: any) => s.staff_name === staffName)) {
-            const matchedEv = lead.events.find((e: any) => e.id === evId);
-            if (matchedEv) {
-               const roles = alloc.staff.filter((s: any) => s.staff_name === staffName).map((s: any) => s.staff_role);
-               assignedEvents.push({ ...matchedEv, alloc, roles });
-            }
-         }
-       });
-    } else if (lead?.events && lead.events.length > 0) {
-       assignedEvents = lead.events.filter((ev: any) => {
-         const names = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
-         return names.includes(staffName.toLowerCase());
-       }).map((ev: any) => {
-         let fallbackRoles = ['Crew'];
-         const myAssignments = staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id && sa.staff_name === staffName) : [];
-         if (myAssignments.length > 0) {
-            fallbackRoles = Array.from(new Set(myAssignments.map(sa => sa.staff_role)));
-         } else {
-             const history = leadStaffAssignmentHistory?.filter((h: any) => h.order_id === ord.order_id && h.assigned_staff === staffName);
-             if (history && history.length > 0) {
-                 fallbackRoles = Array.from(new Set(history.map((h: any) => h.assigned_role || h.assigned_roles)));
-             }
-         }
-         return { ...ev, roles: fallbackRoles };
-        });
-    }
-
-    if (assignedEvents.length === 0) {
-       const eventName = ord.custom_event_name || lead?.custom_event_name || ord.event_type || 'N/A';
-       const eventType = ord.event_type || 'N/A';
-       const reportingDate = ord.Reporting_date || lead?.Reporting_date || ord.event_date || 'N/A';
-       const reportingTime = ord.reporting_time || lead?.reporting_time || '8:00 AM';
-       
-       const evLoc = lead?.google_maps_link || ord.event_location || 'N/A';
-
-       let assignedRoles = ['Crew'];
-       if (finalAssignments) {
-          assignedRoles = Array.from(new Set(finalAssignments.filter(a => a.staff_name === staffName).map(a => a.staff_role)));
-       } else {
-          const myAssignments = staffAssignments ? staffAssignments.filter(sa => sa.order_id === ord.order_id && sa.staff_name === staffName) : [];
-          if (myAssignments.length > 0) {
-             assignedRoles = Array.from(new Set(myAssignments.map(sa => sa.staff_role)));
-          } else {
-             const history = leadStaffAssignmentHistory?.filter((h: any) => h.order_id === ord.order_id && h.assigned_staff === staffName);
-             if (history && history.length > 0) {
-                 assignedRoles = Array.from(new Set(history.map((h: any) => h.assigned_role || h.assigned_roles)));
-             }
-          }
-       }
-
-       text += `Event Name: ${eventName}\n`;
-       text += `Event Type: ${eventType}\n`;
-       text += `Location: ${evLoc}\n\n`;
-       text += `Reporting Date: ${reportingDate}\n`;
-       text += `Reporting Time: ${reportingTime}\n`;
-       text += `Task: ${assignedRoles.join(', ')}\n`;
-       
-       // When no assignedEvents but finalAssignments exist
-       if (finalAssignments) {
-          const myAssignments = finalAssignments.filter(a => a.staff_name === staffName);
-          const myEq = myAssignments.flatMap(a => a.equipment || []);
-          const uniqueEq = Array.from(new Set(myEq));
-          if (uniqueEq.length > 0) {
-              text += `\nAssigned Equipment:\n`;
-              uniqueEq.forEach(eq => {
-                  text += `- ${eq}\n`;
-              });
-          }
-       }
-    } else {
-       assignedEvents.forEach((ev, index) => {
-          const eventName = ev.event_name || (ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A'));
-          const eventType = ev.event_type || 'N/A';
-          const reportingDate = ev.reporting_date || ev.alloc?.reporting_date || ord.Reporting_date || lead?.Reporting_date || ev.event_date || 'N/A';
-          const reportingTime = ev.reporting_time || ev.alloc?.reporting_time || ord.reporting_time || lead?.reporting_time || '8:00 AM';
-          
-          const evLoc = ev.google_maps_link || ev.event_location || 'N/A';
-
-          let assignedRoles = ev.roles || ['Crew'];
-          assignedRoles = Array.from(new Set(assignedRoles));
-
-          if (index > 0) text += `\n---\n\n`;
-          
-          text += `Event Name: ${eventName}\n`;
-          text += `Event Type: ${eventType}\n`;
-          text += `Location: ${evLoc}\n\n`;
-          text += `Reporting Date: ${reportingDate}\n`;
-          text += `Reporting Time: ${reportingTime}\n`;
-          text += `Task: ${assignedRoles.join(', ')}\n`;
-
-          // Handle equipment for multi-events if present in modalEventAllocations or finalAssignments
-          // We will fetch it from finalAssignments if available for this specific event
-          if (finalAssignments) {
-              const myAssignments = finalAssignments.filter(a => a.staff_name === staffName && a.event_id === ev.id);
-              const myEq = myAssignments.flatMap(a => a.equipment || []);
-              const uniqueEq = Array.from(new Set(myEq));
-              if (uniqueEq.length > 0) {
-                  text += `\nAssigned Equipment:\n`;
-                  uniqueEq.forEach(eq => {
-                      text += `- ${eq}\n`;
-                  });
-              }
-          } else if (ev.alloc && ev.alloc.staff) {
-              const myAllocStaff = ev.alloc.staff.filter((s: any) => s.staff_name === staffName);
-              const myEq = myAllocStaff.flatMap((s: any) => s.equipment || []);
-              const uniqueEq = Array.from(new Set(myEq));
-              if (uniqueEq.length > 0) {
-                  text += `\nAssigned Equipment:\n`;
-                  uniqueEq.forEach(eq => {
-                      text += `- ${eq}\n`;
-                  });
-              }
-          }
-       });
-    }
-
-    return text.trim();
+    return generateWhatsAppAssignmentMessage({
+      order: ord,
+      lead: lead,
+      leadPkgs: targetLeadPkgs,
+      staffAssignments: staffAssignments,
+      operationsRecord: op,
+      staffList: staff,
+      modalEventAllocations: modalEventAllocations,
+      finalAssignments: finalAssignments,
+      targetStaffName: staffName
+    });
   };
 
   // Filter orders to show confirmed ones for Operations
@@ -2470,42 +2180,30 @@ export const OperationsLeads: React.FC = () => {
                             setActiveMenuOrderId(null);
                           };
 
-                          // 1. When Current Status = Confirm Order
-                          if (isConfirmOrder || (assignedStaffNames.length === 0 && !isEventStarted && !isEventEnded && !isFootageHandover && !isVerifiedFootage)) {
-                            actionItems.push({
-                              label: 'Assign Crew',
-                              onClick: handleAssignCrew
-                            });
-                          }
-                          // 2. When Current Status = Assigned Crew
-                          else if (isAssignedCrew) {
-                            if (assignedStaffNames.length > 0 && !hasWorkStarted) {
+                          const isFinishedOrClosed = isEventEnded || isFootageHandover || isVerifiedFootage || currentStage === 'Event Cancelled' || isLocked;
+
+                          // 1. Crew Assignment / Reassignment
+                          // Evaluated purely by this order's current assignment and stage
+                          if (!isFinishedOrClosed) {
+                            if (assignedStaffNames.length > 0 || isAssignedCrew) {
                               actionItems.push({
                                 label: 'Reassign Crew',
                                 onClick: handleAssignCrew
                               });
-                            }
-                          }
-                          // 3. When Current Status = Event Started
-                          else if (isEventStarted) {
-                            // View Details hidden from Operations action dropdown
-                          }
-                          // 4. When Current Status = Event Ended or Footage Handover
-                          else if (isEventEnded || isFootageHandover) {
-                            if (isFootageHandover) {
+                            } else {
                               actionItems.push({
-                                label: 'Upload Final Footage',
-                                onClick: handleFootageModal
+                                label: 'Assign Crew',
+                                onClick: handleAssignCrew
                               });
                             }
                           }
-                          // 6. When Current Status = Verified Footage
-                          else if (isVerifiedFootage) {
-                            // View Details hidden from Operations action dropdown
-                          }
-                          // Fallback for any other status
-                          else {
-                            // View Details hidden from Operations action dropdown
+
+                          // 2. When Current Status = Footage Handover or Event Completed
+                          if (isFootageHandover || currentStage === 'Event Completed') {
+                            actionItems.push({
+                              label: 'Upload Final Footage',
+                              onClick: handleFootageModal
+                            });
                           }
 
                           // Extra utilities if applicable

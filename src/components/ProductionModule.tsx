@@ -4037,35 +4037,43 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     </div>
 
                     <div className="flex flex-col gap-0.5">
-                      {/* Assign Editor */}
-                      {(displayStatus === "New Project" || displayStatus === "New Project Arrived" || displayStatus === "Raw Footage Received" || displayStatus === "Verified Footage" || displayStatus === "Footage Handover Verified" || displayStatus === "Pending") && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setOpenActionDropdown(null);
-                            handleOpenAssignEditor(prod);
-                          }}
-                          className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-purple-300 hover:text-white hover:bg-purple-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                        >
-                          <span className="text-sm">👤</span>
-                          <span>Assign Editor</span>
-                        </button>
-                      )}
+                      {/* Assign / Reassign Editor */}
+                      {(() => {
+                        const hasAssignedEditors = getAssignedEditorsList(prod).length > 0 || (prod.editor_assigned && prod.editor_assigned !== 'Unassigned' && prod.editor_assigned !== '');
+                        const isProductionClosed = prod.production_status === 'Order Closed' || prod.editing_status === 'Order Closed' || prod.editing_status === 'Delivered' || prod.editing_status === 'Project Delivered';
+                        
+                        if (isProductionClosed) return null;
 
-                      {/* Reassign Editor */}
-                      {(displayStatus === "Assigned Editor" || displayStatus === "Editing Started" || displayStatus === "Customer Review") && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setOpenActionDropdown(null);
-                            handleOpenAssignEditor(prod);
-                          }}
-                          className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-purple-300 hover:text-white hover:bg-purple-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                        >
-                          <span className="text-sm">👤</span>
-                          <span>Reassign Editor</span>
-                        </button>
-                      )}
+                        if (hasAssignedEditors || ["Assigned Editor", "Editing Started", "Customer Review", "Revision Required", "Internal QC Review"].includes(displayStatus)) {
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenActionDropdown(null);
+                                handleOpenAssignEditor(prod);
+                              }}
+                              className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-purple-300 hover:text-white hover:bg-purple-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                            >
+                              <span className="text-sm">👤</span>
+                              <span>Reassign Editor</span>
+                            </button>
+                          );
+                        } else {
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenActionDropdown(null);
+                                handleOpenAssignEditor(prod);
+                              }}
+                              className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-purple-300 hover:text-white hover:bg-purple-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                            >
+                              <span className="text-sm">👤</span>
+                              <span>Assign Editor</span>
+                            </button>
+                          );
+                        }
+                      })()}
 
                       {/* Send Review Link */}
                       {(displayStatus === "Customer Review" || displayStatus === "Editing Completed") && (
