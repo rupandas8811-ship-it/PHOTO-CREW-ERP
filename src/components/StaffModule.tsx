@@ -652,7 +652,7 @@ export const StaffModule: React.FC = () => {
                 reportingDate: ev.reporting_date || ev.event_date || lead.Reporting_date || lead.event_date || 'N/A',
                 reportingTime: ev.reporting_time || lead.reporting_time || 'N/A',
                 venue: ev.event_location || lead.event_location || 'N/A',
-                googleMapsLink: ev.google_maps_link || lead.google_maps_link || 'N/A',
+                googleMapsLink: ev.google_maps_link || ((lead.events && lead.events.length === 1) ? (lead.google_maps_link || 'N/A') : 'N/A'),
                 guestPax: ev.guest_pax || (lead as any).guest_pax || 'N/A',
                 equipmentItems: assignedEqItems,
                 taskStatus: currentStaffStatus,
@@ -1908,28 +1908,28 @@ export const StaffModule: React.FC = () => {
 
       {/* EQUIPMENT PHOTO PROOF VERIFICATION MODAL (EVENT START / EVENT COMPLETE) */}
       {photoModalData && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-zinc-800 bg-zinc-950/60 flex justify-between items-start">
-              <div>
-                <span className="text-xs font-mono font-bold text-amber-400 uppercase tracking-widest block mb-1">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-[calc(100vw-1.25rem)] sm:w-full sm:max-w-xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+            <div className="p-4 sm:p-6 border-b border-zinc-800 bg-zinc-950/60 flex justify-between items-start gap-3 shrink-0">
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] sm:text-xs font-mono font-bold text-amber-400 uppercase tracking-widest block mb-1">
                   {photoModalData.stage === 'Event Complete' ? 'Event End Workflow' : photoModalData.stage === 'Equipment Handover' ? 'Footage Handover Workflow' : `Verification • ${photoModalData.stage}`}
                 </span>
-                <h3 className="text-xl font-black text-white">{photoModalData.booking.eventName}</h3>
-                <p className="text-zinc-400 text-xs mt-0.5">Order ID: {photoModalData.booking.orderId} | Staff: <strong className="text-white">{staffName}</strong></p>
+                <h3 className="text-base sm:text-xl font-black text-white break-words">{photoModalData.booking.eventName}</h3>
+                <p className="text-zinc-400 text-xs mt-0.5 break-words">Order ID: {photoModalData.booking.orderId} | Staff: <strong className="text-white">{staffName}</strong></p>
               </div>
               <button
                 onClick={() => setPhotoModalData(null)}
-                className="p-2 text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-full transition-colors"
+                className="p-1.5 sm:p-2 text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-full transition-colors shrink-0"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-5">
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-xs text-amber-300 flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 shrink-0 text-amber-400 mt-0.5" />
-                <div>
+            <div className="p-3.5 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 flex-1 min-h-0">
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-xs text-amber-300 flex items-start gap-2.5 sm:gap-3">
+                <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 text-amber-400 mt-0.5" />
+                <div className="break-words min-w-0">
                   {photoModalData.stage === 'Event Complete' ? (
                     <span><strong>Event Completion Proof Required:</strong> Please upload or capture the <strong>Event Completion Photo Proof</strong> to complete the Event End stage.</span>
                   ) : photoModalData.stage === 'Equipment Handover' ? (
@@ -1943,7 +1943,7 @@ export const StaffModule: React.FC = () => {
               </div>
 
               {/* Equipment / Proof Items list with photo inputs */}
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 {(photoModalData.stage === 'Event Start'
                   ? (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0 
                       ? [
@@ -1982,25 +1982,25 @@ export const StaffModule: React.FC = () => {
                   const currentPhoto = modalPhotos[item.name] || (item.name === 'Equipment Handover Photo Proof' ? modalPhotos['Asset Return Photo Proof'] : undefined);
 
                   return (
-                    <div key={idx} className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-4 space-y-3">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <div className="font-bold text-white text-sm flex items-center gap-2">
-                            <Camera className="w-4 h-4 text-amber-500" />
-                            {item.name} {item.optional ? <span className="text-zinc-500 text-xs font-normal">(Optional)</span> : <span className="text-rose-400 text-xs font-normal">(Required)</span>}
+                    <div key={idx} className="bg-zinc-950/80 border border-zinc-800 rounded-xl sm:rounded-2xl p-3 sm:p-4 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between items-start gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-bold text-white text-xs sm:text-sm flex items-center gap-2 break-words">
+                            <Camera className="w-4 h-4 text-amber-500 shrink-0" />
+                            <span>{item.name}</span> {item.optional ? <span className="text-zinc-500 text-xs font-normal shrink-0">(Optional)</span> : <span className="text-rose-400 text-xs font-normal shrink-0">(Required)</span>}
                           </div>
-                          <div className="text-[10px] font-mono text-zinc-400">Asset ID: {item.assetId}</div>
+                          <div className="text-[10px] font-mono text-zinc-400 break-all">Asset ID: {item.assetId}</div>
                         </div>
                         {currentPhoto ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                          <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 sm:px-2.5 py-1 rounded-full border border-emerald-500/20 shrink-0">
                             <CheckCircle className="w-3.5 h-3.5" /> Photo Attached
                           </span>
                         ) : item.optional ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-zinc-400 bg-zinc-800/80 px-2.5 py-1 rounded-full border border-zinc-700">
+                          <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-zinc-400 bg-zinc-800/80 px-2 sm:px-2.5 py-1 rounded-full border border-zinc-700 shrink-0">
                             Photo Optional
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
+                          <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2 sm:px-2.5 py-1 rounded-full border border-amber-500/20 shrink-0">
                             <AlertCircle className="w-3.5 h-3.5" /> Photo Required
                           </span>
                         )}
@@ -2008,8 +2008,8 @@ export const StaffModule: React.FC = () => {
 
                       {currentPhoto ? (
                         <div className="relative group rounded-xl overflow-hidden border border-zinc-700 bg-zinc-900">
-                          <img src={currentPhoto} alt={item.name} className="w-full h-40 object-cover" />
-                          <label className="absolute bottom-2 right-2 bg-zinc-900/90 hover:bg-zinc-900 text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-zinc-700 cursor-pointer flex items-center gap-1.5 shadow-lg">
+                          <img src={currentPhoto} alt={item.name} className="w-full h-36 sm:h-40 object-cover" />
+                          <label className="absolute bottom-2 right-2 bg-zinc-900/90 hover:bg-zinc-900 text-white text-xs font-bold px-2.5 sm:px-3 py-1.5 rounded-xl border border-zinc-700 cursor-pointer flex items-center gap-1.5 shadow-lg">
                             <Upload className="w-3.5 h-3.5" /> Change Photo
                             <input
                               type="file"
@@ -2021,14 +2021,14 @@ export const StaffModule: React.FC = () => {
                           </label>
                         </div>
                       ) : (
-                        <label className="border-2 border-dashed border-zinc-800 hover:border-amber-500/50 bg-zinc-900/50 hover:bg-zinc-900 rounded-2xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors group">
-                          <div className="w-10 h-10 rounded-full bg-zinc-800 group-hover:bg-amber-500/20 text-zinc-400 group-hover:text-amber-400 flex items-center justify-center transition-colors">
-                            <Camera className="w-5 h-5" />
+                        <label className="border-2 border-dashed border-zinc-800 hover:border-amber-500/50 bg-zinc-900/50 hover:bg-zinc-900 rounded-xl sm:rounded-2xl p-4 sm:p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors group">
+                          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-zinc-800 group-hover:bg-amber-500/20 text-zinc-400 group-hover:text-amber-400 flex items-center justify-center transition-colors">
+                            <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
                           </div>
-                          <span className="text-xs font-bold text-zinc-300 group-hover:text-amber-400 transition-colors">
+                          <span className="text-xs font-bold text-zinc-300 group-hover:text-amber-400 transition-colors text-center break-words">
                             Capture or Upload {item.name}
                           </span>
-                          <span className="text-[10px] text-zinc-500 font-mono">Use phone camera or choose file</span>
+                          <span className="text-[10px] text-zinc-500 font-mono text-center">Use phone camera or choose file</span>
                           <input
                             type="file"
                             accept="image/*"
@@ -2044,21 +2044,21 @@ export const StaffModule: React.FC = () => {
 
                 {/* Raw Footage Link Input for Footage Handover stage */}
                 {photoModalData.stage === 'Equipment Handover' && (
-                  <div className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-4 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <div className="font-bold text-white text-sm flex items-center gap-2">
-                          <Video className="w-4 h-4 text-indigo-400" />
-                          Raw Footage Drive Link <span className="text-rose-400 text-xs font-normal">(Required)</span>
+                  <div className="bg-zinc-950/80 border border-zinc-800 rounded-xl sm:rounded-2xl p-3 sm:p-4 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-white text-xs sm:text-sm flex items-center gap-2">
+                          <Video className="w-4 h-4 text-indigo-400 shrink-0" />
+                          Raw Footage Drive Link <span className="text-rose-400 text-xs font-normal shrink-0">(Required)</span>
                         </div>
-                        <div className="text-[10px] font-mono text-zinc-400">Google Drive / Cloud folder URL for raw footage handover</div>
+                        <div className="text-[10px] font-mono text-zinc-400 break-words">Google Drive / Cloud folder URL for raw footage handover</div>
                       </div>
                       {modalRawFootageLink.trim() ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                        <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20 shrink-0">
                           <CheckCircle className="w-3.5 h-3.5" /> Link Provided
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
+                        <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20 shrink-0">
                           <AlertCircle className="w-3.5 h-3.5" /> Link Required
                         </span>
                       )}
@@ -2068,18 +2068,18 @@ export const StaffModule: React.FC = () => {
                       value={modalRawFootageLink}
                       onChange={(e) => setModalRawFootageLink(e.target.value)}
                       placeholder="https://drive.google.com/drive/folders/..."
-                      className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 font-mono"
+                      className="w-full min-w-0 px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 font-mono"
                     />
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="p-4 border-t border-zinc-800 bg-zinc-950/80 flex justify-between items-center">
+            <div className="p-3 sm:p-4 border-t border-zinc-800 bg-zinc-950/80 flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0 shrink-0">
               <button
                 onClick={() => setPhotoModalData(null)}
                 disabled={isSubmitting}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl text-xs transition-colors"
+                className="w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl text-xs transition-colors"
               >
                 Cancel
               </button>
@@ -2087,7 +2087,7 @@ export const StaffModule: React.FC = () => {
               <button
                 onClick={handleConfirmStatusUpdate}
                 disabled={isSubmitting}
-                className={`px-6 py-2.5 font-bold rounded-xl text-xs transition-all flex items-center gap-2 shadow-lg ${
+                className={`w-full sm:w-auto justify-center px-5 sm:px-6 py-2.5 font-bold rounded-xl text-xs transition-all flex items-center gap-2 shadow-lg ${
                   photoModalData.stage === 'Event Start'
                     ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-amber-500/20'
                     : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'

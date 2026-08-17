@@ -221,7 +221,7 @@ export const CameraLensStatsCard: React.FC<CameraLensStatsCardProps> = ({
         currentTheme.borderClass
       } group/card ${
         onClick ? 'cursor-pointer hover:-translate-y-1 active:scale-[0.98]' : ''
-      } relative overflow-hidden h-full min-h-[148px] sm:min-h-[158px] gap-2.5 sm:gap-3`}
+      } relative overflow-hidden h-full min-h-[152px] sm:min-h-[160px] gap-2.5 sm:gap-3`}
     >
       {/* Premium subtle glass light strike overlay */}
       <div className="absolute inset-0 bg-gradient-to-tr from-white/[0.01] to-white/[0.04] opacity-50 pointer-events-none" />
@@ -230,10 +230,10 @@ export const CameraLensStatsCard: React.FC<CameraLensStatsCardProps> = ({
       <div className="absolute -right-6 -bottom-6 w-24 h-24 rounded-full blur-[28px] pointer-events-none opacity-10 transition-all duration-500 group-hover/card:scale-150 group-hover/card:opacity-25" style={{ backgroundColor: currentTheme.color }} />
 
       {/* Main Grid: Left Lens Representation & Right Metrics Section */}
-      <div className="flex items-center gap-2.5 sm:gap-3.5 z-10 w-full text-left">
+      <div className="flex items-start gap-2.5 sm:gap-3 z-10 w-full text-left">
         
         {/* LEFT COMPASS: DSLR CAMERA LENS EMBED */}
-        <div className="relative w-10 h-10 sm:w-12 sm:h-12 md:w-11 md:h-11 lg:w-12 lg:h-12 xl:w-13 xl:h-13 flex items-center justify-center shrink-0 select-none group/lens">
+        <div className="relative w-9 h-9 sm:w-11 sm:h-11 md:w-10 md:h-10 lg:w-11 lg:h-11 xl:w-12 xl:h-12 flex items-center justify-center shrink-0 select-none group/lens mt-0.5">
           {/* 3D Camera Lens Outer Barrel */}
           <div className="absolute inset-0 rounded-full border border-zinc-800 bg-gradient-to-b from-zinc-900 to-zinc-950 flex items-center justify-center p-0.5 shadow-xl ring-1 ring-white/5 transition-all duration-700 group-hover/card:scale-105 group-hover/card:border-zinc-700">
             
@@ -295,24 +295,24 @@ export const CameraLensStatsCard: React.FC<CameraLensStatsCardProps> = ({
         </div>
 
         {/* CENTER SEGMENT: METRICS TITLE AND DIGIT CONTROLLER */}
-        <div className="flex-1 min-w-0 space-y-1 overflow-hidden">
-          <div className="flex items-center justify-between gap-1 w-full">
-            <span className="text-[10px] sm:text-[11px] font-bold tracking-wider text-zinc-400 uppercase font-sans group-hover/card:text-zinc-200 transition-colors duration-300 truncate">
+        <div className="flex-1 min-w-0 space-y-1">
+          <div className="flex items-start justify-between gap-1.5 w-full">
+            <span className="text-[10px] sm:text-[11px] font-bold tracking-wider text-zinc-400 uppercase font-sans group-hover/card:text-zinc-200 transition-colors duration-300 leading-snug break-words">
               {label}
             </span>
             {isFiltered ? (
-              <span className="text-[8px] bg-white/10 border border-white/10 text-white rounded px-1.5 py-0.5 tracking-widest font-mono uppercase shrink-0">
+              <span className="text-[8px] bg-white/10 border border-white/10 text-white rounded px-1.5 py-0.5 tracking-widest font-mono uppercase shrink-0 mt-0.5">
                 Filter
               </span>
             ) : onClick ? (
-              <span className="inline-flex items-center gap-0.5 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-900/90 border border-zinc-800 text-zinc-400 group-hover/card:text-white group-hover/card:border-zinc-600 group-hover/card:bg-zinc-850 transition-all shadow-sm shrink-0">
+              <span className="inline-flex items-center gap-0.5 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-900/90 border border-zinc-800 text-zinc-400 group-hover/card:text-white group-hover/card:border-zinc-600 group-hover/card:bg-zinc-850 transition-all shadow-sm shrink-0 mt-0.5">
                 <span>View</span>
                 <span className="text-[10px] leading-none transition-transform group-hover/card:translate-x-0.5 group-hover/card:-translate-y-0.5">↗</span>
               </span>
             ) : null}
           </div>
-          <div className="flex items-baseline select-none py-0.5 overflow-hidden">
-            <span className={`${valSizeClass} font-black text-white tracking-tight group-hover/card:scale-[1.02] transition-transform duration-300 origin-left block whitespace-nowrap tabular-nums overflow-hidden text-ellipsis max-w-full leading-tight`}>
+          <div className="flex items-baseline select-none py-0.5">
+            <span className={`${valSizeClass} font-black text-white tracking-tight group-hover/card:scale-[1.02] transition-transform duration-300 origin-left block whitespace-nowrap tabular-nums max-w-full leading-tight`}>
               {isCurrency || isPercentage ? (
                 <span>{displayVal}</span>
               ) : (

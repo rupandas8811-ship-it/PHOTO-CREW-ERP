@@ -1341,7 +1341,7 @@ export function getEventTeamMemberStaffMapping(params: {
     const reportingDate = ev.reporting_date || ev.Reporting_date || order?.Reporting_date || lead?.Reporting_date || eventDate || 'N/A';
     const reportingTime = ev.reporting_time || order?.reporting_time || lead?.reporting_time || operationsRecord?.reporting_time || 'N/A';
     const location = ev.event_location || order?.event_location || lead?.event_location || 'N/A';
-    const googleMapsLink = ev.google_maps_link || lead?.google_maps_link || order?.google_maps_link || null;
+    const googleMapsLink = ev.google_maps_link || (totalEvents === 1 ? (lead?.google_maps_link || order?.google_maps_link || null) : null);
     const guestPax = ev.guest_pax || (lead as any)?.guest_pax || order?.guest_pax || 'N/A';
 
     // 1. Extract Sales Team Members Included for this event

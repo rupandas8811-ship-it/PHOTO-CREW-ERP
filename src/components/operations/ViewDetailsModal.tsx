@@ -231,32 +231,101 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
                 </div>
 
                 {/* Event Timing & Location Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-                  <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60">
-                    <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Event Date</span>
-                    <span className="font-bold text-zinc-100 font-mono">{group.eventDate}</span>
-                  </div>
-                  <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60">
-                    <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Event Start Time</span>
-                    <span className="font-bold text-emerald-400 font-mono">{group.eventStartTime}</span>
-                  </div>
-                  <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60">
-                    <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Reporting Date</span>
-                    <span className="font-bold text-sky-300 font-mono">{group.reportingDate}</span>
-                  </div>
-                  <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60">
-                    <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Reporting Time</span>
-                    <span className="font-bold text-sky-400 font-mono">{group.reportingTime}</span>
-                  </div>
-                  <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60 sm:col-span-2 lg:col-span-3">
-                    <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Event Location / Venue</span>
-                    <span className="font-medium text-zinc-200 break-words">{group.location}</span>
-                  </div>
-                  <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60">
-                    <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Guest Pax</span>
-                    <span className="font-semibold text-zinc-200">{group.guestPax}</span>
-                  </div>
-                </div>
+                {(() => {
+                  const resolvedMapLink = (() => {
+                    if (group.googleMapsLink && group.googleMapsLink !== 'N/A' && group.googleMapsLink.trim() !== '') {
+                      return group.googleMapsLink.trim();
+                    }
+                    if (booking) {
+                      const isMatchingEvent = !booking.eventId || booking.eventId === 'ev' || booking.eventId === 'gen' || String(booking.eventId).toLowerCase() === String(group.eventId).toLowerCase();
+                      if (isMatchingEvent && booking.googleMapsLink && booking.googleMapsLink !== 'N/A' && booking.googleMapsLink.trim() !== '') {
+                        return booking.googleMapsLink.trim();
+                      }
+                    }
+                    if (lead?.events && Array.isArray(lead.events)) {
+                      const matchedEv = lead.events.find((e: any) => String(e.id || e.event_id).toLowerCase() === String(group.eventId).toLowerCase());
+                      if (matchedEv?.google_maps_link && matchedEv.google_maps_link !== 'N/A' && matchedEv.google_maps_link.trim() !== '') {
+                        return matchedEv.google_maps_link.trim();
+                      }
+                      if (lead.events.length === 1 && lead.events[0]?.google_maps_link && lead.events[0].google_maps_link !== 'N/A' && lead.events[0].google_maps_link.trim() !== '') {
+                        return lead.events[0].google_maps_link.trim();
+                      }
+                    }
+                    if (lead?.notes_special_customizations) {
+                      try {
+                        const parsed = deserializeLeadEvents(lead.notes_special_customizations);
+                        if (parsed.events && parsed.events.length > 0) {
+                          const matchedEv = parsed.events.find((e: any) => String(e.id || e.event_id).toLowerCase() === String(group.eventId).toLowerCase());
+                          if (matchedEv?.google_maps_link && matchedEv.google_maps_link !== 'N/A' && matchedEv.google_maps_link.trim() !== '') {
+                            return matchedEv.google_maps_link.trim();
+                          }
+                          if (parsed.events.length === 1 && parsed.events[0]?.google_maps_link && parsed.events[0].google_maps_link !== 'N/A' && parsed.events[0].google_maps_link.trim() !== '') {
+                            return parsed.events[0].google_maps_link.trim();
+                          }
+                        }
+                      } catch(e) {}
+                    }
+                    const totalEventsInLead = (lead?.events && Array.isArray(lead.events) ? lead.events.length : 0);
+                    if (totalEventsInLead <= 1) {
+                      if (lead?.google_maps_link && lead.google_maps_link !== 'N/A' && lead.google_maps_link.trim() !== '') {
+                        return lead.google_maps_link.trim();
+                      }
+                      if (order?.google_maps_link && order.google_maps_link !== 'N/A' && order.google_maps_link.trim() !== '') {
+                        return order.google_maps_link.trim();
+                      }
+                    }
+                    return null;
+                  })();
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                      <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60">
+                        <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Event Date</span>
+                        <span className="font-bold text-zinc-100 font-mono">{group.eventDate}</span>
+                      </div>
+                      <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60">
+                        <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Event Start Time</span>
+                        <span className="font-bold text-emerald-400 font-mono">{group.eventStartTime}</span>
+                      </div>
+                      <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60">
+                        <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Reporting Date</span>
+                        <span className="font-bold text-sky-300 font-mono">{group.reportingDate}</span>
+                      </div>
+                      <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60">
+                        <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Reporting Time</span>
+                        <span className="font-bold text-sky-400 font-mono">{group.reportingTime}</span>
+                      </div>
+                      <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60 sm:col-span-2 lg:col-span-2">
+                        <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Event Location / Venue</span>
+                        <span className="font-medium text-zinc-200 break-words">{group.location}</span>
+                      </div>
+                      <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60 sm:col-span-2 lg:col-span-1">
+                        <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Google Maps Location</span>
+                        {resolvedMapLink ? (
+                          <a 
+                            href={resolvedMapLink.startsWith('http') ? resolvedMapLink : `https://${resolvedMapLink}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            referrerPolicy="no-referrer"
+                            className="inline-flex items-center gap-1.5 text-xs font-bold text-sky-400 hover:text-sky-300 hover:underline font-mono transition-colors break-all"
+                          >
+                            <MapPin className="w-3.5 h-3.5 shrink-0 text-sky-400" />
+                            <span>View on Google Maps</span>
+                            <span className="text-[11px] leading-none">↗</span>
+                          </a>
+                        ) : (
+                          <span className="text-xs text-zinc-500 font-mono italic">
+                            Not provided
+                          </span>
+                        )}
+                      </div>
+                      <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60 sm:col-span-2 lg:col-span-1">
+                        <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Guest Pax</span>
+                        <span className="font-semibold text-zinc-200">{group.guestPax}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Team Members Included & Staff Assignment Mapping Table */}
                 <div className="space-y-2 pt-2">
