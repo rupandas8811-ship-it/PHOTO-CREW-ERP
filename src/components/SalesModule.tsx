@@ -2405,9 +2405,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [unlockRequestCustomReason, setUnlockRequestCustomReason] = useState('');
   const [selectedUnlockLead, setSelectedUnlockLead] = useState<Lead | null>(null);
 
+  // Helper function to resolve Lost Reason and Notes strictly from fields
+  const getStrictLostReasonAndNotes = (lead: Lead | null) => {
+    if (!lead) return { reason: '', notes: '' };
+    return {
+      reason: lead.Lost_Reason || '',
+      notes: lead.Lost_Notes || ''
+    };
+  };
+
   // Helper function to resolve Lost Reason and Notes from all possible sources
   const getLostReasonAndNotes = (lead: Lead | null, historyList?: any[]) => {
-    if (!lead) return { reason: 'No reason provided.', notes: '' };
+    if (!lead) return { reason: '', notes: '' };
 
     // 1. Direct fields on lead (check casing variations)
     let reason = lead.Lost_Reason || (lead as any).lost_reason || (lead as any).LostReason || (lead as any).lostReason;
@@ -13055,7 +13064,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
             {/* If Lost Lead, display Lost Details */}
             {selectedLead && ['Lost Lead', 'Lead Lost', 'Lost'].includes(selectedLead.status || (selectedLead as any).current_status || '') && (() => {
-              const { reason: lostReasonText, notes: lostNotesText } = getLostReasonAndNotes(selectedLead, statusHistory);
+              const { reason: lostReasonText, notes: lostNotesText } = getStrictLostReasonAndNotes(selectedLead);
               return (
                 <div className="mx-4 sm:mx-5 mt-2 bg-rose-950/25 border border-rose-500/20 p-2.5 rounded-xl flex items-start gap-3 text-left shadow-lg flex-col">
                   <div className="flex items-start gap-3 w-full">
