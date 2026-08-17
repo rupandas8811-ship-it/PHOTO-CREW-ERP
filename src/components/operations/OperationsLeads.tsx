@@ -2099,7 +2099,7 @@ export const OperationsLeads: React.FC = () => {
                 const staffStatuses = assignedStaffDetails.map(s => s.staff_status);
                 const baseStage = ord.current_stage || (lead ? getLeadCurrentStatus(lead) : 'Order Confirmed');
                 const currentStage = getCalculatedOrderStage(baseStage, staffStatuses);
-                const isLocked = currentStage === 'Raw Footage Received';
+                const isLocked = currentStage === 'Verified Footage';
 
                 return (
                   <tr key={ord.order_id} className={`hover:bg-zinc-900/20 transition-all ${isLocked ? 'opacity-85' : ''}`}>
@@ -2386,6 +2386,16 @@ export const OperationsLeads: React.FC = () => {
                           }
 
                           const isOpen = activeMenuOrderId === ord.order_id;
+                          if (isLocked) {
+                            return (
+                              <div className="flex items-center justify-end actions-menu-container">
+                                <span className="px-3.5 py-1.5 bg-zinc-800 text-zinc-500 rounded-xl text-xs font-sans font-black border border-zinc-700/50 cursor-not-allowed flex items-center gap-1.5" title="Action locked in Verified Footage stage">
+                                  🔒 Locked
+                                </span>
+                              </div>
+                            );
+                          }
+
                           return (
                             <OperationsActionColumn
                               ord={ord}
@@ -4088,14 +4098,28 @@ export const OperationsLeads: React.FC = () => {
                       setIsSaving(true);
                       const timestamp = new Date().toISOString();
 
+                      if (!currentOp || !currentOp.operation_id) {
+                        alert("Error: Could not find a valid operation record for this event. Please refresh and try again.");
+                        setIsSaving(false);
+                        return;
+                      }
+
                       // Save Consolidated Link & update operation status
-                      await pushUpdate('operations', 'order_id', receivingFootageOrderId, {
+                      const updateRes = await pushUpdate('operations', 'operation_id', currentOp.operation_id, {
                         consolidated_drive_link: consolidatedDriveLink,
+                        Consolidated_Drive_Link: consolidatedDriveLink,
                         raw_footage_drive_link: rawFootageLink || consolidatedDriveLink,
-                        event_status: 'Verified Footage',
+                        Raw_Footage_Drive_Link: rawFootageLink || consolidatedDriveLink,
+                        event_status: 'Completed',
                         remarks: `Verified by ${currentUserName || 'Operations Manager'} on ${new Date().toLocaleDateString()}`,
                         updated_by: currentUserName || 'Operations Manager'
                       });
+
+                      if (updateRes && !updateRes.success) {
+                        alert(`Failed to save final consolidated footage to database: ${updateRes.error}`);
+                        setIsSaving(false);
+                        return;
+                      }
 
                       // Call confirmRawFootageReceived to move to Verified Footage and Production
                       await confirmRawFootageReceived(

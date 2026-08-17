@@ -213,7 +213,9 @@ const getRawFootageDriveLink = (assignment: any, prod: any, order: any, lead: an
 
   const opsLink = matchedOp ? (
     matchedOp.consolidated_drive_link || 
-    matchedOp.Consolidated_Drive_Link
+    matchedOp.Consolidated_Drive_Link ||
+    matchedOp.raw_footage_drive_link ||
+    matchedOp.Raw_Footage_Drive_Link
   ) : null;
 
   if (opsLink && typeof opsLink === 'string' && opsLink.trim() !== '') {
