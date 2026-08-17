@@ -435,7 +435,6 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
   }, []);
 
   // Configs for Overview Card details
-  // Configs for Overview Card details
   const modalData = useMemo(() => {
     if (!selectedCard) return [];
     if (selectedCard === 'overview_revenue') return filteredOrders;
@@ -449,23 +448,149 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       return { ...o, totalRevenue: totalRev, paymentReceived: received, outstandingAmount: outstanding };
     }).filter(item => item.outstandingAmount > 0);
 
-    if (selectedCard === 'sales_total_leads') return boCardsData.salesTotalLeads;
-    if (selectedCard === 'sales_total_converted') return boCardsData.salesConverted;
-    if (selectedCard === 'sales_total_lost') return boCardsData.salesLost;
-    if (selectedCard === 'sales_quotation_followup') return boCardsData.salesFollowup;
+    // SALES CARDS
+    if (selectedCard === 'sales_total_leads' || selectedCard === 'overview_sales') {
+      return boCardsData.salesTotalLeads.map(lead => {
+        const order = orders.find(o => o.lead_id === lead.lead_id || o.order_id === lead.lead_id);
+        return {
+          ...lead,
+          id: lead.lead_id,
+          lead_id: lead.lead_id,
+          customer_name: lead.customer_name || 'Client',
+          mobile: lead.mobile || lead.phone || 'N/A',
+          custom_event_name: lead.custom_event_name || lead.event_name || lead.event_type || 'Event',
+          event_date: lead.event_date || 'N/A',
+          quotation_amount: lead.quotation_amount || lead.grand_total || lead.final_quotation_amount || lead.package_price || lead.budget || 0,
+          status: lead.current_status || lead.status || 'Active Lead',
+          sales_person: lead.sales_person || lead.sales_staff_name || lead.created_by || 'Unassigned',
+          rawOrder: order,
+          rawLead: lead
+        };
+      });
+    }
+    if (selectedCard === 'sales_total_converted') {
+      return boCardsData.salesConverted.map(lead => {
+        const order = orders.find(o => o.lead_id === lead.lead_id || o.order_id === lead.lead_id);
+        return {
+          ...lead,
+          id: lead.lead_id,
+          lead_id: lead.lead_id,
+          customer_name: lead.customer_name || 'Client',
+          mobile: lead.mobile || lead.phone || 'N/A',
+          custom_event_name: lead.custom_event_name || lead.event_name || lead.event_type || 'Event',
+          event_date: lead.event_date || 'N/A',
+          quotation_amount: lead.quotation_amount || lead.grand_total || lead.final_quotation_amount || lead.package_price || lead.budget || 0,
+          status: lead.current_status || lead.status || 'Confirmed',
+          sales_person: lead.sales_person || lead.sales_staff_name || lead.created_by || 'Unassigned',
+          rawOrder: order,
+          rawLead: lead
+        };
+      });
+    }
+    if (selectedCard === 'sales_total_lost') {
+      return boCardsData.salesLost.map(lead => {
+        const order = orders.find(o => o.lead_id === lead.lead_id || o.order_id === lead.lead_id);
+        return {
+          ...lead,
+          id: lead.lead_id,
+          lead_id: lead.lead_id,
+          customer_name: lead.customer_name || 'Client',
+          mobile: lead.mobile || lead.phone || 'N/A',
+          custom_event_name: lead.custom_event_name || lead.event_name || lead.event_type || 'Event',
+          event_date: lead.event_date || 'N/A',
+          quotation_amount: lead.quotation_amount || lead.grand_total || lead.final_quotation_amount || lead.package_price || lead.budget || 0,
+          status: lead.current_status || lead.status || 'Lost Lead',
+          sales_person: lead.sales_person || lead.sales_staff_name || lead.created_by || 'Unassigned',
+          rawOrder: order,
+          rawLead: lead
+        };
+      });
+    }
+    if (selectedCard === 'sales_quotation_followup') {
+      return boCardsData.salesFollowup.map(lead => {
+        const order = orders.find(o => o.lead_id === lead.lead_id || o.order_id === lead.lead_id);
+        return {
+          ...lead,
+          id: lead.lead_id,
+          lead_id: lead.lead_id,
+          customer_name: lead.customer_name || 'Client',
+          mobile: lead.mobile || lead.phone || 'N/A',
+          custom_event_name: lead.custom_event_name || lead.event_name || lead.event_type || 'Event',
+          event_date: lead.event_date || 'N/A',
+          quotation_amount: lead.quotation_amount || lead.grand_total || lead.final_quotation_amount || lead.package_price || lead.budget || 0,
+          status: lead.current_status || lead.status || 'Quotation Follow-up',
+          sales_person: lead.sales_person || lead.sales_staff_name || lead.created_by || 'Unassigned',
+          rawOrder: order,
+          rawLead: lead
+        };
+      });
+    }
 
-    if (selectedCard === 'ops_new') return boCardsData.opsNew;
-    if (selectedCard === 'ops_completed') return boCardsData.opsCompleted;
-    if (selectedCard === 'ops_upcoming') return boCardsData.opsUpcoming;
-    if (selectedCard === 'ops_scheduled') return boCardsData.opsScheduled;
+    // OPERATIONS CARDS
+    if (selectedCard === 'ops_new' || selectedCard === 'ops_completed' || selectedCard === 'ops_upcoming' || selectedCard === 'ops_scheduled' || selectedCard === 'overview_ops') {
+      const rawList = selectedCard === 'ops_new' ? boCardsData.opsNew
+        : selectedCard === 'ops_completed' ? boCardsData.opsCompleted
+        : selectedCard === 'ops_upcoming' ? boCardsData.opsUpcoming
+        : selectedCard === 'ops_scheduled' ? boCardsData.opsScheduled
+        : filteredOperations;
 
-    if (selectedCard === 'prod_new') return boCardsData.prodNew;
-    if (selectedCard === 'prod_inprogress') return boCardsData.prodInProgress;
-    if (selectedCard === 'prod_editing_completed') return boCardsData.prodEditingCompleted;
-    if (selectedCard === 'prod_client_acceptance') return boCardsData.prodClientAcceptance;
+      return rawList.map(op => {
+        const order = orders.find(o => o.order_id === op.order_id || o.lead_id === (op as any).tracking_id || o.lead_id === op.order_id);
+        const lead = leads.find(l => l.lead_id === op.order_id || l.lead_id === (op as any).tracking_id || l.lead_id === order?.lead_id);
+        const crewList = [op.photographer_assigned, op.videographer_assigned, op.drone_operator_assigned, op.assistant_assigned].filter(Boolean);
+        const assignedCrew = crewList.length > 0 ? crewList.join(', ') : ((op as any).assigned_photographer || (op as any).assigned_crew || (op as any).assigned_staff || 'Unassigned');
+
+        return {
+          ...op,
+          id: op.operation_id || op.order_id || (op as any).tracking_id,
+          order_id: op.order_id || (op as any).tracking_id || order?.order_id || 'N/A',
+          customer_name: order?.customer_name || lead?.customer_name || (op as any).customer_name || 'Client',
+          event_type: order?.event_type || lead?.event_type || (op as any).event_type || 'Event Shoot',
+          custom_event_name: order?.custom_event_name || lead?.custom_event_name || (op as any).custom_event_name || order?.event_type || lead?.event_type || 'Photography Shoot',
+          event_date: order?.event_date || lead?.event_date || (op as any).event_date || 'N/A',
+          status: op.event_status || (op as any).operations_status || (op as any).status || order?.current_stage || 'Active',
+          assigned_crew: assignedCrew,
+          rawOrder: order,
+          rawLead: lead
+        };
+      });
+    }
+
+    // PRODUCTION CARDS
+    if (selectedCard === 'prod_new' || selectedCard === 'prod_inprogress' || selectedCard === 'prod_editing_completed' || selectedCard === 'prod_client_acceptance' || selectedCard === 'overview_prod' || selectedCard === 'overview_acceptance') {
+      const rawList = selectedCard === 'prod_new' ? boCardsData.prodNew
+        : selectedCard === 'prod_inprogress' ? boCardsData.prodInProgress
+        : selectedCard === 'prod_editing_completed' ? boCardsData.prodEditingCompleted
+        : (selectedCard === 'prod_client_acceptance' || selectedCard === 'overview_acceptance') ? boCardsData.prodClientAcceptance
+        : filteredProduction;
+
+      return rawList.map(prod => {
+        const order = orders.find(o => o.order_id === prod.order_id || o.lead_id === prod.tracking_id || o.order_id === prod.tracking_id || (prod as any).production_id === o.order_id);
+        const lead = leads.find(l => l.lead_id === prod.tracking_id || l.lead_id === (prod as any).order_id || l.lead_id === order?.lead_id);
+
+        return {
+          ...prod,
+          id: prod.production_id || prod.order_id || prod.tracking_id,
+          order_id: prod.order_id || prod.tracking_id || order?.order_id || 'N/A',
+          customer_name: order?.customer_name || lead?.customer_name || (prod as any).customer_name || 'Client',
+          event_type: order?.event_type || lead?.event_type || (prod as any).project_type || 'Video Editing',
+          custom_event_name: order?.custom_event_name || lead?.custom_event_name || (prod as any).custom_event_name || order?.event_type || 'Deliverable',
+          event_date: order?.event_date || (prod as any).event_date || lead?.event_date || 'N/A',
+          delivery_date: prod.expected_delivery_date || prod.target_delivery_date || (prod as any).delivery_date || 'N/A',
+          status: prod.editing_status || prod.production_status || (prod as any).status || order?.current_stage || 'In Production',
+          editor: prod.editor_assigned || (prod as any).assigned_editor || (prod as any).assigned_staff || 'Unassigned',
+          rawOrder: order,
+          rawLead: lead
+        };
+      });
+    }
+
+    if (selectedCard === 'overview_closed') {
+      return filteredOrders.filter(o => o.current_stage === 'Order Closed' || o.current_stage === 'Closed');
+    }
 
     return [];
-  }, [selectedCard, filteredOrders, waitingApprovalOrders, payments, boCardsData]);
+  }, [selectedCard, filteredOrders, waitingApprovalOrders, payments, boCardsData, orders, leads, filteredOperations, filteredProduction]);
 
   const modalColumns = useMemo(() => {
     const actionCol = { 
@@ -474,7 +599,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       render: (item: any) => (
         <button
           type="button"
-          onClick={() => setSelectedHistoryOrder(item)}
+          onClick={() => setSelectedHistoryOrder(item.rawOrder || item.rawLead || item)}
           className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
           title="View Project History & Timeline"
         >
@@ -487,26 +612,64 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     const baseOrderCols = [
       { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-400">{item.order_id || item.lead_id}</span> },
       { key: 'customer_name', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customer_name}</span> },
-      { key: 'custom_event_name', label: 'Event Name', render: (item: any) => <span>{item.custom_event_name || item.event_type || 'Photography'}</span> },
+      { key: 'custom_event_name', label: 'Event Name', render: (item: any) => <span className="text-zinc-200">{item.custom_event_name || item.event_type || 'Photography'}</span> },
       { key: 'event_date', label: 'Event Date', render: (item: any) => <span className="font-mono text-zinc-400">{item.event_date ? item.event_date.split('T')[0] : 'N/A'}</span> }
     ];
+
     const baseLeadCols = [
-      { key: 'lead_id', label: 'Lead ID', render: (item: any) => <span className="font-mono text-zinc-400">{item.lead_id}</span> },
-      { key: 'customer_name', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customer_name}</span> },
-      { key: 'status', label: 'Status', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold font-mono text-[10px]">{item.current_status || item.status || 'Active'}</span> },
-      { key: 'sales_person', label: 'Sales Person', render: (item: any) => <span className="text-zinc-400">{item.sales_person || 'Unassigned'}</span> }
+      { key: 'lead_id', label: 'Lead ID', render: (item: any) => <span className="font-mono text-zinc-400 font-bold">{item.lead_id}</span> },
+      { key: 'customer_name', label: 'Customer Name', render: (item: any) => (
+        <div>
+          <span className="font-bold text-white block">{item.customer_name}</span>
+          {item.mobile && item.mobile !== 'N/A' && <span className="text-[10px] text-zinc-400 font-mono">{item.mobile}</span>}
+        </div>
+      )},
+      { key: 'custom_event_name', label: 'Event / Type', render: (item: any) => <span className="text-zinc-300">{item.custom_event_name || 'Event'}</span> },
+      { key: 'event_date', label: 'Event Date', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.event_date ? item.event_date.split('T')[0] : 'N/A'}</span> },
+      { key: 'sales_person', label: 'Sales Staff', render: (item: any) => <span className="text-amber-400 font-mono text-xs">{item.sales_person || 'Unassigned'}</span> },
+      { key: 'quotation_amount', label: 'Quotation Amount', render: (item: any) => <span className="font-mono text-emerald-400 font-bold text-xs">{formatINR(item.quotation_amount || 0)}</span> },
+      { key: 'status', label: 'Status', render: (item: any) => (
+        <span className={`px-2 py-0.5 rounded-lg border font-bold font-mono text-[10px] ${
+          (item.status || '').toLowerCase().includes('confirm') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+          (item.status || '').toLowerCase().includes('lost') ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+          'bg-amber-500/10 text-amber-400 border-amber-500/20'
+        }`}>
+          {item.status || 'Active'}
+        </span>
+      )}
     ];
+
     const baseOpsCols = [
-      { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-400">{item.order_id || item.lead_id}</span> },
-      { key: 'event_type', label: 'Event Type', render: (item: any) => <span className="font-bold text-white">{item.event_type}</span> },
-      { key: 'status', label: 'Status', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold font-mono text-[10px]">{item.operations_status || item.status || 'Active'}</span> },
-      { key: 'assigned', label: 'Assigned Crew', render: (item: any) => <span className="text-zinc-400">{item.assigned_photographer || item.assigned_videographer || item.primary_assigned || 'Unassigned'}</span> }
+      { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-400 font-bold">{item.order_id}</span> },
+      { key: 'customer_name', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customer_name}</span> },
+      { key: 'custom_event_name', label: 'Event / Shoot Type', render: (item: any) => <span className="text-zinc-200">{item.custom_event_name}</span> },
+      { key: 'event_date', label: 'Shoot Date', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.event_date ? item.event_date.split('T')[0] : 'N/A'}</span> },
+      { key: 'assigned_crew', label: 'Assigned Crew', render: (item: any) => <span className="text-blue-400 font-mono text-xs">{item.assigned_crew}</span> },
+      { key: 'status', label: 'Operational Status', render: (item: any) => (
+        <span className={`px-2 py-0.5 rounded-lg border font-bold font-mono text-[10px] ${
+          (item.status || '').toLowerCase().includes('complete') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+          'bg-blue-500/10 text-blue-400 border-blue-500/20'
+        }`}>
+          {item.status || 'Active'}
+        </span>
+      )}
     ];
+
     const baseProdCols = [
-      { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-400">{item.order_id || item.tracking_id}</span> },
-      { key: 'event_type', label: 'Project Type', render: (item: any) => <span className="font-bold text-white">{item.event_type || item.project_type || 'Editing'}</span> },
-      { key: 'status', label: 'Status', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-pink-500/10 text-pink-400 border border-pink-500/20 font-bold font-mono text-[10px]">{item.production_status || item.editing_status || item.status || 'Active'}</span> },
-      { key: 'editor', label: 'Editor', render: (item: any) => <span className="text-zinc-400">{item.editor || item.assigned_editor || 'Unassigned'}</span> }
+      { key: 'order_id', label: 'Project / Order ID', render: (item: any) => <span className="font-mono text-zinc-400 font-bold">{item.order_id}</span> },
+      { key: 'customer_name', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customer_name}</span> },
+      { key: 'custom_event_name', label: 'Project Deliverable', render: (item: any) => <span className="text-zinc-200">{item.custom_event_name}</span> },
+      { key: 'delivery_date', label: 'Target Delivery', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.delivery_date ? item.delivery_date.split('T')[0] : 'N/A'}</span> },
+      { key: 'editor', label: 'Assigned Editor', render: (item: any) => <span className="text-purple-400 font-mono text-xs">{item.editor}</span> },
+      { key: 'status', label: 'Production Status', render: (item: any) => (
+        <span className={`px-2 py-0.5 rounded-lg border font-bold font-mono text-[10px] ${
+          (item.status || '').toLowerCase().includes('acceptance') || (item.status || '').toLowerCase().includes('approved') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+          (item.status || '').toLowerCase().includes('complete') ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+          'bg-pink-500/10 text-pink-400 border-pink-500/20'
+        }`}>
+          {item.status || 'In Progress'}
+        </span>
+      )}
     ];
 
     if (selectedCard === 'overview_revenue') return [...baseOrderCols, { key: 'quotation_amount', label: 'Quotation Amount', render: (item: any) => <span className="font-mono text-emerald-400 font-bold">{formatINR(item.quotation_amount || 0)}</span> }, { key: 'advance_received', label: 'Advance Received', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.advance_received || 0)}</span> }, actionCol];
@@ -514,9 +677,10 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     if (selectedCard === 'overview_approval') return [...baseOrderCols, { key: 'current_stage', label: 'Current Stage', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold font-mono text-[10px]">{item.current_stage || 'Awaiting Approval'}</span> }, actionCol];
     if (selectedCard === 'overview_outstanding') return [...baseOrderCols, { key: 'totalRevenue', label: 'Total Revenue', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.totalRevenue || 0)}</span> }, { key: 'paymentReceived', label: 'Received', render: (item: any) => <span className="font-mono text-emerald-400">{formatINR(item.paymentReceived || 0)}</span> }, { key: 'outstandingAmount', label: 'Outstanding Balance', render: (item: any) => <span className="font-mono text-rose-400 font-bold">{formatINR(item.outstandingAmount || 0)}</span> }, actionCol];
 
-    if (selectedCard && selectedCard.startsWith('sales_')) return [...baseLeadCols, actionCol];
-    if (selectedCard && selectedCard.startsWith('ops_')) return [...baseOpsCols, actionCol];
-    if (selectedCard && selectedCard.startsWith('prod_')) return [...baseProdCols, actionCol];
+    if (selectedCard && (selectedCard.startsWith('sales_') || selectedCard === 'overview_sales')) return [...baseLeadCols, actionCol];
+    if (selectedCard && (selectedCard.startsWith('ops_') || selectedCard === 'overview_ops')) return [...baseOpsCols, actionCol];
+    if (selectedCard && (selectedCard.startsWith('prod_') || selectedCard === 'overview_prod' || selectedCard === 'overview_acceptance')) return [...baseProdCols, actionCol];
+    if (selectedCard === 'overview_closed') return [...baseOrderCols, { key: 'current_stage', label: 'Status', render: () => <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold font-mono text-[10px]">Closed & Completed</span> }, actionCol];
 
     return [];
   }, [selectedCard]);
@@ -528,22 +692,27 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       case 'overview_approval': return { title: 'Awaiting Business Owner Approval', totalLabel: 'Awaiting Approvals Count', totalValue: `${modalData.length} Projects`, accentColor: 'amber' as const, filterDescription: 'This list displays all projects currently waiting for review and final closure.' };
       case 'overview_outstanding': return { title: 'Outstanding Payments List', totalLabel: 'Total Outstanding Balance', totalValue: formatINR(outstandingPaymentTotal), accentColor: 'rose' as const, filterDescription: 'This list displays all orders that have a non-zero outstanding balance.' };
 
-      case 'sales_total_leads': return { title: 'Total Leads', totalLabel: 'Total Count', totalValue: `${modalData.length}`, accentColor: 'amber' as const, filterDescription: 'All relevant leads in the sales pipeline.' };
-      case 'sales_total_converted': return { title: 'Total Converted', totalLabel: 'Total Count', totalValue: `${modalData.length}`, accentColor: 'amber' as const, filterDescription: 'Leads successfully converted.' };
-      case 'sales_total_lost': return { title: 'Total Leads Lost', totalLabel: 'Total Count', totalValue: `${modalData.length}`, accentColor: 'amber' as const, filterDescription: 'Leads whose status is Lost.' };
-      case 'sales_quotation_followup': return { title: 'Total Quotation Follow-up', totalLabel: 'Total Count', totalValue: `${modalData.length}`, accentColor: 'amber' as const, filterDescription: 'Leads currently requiring quotation follow-up.' };
+      case 'sales_total_leads':
+      case 'overview_sales': return { title: 'Total Leads Breakdown', totalLabel: 'Total Leads Count', totalValue: `${modalData.length}`, accentColor: 'amber' as const, filterDescription: 'All leads currently logged in the Sales pipeline.' };
+      case 'sales_total_converted': return { title: 'Total Converted Leads', totalLabel: 'Converted Count', totalValue: `${modalData.length}`, accentColor: 'emerald' as const, filterDescription: 'Leads that have been successfully confirmed and transitioned into active orders.' };
+      case 'sales_total_lost': return { title: 'Total Leads Lost', totalLabel: 'Lost Leads Count', totalValue: `${modalData.length}`, accentColor: 'rose' as const, filterDescription: 'Leads whose status has been marked as Lost.' };
+      case 'sales_quotation_followup': return { title: 'Total Quotation Follow-up', totalLabel: 'Follow-up Count', totalValue: `${modalData.length}`, accentColor: 'amber' as const, filterDescription: 'Leads requiring active quotation follow-up.' };
 
-      case 'ops_new': return { title: 'Total New Projects', totalLabel: 'Total Count', totalValue: `${modalData.length}`, accentColor: 'blue' as const, filterDescription: 'Existing new projects/orders that have arrived in Operations.' };
-      case 'ops_completed': return { title: 'Total Completed Shoot Projects', totalLabel: 'Total Count', totalValue: `${modalData.length}`, accentColor: 'blue' as const, filterDescription: 'Shoot projects marked as complete.' };
-      case 'ops_upcoming': return { title: 'Total Upcoming Shoots', totalLabel: 'Total Count', totalValue: `${modalData.length}`, accentColor: 'blue' as const, filterDescription: 'Projects whose scheduled date is in the future.' };
-      case 'ops_scheduled': return { title: 'Total Scheduled', totalLabel: 'Total Count', totalValue: `${modalData.length}`, accentColor: 'blue' as const, filterDescription: 'Existing scheduled/assigned shoot projects.' };
+      case 'ops_new': return { title: 'Total New Projects (Operations)', totalLabel: 'New Projects Count', totalValue: `${modalData.length}`, accentColor: 'blue' as const, filterDescription: 'New incoming shoot assignments requiring operational planning and crew deployment.' };
+      case 'ops_completed': return { title: 'Total Completed Shoot Projects', totalLabel: 'Completed Count', totalValue: `${modalData.length}`, accentColor: 'emerald' as const, filterDescription: 'Shoot assignments successfully completed on location.' };
+      case 'ops_upcoming': return { title: 'Total Upcoming Shoots', totalLabel: 'Upcoming Count', totalValue: `${modalData.length}`, accentColor: 'blue' as const, filterDescription: 'Scheduled shoots with future event dates.' };
+      case 'ops_scheduled': return { title: 'Total Scheduled Shoots', totalLabel: 'Scheduled Count', totalValue: `${modalData.length}`, accentColor: 'blue' as const, filterDescription: 'Events where crew, equipment, and shoot timing have been scheduled.' };
+      case 'overview_ops': return { title: 'Operations Pipeline Breakdown', totalLabel: 'Total Operations Count', totalValue: `${modalData.length}`, accentColor: 'blue' as const, filterDescription: 'Comprehensive overview of all operations tasks and event shoots.' };
 
-      case 'prod_new': return { title: 'Total New Projects', totalLabel: 'Total Count', totalValue: `${modalData.length}`, accentColor: 'pink' as const, filterDescription: 'Projects currently received by Production.' };
-      case 'prod_inprogress': return { title: 'Total In Progress', totalLabel: 'Total Count', totalValue: `${modalData.length}`, accentColor: 'pink' as const, filterDescription: 'Projects currently being edited.' };
-      case 'prod_editing_completed': return { title: 'Total Editing Completed', totalLabel: 'Total Count', totalValue: `${modalData.length}`, accentColor: 'pink' as const, filterDescription: 'Projects where editing is complete and pending client review.' };
-      case 'prod_client_acceptance': return { title: 'Total Client Acceptance', totalLabel: 'Total Count', totalValue: `${modalData.length}`, accentColor: 'pink' as const, filterDescription: 'Projects approved by the client.' };
+      case 'prod_new': return { title: 'Total New Projects (Production)', totalLabel: 'New Projects Count', totalValue: `${modalData.length}`, accentColor: 'purple' as const, filterDescription: 'Projects with raw footage received, awaiting editor allocation and start.' };
+      case 'prod_inprogress': return { title: 'Total In Progress Editing', totalLabel: 'In Progress Count', totalValue: `${modalData.length}`, accentColor: 'purple' as const, filterDescription: 'Projects actively being edited and color-graded by production staff.' };
+      case 'prod_editing_completed': return { title: 'Total Editing Complete', totalLabel: 'Editing Complete Count', totalValue: `${modalData.length}`, accentColor: 'purple' as const, filterDescription: 'Projects with post-production finished and ready for review.' };
+      case 'prod_client_acceptance':
+      case 'overview_acceptance': return { title: 'Total Client Acceptance', totalLabel: 'Client Accepted Count', totalValue: `${modalData.length}`, accentColor: 'emerald' as const, filterDescription: 'Projects reviewed and accepted by the client.' };
+      case 'overview_prod': return { title: 'Production Pipeline Breakdown', totalLabel: 'Total Production Count', totalValue: `${modalData.length}`, accentColor: 'purple' as const, filterDescription: 'Comprehensive overview of deliverables across all editing phases.' };
+      case 'overview_closed': return { title: 'Closed & Completed Orders', totalLabel: 'Closed Orders Count', totalValue: `${modalData.length}`, accentColor: 'emerald' as const, filterDescription: 'Projects successfully completed, fully paid, and closed.' };
 
-      default: return { title: 'Detail View', totalLabel: 'Total', totalValue: '0', accentColor: 'amber' as const, filterDescription: '' };
+      default: return { title: 'Detail View', totalLabel: 'Total Count', totalValue: `${modalData.length}`, accentColor: 'amber' as const, filterDescription: 'Detailed view of matching records.' };
     }
   }, [selectedCard, totalRevenue, outstandingPaymentTotal, modalData.length, filteredOrders.length]);
   // Review & Close Modal State
@@ -1456,7 +1625,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
 
       {/* CARD DETAIL POPUP/MODAL */}
       <BusinessOwnerCardDetailModal
-        isOpen={selectedCard !== null && selectedCard.startsWith('overview_')}
+        isOpen={selectedCard !== null}
         onClose={() => setSelectedCard(null)}
         title={modalTitleAndMeta.title}
         subtitle={`${startDate} ~ ${endDate}`}
@@ -1691,36 +1860,47 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
           return (
             <div
               key={fullDateStr}
-              className={`min-h-[70px] sm:min-h-[90px] p-1.5 sm:p-2 rounded-xl border flex flex-col justify-between transition-all ${
+              onClick={() => {
+                if (dayEvents.length > 0) {
+                  onSelectEvent({ date: fullDateStr, events: dayEvents });
+                }
+              }}
+              className={`min-h-[70px] sm:min-h-[90px] p-1 sm:p-1.5 rounded-xl border flex flex-col justify-start transition-all overflow-hidden ${
+                dayEvents.length > 0 ? 'cursor-pointer hover:border-zinc-700' : ''
+              } ${
                 isToday
                   ? 'bg-amber-500/10 border-amber-500/50 shadow-md'
                   : 'bg-zinc-900/40 border-zinc-850 hover:bg-zinc-900/80'
               }`}
             >
-              <div className="flex items-center justify-between">
+              <div className="w-full flex items-center justify-between shrink-0">
                 <span className={`text-xs font-mono font-bold ${isToday ? 'text-amber-400 font-black' : 'text-zinc-400'}`}>
                   {dayNum}
                 </span>
-                {dayEvents.length > 0 && (
-                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-300">
+                {dayEvents.length > 1 && (
+                  <span className="text-[8px] font-mono font-bold px-1 rounded bg-zinc-800 text-zinc-400 hidden sm:inline-block">
                     {dayEvents.length}
                   </span>
                 )}
               </div>
 
-              {/* Event Cards in Day Cell */}
-              <div className="space-y-1 mt-1 overflow-y-auto max-h-[50px] sm:max-h-[65px] scrollbar-none">
-                {dayEvents.map(ev => (
-                  <div
-                    key={ev.id}
-                    onClick={() => onSelectEvent(ev)}
-                    className={`p-1 rounded-md border text-[10px] font-medium truncate cursor-pointer hover:scale-102 transition-transform w-full ${ev.badgeColor}`}
-                    title={`${ev.title} (${ev.currentStatus})`}
-                  >
-                    {ev.title}
-                  </div>
-                ))}
-              </div>
+              {/* Event Cards inside the Day Cell */}
+              {dayEvents.length > 0 && (
+                <div className="w-full flex-1 flex flex-col justify-start gap-0.5 overflow-hidden mt-0.5 min-h-0">
+                  {dayEvents.map((ev, eIdx) => {
+                    const displayName = ev.eventName || ev.title || ev.customerName || 'Event';
+                    return (
+                      <div
+                        key={ev.id || eIdx}
+                        className="w-full truncate text-[8px] sm:text-[10px] leading-tight px-1 py-0.5 rounded bg-zinc-900/90 text-zinc-300 border border-zinc-800/80 font-medium text-left"
+                        title={displayName}
+                      >
+                        {displayName}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}
@@ -1775,12 +1955,19 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       const isCompleted = ['Event Completed', 'Client Acceptance', 'Delivered', 'Project Delivered', 'Completed'].includes(o.current_stage) || prod?.editing_status === 'Client Acceptance';
       const isClosed = o.current_stage === 'Order Closed' || o.current_stage === 'Closed' || prod?.editing_status === 'Order Closed';
 
+      const paymentDate = pay?.payment_date || o.created_at || o.event_date;
+      const paymentType = pay?.payment_type || pay?.Payment_type || (pay?.final_payment_received ? 'Final Payment' : pay?.advance_received ? 'Advance Payment' : 'Standard Payment');
+      const transactionId = pay?.transaction_id || '-';
+
       return {
         orderId: o.order_id,
         leadId: o.lead_id,
         customerName: o.customer_name,
         eventName: o.custom_event_name || o.event_type || 'Event Photography',
         eventDate: o.event_date,
+        paymentDate,
+        paymentType,
+        transactionId,
         totalRevenue,
         paymentReceived,
         outstanding,
@@ -1855,7 +2042,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
     };
 
     const baseCols = [
-      { key: 'orderId', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-400">{item.orderId}</span> },
+      { key: 'orderId', label: 'Order ID', render: (item: any) => <span className="font-mono font-bold text-amber-400">{item.orderId}</span> },
       { key: 'customerName', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customerName}</span> },
       { key: 'eventName', label: 'Event Name', render: (item: any) => <span>{item.eventName}</span> },
       { key: 'eventDate', label: 'Event Date', render: (item: any) => <span className="font-mono text-zinc-400">{item.eventDate ? item.eventDate.split('T')[0] : 'N/A'}</span> }
@@ -1865,15 +2052,42 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       return [
         ...baseCols,
         { key: 'totalRevenue', label: 'Total Revenue', render: (item: any) => <span className="font-mono text-emerald-400 font-bold">{formatINR(item.totalRevenue)}</span> },
-        { key: 'paymentReceived', label: 'Received', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.paymentReceived)}</span> },
+        { key: 'paymentReceived', label: 'Received', render: (item: any) => <span className="font-mono text-zinc-300">{formatINR(item.paymentReceived)}</span> },
+        { key: 'outstanding', label: 'Outstanding', render: (item: any) => <span className="font-mono text-rose-400">{formatINR(item.outstanding)}</span> },
+        { key: 'paymentStatus', label: 'Payment Status', render: (item: any) => (
+          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+            item.paymentStatus === 'Fully Paid'
+              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+              : item.paymentStatus === 'Partially Paid'
+              ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+              : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+          }`}>
+            {item.paymentStatus}
+          </span>
+        )},
         actionCol
       ];
     }
     if (selectedCard === 'summary_payment') {
       return [
-        ...baseCols,
-        { key: 'totalRevenue', label: 'Total Revenue', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.totalRevenue)}</span> },
+        { key: 'orderId', label: 'Order ID', render: (item: any) => <span className="font-mono font-bold text-amber-400">{item.orderId}</span> },
+        { key: 'customerName', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customerName}</span> },
+        { key: 'eventName', label: 'Event Name', render: (item: any) => <span>{item.eventName}</span> },
+        { key: 'paymentDate', label: 'Payment Date', render: (item: any) => <span className="font-mono text-zinc-300">{item.paymentDate ? item.paymentDate.split('T')[0] : 'N/A'}</span> },
+        { key: 'paymentType', label: 'Payment Type', render: (item: any) => <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px] font-mono">{item.paymentType || 'Standard'}</span> },
         { key: 'paymentReceived', label: 'Payment Received', render: (item: any) => <span className="font-mono text-emerald-400 font-bold">{formatINR(item.paymentReceived)}</span> },
+        { key: 'transactionId', label: 'Transaction / Ref', render: (item: any) => <span className="font-mono text-zinc-400 text-[10px]">{item.transactionId || '-'}</span> },
+        { key: 'paymentStatus', label: 'Payment Status', render: (item: any) => (
+          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+            item.paymentStatus === 'Fully Paid'
+              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+              : item.paymentStatus === 'Partially Paid'
+              ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+              : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+          }`}>
+            {item.paymentStatus}
+          </span>
+        )},
         actionCol
       ];
     }
@@ -1883,12 +2097,25 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         { key: 'totalRevenue', label: 'Total Revenue', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.totalRevenue)}</span> },
         { key: 'paymentReceived', label: 'Received', render: (item: any) => <span className="font-mono text-emerald-400">{formatINR(item.paymentReceived)}</span> },
         { key: 'outstanding', label: 'Outstanding Balance', render: (item: any) => <span className="font-mono text-rose-400 font-bold">{formatINR(item.outstanding)}</span> },
+        { key: 'paymentStatus', label: 'Payment Status', render: (item: any) => (
+          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+            item.paymentStatus === 'Fully Paid'
+              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+              : item.paymentStatus === 'Partially Paid'
+              ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+              : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+          }`}>
+            {item.paymentStatus}
+          </span>
+        )},
         actionCol
       ];
     }
     if (selectedCard === 'summary_completed' || selectedCard === 'summary_closed') {
       return [
         ...baseCols,
+        { key: 'totalRevenue', label: 'Total Revenue', render: (item: any) => <span className="font-mono text-emerald-400">{formatINR(item.totalRevenue)}</span> },
+        { key: 'paymentReceived', label: 'Received', render: (item: any) => <span className="font-mono text-zinc-300">{formatINR(item.paymentReceived)}</span> },
         { key: 'currentStage', label: 'Current Stage', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-850 font-bold font-mono text-[10px] text-zinc-300">{item.currentStage || 'Completed'}</span> },
         actionCol
       ];
@@ -1901,18 +2128,18 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       case 'summary_revenue':
         return {
           title: 'Summary: Total Revenue',
-          totalLabel: 'Total Sum',
+          totalLabel: 'Total Revenue Sum',
           totalValue: formatINR(totalRevSum),
           accentColor: 'blue' as const,
           filterDescription: 'This list displays all summary orders active within the selected parameters, contributing to the Total Revenue.'
         };
       case 'summary_payment':
         return {
-          title: 'Summary: Payment Received',
+          title: 'Summary: Payment Received & Collections',
           totalLabel: 'Total Received Sum',
           totalValue: formatINR(totalRecSum),
           accentColor: 'emerald' as const,
-          filterDescription: 'This list displays all payments received and credited for orders within the active period bounds.'
+          filterDescription: 'This list displays all payments received, transaction collections, and deposits for active orders.'
         };
       case 'summary_outstanding':
         return {
@@ -1928,7 +2155,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
           totalLabel: 'Completed Projects Count',
           totalValue: `${completedCount} Projects`,
           accentColor: 'amber' as const,
-          filterDescription: 'This list displays all projects that have been successfully completed, awaiting final close or client accepted.'
+          filterDescription: 'This list displays all projects that have been successfully completed, delivered, or accepted by clients.'
         };
       case 'summary_closed':
         return {
@@ -2068,13 +2295,13 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       </div>
 
       {/* Summary KPI Highlights Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5 sm:gap-4">
         <CameraLensStatsCard
           label="Total Revenue"
           val={totalRevSum}
           isCurrency={true}
           currencyFormatter={formatINR}
-          theme="emerald"
+          theme="blue"
           trendText="Gross Value"
           lensLabel="PRIME 50mm"
           chartPoints={[25, 35, 30, 45, 40, 55, 60]}
@@ -2085,7 +2312,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
           val={totalRecSum}
           isCurrency={true}
           currencyFormatter={formatINR}
-          theme="green"
+          theme="emerald"
           trendText="Collections"
           lensLabel="CINE 35mm"
           chartPoints={[20, 28, 25, 38, 35, 48, 52]}
@@ -2114,7 +2341,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         <CameraLensStatsCard
           label="Closed Orders"
           val={closedCount}
-          theme="blue"
+          theme="indigo"
           trendText="Settled Orders"
           lensLabel="TELE 135mm"
           chartPoints={[8, 12, 10, 16, 15, 22, 24]}
@@ -3026,7 +3253,7 @@ const UnlockRequestReviewModal: React.FC<UnlockRequestReviewModalProps> = ({
 };
 
 /* ============================================================================
-   CALENDAR EVENT DETAIL MODAL
+   CALENDAR EVENT DETAIL MODAL (READ-ONLY TABLE)
    ============================================================================ */
 interface CalendarEventDetailModalProps {
   event: any;
@@ -3036,8 +3263,7 @@ interface CalendarEventDetailModalProps {
 
 const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
   event,
-  onClose,
-  onReviewAndClose
+  onClose
 }) => {
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -3056,15 +3282,10 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
     };
   }, []);
 
-  const isAwaitingApproval = [
-    'Client Acceptance',
-    'Business Owner Review',
-    'Customer Review',
-    'Editing Complete',
-    'Final Approval'
-  ].includes(event.currentStatus);
-
   if (typeof document === 'undefined') return null;
+
+  const eventList: any[] = event?.events ? event.events : [event];
+  const dateStr = event?.date || eventList[0]?.eventDate || '';
 
   return createPortal(
     <div 
@@ -3074,74 +3295,92 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
       }}
     >
       <div 
-        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-md p-6 space-y-5 shadow-2xl relative animate-in fade-in zoom-in duration-200"
+        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-5xl p-5 md:p-6 space-y-4 shadow-2xl relative animate-in fade-in zoom-in duration-200 overflow-hidden flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        
-        <div className="flex items-center justify-between pb-3 border-b border-zinc-850">
+        <div className="flex items-center justify-between pb-3 border-b border-zinc-850 shrink-0">
           <div>
-            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-purple-400">
-              Event Details
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-500">
+              EVENT DETAILS
             </span>
-            <h3 className="text-lg font-black text-white mt-0.5">
-              {event.eventName}
+            <h3 className="text-base sm:text-lg font-black text-white mt-0.5 font-mono">
+              {dateStr || 'Selected Date'}
             </h3>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Required Details Display */}
-        <div className="space-y-3 text-xs font-sans">
-          
-          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-3 flex items-center justify-between">
-            <span className="text-zinc-500 font-mono uppercase text-[10px] font-bold">Customer Name</span>
-            <span className="text-white font-bold text-sm">{event.customerName}</span>
-          </div>
-
-          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-3 flex items-center justify-between font-mono">
-            <span className="text-zinc-500 uppercase text-[10px] font-bold">Order ID</span>
-            <span className="text-amber-400 font-bold">{event.orderId}</span>
-          </div>
-
-          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-3 flex items-center justify-between">
-            <span className="text-zinc-500 font-mono uppercase text-[10px] font-bold">Event Name</span>
-            <span className="text-zinc-200 font-bold">{event.eventName}</span>
-          </div>
-
-          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-3 flex items-center justify-between">
-            <span className="text-zinc-500 font-mono uppercase text-[10px] font-bold">Current Status</span>
-            <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono text-[10px] font-bold">
-              {event.currentStatus}
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-mono font-bold px-2.5 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg select-none">
+              {eventList.length} EVENTS
             </span>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
-
-          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-3 flex items-center justify-between font-mono text-[11px]">
-            <span className="text-zinc-500 uppercase font-bold">Event Date</span>
-            <span className="text-zinc-300">{event.eventDate}</span>
-          </div>
-
         </div>
 
-        {/* Actions */}
-        <div className="pt-2 flex items-center justify-end gap-2">
-          {isAwaitingApproval && event.rawOrder && (
-            <button
-              onClick={() => onReviewAndClose(event.rawOrder)}
-              className="px-4 py-2 rounded-xl bg-amber-500 text-black font-black text-xs hover:bg-amber-400 transition-all cursor-pointer flex items-center gap-1.5 shadow-lg"
-            >
-              <ShieldCheck className="w-4 h-4" />
-              <span>Review & Close Order</span>
-            </button>
-          )}
+        {/* Read-Only Table */}
+        <div className="overflow-y-auto flex-1">
+          <div className="overflow-x-auto w-full border border-zinc-850 rounded-xl bg-zinc-900/40">
+            <table className="w-full text-left border-collapse min-w-[700px]">
+              <thead>
+                <tr className="border-b border-zinc-800 bg-zinc-950/90 text-zinc-400 font-mono text-[11px] uppercase tracking-wider font-bold">
+                  <th className="p-3.5 pl-4">Event Name</th>
+                  <th className="p-3.5">Event Date</th>
+                  <th className="p-3.5">Event Time</th>
+                  <th className="p-3.5">Customer</th>
+                  <th className="p-3.5">Status</th>
+                  <th className="p-3.5 pr-4">Target Delivery Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-850/60 text-xs font-sans">
+                {eventList.map((ev, idx) => {
+                  const evName = ev.eventName || ev.rawOrder?.custom_event_name || ev.title || 'Event';
+                  const evDate = ev.eventDate || ev.rawOrder?.event_date || dateStr;
+                  const evTime = ev.rawOrder?.event_time || '10:00 AM';
+                  const custName = ev.customerName || ev.rawOrder?.customer_name || '—';
+                  const status = ev.currentStatus || ev.rawOrder?.current_stage || 'Active';
+                  const targetDel = ev.rawProd?.target_delivery_date || ev.rawProd?.expected_delivery_date || ev.rawOrder?.delivery_target_date || '—';
 
+                  return (
+                    <tr 
+                      key={ev.id || idx}
+                      className="bg-zinc-950/20 select-text"
+                    >
+                      <td className="p-3.5 pl-4 font-bold text-zinc-100">
+                        {evName}
+                      </td>
+                      <td className="p-3.5 font-mono text-zinc-300">
+                        {evDate}
+                      </td>
+                      <td className="p-3.5 font-mono text-zinc-300">
+                        {evTime}
+                      </td>
+                      <td className="p-3.5 text-zinc-200 font-medium">
+                        {custName}
+                      </td>
+                      <td className="p-3.5">
+                        <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase bg-zinc-850 text-amber-400 border border-zinc-750">
+                          {status}
+                        </span>
+                      </td>
+                      <td className="p-3.5 pr-4 font-mono font-bold text-pink-400">
+                        {targetDel}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Modal Footer */}
+        <div className="pt-2 flex items-center justify-end shrink-0">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-bold text-zinc-400 hover:text-white cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-bold text-zinc-400 hover:text-white cursor-pointer transition-colors"
           >
             Close
           </button>
@@ -3152,4 +3391,5 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
     document.body
   );
 };
+
 

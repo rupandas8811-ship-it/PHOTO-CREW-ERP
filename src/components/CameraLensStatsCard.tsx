@@ -189,31 +189,51 @@ export const CameraLensStatsCard: React.FC<CameraLensStatsCardProps> = ({
 
   // Dynamically scale counts when they become large to protect from text overflow / clipping
   const valStr = String(displayVal);
-  let valSizeClass = "text-2xl sm:text-3xl";
-  if (valStr.length > 12) {
-    valSizeClass = "text-base sm:text-lg md:text-xl lg:text-2xl";
-  } else if (valStr.length > 9) {
-    valSizeClass = "text-lg sm:text-xl md:text-2xl lg:text-3xl";
-  } else if (valStr.length > 6) {
-    valSizeClass = "text-xl sm:text-2xl md:text-3xl";
+  let valSizeClass = "text-lg sm:text-xl lg:text-xl xl:text-2xl";
+  if (valStr.length >= 12) {
+    valSizeClass = "text-xs sm:text-sm md:text-xs lg:text-sm xl:text-base";
+  } else if (valStr.length >= 8) {
+    valSizeClass = "text-sm sm:text-base md:text-sm lg:text-base xl:text-lg";
+  } else if (valStr.length >= 5) {
+    valSizeClass = "text-base sm:text-lg md:text-base lg:text-lg xl:text-xl";
+  } else if (valStr.length <= 3) {
+    valSizeClass = "text-xl sm:text-2xl md:text-xl lg:text-2xl xl:text-3xl";
   }
 
   return (
     <div 
       onClick={onClick}
-      className={`bg-zinc-950/65 backdrop-blur-xl border ${isFiltered ? 'border-zinc-500 shadow-[0_0_20px_rgba(255,255,255,0.08)] scale-[0.98]' : 'border-zinc-900'} rounded-2xl p-3 sm:p-5 flex flex-col justify-between transition-all duration-500 hover:-translate-y-1.5 select-none ${currentTheme.borderClass} group/card cursor-pointer relative overflow-hidden h-auto min-h-[140px] sm:min-h-[160px] gap-2.5 sm:gap-4`}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      } : undefined}
+      className={`bg-zinc-950/75 backdrop-blur-xl border ${
+        isFiltered 
+          ? 'border-zinc-500 shadow-[0_0_20px_rgba(255,255,255,0.08)] scale-[0.98]' 
+          : onClick 
+            ? 'border-zinc-850 hover:border-zinc-700/80 shadow-md hover:shadow-xl' 
+            : 'border-zinc-900'
+      } rounded-2xl p-3 sm:p-4 flex flex-col justify-between transition-all duration-300 select-none ${
+        currentTheme.borderClass
+      } group/card ${
+        onClick ? 'cursor-pointer hover:-translate-y-1 active:scale-[0.98]' : ''
+      } relative overflow-hidden h-full min-h-[148px] sm:min-h-[158px] gap-2.5 sm:gap-3`}
     >
       {/* Premium subtle glass light strike overlay */}
       <div className="absolute inset-0 bg-gradient-to-tr from-white/[0.01] to-white/[0.04] opacity-50 pointer-events-none" />
       
       {/* Interactive underlying neon spot glow */}
-      <div className="absolute -right-6 -bottom-6 w-24 h-24 rounded-full blur-[28px] pointer-events-none opacity-10 transition-all duration-500 group-hover/card:scale-150 group-hover/card:opacity-20" style={{ backgroundColor: currentTheme.color }} />
+      <div className="absolute -right-6 -bottom-6 w-24 h-24 rounded-full blur-[28px] pointer-events-none opacity-10 transition-all duration-500 group-hover/card:scale-150 group-hover/card:opacity-25" style={{ backgroundColor: currentTheme.color }} />
 
       {/* Main Grid: Left Lens Representation & Right Metrics Section */}
-      <div className="flex flex-col sm:flex-row items-center sm:items-start md:items-center gap-2 sm:gap-4 z-10 w-full text-center sm:text-left">
+      <div className="flex items-center gap-2.5 sm:gap-3.5 z-10 w-full text-left">
         
         {/* LEFT COMPASS: DSLR CAMERA LENS EMBED */}
-        <div className="relative w-10 h-10 sm:w-16 sm:h-16 md:w-18 md:h-18 flex items-center justify-center shrink-0 select-none group/lens">
+        <div className="relative w-10 h-10 sm:w-12 sm:h-12 md:w-11 md:h-11 lg:w-12 lg:h-12 xl:w-13 xl:h-13 flex items-center justify-center shrink-0 select-none group/lens">
           {/* 3D Camera Lens Outer Barrel */}
           <div className="absolute inset-0 rounded-full border border-zinc-800 bg-gradient-to-b from-zinc-900 to-zinc-950 flex items-center justify-center p-0.5 shadow-xl ring-1 ring-white/5 transition-all duration-700 group-hover/card:scale-105 group-hover/card:border-zinc-700">
             
@@ -244,21 +264,21 @@ export const CameraLensStatsCard: React.FC<CameraLensStatsCardProps> = ({
               </div>
 
               {/* Glass reflection gradient theme */}
-              <div className={`absolute inset-1.5 sm:inset-2 rounded-full bg-gradient-to-br transition-all duration-500 flex items-center justify-center ${currentTheme.innerGlow}`}>
+              <div className={`absolute inset-1 sm:inset-1.5 rounded-full bg-gradient-to-br transition-all duration-500 flex items-center justify-center ${currentTheme.innerGlow}`}>
                 
                 {/* Viewfinder crosshairs */}
                 <div className="absolute inset-0 pointer-events-none opacity-20 group-hover/card:opacity-40 transition-opacity">
                   <div className="absolute top-1/2 left-0 w-full h-[0.5px] bg-white/40" />
                   <div className="absolute left-1/2 top-0 h-full w-[0.5px] bg-white/40" />
-                  <div className="absolute inset-1.5 sm:inset-2.5 border border-dashed border-white/20 rounded-full animate-[spin_100s_linear_infinite]" />
+                  <div className="absolute inset-1 sm:inset-2 border border-dashed border-white/20 rounded-full animate-[spin_100s_linear_infinite]" />
                 </div>
 
                 {/* Glass reflection overlay */}
                 <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-transparent via-white/5 to-white/15 opacity-80 mix-blend-overlay pointer-events-none group-hover/card:scale-110 group-hover/card:-rotate-12 transition-all duration-1000" />
                 
                 {/* Flare reflections */}
-                <div className="absolute top-0.5 left-1 w-4 h-1.5 bg-white/20 blur-[0.5px] rounded-full rotate-[-20deg] pointer-events-none group-hover/card:translate-x-0.5 transition-transform" />
-                <div className="absolute bottom-1 right-1 w-2.5 h-1 bg-white/10 blur-[0.5px] rounded-full pointer-events-none" />
+                <div className="absolute top-0.5 left-1 w-3 h-1 bg-white/20 blur-[0.5px] rounded-full rotate-[-20deg] pointer-events-none group-hover/card:translate-x-0.5 transition-transform" />
+                <div className="absolute bottom-1 right-1 w-2 h-0.5 bg-white/10 blur-[0.5px] rounded-full pointer-events-none" />
 
                 {/* Floating spec text label on hover */}
                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/lens:opacity-100 bg-zinc-950/80 transition-opacity duration-300 rounded-full p-0.5 pointer-events-none">
@@ -266,7 +286,7 @@ export const CameraLensStatsCard: React.FC<CameraLensStatsCardProps> = ({
                 </div>
 
                 {/* Center Icon fallback */}
-                <Camera className="w-3.5 h-3.5 text-zinc-500 opacity-60 group-hover/card:scale-110 group-hover/card:text-zinc-300 transition-all duration-500" />
+                <Camera className="w-3 h-3 text-zinc-500 opacity-60 group-hover/card:scale-110 group-hover/card:text-zinc-300 transition-all duration-500" />
               </div>
 
             </div>
@@ -274,20 +294,25 @@ export const CameraLensStatsCard: React.FC<CameraLensStatsCardProps> = ({
           </div>
         </div>
 
-        {/* CENTER SEGMENT: METRICS TITLE AND LARGE DIGIT CONTROLLER */}
-        <div className="flex-grow space-y-1.5 overflow-hidden w-full">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 w-full">
-            <span className="text-[10px] sm:text-[11px] font-extrabold tracking-wider text-zinc-500 uppercase font-sans group-hover/card:text-zinc-300 transition-colors duration-300 break-words whitespace-normal leading-tight">
+        {/* CENTER SEGMENT: METRICS TITLE AND DIGIT CONTROLLER */}
+        <div className="flex-1 min-w-0 space-y-1 overflow-hidden">
+          <div className="flex items-center justify-between gap-1 w-full">
+            <span className="text-[10px] sm:text-[11px] font-bold tracking-wider text-zinc-400 uppercase font-sans group-hover/card:text-zinc-200 transition-colors duration-300 truncate">
               {label}
             </span>
-            {isFiltered && (
-              <span className="self-center sm:self-auto text-[8px] bg-white/10 border border-white/10 text-white rounded px-1.5 py-0.5 tracking-widest font-mono uppercase shrink-0">
-                Active Filter
+            {isFiltered ? (
+              <span className="text-[8px] bg-white/10 border border-white/10 text-white rounded px-1.5 py-0.5 tracking-widest font-mono uppercase shrink-0">
+                Filter
               </span>
-            )}
+            ) : onClick ? (
+              <span className="inline-flex items-center gap-0.5 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-900/90 border border-zinc-800 text-zinc-400 group-hover/card:text-white group-hover/card:border-zinc-600 group-hover/card:bg-zinc-850 transition-all shadow-sm shrink-0">
+                <span>View</span>
+                <span className="text-[10px] leading-none transition-transform group-hover/card:translate-x-0.5 group-hover/card:-translate-y-0.5">↗</span>
+              </span>
+            ) : null}
           </div>
-          <div className="flex items-baseline justify-center sm:justify-start select-none py-0.5">
-            <span className={`${valSizeClass} font-black text-white tracking-tight group-hover/card:scale-105 transition-transform duration-550 origin-left block  text-ellipsis overflow-hidden break-words max-w-full`}>
+          <div className="flex items-baseline select-none py-0.5 overflow-hidden">
+            <span className={`${valSizeClass} font-black text-white tracking-tight group-hover/card:scale-[1.02] transition-transform duration-300 origin-left block whitespace-nowrap tabular-nums overflow-hidden text-ellipsis max-w-full leading-tight`}>
               {isCurrency || isPercentage ? (
                 <span>{displayVal}</span>
               ) : (
@@ -300,13 +325,13 @@ export const CameraLensStatsCard: React.FC<CameraLensStatsCardProps> = ({
       </div>
 
       {/* BOTTOM SEGMENT: SPARKLINE TREND GRAPH & CALIBRATION CODES */}
-      <div className="mt-auto pt-2 border-t border-zinc-900/55 flex flex-col xs:flex-row items-center justify-between gap-3 z-10 w-full text-center xs:text-left">
-        <div className="w-full xs:w-auto xs:max-w-[130px] flex-grow max-w-full overflow-hidden">
+      <div className="mt-auto pt-2 border-t border-zinc-900/60 flex items-center justify-between gap-2 z-10 w-full">
+        <div className="w-auto flex-1 max-w-[110px] overflow-hidden">
           <MicroSparkline points={chartPoints} color={currentTheme.sparkColor} />
         </div>
-        <div className="flex items-center justify-center xs:justify-start gap-1 shrink-0 text-[8px] font-mono font-medium text-zinc-500 uppercase tracking-widest py-0.5">
+        <div className="flex items-center gap-1 shrink-0 text-[8px] font-mono font-medium text-zinc-500 uppercase tracking-wider py-0.5 truncate">
           <span className="w-1 h-1 rounded-full animate-ping shrink-0" style={{ backgroundColor: currentTheme.color }} />
-          <span className="break-words max-w-[120px]">{trendText}</span>
+          <span className="truncate">{trendText}</span>
         </div>
       </div>
     </div>

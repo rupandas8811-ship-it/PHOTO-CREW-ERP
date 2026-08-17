@@ -109,7 +109,7 @@ const extractTeamMembersConfig = (lead: any, leadPkgs: any[]): EventTeamMemberCo
         }
       });
 
-      // If it's a flat array of string/role items without event metadata (e.g. ["1 × Photographer"] or [{ name: 'Photographer', qty: 1 }])
+      // If it's a flat array of string/role items without event metadata (e.g. ["1 × Drone Operator", "2 × Lead Photographer"])
       const isEventArray = parsed.some((item: any) => item && typeof item === 'object' && ('event_id' in item || 'event_name' in item || 'team_members' in item || 'members' in item));
       if (!isEventArray && parsed.length > 0) {
         configs.push({
@@ -125,17 +125,26 @@ const extractTeamMembersConfig = (lead: any, leadPkgs: any[]): EventTeamMemberCo
         if (!val) return;
         const valList = Array.isArray(val) ? val : parseRaw(val) || [val];
         if (Array.isArray(valList) && valList.length > 0) {
-          let extractedEvId = '';
-          let extractedEvName = '';
+          let extractedEvId = key;
+          let extractedEvName = key;
 
-          const parts = key.split('_');
-          if (parts.length >= 2) {
-            const suffix = parts.slice(1).join('_');
-            extractedEvId = suffix;
-            extractedEvName = suffix;
-          } else {
-            extractedEvId = key;
-            extractedEvName = key;
+          if (pkgId && key.toLowerCase().startsWith(`${pkgId.toLowerCase()}_`)) {
+            const rest = key.substring(pkgId.length + 1);
+            extractedEvId = rest;
+            extractedEvName = rest;
+          } else if (key.toLowerCase().startsWith('custom package_')) {
+            const rest = key.substring('custom package_'.length);
+            extractedEvId = rest;
+            extractedEvName = rest;
+          } else if (key.toLowerCase().startsWith('custom_package_')) {
+            const rest = key.substring('custom_package_'.length);
+            extractedEvId = rest;
+            extractedEvName = rest;
+          } else if (key.includes('_')) {
+            const parts = key.split('_');
+            const rest = parts.slice(1).join('_');
+            extractedEvId = rest;
+            extractedEvName = rest;
           }
 
           configs.push({
@@ -254,13 +263,17 @@ const getEventRolesForEvent = (ev: any, index: number, configList: EventTeamMemb
     if (matchByName && matchByName.team_members?.length > 0) return matchByName.team_members;
   }
 
-  // 4. Single-event lead compatibility ONLY
-  // If the lead has strictly 1 event, and there is a config with no specific event_id or matching event, use it.
-  if (totalEvents === 1 && configList.length === 1 && configList[0].team_members?.length > 0) {
-    return configList[0].team_members;
+  // 4. Index matching for multi-event configurations
+  if (totalEvents > 1 && configList[index] && configList[index].team_members?.length > 0) {
+    return configList[index].team_members;
   }
 
-  // Multi-event leads MUST NEVER copy team members from another event or guess by index
+  // 5. Single-event lead fallback: any config with team members
+  if (totalEvents === 1) {
+    const anyValidConfig = configList.find(c => c.team_members && c.team_members.length > 0);
+    if (anyValidConfig) return anyValidConfig.team_members;
+  }
+
   return [];
 };
 
@@ -1467,8 +1480,8 @@ export const OperationsLeads: React.FC = () => {
               const st = staff?.find(s => s.name?.toLowerCase() === assignedName.toLowerCase());
               staffList.push({
                 id: 'slot_' + Math.random().toString(36).substr(2, 6),
-                staff_role: 'General Staff',
-                staff_id: st?.staff_id || 'MOCK-' + Math.random().toString(36).substr(2, 4),
+                staff_role: st?.role || 'Team Member',
+                staff_id: st?.staff_id || (assignedName ? 'MOCK-' + Math.random().toString(36).substr(2, 4) : ''),
                 staff_name: assignedName,
                 mobile: st?.mobile || mobilesList[idx] || '',
                 staff_type: 'In-House',
@@ -1490,16 +1503,6 @@ export const OperationsLeads: React.FC = () => {
                   equipment: []
                 });
               }
-            });
-          } else {
-            staffList.push({
-              id: 'slot_' + Math.random().toString(36).substr(2, 6),
-              staff_role: 'General Staff',
-              staff_id: '',
-              staff_name: '',
-              mobile: '',
-              staff_type: 'In-House',
-              equipment: []
             });
           }
         }
@@ -2821,15 +2824,15 @@ export const OperationsLeads: React.FC = () => {
 
                             return taskGroups.map((task, groupIdx) => {
                               const taskSlots = allocStaff.filter((s: any) => s.staff_role === task.roleName);
-                              const slotsToRender = taskSlots.length > 0 ? taskSlots : [{
+                              const slotsToRender = taskSlots.length > 0 ? taskSlots : Array.from({ length: task.targetQty || 1 }, () => ({
                                 id: 'slot_' + Math.random().toString(36).substr(2, 6),
                                 staff_role: task.roleName,
                                 staff_id: '',
                                 staff_name: '',
                                 mobile: '',
-                                staff_type: 'In-House',
+                                staff_type: 'In-House' as const,
                                 equipment: []
-                              }];
+                              }));
 
                               const assignedCount = taskSlots.filter((s: any) => s.staff_name && s.staff_name.trim() !== '').length;
 

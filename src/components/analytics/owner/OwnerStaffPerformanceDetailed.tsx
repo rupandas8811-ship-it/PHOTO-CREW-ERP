@@ -845,26 +845,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
               Business Performance Ecosystem Pipeline
             </h3>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="text-[10px] font-mono text-zinc-500 hidden md:block">Live Database Flow Metrics</span>
-            <div className="w-full md:w-64">
-              <select
-                value={activeTab}
-                onChange={(e) => {
-                  const val = e.target.value as 'sales' | 'operations' | 'production';
-                  setActiveTab(val);
-                  setSelectedStaffFilter('All');
-                  setCurrentPage(1);
-                  setSortConfig({ key: val === 'sales' ? 'conversionRate' : 'completionRate', direction: 'desc' });
-                }}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2 text-xs font-bold font-mono text-white focus:outline-none focus:border-amber-500 transition-colors shadow-inner cursor-pointer"
-              >
-                <option value="sales">Sales Performance</option>
-                <option value="operations">Operations Performance</option>
-                <option value="production">Production Performance</option>
-              </select>
-            </div>
-          </div>
+          <span className="text-[10px] font-mono text-zinc-500">Live Database Flow Metrics</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
@@ -957,6 +938,38 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
               <span>Success Rate: 100%</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* DEPARTMENT / PERFORMANCE DROPDOWN (Directly below Pipeline) */}
+      <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-2.5">
+          <Layers className="w-4 h-4 text-amber-400" />
+          <div>
+            <h3 className="text-xs font-black uppercase tracking-wider text-white font-mono">
+              Department Performance View
+            </h3>
+            <p className="text-[11px] text-zinc-400 font-mono">
+              Select department to review detailed staff scorecards, conversion metrics, and deliverable records.
+            </p>
+          </div>
+        </div>
+        <div className="w-full sm:w-72">
+          <select
+            value={activeTab}
+            onChange={(e) => {
+              const val = e.target.value as 'sales' | 'operations' | 'production';
+              setActiveTab(val);
+              setSelectedStaffFilter('All');
+              setCurrentPage(1);
+              setSortConfig({ key: val === 'sales' ? 'conversionRate' : 'completionRate', direction: 'desc' });
+            }}
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-xs font-bold font-mono text-white focus:outline-none focus:border-amber-500 transition-colors shadow-inner cursor-pointer"
+          >
+            <option value="sales">Sales Performance</option>
+            <option value="operations">Operations Performance</option>
+            <option value="production">Production Performance</option>
+          </select>
         </div>
       </div>
 

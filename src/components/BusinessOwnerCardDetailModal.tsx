@@ -14,7 +14,7 @@ interface BusinessOwnerCardDetailModalProps {
   onClose: () => void;
   title: string;
   subtitle?: string;
-  accentColor?: 'emerald' | 'blue' | 'amber' | 'rose';
+  accentColor?: 'emerald' | 'blue' | 'amber' | 'rose' | 'purple' | 'pink';
   data: any[];
   columns: ColumnDefinition[];
   totalLabel?: string;
@@ -69,34 +69,52 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
   if (!isOpen || typeof document === 'undefined') return null;
 
   // Determine colors based on accent type
-  const colorMap = {
+  const colorMap: Record<string, { border: string; bg: string; text: string; badge: string; dot: string }> = {
     emerald: {
       border: 'border-emerald-500/30',
       bg: 'from-emerald-950/20 to-zinc-950',
       text: 'text-emerald-400',
-      badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+      badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+      dot: 'bg-emerald-500'
     },
     blue: {
       border: 'border-blue-500/30',
       bg: 'from-blue-950/20 to-zinc-950',
       text: 'text-blue-400',
-      badge: 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+      badge: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+      dot: 'bg-blue-500'
     },
     amber: {
       border: 'border-amber-500/30',
       bg: 'from-amber-950/20 to-zinc-950',
       text: 'text-amber-400',
-      badge: 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+      badge: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+      dot: 'bg-amber-500'
     },
     rose: {
       border: 'border-rose-500/30',
       bg: 'from-rose-950/20 to-zinc-950',
       text: 'text-rose-400',
-      badge: 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+      badge: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+      dot: 'bg-rose-500'
+    },
+    purple: {
+      border: 'border-purple-500/30',
+      bg: 'from-purple-950/20 to-zinc-950',
+      text: 'text-purple-400',
+      badge: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+      dot: 'bg-purple-500'
+    },
+    pink: {
+      border: 'border-pink-500/30',
+      bg: 'from-pink-950/20 to-zinc-950',
+      text: 'text-pink-400',
+      badge: 'bg-pink-500/10 text-pink-400 border-pink-500/20',
+      dot: 'bg-pink-500'
     }
   };
 
-  const activeColors = colorMap[accentColor] || colorMap.amber;
+  const activeColors = (accentColor && colorMap[accentColor]) || colorMap.amber;
 
   return createPortal(
     <div 
@@ -113,7 +131,7 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
         <div className="p-6 border-b border-zinc-900 flex items-start justify-between gap-4">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <div className={`w-2.5 h-2.5 rounded-full ${accentColor === 'emerald' ? 'bg-emerald-500' : accentColor === 'blue' ? 'bg-blue-500' : accentColor === 'rose' ? 'bg-rose-500' : 'bg-amber-500'}`} />
+              <div className={`w-2.5 h-2.5 rounded-full ${activeColors.dot}`} />
               <h2 className="text-base font-black uppercase tracking-wider text-white font-mono">
                 {title}
               </h2>

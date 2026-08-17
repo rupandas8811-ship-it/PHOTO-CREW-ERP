@@ -1218,7 +1218,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                             if (evs.length > 0) setShowSelectedDateModal(true);
                           }
                         }}
-                        className={`flex flex-col items-center justify-between p-2 sm:p-3 rounded-xl aspect-square border transition-all duration-150 cursor-pointer select-none touch-manipulation relative ${
+                        className={`flex flex-col items-start justify-start p-1 sm:p-1.5 rounded-xl aspect-square border transition-all duration-150 cursor-pointer select-none touch-manipulation relative overflow-hidden ${
                           isSelected
                             ? "bg-zinc-900 border-yellow-500 shadow-[0_0_12px_rgba(234,179,8,0.18)]"
                             : isTodayStr
@@ -1229,35 +1229,42 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                         }`}
                       >
                         {/* Date Number Display */}
-                        <span
-                          className={`text-sm sm:text-base font-mono font-extrabold ${
-                            isSelected
-                              ? "text-yellow-500 font-black"
-                              : isTodayStr
-                              ? "text-emerald-400 font-bold"
-                              : cell.isCurrentMonth
-                              ? "text-zinc-200"
-                              : "text-zinc-800"
-                          }`}
-                        >
-                          {cell.dayNumber}
-                        </span>
+                        <div className="w-full flex items-center justify-between shrink-0">
+                          <span
+                            className={`text-xs sm:text-sm font-mono font-extrabold ${
+                              isSelected
+                                ? "text-yellow-500 font-black"
+                                : isTodayStr
+                                ? "text-emerald-400 font-bold"
+                                : cell.isCurrentMonth
+                                ? "text-zinc-200"
+                                : "text-zinc-800"
+                            }`}
+                          >
+                            {cell.dayNumber}
+                          </span>
+                          {cell.isCurrentMonth && evs.length > 1 && (
+                            <span className="text-[8px] font-mono px-1 rounded bg-zinc-800 text-zinc-400 font-bold hidden sm:inline-block">
+                              {evs.length}
+                            </span>
+                          )}
+                        </div>
 
-                        {/* Event Dots/Indicators under the number */}
+                        {/* Event names list inside the existing date box */}
                         {cell.isCurrentMonth && evs.length > 0 && (
-                          <div className="flex items-center justify-center gap-1 mt-1 max-w-full overflow-hidden">
-                            {evs.slice(0, 4).map((ev) => {
-                              const h = getEventHighlights(ev);
+                          <div className="w-full flex-1 flex flex-col justify-start gap-0.5 overflow-hidden mt-0.5 min-h-0">
+                            {evs.map((ev, eIdx) => {
+                              const displayName = ev.eventName || ev.raw?.event_name || ev.eventType || ev.customerName || 'Event';
                               return (
-                                <span
-                                  key={ev.id}
-                                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${h.dot}`}
-                                />
+                                <div
+                                  key={ev.id || eIdx}
+                                  className="w-full truncate text-[8px] sm:text-[10px] leading-tight px-1 py-0.5 rounded bg-zinc-900/90 text-zinc-300 border border-zinc-800/80 font-medium text-left"
+                                  title={displayName}
+                                >
+                                  {displayName}
+                                </div>
                               );
                             })}
-                            {evs.length > 4 && (
-                              <span className="w-1 h-1 rounded-full bg-zinc-500 shrink-0" />
-                            )}
                           </div>
                         )}
                       </div>
@@ -1939,21 +1946,21 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
         </div>
       )}
     
-      {/* RESPONSIVE SELECTED DATE EVENT POPUP */}
+      {/* RESPONSIVE SELECTED DATE EVENT POPUP (READ-ONLY TABLE) */}
       {showSelectedDateModal && selectedDate && (
         <div 
           className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-fade-in"
           onClick={(e) => { e.stopPropagation(); setShowSelectedDateModal(false); }}
         >
           <div 
-            className="bg-zinc-900 border border-zinc-800 w-full max-w-5xl rounded-2xl shadow-2xl relative flex flex-col max-h-[90vh]" 
+            className="bg-zinc-900 border border-zinc-800 w-full max-w-5xl rounded-2xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden" 
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
             <div className="flex items-center justify-between p-4 md:p-6 border-b border-zinc-800/80 shrink-0">
               <div>
                 <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 block font-bold">
-                  SELECTED DATE EVENTS
+                  EVENT DETAILS
                 </span>
                 <h3 className="text-sm sm:text-base font-extrabold text-zinc-200 font-mono mt-0.5 flex items-center gap-2">
                   <CalendarIcon className="w-5 h-5 text-yellow-500" />
@@ -1966,242 +1973,89 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                 </h3>
               </div>
               <div className="flex items-center gap-3">
-                <span className="hidden sm:inline-block text-xs font-mono font-bold px-2.5 py-1 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 rounded-lg select-none">
+                <span className="text-xs font-mono font-bold px-2.5 py-1 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 rounded-lg select-none">
                   {filteredEvents.filter(ev => ev.date === selectedDate).length} EVENTS
                 </span>
                 <button
                   onClick={() => setShowSelectedDateModal(false)}
-                  className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition"
+                  className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            {/* Content Body */}
+            {/* Content Body with Responsive Read-Only Table */}
             <div className="p-4 md:p-6 overflow-y-auto">
-              <div className="space-y-3">
-                {(() => {
-                  const selectedEvs = filteredEvents.filter(ev => ev.date === selectedDate);
-                  if (selectedEvs.length === 0) {
-                    return (
-                      <div className="p-6 text-center bg-zinc-900/10 border border-dashed border-zinc-800/80 rounded-2xl text-zinc-500 text-xs font-mono">
-                        No events scheduled for this date.
-                      </div>
-                    );
-                  }
+              {(() => {
+                const selectedEvs = filteredEvents.filter(ev => ev.date === selectedDate);
+                if (selectedEvs.length === 0) {
                   return (
-<>
+                    <div className="p-8 text-center bg-zinc-950/40 border border-dashed border-zinc-800/80 rounded-2xl text-zinc-500 text-xs font-mono">
+                      No events scheduled for this date.
+                    </div>
+                  );
+                }
 
-                          {/* Desktop/Tablet Table View */}
-                          <div className="hidden md:block overflow-x-auto w-full border border-zinc-900 rounded-xl bg-zinc-950/40">
-                            <table className="w-full text-left border-collapse">
-                              <thead>
-                                <tr className="border-b border-zinc-900 bg-zinc-950/80">
-                                  {role === 'production' ? (
-                                    <>
-                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-amber-400">ORDER ID</th>
-                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-400">CUSTOMER NAME</th>
-                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-400">ASSIGNED DATE</th>
-                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-pink-400">TARGET DELIVERY DATE</th>
-                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-400">CURRENT STATUS</th>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">EVENT NAME / CUSTOMER</th>
-                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">EVENT TYPE</th>
-                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">START</th>
-                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">END</th>
-                                      <th className="p-4 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-zinc-500">STATUS</th>
-                                    </>
-                                  )}
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-zinc-900/60">
-                                {selectedEvs.map((ev) => {
-                                  const col = getColorClasses(ev.eventClass);
-                                  const times = parseEventTimes(ev.eventTime);
+                return (
+                  <div className="overflow-x-auto w-full border border-zinc-800 rounded-xl bg-zinc-950/60 shadow-inner">
+                    <table className="w-full text-left border-collapse min-w-[700px]">
+                      <thead>
+                        <tr className="border-b border-zinc-850 bg-zinc-950/90 text-zinc-400 font-mono text-[11px] uppercase tracking-wider font-bold">
+                          <th className="p-3.5 pl-4">Event Name</th>
+                          <th className="p-3.5">Event Date</th>
+                          <th className="p-3.5">Event Time</th>
+                          <th className="p-3.5">Customer</th>
+                          <th className="p-3.5">Status</th>
+                          <th className="p-3.5 pr-4">Target Delivery Date</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-850/60 text-xs font-sans">
+                        {selectedEvs.map((ev, idx) => {
+                          const evName = ev.eventName || ev.raw?.event_name || ev.eventType || 'Event';
+                          const evDate = formatDateDMY(ev.raw?.event_date || ev.date);
+                          const evTime = ev.eventTime || ev.raw?.event_start_time || '10:00 AM';
+                          const custName = ev.customerName || ev.raw?.customer_name || '—';
+                          const status = ev.currentStage || ev.eventClass || ev.raw?.status || 'Active';
+                          const targetDelDate = formatDateDMY(ev.targetDeliveryDate || ev.raw?.targetDeliveryDate || ev.raw?.delivery_target_date || ev.raw?.expected_delivery_date || '—');
 
-                                  if (role === 'production') {
-                                    const leadId = ev.raw?.lead_id || ev.orderId;
-                                    const leadObj = leads.find(l => l.lead_id === leadId);
-                                    const linkedOrder = orders.find(o => o.lead_id === leadId || o.order_id === ev.orderId);
-                                    const prodRecord = production?.find(p => p.tracking_id === leadId || p.order_id === leadId || p.tracking_id === ev.orderId || (p as any).order_id === ev.orderId);
-                                    
-                                    const oId = linkedOrder?.order_id || prodRecord?.order_id || ev.orderId || leadId || '—';
-                                    const cName = leadObj?.customer_name || linkedOrder?.client_name || ev.customerName || '—';
-                                    const aDate = getProductionAssignedDate(oId, leadId, prodRecord, editorAssignments);
-                                    const tDate = formatDateDMY(prodRecord?.target_delivery_date || prodRecord?.expected_delivery_date || leadObj?.delivery_target_date || ev.targetDeliveryDate || ev.date);
-                                    const cStatus = prodRecord?.production_status || prodRecord?.editing_status || linkedOrder?.current_stage || leadObj?.status || ev.currentStage || 'Active';
-
-                                    return (
-                                      <tr 
-                                        key={ev.id}
-                                        id={`table_ev_row_${ev.id}`}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setPopupLeadId(leadId);
-                                        }}
-                                        className="hover:bg-zinc-900/30 transition cursor-pointer"
-                                      >
-                                        <td className="p-4 font-mono text-xs font-bold text-amber-400">{oId}</td>
-                                        <td className="p-4 text-xs sm:text-sm font-bold text-zinc-100">{cName}</td>
-                                        <td className="p-4 font-mono text-xs text-zinc-300">{aDate}</td>
-                                        <td className="p-4 font-mono text-xs font-bold text-pink-400">{tDate}</td>
-                                        <td className="p-4">
-                                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 border rounded-md uppercase inline-block bg-zinc-800 text-amber-300 border-zinc-700">
-                                            {cStatus}
-                                          </span>
-                                        </td>
-                                      </tr>
-                                    );
-                                  }
-
-                                  return (
-                                    <tr 
-                                      key={ev.id}
-                                      id={`table_ev_row_${ev.id}`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (ev.sourceType === 'memo') {
-                                          setNewMemoTitle(ev.customerName);
-                                          setNewMemoMessage(ev.notes || '');
-                                          setEditingMemoId(ev.id);
-                                          setSelectedDate(ev.date);
-                                          setShowAddMemo(true);
-                                        } else {
-                                          setPopupLeadId(ev.raw?.lead_id || ev.orderId);
-                                        }
-                                      }}
-                                      className="hover:bg-zinc-900/30 transition cursor-pointer"
-                                    >
-                                      <td className="p-4">
-                                        <span className="text-xs sm:text-sm font-bold text-zinc-100 block">{ev.customerName}</span>
-                                        {ev.packageName && <span className="text-[9px] font-mono text-zinc-500 block mt-0.5">{ev.packageName}</span>}
-                                      </td>
-                                      <td className="p-4">
-                                        <span className="text-xs font-mono text-zinc-300">{ev.eventName || ev.eventType}</span>
-                                      </td>
-                                      <td className="p-4">
-                                        <span className="text-xs font-mono text-zinc-400">{times.start}</span>
-                                      </td>
-                                      <td className="p-4">
-                                        <span className="text-xs font-mono text-zinc-400">{times.end}</span>
-                                      </td>
-                                      <td className="p-4">
-                                        <span className={`text-[10px] font-mono font-bold px-2 py-0.5 border rounded-md uppercase inline-block ${col.badge}`}>
-                                          {ev.currentStage || ev.eventClass}
-                                        </span>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-
-                          {/* Mobile List View */}
-                          <div className="block md:hidden space-y-2.5">
-                            {selectedEvs.map((ev) => {
-                              const col = getColorClasses(ev.eventClass);
-                              const times = parseEventTimes(ev.eventTime);
-
-                              if (role === 'production') {
-                                const leadId = ev.raw?.lead_id || ev.orderId;
-                                const leadObj = leads.find(l => l.lead_id === leadId);
-                                const linkedOrder = orders.find(o => o.lead_id === leadId || o.order_id === ev.orderId);
-                                const prodRecord = production?.find(p => p.tracking_id === leadId || p.order_id === leadId || p.tracking_id === ev.orderId || (p as any).order_id === ev.orderId);
-                                
-                                const oId = linkedOrder?.order_id || prodRecord?.order_id || ev.orderId || leadId || '—';
-                                const cName = leadObj?.customer_name || linkedOrder?.client_name || ev.customerName || '—';
-                                const aDate = getProductionAssignedDate(oId, leadId, prodRecord, editorAssignments);
-                                const tDate = formatDateDMY(prodRecord?.target_delivery_date || prodRecord?.expected_delivery_date || leadObj?.delivery_target_date || ev.targetDeliveryDate || ev.date);
-                                const cStatus = prodRecord?.production_status || prodRecord?.editing_status || linkedOrder?.current_stage || leadObj?.status || ev.currentStage || 'Active';
-
-                                return (
-                                  <div
-                                    key={ev.id}
-                                    id={`mobile_ev_row_${ev.id}`}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setPopupLeadId(leadId);
-                                    }}
-                                    className="p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/80 flex flex-col gap-2 transition active:scale-[0.99] cursor-pointer"
-                                  >
-                                    <div className="flex justify-between items-start gap-2">
-                                      <div>
-                                        <span className="text-[10px] font-mono uppercase text-amber-400 font-bold block">ORDER ID: {oId}</span>
-                                        <span className="text-sm font-bold text-zinc-100">{cName}</span>
-                                      </div>
-                                      <span className="text-[9px] font-mono px-2 py-0.5 border rounded-md font-bold uppercase shrink-0 bg-zinc-800 text-amber-300 border-zinc-700">
-                                        {cStatus}
-                                      </span>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-2 mt-1 pt-2 border-t border-zinc-900/40 text-xs font-mono">
-                                      <div>
-                                        <span className="text-[9px] text-zinc-500 block">ASSIGNED DATE</span>
-                                        <span className="text-zinc-300">{aDate}</span>
-                                      </div>
-                                      <div>
-                                        <span className="text-[9px] text-zinc-500 block">TARGET DELIVERY</span>
-                                        <span className="text-pink-400 font-bold">{tDate}</span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              }
-
-                              return (
-                                <div
-                                  key={ev.id}
-                                  id={`mobile_ev_row_${ev.id}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (ev.sourceType === 'memo') {
-                                      setNewMemoTitle(ev.customerName);
-                                      setNewMemoMessage(ev.notes || '');
-                                      setEditingMemoId(ev.id);
-                                      setSelectedDate(ev.date);
-                                      setShowAddMemo(true);
-                                    } else {
-                                      setPopupLeadId(ev.raw?.lead_id || ev.orderId);
-                                    }
-                                  }}
-                                  className={`p-3.5 rounded-xl border flex flex-col gap-2 transition active:scale-[0.99] cursor-pointer w-full hover:brightness-110 ${col.card}`}
-                                >
-                                  <div className="flex justify-between items-start gap-2">
-                                    <div>
-                                      <span className="text-[10px] font-mono uppercase text-zinc-500 block">EVENT NAME / CUSTOMER</span>
-                                      <span className="text-sm font-bold text-zinc-100">{ev.customerName}</span>
-                                    </div>
-                                    <span className={`text-[9px] font-mono px-2 py-0.5 border rounded-md font-bold uppercase shrink-0 ${col.badge}`}>
-                                      {ev.currentStage || ev.eventClass}
-                                    </span>
-                                  </div>
-
-                                  <div className="grid grid-cols-2 gap-2 mt-1 pt-2 border-t border-zinc-900/40 text-xs font-mono">
-                                    <div>
-                                      <span className="text-[9px] text-zinc-500 block">EVENT TYPE</span>
-                                      <span className="text-zinc-300">{ev.eventName || ev.eventType}</span>
-                                    </div>
-                                    <div>
-                                      <span className="text-[9px] text-zinc-500 block">TIME</span>
-                                      <span className="text-zinc-300">{times.start} {times.end !== '--' ? `- ${times.end}` : ''}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </>
-                      );
-                    })()}
-              </div>
+                          return (
+                            <tr 
+                              key={ev.id || idx}
+                              className="bg-zinc-950/30 select-text"
+                            >
+                              <td className="p-3.5 pl-4 font-bold text-zinc-100">
+                                {evName}
+                              </td>
+                              <td className="p-3.5 font-mono text-zinc-300">
+                                {evDate}
+                              </td>
+                              <td className="p-3.5 font-mono text-zinc-300">
+                                {evTime}
+                              </td>
+                              <td className="p-3.5 text-zinc-200 font-medium">
+                                {custName}
+                              </td>
+                              <td className="p-3.5">
+                                <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase bg-zinc-800 text-amber-300 border border-zinc-700">
+                                  {status}
+                                </span>
+                              </td>
+                              <td className="p-3.5 pr-4 font-mono font-bold text-pink-400">
+                                {targetDelDate}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
       )}
-</div>
+    </div>
   );
 };

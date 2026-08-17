@@ -7,6 +7,30 @@ import { supabaseClient } from '../supabaseClient';
 import { getCalculatedOrderStage, getStageRank, getAllStaffStatusesForOrder } from '../utils/orderStageCalculator';
 import { ViewDetailsModal } from './operations/ViewDetailsModal';
 
+const formatDateDMY = (dateStr?: string | null): string => {
+  if (!dateStr || dateStr === '—') return '—';
+  try {
+    const raw = dateStr.split('T')[0];
+    const parts = raw.split('-');
+    if (parts.length === 3) {
+      const year = parts[0];
+      const month = parts[1];
+      const day = parts[2];
+      return `${day}/${month}/${year}`;
+    }
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+  } catch (e) {
+    // fallback
+  }
+  return dateStr;
+};
+
 const StaffActionDropdown: React.FC<{
   booking: any;
   hasEquipmentReceived: boolean;
@@ -1626,7 +1650,7 @@ export const StaffModule: React.FC = () => {
                 >
                   {/* Date Number Display */}
                   <span
-                    className={`text-xs sm:text-sm font-mono font-extrabold ${
+                    className={`text-xs font-mono font-extrabold shrink-0 ${
                       isSelected
                         ? 'text-amber-400 font-black'
                         : cell.isToday
@@ -1639,18 +1663,21 @@ export const StaffModule: React.FC = () => {
                     {cell.dayNum}
                   </span>
 
-                  {/* Event Dots ONLY (No event names, badges, times, or crew text) */}
+                  {/* Event Names inside the Date Box */}
                   {cell.isCurrentMonth && hasEvents && (
-                    <div className="flex items-center justify-center gap-1 mt-0.5 max-w-full overflow-hidden">
-                      {cell.events.slice(0, 4).map((ev, eIdx) => (
-                        <span
-                          key={ev.key || eIdx}
-                          className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"
-                        />
-                      ))}
-                      {cell.events.length > 4 && (
-                        <span className="w-1 h-1 rounded-full bg-zinc-500 shrink-0" />
-                      )}
+                    <div className="w-full flex-1 flex flex-col justify-start gap-0.5 overflow-hidden mt-0.5 min-h-0">
+                      {cell.events.map((ev, eIdx) => {
+                        const displayName = ev.eventName || ev.orderId || 'Event';
+                        return (
+                          <div
+                            key={ev.key || eIdx}
+                            className="w-full truncate text-[8px] sm:text-[9px] leading-tight px-1 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 font-medium text-left"
+                            title={displayName}
+                          >
+                            {displayName}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1663,7 +1690,7 @@ export const StaffModule: React.FC = () => {
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
               <div>
                 <span className="text-[10px] font-mono uppercase tracking-wider text-amber-500 block font-extrabold">
-                  SELECTED DATE
+                  EVENT DETAILS
                 </span>
                 <h4 className="text-base sm:text-lg font-black text-white font-mono mt-0.5">
                   {calendarModalDate || 'Select a date'}
@@ -1686,111 +1713,46 @@ export const StaffModule: React.FC = () => {
               </div>
             ) : (
               <div className="space-y-3">
-                {/* Desktop Table View */}
-                <div className="hidden md:block overflow-x-auto w-full border border-zinc-800 rounded-2xl bg-zinc-950/60">
-                  <table className="w-full text-left border-collapse">
+                {/* Responsive Read-Only Table */}
+                <div className="overflow-x-auto w-full border border-zinc-800 rounded-2xl bg-zinc-950/60 shadow-inner">
+                  <table className="w-full text-left border-collapse min-w-[700px]">
                     <thead>
-                      <tr className="border-b border-zinc-800 bg-zinc-950/90 text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400">
-                        <th className="p-4">ORDER & EVENT</th>
-                        <th className="p-4">CUSTOMER</th>
-                        <th className="p-4">DATE & TIME</th>
-                        <th className="p-4">ASSIGNED TASK</th>
-                        <th className="p-4">STATUS</th>
-                        <th className="p-4 text-right">ACTION</th>
+                      <tr className="border-b border-zinc-800 bg-zinc-950/90 text-[11px] font-mono font-bold uppercase tracking-wider text-zinc-400">
+                        <th className="p-3.5 pl-4">Event Name</th>
+                        <th className="p-3.5">Event Date</th>
+                        <th className="p-3.5">Event Time</th>
+                        <th className="p-3.5">Customer</th>
+                        <th className="p-3.5">Status</th>
+                        <th className="p-3.5 pr-4">Target Delivery Date</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/60 text-xs font-sans">
                       {calendarModalEvents.map((ev, idx) => (
-                        <tr key={ev.key || idx} className="hover:bg-zinc-800/30 transition-colors">
-                          <td className="p-4">
-                            <span className="text-[10px] font-mono font-bold text-amber-400 block">
-                              ORDER: {ev.orderId}
-                            </span>
-                            <span className="text-sm font-bold text-white block mt-0.5">{ev.eventName}</span>
-                            {ev.venue && <span className="text-[11px] text-zinc-400 block mt-0.5">{ev.venue}</span>}
+                        <tr key={ev.key || idx} className="bg-zinc-950/30 select-text">
+                          <td className="p-3.5 pl-4 font-bold text-zinc-100">
+                            {ev.eventName || 'Photography Event'}
                           </td>
-                          <td className="p-4">
-                            <span className="font-bold text-zinc-200 block">{ev.customerName}</span>
-                            <a href={`tel:${ev.customerMobile}`} className="text-[11px] font-mono text-amber-400 hover:underline">
-                              {ev.customerMobile}
-                            </a>
+                          <td className="p-3.5 font-mono text-zinc-300">
+                            {formatDateDMY(ev.eventDate || calendarModalDate)}
                           </td>
-                          <td className="p-4 font-mono text-zinc-300">
-                            <div>Start: {ev.eventStartTime}</div>
-                            <div className="text-zinc-500 text-[10px]">End: {ev.eventEndTime || 'N/A'}</div>
+                          <td className="p-3.5 font-mono text-zinc-300">
+                            {ev.eventStartTime || '10:00 AM'}
                           </td>
-                          <td className="p-4">
-                            <span className="px-2.5 py-1 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-bold uppercase text-[10px]">
-                              {ev.assignedRole}
+                          <td className="p-3.5 text-zinc-200 font-medium">
+                            {ev.customerName || '—'}
+                          </td>
+                          <td className="p-3.5">
+                            <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase bg-zinc-800 text-amber-300 border border-zinc-700">
+                              {ev.status || 'Active'}
                             </span>
                           </td>
-                          <td className="p-4">
-                            <span className="px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold uppercase text-[10px]">
-                              {ev.taskStatus}
-                            </span>
-                          </td>
-                          <td className="p-4 text-right">
-                            <button
-                              onClick={() => setSelectedBookingDetails(ev)}
-                              className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1"
-                            >
-                              <Eye className="w-3.5 h-3.5" /> Details
-                            </button>
+                          <td className="p-3.5 pr-4 font-mono font-bold text-pink-400">
+                            {formatDateDMY(ev.targetDeliveryDate || ev.delivery_target_date || '—')}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                </div>
-
-                {/* Mobile Card View */}
-                <div className="block md:hidden space-y-3">
-                  {calendarModalEvents.map((ev, idx) => (
-                    <div
-                      key={ev.key || idx}
-                      className="p-4 rounded-2xl bg-zinc-950/80 border border-zinc-800 space-y-3"
-                    >
-                      <div className="flex justify-between items-start gap-2">
-                        <div>
-                          <span className="text-[10px] font-mono font-bold text-amber-400 uppercase block">
-                            ORDER: {ev.orderId}
-                          </span>
-                          <h5 className="text-base font-bold text-white mt-0.5">{ev.eventName}</h5>
-                          <p className="text-xs text-zinc-300 font-semibold mt-0.5">{ev.customerName}</p>
-                        </div>
-                        <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-bold uppercase text-[9px] shrink-0">
-                          {ev.assignedRole}
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-2 border-t border-zinc-850 text-zinc-400">
-                        <div>
-                          <span className="text-[9px] text-zinc-500 block uppercase">TIME</span>
-                          <span className="text-zinc-200">{ev.eventStartTime}</span>
-                        </div>
-                        <div>
-                          <span className="text-[9px] text-zinc-500 block uppercase">STATUS</span>
-                          <span className="text-amber-400 font-bold">{ev.taskStatus}</span>
-                        </div>
-                      </div>
-
-                      {ev.venue && (
-                        <div className="text-xs text-zinc-400 font-mono pt-2 border-t border-zinc-850">
-                          <span className="text-[9px] text-zinc-500 block uppercase">VENUE</span>
-                          <span>{ev.venue}</span>
-                        </div>
-                      )}
-
-                      <div className="pt-2 flex justify-end">
-                        <button
-                          onClick={() => setSelectedBookingDetails(ev)}
-                          className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1"
-                        >
-                          <Eye className="w-3.5 h-3.5" /> View Details
-                        </button>
-                      </div>
-                    </div>
-                  ))}
                 </div>
               </div>
             )}
