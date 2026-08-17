@@ -4916,11 +4916,9 @@ export const OperationsLeads: React.FC = () => {
                                             ✅ Uploaded ↗
                                           </a>
                                           <div className="flex items-center gap-2">
-                                            {verificationStatus === 'Verified' ? (
-                                              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">✅ Verified</span>
-                                            ) : (
-                                              <button type="button" onClick={() => handleVerifyFootage(ord, member.staff_name, memberEvId, 'Verified')} className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 px-1.5 rounded bg-emerald-500/10 cursor-pointer transition-colors">✔ Verify</button>
-                                            )}
+                                             {verificationStatus === "Verified" && (
+                                               <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">✅ Verified</span>
+                                             )}
                                           </div>
                                         </div>
                                       ) : (
