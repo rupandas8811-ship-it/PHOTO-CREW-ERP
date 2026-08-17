@@ -516,9 +516,6 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     quotations,
     getLeadCurrentStatus,
     logs,
-    addStaff,
-    updateStaff,
-    deleteStaff,
     addProductionStaff,
     updateProductionStaff,
     deleteProductionStaff,
@@ -1191,9 +1188,9 @@ ${coordinatorName}`;
     try {
       if (editingStaffMember) {
         const { mobile: _m, email: _e, ...safePayload } = payload;
-        await updateStaff(editingStaffMember.staff_id, safePayload);
+        await updateProductionStaff(editingStaffMember.staff_id, safePayload);
       } else {
-        await addStaff(payload);
+        await addProductionStaff(payload);
       }
       setIsStaffModalOpen(false);
       setEditingStaffMember(null);
@@ -4630,7 +4627,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             <button
                               onClick={async () => {
                                 const nextStatus = member.status === 'Active' ? 'Inactive' : 'Active';
-                                await updateStaff(member.staff_id, { status: nextStatus });
+                                await updateProductionStaff(member.staff_id, { status: nextStatus });
                               }}
                               className={`p-1.5 border rounded-lg transition duration-150 cursor-pointer ${
                                 member.status === 'Active'
@@ -4646,7 +4643,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             <button
                               onClick={async () => {
                                 if (confirm(`Are you sure you want to remove ${member.name} from the post-production database?`)) {
-                                  await deleteStaff(member.staff_id);
+                                  await deleteProductionStaff(member.staff_id);
                                 }
                               }}
                               className="p-1.5 bg-rose-500/10 hover:bg-rose-500/25 text-rose-450 border border-rose-500/20 rounded-lg transition duration-150 cursor-pointer"
