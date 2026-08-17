@@ -590,51 +590,6 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     }
 
     return '';
-
-    const rf = (rawFootage || []).find(f => 
-      (orderId && f.order_id === orderId) || 
-      (prodItem.tracking_id && (f.tracking_id === prodItem.tracking_id || f.order_id === prodItem.tracking_id))
-    );
-    if (rf?.server_path && rf.server_path.trim() !== '' && !rf.server_path.startsWith('s3://')) {
-      return rf.server_path.trim();
-    }
-
-    // 2.5 Check Order table
-    if (order && (order as any).raw_footage_link && ((order as any).raw_footage_link as string).trim() !== '') {
-      return ((order as any).raw_footage_link as string).trim();
-    }
-    if (order && (order as any).raw_footage_drive_link && ((order as any).raw_footage_drive_link as string).trim() !== '') {
-      return ((order as any).raw_footage_drive_link as string).trim();
-    }
-    if (order && (order as any).consolidated_drive_link && ((order as any).consolidated_drive_link as string).trim() !== '') {
-      return ((order as any).consolidated_drive_link as string).trim();
-    }
-
-    // 3. Check Production item direct fields
-    if (prodItem.raw_footage_location && prodItem.raw_footage_location.trim() !== '' && !prodItem.raw_footage_location.startsWith('s3://')) {
-      return prodItem.raw_footage_location.trim();
-    }
-    if ((prodItem as any).raw_footage_drive_link && ((prodItem as any).raw_footage_drive_link as string).trim() !== '') {
-      return ((prodItem as any).raw_footage_drive_link as string).trim();
-    }
-
-    // 4. Check Raw Footage table server_path fallback
-    if (rf?.server_path && rf.server_path.trim() !== '') {
-      return rf.server_path.trim();
-    }
-
-    // 5. Check Production item raw_footage_location fallback
-    if (prodItem.raw_footage_location && prodItem.raw_footage_location.trim() !== '') {
-      return prodItem.raw_footage_location.trim();
-    }
-
-    // 6. Check staff_assignments / editorAssignments for any raw_footage_link
-    const matchingSA = (editorAssignments || []).find(a => a.production_id === prodItem.production_id || (orderId && a.order_id === orderId));
-    if ((matchingSA as any)?.raw_footage_link && ((matchingSA as any).raw_footage_link as string).trim() !== '') {
-      return ((matchingSA as any).raw_footage_link as string).trim();
-    }
-
-    return '';
   };
 
   const getPersonalizedMessage = (staff: any, deliverables: any[]) => {
