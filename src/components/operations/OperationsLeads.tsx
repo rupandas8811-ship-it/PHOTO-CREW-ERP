@@ -2099,7 +2099,7 @@ export const OperationsLeads: React.FC = () => {
                 const staffStatuses = assignedStaffDetails.map(s => s.staff_status);
                 const baseStage = ord.current_stage || (lead ? getLeadCurrentStatus(lead) : 'Order Confirmed');
                 const currentStage = getCalculatedOrderStage(baseStage, staffStatuses);
-                const isLocked = currentStage === 'Verified Footage';
+                const isLocked = currentStage === 'Raw Footage Received';
 
                 return (
                   <tr key={ord.order_id} className={`hover:bg-zinc-900/20 transition-all ${isLocked ? 'opacity-85' : ''}`}>
@@ -2386,16 +2386,6 @@ export const OperationsLeads: React.FC = () => {
                           }
 
                           const isOpen = activeMenuOrderId === ord.order_id;
-                          if (isLocked) {
-                            return (
-                              <div className="flex items-center justify-end actions-menu-container">
-                                <span className="px-3.5 py-1.5 bg-zinc-800 text-zinc-500 rounded-xl text-xs font-sans font-black border border-zinc-700/50 cursor-not-allowed flex items-center gap-1.5" title="Action locked in Verified Footage stage">
-                                  🔒 Locked
-                                </span>
-                              </div>
-                            );
-                          }
-
                           return (
                             <OperationsActionColumn
                               ord={ord}
@@ -2419,25 +2409,25 @@ export const OperationsLeads: React.FC = () => {
 
       {/* Slide-over or Inline modal for Crew and Equipment Assignment */}
       {assigningOrderId && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-2.5 sm:p-4">
-          <div id="assign_staff_modal" className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-[calc(100vw-1.25rem)] sm:w-full sm:max-w-4xl h-auto max-h-[92vh] sm:max-h-[88vh] flex flex-col shadow-2xl relative animate-in zoom-in duration-200 overflow-hidden">
-            <div className="p-3.5 sm:p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/40 shrink-0">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="p-1 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-500 text-xs font-bold font-mono shrink-0">Operations</span>
-                <h3 className="text-xs sm:text-sm font-sans font-black text-white truncate">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div id="assign_staff_modal" className="bg-zinc-900 border border-zinc-800 rounded-3xl w-[96vw] sm:w-full sm:max-w-4xl h-auto max-h-[90vh] sm:max-h-[85vh] flex flex-col shadow-2xl relative animate-in zoom-in duration-200 overflow-hidden">
+            <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/40">
+              <div className="flex items-center gap-2">
+                <span className="p-1 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-500 text-xs font-bold font-mono">Operations</span>
+                <h3 className="text-sm font-sans font-black text-white">
                   Project Staffing & Handover Dossier ~ {assigningOrderId}
                 </h3>
               </div>
               <button 
                 onClick={() => setAssigningOrderId(null)}
-                className="text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1 shrink-0 ml-2"
+                className="text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
                 type="button"
               >
                 ✕
               </button>
             </div>
             <form onSubmit={handleAssignSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              <div className="p-3.5 sm:p-5 overflow-y-auto flex-1 min-h-0 space-y-4 sm:space-y-6">
+              <div className="p-4 sm:p-5 overflow-y-auto flex-1 min-h-0 space-y-6">
                 
                 {/* 1. Customer Information */}
                 <div className="bg-zinc-950/45 border border-zinc-850 rounded-2xl overflow-hidden transition-all duration-300">
@@ -3675,35 +3665,35 @@ export const OperationsLeads: React.FC = () => {
 
       {/* Equipment Status Modal */}
       {selectedEquipmentStatus && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-2.5 sm:p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-[calc(100vw-1.25rem)] sm:w-full sm:max-w-lg shadow-2xl relative p-4 sm:p-5 max-h-[92vh] flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between mb-3 sm:mb-4 border-b border-zinc-800 pb-3 shrink-0">
-              <div className="min-w-0 pr-2">
-                <h3 className="text-xs sm:text-sm font-bold text-indigo-400 font-mono uppercase truncate">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl relative p-5">
+            <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-indigo-400 font-mono uppercase">
                   Equipment Verification • {selectedEquipmentStatus.staffName}
                 </h3>
                 {selectedEquipmentStatus.assignedEquipment && selectedEquipmentStatus.assignedEquipment.length > 0 && (
-                  <div className="text-[10px] sm:text-[11px] text-zinc-400 mt-0.5 truncate">
+                  <div className="text-[11px] text-zinc-400 mt-0.5">
                     Assigned: <span className="text-zinc-200 font-medium">{selectedEquipmentStatus.assignedEquipment.join(', ')}</span>
                   </div>
                 )}
               </div>
               <button
                 onClick={() => setSelectedEquipmentStatus(null)}
-                className="text-zinc-400 hover:text-white font-bold cursor-pointer p-1 shrink-0"
+                className="text-zinc-400 hover:text-white font-bold cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/60 mb-3 sm:mb-4 flex-1 min-h-0">
-              <table className="w-full text-left text-xs min-w-[340px]">
+            <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/60 mb-4">
+              <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono uppercase tracking-wider text-[10px]">
-                    <th className="py-2.5 px-3 font-bold whitespace-nowrap">Verification Stage</th>
-                    <th className="py-2.5 px-3 font-bold text-center whitespace-nowrap">Image</th>
-                    <th className="py-2.5 px-3 font-bold text-center whitespace-nowrap">Upload Date</th>
-                    <th className="py-2.5 px-3 font-bold text-right whitespace-nowrap">Upload Time</th>
+                    <th className="py-2.5 px-3 font-bold">Verification Stage</th>
+                    <th className="py-2.5 px-3 font-bold text-center">Image</th>
+                    <th className="py-2.5 px-3 font-bold text-center">Upload Date</th>
+                    <th className="py-2.5 px-3 font-bold text-right">Upload Time</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
@@ -3713,8 +3703,8 @@ export const OperationsLeads: React.FC = () => {
                     return (
                       <>
                         <tr className="hover:bg-zinc-800/20">
-                          <td className="py-2.5 sm:py-3 px-3 text-white font-bold whitespace-nowrap">Equipment Received</td>
-                          <td className="py-2.5 sm:py-3 px-3 text-center whitespace-nowrap">
+                          <td className="py-3 px-3 text-white font-bold">Equipment Received</td>
+                          <td className="py-3 px-3 text-center">
                             {recMeta.url ? (
                               <button
                                 onClick={() => setImagePreviewModal({ url: recMeta.url, date: recMeta.date, time: recMeta.time, staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Received' })}
@@ -3726,12 +3716,12 @@ export const OperationsLeads: React.FC = () => {
                               <span className="text-zinc-600 italic text-[11px]">Pending</span>
                             )}
                           </td>
-                          <td className="py-2.5 sm:py-3 px-3 text-center font-mono text-zinc-300 whitespace-nowrap">{recMeta.date}</td>
-                          <td className="py-2.5 sm:py-3 px-3 text-right font-mono text-zinc-300 whitespace-nowrap">{recMeta.time}</td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{recMeta.date}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{recMeta.time}</td>
                         </tr>
                         <tr className="hover:bg-zinc-800/20">
-                          <td className="py-2.5 sm:py-3 px-3 text-white font-bold whitespace-nowrap">Equipment Handover</td>
-                          <td className="py-2.5 sm:py-3 px-3 text-center whitespace-nowrap">
+                          <td className="py-3 px-3 text-white font-bold">Equipment Handover</td>
+                          <td className="py-3 px-3 text-center">
                             {handMeta.url ? (
                               <button
                                 onClick={() => setImagePreviewModal({ url: handMeta.url, date: handMeta.date, time: handMeta.time, staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Handover' })}
@@ -3743,8 +3733,8 @@ export const OperationsLeads: React.FC = () => {
                               <span className="text-zinc-600 italic text-[11px]">Pending</span>
                             )}
                           </td>
-                          <td className="py-2.5 sm:py-3 px-3 text-center font-mono text-zinc-300 whitespace-nowrap">{handMeta.date}</td>
-                          <td className="py-2.5 sm:py-3 px-3 text-right font-mono text-zinc-300 whitespace-nowrap">{handMeta.time}</td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{handMeta.date}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{handMeta.time}</td>
                         </tr>
                       </>
                     );
@@ -3753,10 +3743,10 @@ export const OperationsLeads: React.FC = () => {
               </table>
             </div>
 
-            <div className="flex justify-end pt-2 border-t border-zinc-800 shrink-0">
+            <div className="flex justify-end pt-2 border-t border-zinc-800">
               <button
                 onClick={() => setSelectedEquipmentStatus(null)}
-                className="w-full sm:w-auto px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
               >
                 Close
               </button>
@@ -3767,28 +3757,28 @@ export const OperationsLeads: React.FC = () => {
 
       {/* Event Images Modal */}
       {selectedEventImages && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-2.5 sm:p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-[calc(100vw-1.25rem)] sm:w-full sm:max-w-lg shadow-2xl relative p-4 sm:p-5 max-h-[92vh] flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between mb-3 sm:mb-4 border-b border-zinc-800 pb-3 shrink-0">
-              <h3 className="text-xs sm:text-sm font-bold text-indigo-400 font-mono uppercase truncate pr-2">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full w-full max-w-lg shadow-2xl relative p-5">
+            <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-3">
+              <h3 className="text-sm font-bold text-indigo-400 font-mono uppercase">
                 Event Images • {selectedEventImages.staffName}
               </h3>
               <button
                 onClick={() => setSelectedEventImages(null)}
-                className="text-zinc-400 hover:text-white font-bold cursor-pointer p-1 shrink-0"
+                className="text-zinc-400 hover:text-white font-bold cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/60 mb-3 sm:mb-4 flex-1 min-h-0">
-              <table className="w-full text-left text-xs min-w-[340px]">
+            <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/60 mb-4">
+              <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono uppercase tracking-wider text-[10px]">
-                    <th className="py-2.5 px-3 font-bold whitespace-nowrap">Event Stage</th>
-                    <th className="py-2.5 px-3 font-bold text-center whitespace-nowrap">Image</th>
-                    <th className="py-2.5 px-3 font-bold text-center whitespace-nowrap">Upload Date</th>
-                    <th className="py-2.5 px-3 font-bold text-right whitespace-nowrap">Upload Time</th>
+                    <th className="py-2.5 px-3 font-bold">Event Stage</th>
+                    <th className="py-2.5 px-3 font-bold text-center">Image</th>
+                    <th className="py-2.5 px-3 font-bold text-center">Upload Date</th>
+                    <th className="py-2.5 px-3 font-bold text-right">Upload Time</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
@@ -3798,8 +3788,8 @@ export const OperationsLeads: React.FC = () => {
                     return (
                       <>
                         <tr className="hover:bg-zinc-800/20">
-                          <td className="py-2.5 sm:py-3 px-3 text-white font-bold whitespace-nowrap">Event Start</td>
-                          <td className="py-2.5 sm:py-3 px-3 text-center whitespace-nowrap">
+                          <td className="py-3 px-3 text-white font-bold">Event Start</td>
+                          <td className="py-3 px-3 text-center">
                             {startMeta.url ? (
                               <button
                                 onClick={() => setImagePreviewModal({ url: startMeta.url, date: startMeta.date, time: startMeta.time, staffName: selectedEventImages.staffName, stage: 'Event Start' })}
@@ -3811,12 +3801,12 @@ export const OperationsLeads: React.FC = () => {
                               <span className="text-zinc-600 italic text-[11px]">Pending</span>
                             )}
                           </td>
-                          <td className="py-2.5 sm:py-3 px-3 text-center font-mono text-zinc-300 whitespace-nowrap">{startMeta.date}</td>
-                          <td className="py-2.5 sm:py-3 px-3 text-right font-mono text-zinc-300 whitespace-nowrap">{startMeta.time}</td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{startMeta.date}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{startMeta.time}</td>
                         </tr>
                         <tr className="hover:bg-zinc-800/20">
-                          <td className="py-2.5 sm:py-3 px-3 text-white font-bold whitespace-nowrap">Event Complete</td>
-                          <td className="py-2.5 sm:py-3 px-3 text-center whitespace-nowrap">
+                          <td className="py-3 px-3 text-white font-bold">Event Complete</td>
+                          <td className="py-3 px-3 text-center">
                             {endMeta.url ? (
                               <button
                                 onClick={() => setImagePreviewModal({ url: endMeta.url, date: endMeta.date, time: endMeta.time, staffName: selectedEventImages.staffName, stage: 'Event Complete' })}
@@ -3828,8 +3818,8 @@ export const OperationsLeads: React.FC = () => {
                               <span className="text-zinc-600 italic text-[11px]">Pending</span>
                             )}
                           </td>
-                          <td className="py-2.5 sm:py-3 px-3 text-center font-mono text-zinc-300 whitespace-nowrap">{endMeta.date}</td>
-                          <td className="py-2.5 sm:py-3 px-3 text-right font-mono text-zinc-300 whitespace-nowrap">{endMeta.time}</td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{endMeta.date}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{endMeta.time}</td>
                         </tr>
                       </>
                     );
@@ -3838,10 +3828,10 @@ export const OperationsLeads: React.FC = () => {
               </table>
             </div>
 
-            <div className="flex justify-end pt-2 border-t border-zinc-800 shrink-0">
+            <div className="flex justify-end pt-2 border-t border-zinc-800">
               <button
                 onClick={() => setSelectedEventImages(null)}
-                className="w-full sm:w-auto px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
               >
                 Close
               </button>
@@ -3989,16 +3979,16 @@ export const OperationsLeads: React.FC = () => {
           : true;
 
         return (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-2.5 sm:p-4">
-            <div id="raw_footage_modal" className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-[calc(100vw-1.25rem)] sm:w-full sm:max-w-2xl shadow-2xl relative p-4 sm:p-6 max-h-[92vh] flex flex-col overflow-hidden">
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div id="raw_footage_modal" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full w-full max-w-2xl shadow-2xl relative p-6 max-h-[90vh] overflow-y-auto space-y-5 scrollbar-thin">
               
               {/* Header */}
-              <div className="border-b border-zinc-800 pb-3 flex justify-between items-start shrink-0">
-                <div className="min-w-0 pr-2">
-                  <h3 className="text-sm sm:text-base font-bold text-purple-400 font-mono uppercase flex items-center gap-2 truncate">
+              <div className="border-b border-zinc-800 pb-3 flex justify-between items-start">
+                <div>
+                  <h3 className="text-base font-bold text-purple-400 font-mono uppercase flex items-center gap-2">
                     <span>🎬</span> Final Consolidated Raw Footage
                   </h3>
-                  <p className="text-[11px] sm:text-xs text-zinc-400 mt-1 truncate">
+                  <p className="text-xs text-zinc-400 mt-1">
                     Order ID: <strong className="text-zinc-200">{receivingFootageOrderId}</strong> | Customer: <strong className="text-zinc-200">{currentOrder?.customer_name || currentLead?.customer_name || 'N/A'}</strong>
                   </p>
                 </div>
@@ -4007,202 +3997,283 @@ export const OperationsLeads: React.FC = () => {
                     setReceivingFootageOrderId(null);
                     setConsolidatedDriveLink('');
                   }}
-                  className="text-zinc-400 hover:text-white p-1.5 rounded-lg bg-zinc-800 text-xs cursor-pointer shrink-0"
+                  className="text-zinc-400 hover:text-white p-1 rounded-lg bg-zinc-800 text-xs cursor-pointer"
                 >
                   ✕
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto space-y-4 sm:space-y-5 py-3 pr-0.5">
-                {/* ASSIGNED TEAM MEMBERS VERIFICATION SECTION */}
-                <div className="space-y-3 bg-zinc-950 p-3 sm:p-4 rounded-xl border border-zinc-800">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-zinc-800 pb-2">
-                    <h4 className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
-                      <span>👥</span> Assigned Team Members & Raw Footage
-                    </h4>
-                    <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 w-fit">
-                      Uploaded: {assignedCrewList.filter(c => c.raw_footage_link).length} / {assignedCrewList.length}
-                    </span>
-                  </div>
+              {/* Review description banner - Hidden per UI requirement */}
+              {false && (
+                <div className="text-xs text-zinc-400 leading-relaxed bg-purple-500/10 border border-purple-500/20 rounded-xl p-3">
+                  Review each assigned crew member's Raw Footage link below. Enter the <strong>Final Consolidated Raw Footage Drive Link</strong> to complete verification and transfer the order to Production.
+                </div>
+              )}
 
-                  {assignedCrewList.length === 0 ? (
-                    <div className="text-xs text-zinc-500 italic py-2">No assigned crew members found for this order.</div>
-                  ) : (
-                    <div className="overflow-x-auto rounded-lg">
-                      <table className="w-full text-left text-xs border-collapse min-w-[420px]">
-                        <thead>
-                          <tr className="bg-zinc-900 border-b border-zinc-800 text-[10px] font-mono uppercase text-zinc-400">
-                            <th className="py-2.5 px-3 whitespace-nowrap">Staff Name</th>
-                            <th className="py-2.5 px-3 whitespace-nowrap">Assigned Role</th>
-                            <th className="py-2.5 px-3 whitespace-nowrap">Raw Footage Link</th>
-                            <th className="py-2.5 px-3 text-right whitespace-nowrap">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-zinc-800/60">
-                          {assignedCrewList.map((c) => {
-                            const hasLink = !!(c.raw_footage_link && c.raw_footage_link.trim());
-                            return (
-                              <tr key={c.staff_name} className="hover:bg-zinc-900/50">
-                                <td className="py-2.5 px-3 font-bold text-white whitespace-nowrap">{c.staff_name}</td>
-                                <td className="py-2.5 px-3 text-zinc-300 font-mono text-[11px] whitespace-nowrap">{c.staff_role}</td>
-                                <td className="py-2.5 px-3">
-                                  {hasLink ? (
-                                    <a
-                                      href={c.raw_footage_link}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="inline-flex items-center gap-1 text-purple-400 hover:text-purple-300 underline font-mono text-[11px] whitespace-nowrap"
-                                    >
-                                      Open Drive Link ↗
-                                    </a>
-                                  ) : (
-                                    <span className="text-amber-500/80 italic text-[11px] whitespace-nowrap">Not Uploaded Yet</span>
-                                  )}
-                                </td>
-                                <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                                  {hasLink ? (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold">
-                                      ✅ Uploaded
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-bold">
-                                      ❌ Missing
-                                    </span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+              {/* ASSIGNED TEAM MEMBERS VERIFICATION SECTION */}
+              <div className="space-y-3 bg-zinc-950 p-4 rounded-xl border border-zinc-800">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                  <h4 className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>👥</span> Assigned Team Members & Raw Footage Links
+                  </h4>
+                  <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
+                    Uploaded: {assignedCrewList.filter(c => c.raw_footage_link).length} / {assignedCrewList.length}
+                  </span>
                 </div>
 
-                {/* UPLOAD FINAL CONSOLIDATED RAW FOOTAGE STEP */}
-                {!allCrewVerified ? (
-                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-amber-300 text-xs flex items-center gap-2">
-                    <span>⚠️</span> Please verify each assigned crew member's Raw Footage link before uploading the final raw footage.
-                  </div>
+                {assignedCrewList.length === 0 ? (
+                  <div className="text-xs text-zinc-500 italic py-2">No assigned crew members found for this order.</div>
                 ) : (
-                  <form onSubmit={async (e) => {
-                    e.preventDefault();
-                    if (isSaving) return;
-
-                    if (!consolidatedDriveLink || !consolidatedDriveLink.trim()) {
-                      alert("Please provide the Consolidated Drive Link before verifying.");
-                      return;
-                    }
-
-                    try {
-                      setIsSaving(true);
-                      const timestamp = new Date().toISOString();
-
-                      if (!currentOp || !currentOp.operation_id) {
-                        alert("Error: Could not find a valid operation record for this event. Please refresh and try again.");
-                        setIsSaving(false);
-                        return;
-                      }
-
-                      // Save Consolidated Link & update operation status
-                      const updateRes = await pushUpdate('operations', 'operation_id', currentOp.operation_id, {
-                        consolidated_drive_link: consolidatedDriveLink,
-                        Consolidated_Drive_Link: consolidatedDriveLink,
-                        raw_footage_drive_link: rawFootageLink || consolidatedDriveLink,
-                        Raw_Footage_Drive_Link: rawFootageLink || consolidatedDriveLink,
-                        event_status: 'Completed',
-                        remarks: `Verified by ${currentUserName || 'Operations Manager'} on ${new Date().toLocaleDateString()}`,
-                        updated_by: currentUserName || 'Operations Manager'
-                      });
-
-                      if (updateRes && !updateRes.success) {
-                        alert(`Failed to save final consolidated footage to database: ${updateRes.error}`);
-                        setIsSaving(false);
-                        return;
-                      }
-
-                      // Call confirmRawFootageReceived to move to Verified Footage and Production
-                      await confirmRawFootageReceived(
-                        receivingFootageOrderId,
-                        rawFootageLink || consolidatedDriveLink,
-                        'Google Drive',
-                        `Verified Footage with Consolidated Link: ${consolidatedDriveLink}`,
-                        undefined,
-                        undefined,
-                        undefined
-                      );
-
-                      // Also explicitly update orders and leads
-                      await pushUpdate('orders', 'order_id', receivingFootageOrderId, {
-                        current_stage: 'Verified Footage',
-                        updated_by: currentUserName || 'Operations Manager',
-                        updated_at: timestamp
-                      });
-
-                      if (currentOrder?.lead_id) {
-                        await updateLead(currentOrder.lead_id, {
-                          status: 'Verified Footage' as any,
-                          current_status: 'Verified Footage' as any,
-                          updated_by: currentUserName || 'Operations Manager'
-                        });
-                      }
-
-                      setReceivingFootageOrderId(null);
-                      setConsolidatedDriveLink('');
-                      setFootageForm({ footage_link: '', storage_type: 'Google Drive', upload_notes: '' });
-                      
-                      await refreshData();
-                      alert("✅ Raw Footage Verified Successfully! Order transferred to Production Dashboard.");
-                    } catch (err: any) {
-                      console.error("Failed to verify raw footage:", err);
-                      alert("Failed to verify raw footage: " + (err.message || "Please try again."));
-                    } finally {
-                      setIsSaving(false);
-                    }
-                  }} className="space-y-4 pt-3 border-t border-zinc-800">
-
-                    <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-3 sm:p-4 space-y-3">
-                      <div className="flex items-center gap-2 text-xs font-bold text-purple-300">
-                        <span>🎬</span> Upload Final Consolidated Raw Footage
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-zinc-300 uppercase font-mono mb-1.5 flex items-center justify-between">
-                          <span>Final Consolidated Drive Link <span className="text-rose-400">*</span></span>
-                          <span className="text-[10px] text-zinc-500 font-sans font-normal">Required for Production</span>
-                        </label>
-                        <input
-                          type="url"
-                          required
-                          value={consolidatedDriveLink}
-                          onChange={(e) => setConsolidatedDriveLink(e.target.value)}
-                          placeholder="https://drive.google.com/drive/folders/..."
-                          className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
-                        />
-                      </div>
-
-                      <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2 border-t border-zinc-800/80">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setReceivingFootageOrderId(null);
-                            setConsolidatedDriveLink('');
-                          }}
-                          className="w-full sm:w-auto px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-lg cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          disabled={isSaving || !consolidatedDriveLink.trim()}
-                          className="w-full sm:w-auto px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-bold rounded-lg cursor-pointer shadow-lg shadow-purple-600/20 flex items-center justify-center gap-2"
-                        >
-                          {isSaving ? 'Saving & Transferring...' : 'Upload Final Raw Footage & Move to Production 🚀'}
-                        </button>
-                      </div>
-                    </div>
-                  </form>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-zinc-900 border-b border-zinc-800 text-[10px] font-mono uppercase text-zinc-400">
+                          <th className="py-2.5 px-3">Staff Name</th>
+                          <th className="py-2.5 px-3">Assigned Role</th>
+                          <th className="py-2.5 px-3">Raw Footage Link</th>
+                          <th className="py-2.5 px-3 text-right">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-800/60">
+                        {assignedCrewList.map((c) => {
+                          const hasLink = !!(c.raw_footage_link && c.raw_footage_link.trim());
+                          return (
+                            <tr key={c.staff_name} className="hover:bg-zinc-900/50">
+                              <td className="py-2.5 px-3 font-bold text-white">{c.staff_name}</td>
+                              <td className="py-2.5 px-3 text-zinc-300 font-mono text-[11px]">{c.staff_role}</td>
+                              <td className="py-2.5 px-3">
+                                {hasLink ? (
+                                  <a
+                                    href={c.raw_footage_link}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 text-purple-400 hover:text-purple-300 underline font-mono text-[11px]"
+                                  >
+                                    Open Drive Link ↗
+                                  </a>
+                                ) : (
+                                  <span className="text-amber-500/80 italic text-[11px]">Not Uploaded Yet</span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3 text-right">
+                                {hasLink ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold">
+                                    ✅ Uploaded
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-bold">
+                                    ❌ Missing
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
+
+              {/* PROOF REVIEWS SECTION - Hidden per UI requirement */}
+              {false && (
+                <div className="space-y-4">
+                  <h4 className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5 border-b border-zinc-800 pb-1">
+                    📷 Staff Uploaded Proofs & Link Review
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    
+                    {/* 1. Asset Collection Photo Proof */}
+                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-2">
+                      <div className="text-[11px] font-bold text-zinc-300 flex justify-between items-center">
+                        <span>Asset Collection Photo Proof</span>
+                        {assetCollectionProof.photoUrl ? (
+                          <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">Uploaded</span>
+                        ) : (
+                          <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded font-mono">Not Uploaded</span>
+                        )}
+                      </div>
+                      {assetCollectionProof.photoUrl ? (
+                        <SafeProofImage url={assetCollectionProof.photoUrl} alt="Asset Collection" label="View Full Photo ↗" />
+                      ) : (
+                        <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
+                          No proof photo found
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 2. Event Start Photo Proof */}
+                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-2">
+                      <div className="text-[11px] font-bold text-zinc-300 flex justify-between items-center">
+                        <span>Event Start Photo Proof</span>
+                        {eventStartProof.photoUrl ? (
+                          <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">Uploaded</span>
+                        ) : (
+                          <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded font-mono">Not Uploaded</span>
+                        )}
+                      </div>
+                      {eventStartProof.photoUrl ? (
+                        <SafeProofImage url={eventStartProof.photoUrl} alt="Event Start" label="View Full Photo ↗" />
+                      ) : (
+                        <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
+                          No proof photo found
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 3. Event Completion Photo Proof */}
+                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-2">
+                      <div className="text-[11px] font-bold text-zinc-300 flex justify-between items-center">
+                        <span>Event Completion Photo Proof</span>
+                        {eventCompletionProof.photoUrl ? (
+                          <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">Uploaded</span>
+                        ) : (
+                          <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded font-mono">Not Uploaded</span>
+                        )}
+                      </div>
+                      {eventCompletionProof.photoUrl ? (
+                        <SafeProofImage url={eventCompletionProof.photoUrl} alt="Event Completion" label="View Full Photo ↗" />
+                      ) : (
+                        <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
+                          No proof photo found
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 4. Equipment Handover Photo Proof (Optional) */}
+                    <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 space-y-2">
+                      <div className="text-[11px] font-bold text-zinc-300 flex justify-between items-center">
+                        <span>Equipment Handover Photo <span className="text-zinc-500 font-normal">(Optional)</span></span>
+                        {equipmentHandoverProof.photoUrl ? (
+                          <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">Handover Completed</span>
+                        ) : (
+                          <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded font-mono">Equipment Not Handover</span>
+                        )}
+                      </div>
+                      {equipmentHandoverProof.photoUrl ? (
+                        <SafeProofImage url={equipmentHandoverProof.photoUrl} alt="Equipment Handover" label="View Full Photo ↗" />
+                      ) : (
+                        <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex flex-col items-center justify-center text-[11px] text-zinc-500 p-2 text-center">
+                          <span>Equipment Not Handover</span>
+                          <span className="text-[9px] text-zinc-600 mt-0.5">(Optional for verification)</span>
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+                </div>
+              )}
+
+              {/* UPLOAD FINAL CONSOLIDATED RAW FOOTAGE STEP */}
+              {!allCrewVerified ? (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-amber-300 text-xs flex items-center gap-2">
+                  <span>⚠️</span> Please verify each assigned crew member's Raw Footage link before uploading the final raw footage.
+                </div>
+              ) : (
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (isSaving) return;
+
+                  if (!consolidatedDriveLink || !consolidatedDriveLink.trim()) {
+                    alert("Please provide the Consolidated Drive Link before verifying.");
+                    return;
+                  }
+
+                  try {
+                    setIsSaving(true);
+                    const timestamp = new Date().toISOString();
+
+                    // Save Consolidated Link & update operation status
+                    await pushUpdate('operations', 'order_id', receivingFootageOrderId, {
+                      consolidated_drive_link: consolidatedDriveLink,
+                      raw_footage_drive_link: rawFootageLink || consolidatedDriveLink,
+                      event_status: 'Verified Footage',
+                      remarks: `Verified by ${currentUserName || 'Operations Manager'} on ${new Date().toLocaleDateString()}`,
+                      updated_by: currentUserName || 'Operations Manager'
+                    });
+
+                    // Call confirmRawFootageReceived to move to Verified Footage and Production
+                    await confirmRawFootageReceived(
+                      receivingFootageOrderId,
+                      rawFootageLink || consolidatedDriveLink,
+                      'Google Drive',
+                      `Verified Footage with Consolidated Link: ${consolidatedDriveLink}`,
+                      undefined,
+                      undefined,
+                      undefined
+                    );
+
+                    // Also explicitly update orders and leads
+                    await pushUpdate('orders', 'order_id', receivingFootageOrderId, {
+                      current_stage: 'Verified Footage',
+                      updated_by: currentUserName || 'Operations Manager',
+                      updated_at: timestamp
+                    });
+
+                    if (currentOrder?.lead_id) {
+                      await updateLead(currentOrder.lead_id, {
+                        status: 'Verified Footage' as any,
+                        current_status: 'Verified Footage' as any,
+                        updated_by: currentUserName || 'Operations Manager'
+                      });
+                    }
+
+                    setReceivingFootageOrderId(null);
+                    setConsolidatedDriveLink('');
+                    setFootageForm({ footage_link: '', storage_type: 'Google Drive', upload_notes: '' });
+                    
+                    await refreshData();
+                    alert("✅ Raw Footage Verified Successfully! Order transferred to Production Dashboard.");
+                  } catch (err: any) {
+                    console.error("Failed to verify raw footage:", err);
+                    alert("Failed to verify raw footage: " + (err.message || "Please try again."));
+                  } finally {
+                    setIsSaving(false);
+                  }
+                }} className="space-y-4 pt-3 border-t border-zinc-800">
+
+                  <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-xs font-bold text-purple-300">
+                      <span>🎬</span> Upload Final Consolidated Raw Footage
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-300 uppercase font-mono mb-1.5 flex items-center justify-between">
+                        <span>Final Consolidated Drive Link <span className="text-rose-400">*</span></span>
+                        <span className="text-[10px] text-zinc-500 font-sans font-normal">Required for Production Team</span>
+                      </label>
+                      <input
+                        type="url"
+                        required
+                        value={consolidatedDriveLink}
+                        onChange={(e) => setConsolidatedDriveLink(e.target.value)}
+                        placeholder="https://drive.google.com/drive/folders/..."
+                        className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800/80">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReceivingFootageOrderId(null);
+                          setConsolidatedDriveLink('');
+                        }}
+                        className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-lg cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSaving || !consolidatedDriveLink.trim()}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-bold rounded-lg cursor-pointer shadow-lg shadow-purple-600/20 flex items-center gap-2"
+                      >
+                        {isSaving ? 'Saving & Transferring...' : 'Upload Final Raw Footage & Move to Production 🚀'}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              )}
 
             </div>
           </div>
@@ -4211,8 +4282,8 @@ export const OperationsLeads: React.FC = () => {
 
       {/* Staff Assignment Success Modal */}
       {successModalData && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-2.5 sm:p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-[calc(100vw-1.25rem)] sm:w-full sm:max-w-md shadow-2xl p-4 sm:p-6 relative animate-in zoom-in duration-200 max-h-[92vh] flex flex-col overflow-y-auto">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-md shadow-2xl p-6 relative animate-in zoom-in duration-200">
             <button 
               onClick={() => setSuccessModalData(null)}
               className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
@@ -4232,7 +4303,7 @@ export const OperationsLeads: React.FC = () => {
               </p>
 
               {/* Share via WhatsApp section */}
-              <div className="bg-zinc-950/50 border border-zinc-850 rounded-2xl p-3 sm:p-4 text-left space-y-3">
+              <div className="bg-zinc-950/50 border border-zinc-850 rounded-2xl p-4 text-left space-y-3">
                 <h4 className="text-[10px] font-mono font-bold uppercase text-emerald-400 tracking-wider">
                   📱 Share via WhatsApp
                 </h4>
@@ -4251,10 +4322,10 @@ export const OperationsLeads: React.FC = () => {
                       {assignedStaffNames.map((name, idx) => {
                         const stObj = staff?.find(s => s.name === name);
                         return (
-                          <div key={idx} className="flex items-center justify-between p-2 bg-zinc-900/50 rounded-xl border border-zinc-800/60 gap-2">
-                            <div className="min-w-0">
-                              <div className="text-xs font-bold text-white truncate">{name}</div>
-                              {stObj?.role && <div className="text-[9.5px] text-zinc-500 font-mono truncate">{stObj.role}</div>}
+                          <div key={idx} className="flex items-center justify-between p-2 bg-zinc-900/50 rounded-xl border border-zinc-800/60">
+                            <div>
+                              <div className="text-xs font-bold text-white">{name}</div>
+                              {stObj?.role && <div className="text-[9.5px] text-zinc-500 font-mono">{stObj.role}</div>}
                             </div>
                             <button
                               type="button"
@@ -4263,7 +4334,7 @@ export const OperationsLeads: React.FC = () => {
                                 const url = `https://wa.me/?text=${encodeURIComponent(msgText)}`;
                                 window.open(url, '_blank');
                               }}
-                              className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-[10px] font-mono font-bold cursor-pointer transition-colors shrink-0"
+                              className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-[10px] font-mono font-bold cursor-pointer transition-colors"
                             >
                               Share
                             </button>
@@ -4279,7 +4350,7 @@ export const OperationsLeads: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setSuccessModalData(null)}
-                  className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono font-bold rounded-xl transition-colors cursor-pointer"
+                  className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono font-bold rounded-xl transition-colors cursor-pointer"
                 >
                   Done
                 </button>
@@ -4291,8 +4362,8 @@ export const OperationsLeads: React.FC = () => {
 
       {/* Multi-Staff WhatsApp Share picker */}
       {whatsappShareModalData && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-2.5 sm:p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-[calc(100vw-1.25rem)] sm:w-full sm:max-w-2xl shadow-2xl p-4 sm:p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[92vh]">
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-2xl shadow-2xl p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
             <button 
               onClick={() => setWhatsappShareModalData(null)}
               className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
@@ -4301,19 +4372,19 @@ export const OperationsLeads: React.FC = () => {
               ✕
             </button>
             
-            <div className="flex items-center gap-2.5 mb-3 sm:mb-4 border-b border-zinc-800 pb-3 shrink-0">
-              <span className="text-lg sm:text-xl">📱</span>
-              <div className="text-left min-w-0 pr-6">
-                <h3 className="text-sm sm:text-base font-bold text-white truncate">
+            <div className="flex items-center gap-2.5 mb-4 border-b border-zinc-800 pb-3">
+              <span className="text-xl">📱</span>
+              <div className="text-left">
+                <h3 className="text-base font-bold text-white">
                   Personalized WhatsApp Share
                 </h3>
-                <p className="text-[10px] sm:text-[11px] text-zinc-400 truncate">
+                <p className="text-[11px] text-zinc-400">
                   Review and share work assignments for Order <span className="font-mono text-indigo-400 font-bold">{whatsappShareModalData.orderId}</span>
                 </p>
               </div>
             </div>
 
-            <div className="overflow-y-auto space-y-4 sm:space-y-5 flex-1 pr-1 text-left">
+            <div className="overflow-y-auto space-y-5 flex-1 pr-1 text-left">
               {whatsappShareModalData.staffNames.filter(name => {
                 const st = staff?.find(s => s.name === name);
                 return st?.department === 'Operations';
@@ -4333,13 +4404,13 @@ export const OperationsLeads: React.FC = () => {
                   return (
                     <div 
                       key={idx} 
-                      className={`border rounded-2xl p-3 sm:p-4 transition-all duration-200 ${
+                      className={`border rounded-2xl p-4 transition-all duration-200 ${
                         isSelected 
                           ? 'bg-zinc-950/65 border-zinc-800/80 shadow-md' 
                           : 'bg-zinc-900/30 border-zinc-850/40 opacity-60'
                       }`}
                     >
-                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-3">
+                      <div className="flex items-start justify-between gap-3 mb-3">
                         <div className="flex items-start gap-2.5">
                           <button
                             type="button"
@@ -4355,7 +4426,7 @@ export const OperationsLeads: React.FC = () => {
                           </button>
                           
                           <div>
-                            <div className="flex items-center gap-1.5 flex-wrap">
+                            <div className="flex items-center gap-1.5">
                               <span className="text-xs font-black text-white">{name}</span>
                               {stObj?.role && (
                                 <span className="text-[9.5px] font-mono text-zinc-400 bg-zinc-850 px-1.5 py-0.5 rounded border border-zinc-800">
@@ -4381,7 +4452,7 @@ export const OperationsLeads: React.FC = () => {
                                 : `https://wa.me/?text=${encodeURIComponent(msgText)}`;
                               window.open(shareUrl, '_blank');
                             }}
-                            className="w-full sm:w-auto px-3.5 py-1.5 bg-[#25D366] hover:bg-[#20ba5a] active:scale-95 text-black font-extrabold text-[11px] rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-[#25D366]/10 hover:shadow-[#25D366]/25 transition-all cursor-pointer"
+                            className="px-3.5 py-1.5 bg-[#25D366] hover:bg-[#20ba5a] active:scale-95 text-black font-extrabold text-[11px] rounded-xl flex items-center gap-1.5 shadow-md shadow-[#25D366]/10 hover:shadow-[#25D366]/25 transition-all cursor-pointer"
                           >
                             <span className="text-xs">📲</span> Share on WhatsApp
                           </button>
@@ -4401,8 +4472,8 @@ export const OperationsLeads: React.FC = () => {
                                 [name]: e.target.value
                               }));
                             }}
-                            rows={5}
-                            className="w-full bg-zinc-950 border border-zinc-850 text-zinc-300 text-xs font-mono p-2.5 sm:p-3 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-y leading-relaxed"
+                            rows={6}
+                            className="w-full bg-zinc-950 border border-zinc-850 text-zinc-300 text-xs font-mono p-3 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-y leading-relaxed"
                           />
                         </div>
                       )}
@@ -4412,11 +4483,11 @@ export const OperationsLeads: React.FC = () => {
               )}
             </div>
 
-            <div className="pt-3 sm:pt-4 border-t border-zinc-800 mt-3 sm:mt-4 flex justify-end gap-3 shrink-0">
+            <div className="pt-4 border-t border-zinc-800 mt-4 flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setWhatsappShareModalData(null)}
-                className="w-full sm:w-auto px-4 py-2 bg-zinc-800 hover:bg-zinc-700 active:scale-98 text-zinc-300 text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 active:scale-98 text-zinc-300 text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
               >
                 Close
               </button>
@@ -4444,8 +4515,8 @@ export const OperationsLeads: React.FC = () => {
         const eventNames = Object.keys(groupedByEvent);
 
         return (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-2.5 sm:p-4">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-[calc(100vw-1.25rem)] sm:w-full sm:max-w-4xl shadow-2xl p-4 sm:p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[92vh]">
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-4xl shadow-2xl p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
               <button 
                 onClick={() => setViewingStaffOrderId(null)}
                 className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
@@ -4454,19 +4525,19 @@ export const OperationsLeads: React.FC = () => {
                 ✕
               </button>
               
-              <div className="flex items-center gap-2.5 mb-3 sm:mb-4 border-b border-zinc-800 pb-3 shrink-0">
-                <span className="text-lg sm:text-xl">👥</span>
-                <div className="text-left min-w-0 pr-6">
-                  <h3 className="text-sm sm:text-base font-bold text-white font-sans truncate">
+              <div className="flex items-center gap-2 mb-4 border-b border-zinc-800 pb-3">
+                <span className="text-xl">👥</span>
+                <div className="text-left">
+                  <h3 className="text-base font-bold text-white font-sans">
                     Assigned Team Members
                   </h3>
-                  <p className="text-[10px] sm:text-[11px] text-zinc-400 truncate">
+                  <p className="text-[11px] text-zinc-400">
                     Order <span className="font-mono text-indigo-400 font-bold">{ord.order_id}</span> • {ord.customer_name}
                   </p>
                 </div>
               </div>
 
-              <div className="overflow-y-auto space-y-4 flex-1 pr-0.5 text-left">
+              <div className="overflow-y-auto space-y-4 flex-1 pr-1 text-left">
                 {eventNames.length === 0 ? (
                   <div className="text-center py-8 text-zinc-500 italic text-xs font-mono">
                     No staff assigned yet.
@@ -4475,20 +4546,20 @@ export const OperationsLeads: React.FC = () => {
                   eventNames.map((evName, evIdx) => {
                     const members = groupedByEvent[evName];
                     return (
-                      <div key={evIdx} className="bg-zinc-950/40 border border-zinc-850/60 rounded-2xl p-3 sm:p-4 space-y-3">
+                      <div key={evIdx} className="bg-zinc-950/40 border border-zinc-850/60 rounded-2xl p-4 space-y-3">
                         <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
-                          <h4 className="text-xs font-bold text-indigo-400 font-sans flex items-center gap-1.5 truncate">
+                          <h4 className="text-xs font-bold text-indigo-400 font-sans flex items-center gap-1.5">
                             🎬 {evName}
                           </h4>
                           {members[0] && (
-                            <span className="text-[10px] font-mono text-zinc-500 shrink-0 ml-2">
+                            <span className="text-[10px] font-mono text-zinc-500">
                               {members[0].event_date}
                             </span>
                           )}
                         </div>
 
                         <div className="overflow-x-auto rounded-xl border border-zinc-800/80 bg-zinc-900/60 mt-2">
-                          <table className="w-full text-left border-collapse min-w-[640px]">
+                          <table className="w-full text-left border-collapse min-w-max">
                             <thead>
                               <tr className="bg-zinc-950/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
                                 <th className="py-2.5 px-3.5 font-bold whitespace-nowrap">Staff Name</th>

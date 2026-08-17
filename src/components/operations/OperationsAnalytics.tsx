@@ -729,35 +729,35 @@ export const OperationsAnalytics: React.FC = () => {
 
       {/* STAFF DETAILED MODAL / SLIDE DRAW PANEL */}
       {selectedStaff && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-2.5 sm:p-4 animate-fade-in">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl sm:rounded-3xl w-[calc(100vw-1.25rem)] sm:w-full sm:max-w-3xl overflow-hidden shadow-2xl relative text-left flex flex-col max-h-[92vh]">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full w-full max-w-3xl overflow-hidden shadow-2xl relative text-left">
             
             {/* Header border decor focus ring corner */}
-            <div className="absolute top-3 left-3 w-3 h-3 border-t-2 border-l-2 border-amber-500/80 pointer-events-none" />
-            <div className="absolute top-3 right-3 w-3 h-3 border-t-2 border-r-2 border-amber-500/80 pointer-events-none" />
-            <div className="absolute bottom-3 left-3 w-3 h-3 border-b-2 border-l-2 border-amber-500/80 pointer-events-none" />
-            <div className="absolute bottom-3 right-3 w-3 h-3 border-b-2 border-r-2 border-amber-500/80 pointer-events-none" />
+            <div className="absolute top-3 left-3 w-3 h-3 border-t-2 border-l-2 border-amber-500/80" />
+            <div className="absolute top-3 right-3 w-3 h-3 border-t-2 border-r-2 border-amber-500/80" />
+            <div className="absolute bottom-3 left-3 w-3 h-3 border-b-2 border-l-2 border-amber-500/80" />
+            <div className="absolute bottom-3 right-3 w-3 h-3 border-b-2 border-r-2 border-amber-500/80" />
 
             {/* Title Bar */}
-            <div className="bg-zinc-900 p-4 sm:p-5 border-b border-zinc-800 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 pr-2">
-                <Camera className="w-5 h-5 text-amber-550 shrink-0" />
-                <div className="min-w-0">
-                  <h3 className="text-xs font-black uppercase font-mono tracking-widest text-amber-400 truncate">STATION ASSIGNMENTS SHEET</h3>
-                  <p className="text-[10px] sm:text-[11px] text-zinc-400 font-sans truncate">Active operational history files for <b>{selectedStaff.name}</b> // {selectedStaff.role}</p>
+            <div className="bg-zinc-900 p-4 border-b border-zinc-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Camera className="w-5 h-5 text-amber-550" />
+                <div>
+                  <h3 className="text-xs font-black uppercase font-mono tracking-widest text-amber-400">STATION ASSIGNMENTS SHEET</h3>
+                  <p className="text-[11px] text-zinc-400 font-sans">Active operational history files for <b>{selectedStaff.name}</b> // {selectedStaff.role}</p>
                 </div>
               </div>
               <button 
                 onClick={() => setSelectedStaff(null)} 
-                className="px-2.5 py-1 rounded-lg bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer text-xs border border-zinc-800 font-mono shrink-0"
+                className="px-2.5 py-1 rounded bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer text-xs border border-zinc-800 font-mono"
               >
                 ✕ Exit
               </button>
             </div>
 
             {/* Dialog Body Content */}
-            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 bg-zinc-900 p-3.5 sm:p-4 border border-zinc-800 rounded-xl font-mono text-[11px] text-zinc-400">
+            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-zinc-900 p-4 border border-zinc-800 rounded-xl font-mono text-[11px] text-zinc-400">
                 <div>
                   <span className="text-zinc-550 block text-[9px] uppercase">Roster Status</span>
                   <span className="text-emerald-400 uppercase font-black">{selectedStaff.status}</span>
@@ -788,7 +788,7 @@ export const OperationsAnalytics: React.FC = () => {
                     return (
                       <div 
                         key={ord.order_id} 
-                        className="bg-zinc-900 border border-zinc-850 hover:border-zinc-800 rounded-xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all relative"
+                        className="bg-zinc-900 border border-zinc-850 hover:border-zinc-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all relative"
                       >
                         <div className="absolute top-0 bottom-0 left-0 w-1 bg-amber-500 rounded-l" />
 
@@ -818,10 +818,10 @@ export const OperationsAnalytics: React.FC = () => {
             </div>
 
             {/* Footer Workspace Action */}
-            <div className="bg-zinc-900 p-3.5 sm:p-4 border-t border-zinc-800 text-right shrink-0">
+            <div className="bg-zinc-900 p-4 border-t border-zinc-800 text-right">
               <button 
                 onClick={() => setSelectedStaff(null)} 
-                className="w-full sm:w-auto px-5 py-2 rounded-lg bg-indigo-650 hover:bg-indigo-600 text-xs font-black text-white hover:shadow-lg transition-all cursor-pointer font-sans"
+                className="px-5 py-2 rounded-lg bg-indigo-650 hover:bg-indigo-600 text-xs font-black text-white hover:shadow-lg transition-all cursor-pointer font-sans"
               >
                 Close File View
               </button>

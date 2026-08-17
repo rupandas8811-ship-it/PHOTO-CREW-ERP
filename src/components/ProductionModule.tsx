@@ -516,6 +516,9 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     quotations,
     getLeadCurrentStatus,
     logs,
+    addStaff,
+    updateStaff,
+    deleteStaff,
     addProductionStaff,
     updateProductionStaff,
     deleteProductionStaff,
@@ -579,9 +582,7 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
 
     const opsLink = matchedOp ? (
       matchedOp.consolidated_drive_link || 
-      matchedOp.Consolidated_Drive_Link ||
-      matchedOp.raw_footage_drive_link ||
-      matchedOp.Raw_Footage_Drive_Link
+      matchedOp.Consolidated_Drive_Link
     ) : null;
 
     if (opsLink && opsLink.trim() !== '') {
@@ -1188,9 +1189,9 @@ ${coordinatorName}`;
     try {
       if (editingStaffMember) {
         const { mobile: _m, email: _e, ...safePayload } = payload;
-        await updateProductionStaff(editingStaffMember.staff_id, safePayload);
+        await updateStaff(editingStaffMember.staff_id, safePayload);
       } else {
-        await addProductionStaff(payload);
+        await addStaff(payload);
       }
       setIsStaffModalOpen(false);
       setEditingStaffMember(null);
@@ -4627,7 +4628,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             <button
                               onClick={async () => {
                                 const nextStatus = member.status === 'Active' ? 'Inactive' : 'Active';
-                                await updateProductionStaff(member.staff_id, { status: nextStatus });
+                                await updateStaff(member.staff_id, { status: nextStatus });
                               }}
                               className={`p-1.5 border rounded-lg transition duration-150 cursor-pointer ${
                                 member.status === 'Active'
@@ -4643,7 +4644,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             <button
                               onClick={async () => {
                                 if (confirm(`Are you sure you want to remove ${member.name} from the post-production database?`)) {
-                                  await deleteProductionStaff(member.staff_id);
+                                  await deleteStaff(member.staff_id);
                                 }
                               }}
                               className="p-1.5 bg-rose-500/10 hover:bg-rose-500/25 text-rose-450 border border-rose-500/20 rounded-lg transition duration-150 cursor-pointer"
@@ -8230,7 +8231,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         
                         // 2. Prepare new assignments across all sections
                         const newAssignments = [];
-                        const newStaffAssignments = [];
                         for (const section of wfEventSections) {
                           for (const item of section.items) {
                             if (!item.editor || item.editor === 'Unassigned') continue;
@@ -8261,17 +8261,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 status: finalStatus,
                                 created_at: originalAssignment?.created_at || new Date().toISOString()
                               });
-                              
-                              // Create matching staff_assignment for the Production Staff dashboard
-                              newStaffAssignments.push({
-                                assignment_id: id,
-                                order_id: orderId,
-                                staff_role: st.role || 'Editor',
-                                staff_id: st.staff_id,
-                                staff_name: item.editor,
-                                assignment_date: originalAssignment?.assigned_date || new Date().toISOString().split('T')[0],
-                                assignment_status: finalStatus || 'Assigned'
-                              });
                             }
                           }
                         }
@@ -8281,15 +8270,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             .from('editor_assignments')
                             .insert(newAssignments);
                           if (insertError) throw insertError;
-                        }
-                        
-                        if (newStaffAssignments && newStaffAssignments.length > 0) {
-                          const { error: staffInsertError } = await supabaseClient
-                            .from('staff_assignments')
-                            .insert(newStaffAssignments);
-                          if (staffInsertError) {
-                            console.warn("Failed to sync staff_assignments:", staffInsertError);
-                          }
                         }
                         
                         // 3. Update the production record

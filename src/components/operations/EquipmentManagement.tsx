@@ -571,17 +571,17 @@ export const EquipmentManagement: React.FC = () => {
       <div className="grid grid-cols-1 gap-6 items-start">
         {/* Gear Form Modal */}
         {showGearForm && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-2.5 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-            <div id="equipment_registry_form" className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-2xl w-[calc(100vw-1.25rem)] sm:w-full sm:max-w-lg relative my-auto max-h-[92vh] flex flex-col overflow-hidden">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+            <div id="equipment_registry_form" className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-2xl w-full max-w-lg relative my-auto max-h-full overflow-y-auto">
               <button onClick={() => { setEditingId(null); setShowGearForm(false); }} className="absolute top-4 right-4 text-zinc-400 hover:text-white p-1 rounded-full bg-zinc-800/50 hover:bg-zinc-800 transition-colors z-10 cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
-              <h3 className="text-xs font-mono font-black uppercase text-zinc-300 flex items-center gap-1.5 border-b border-zinc-850 pb-2.5 pr-8 shrink-0">
+              <h3 className="text-xs font-mono font-black uppercase text-zinc-300 flex items-center gap-1.5 border-b border-zinc-850 pb-2.5 pr-8">
                 <PlusCircle className="w-4 h-4 text-amber-500" />
                 <span>{editingId ? 'Edit Register Details' : 'Register New Studio Gear'}</span>
               </h3>
 
-              <form onSubmit={handleSubmit} className="space-y-4 text-xs mt-3 overflow-y-auto flex-1 pr-0.5">
+              <form onSubmit={handleSubmit} className="space-y-4 text-xs mt-4">
             <fieldset disabled={!canEdit} className="space-y-4">
               <div>
                 <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-500 mb-1 font-semibold">
@@ -666,7 +666,7 @@ export const EquipmentManagement: React.FC = () => {
             </fieldset>
 
             {canEdit ? (
-              <div className="flex gap-2 justify-end pt-3 border-t border-zinc-850 mt-4 shrink-0">
+              <div className="flex gap-2 justify-end pt-2 border-t border-zinc-850 mt-4">
                 <button
                   type="button"
                   onClick={handleCancelEdit}
@@ -678,13 +678,12 @@ export const EquipmentManagement: React.FC = () => {
                   type="submit"
                   className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-black font-semibold rounded-xl cursor-pointer flex items-center gap-1"
                 >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>{editingId ? 'Update Gear' : 'Save To Registry'}</span>
+                  <span>{editingId ? 'Update Gear' : 'Add to Inventory'}</span>
                 </button>
               </div>
             ) : (
-              <div className="pt-2 border-t border-zinc-850 text-center text-zinc-500 text-[10px] font-mono">
-                🔒 View-only permission mode
+              <div className="bg-zinc-950/40 border border-zinc-850 p-3 rounded-lg text-[10px] text-zinc-500 font-mono mt-4">
+                🔒 Read-only mode access.
               </div>
             )}
           </form>
@@ -878,55 +877,55 @@ export const EquipmentManagement: React.FC = () => {
         const meta = parseEquipmentNotes(selectedEq.notes);
         const assigned_quantity = selectedEq.quantity - (selectedEq.available_quantity ?? selectedEq.quantity);
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-[calc(100vw-1.25rem)] sm:w-full sm:max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
               
               {/* Header block */}
-              <div className="p-4 sm:p-6 border-b border-zinc-850 bg-zinc-950/80 flex items-center justify-between shrink-0">
-                <div className="min-w-0 pr-2">
-                  <div className="flex items-center gap-2 flex-wrap">
+              <div className="p-6 border-b border-zinc-850 bg-zinc-950/80 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
                     <span className="text-[10px] font-mono bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-0.5 rounded uppercase font-extrabold tracking-widest">
                       {selectedEq.equipment_id}
                     </span>
                     <span className="text-zinc-500 font-mono text-xs">/ {selectedEq.equipment_type}</span>
                   </div>
-                  <h4 className="text-base sm:text-lg font-bold text-white mt-1.5 truncate">{selectedEq.equipment_name}</h4>
+                  <h4 className="text-lg font-bold text-white mt-1.5">{selectedEq.equipment_name}</h4>
                 </div>
                 <button 
                   onClick={() => setSelectedEq(null)} 
-                  className="p-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-all cursor-pointer shrink-0"
+                  className="p-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-all cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               {/* Body content (Bento-style layout) */}
-              <div className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-6 text-xs text-zinc-300 flex-1">
+              <div className="p-6 max-h-[70vh] overflow-y-auto space-y-6 text-xs text-zinc-300">
                 
                 {/* Visual statistics grid */}
-                <div className="grid grid-cols-3 gap-2 sm:gap-3 text-center">
-                  <div className="p-2.5 sm:p-3 bg-zinc-950/60 border border-zinc-850 rounded-xl sm:rounded-2xl">
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="p-3 bg-zinc-950/60 border border-zinc-850 rounded-2xl">
                     <span className="text-[9px] font-mono text-zinc-500 block uppercase font-bold tracking-wider">Total Stock</span>
-                    <span className="text-base sm:text-lg font-bold text-white font-mono block mt-1">{selectedEq.quantity}</span>
+                    <span className="text-lg font-bold text-white font-mono block mt-1">{selectedEq.quantity}</span>
                   </div>
-                  <div className="p-2.5 sm:p-3 bg-zinc-950/60 border border-zinc-850 rounded-xl sm:rounded-2xl">
+                  <div className="p-3 bg-zinc-950/60 border border-zinc-850 rounded-2xl">
                     <span className="text-[9px] font-mono text-zinc-500 block uppercase font-bold tracking-wider">Available</span>
-                    <span className="text-base sm:text-lg font-bold text-emerald-400 font-mono block mt-1">{selectedEq.available_quantity}</span>
+                    <span className="text-lg font-bold text-emerald-400 font-mono block mt-1">{selectedEq.available_quantity}</span>
                   </div>
-                  <div className="p-2.5 sm:p-3 bg-zinc-950/60 border border-zinc-850 rounded-xl sm:rounded-2xl">
+                  <div className="p-3 bg-zinc-950/60 border border-zinc-850 rounded-2xl">
                     <span className="text-[9px] font-mono text-zinc-500 block uppercase font-bold tracking-wider">Assigned Out</span>
-                    <span className="text-base sm:text-lg font-bold text-sky-400 font-mono block mt-1">{assigned_quantity}</span>
+                    <span className="text-lg font-bold text-sky-400 font-mono block mt-1">{assigned_quantity}</span>
                   </div>
                 </div>
 
                 {/* Details list inside card */}
-                <div className="bg-[#09090b]/40 border border-zinc-850 rounded-2xl p-3.5 sm:p-4.5 space-y-4">
+                <div className="bg-[#09090b]/40 border border-zinc-850 rounded-2xl p-4.5 space-y-4">
                   <h5 className="text-[10px] font-mono font-black text-zinc-400 uppercase tracking-widest border-b border-zinc-850 pb-2 flex items-center gap-1.5">
                     <Info className="w-4 h-4 text-amber-500" />
                     <span>SYSTEM IDENTIFICATION & SPECIFICATIONS</span>
                   </h5>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <span className="text-zinc-500 font-mono text-[10px] block uppercase">Manufacturer Brand</span>
                       <span className="text-white font-bold">{selectedEq.brand || 'N/A'}</span>
@@ -977,13 +976,13 @@ export const EquipmentManagement: React.FC = () => {
                 </div>
 
                 {/* Logistics & Purchase info card */}
-                <div className="bg-[#09090b]/40 border border-zinc-850 rounded-2xl p-3.5 sm:p-4.5 space-y-4">
+                <div className="bg-[#09090b]/40 border border-zinc-850 rounded-2xl p-4.5 space-y-4">
                   <h5 className="text-[10px] font-mono font-black text-zinc-400 uppercase tracking-widest border-b border-zinc-850 pb-2 flex items-center gap-1.5">
                     <Calendar className="w-4 h-4 text-amber-500" />
                     <span>FINANCIALS & DISPATCH ASSIGNMENTS</span>
                   </h5>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <span className="text-zinc-500 font-mono text-[10px] block uppercase">Purchase Price</span>
                       <span className="text-white font-bold font-mono">
@@ -1012,7 +1011,7 @@ export const EquipmentManagement: React.FC = () => {
 
                 {/* Field report notes */}
                 {meta.notes && (
-                  <div className="bg-amber-500/[0.02] border border-amber-500/10 p-3.5 sm:p-4.5 rounded-2xl space-y-2">
+                  <div className="bg-amber-500/[0.02] border border-amber-500/10 p-4.5 rounded-2xl space-y-2">
                     <span className="text-[10px] font-mono font-black text-amber-500 uppercase tracking-widest block">NOTES & FIELD REPORTS</span>
                     <p className="text-zinc-350 leading-relaxed font-mono text-[11px] bg-zinc-950 p-3 rounded-xl border border-zinc-850 whitespace-pre-wrap">
                       {meta.notes}
@@ -1022,7 +1021,7 @@ export const EquipmentManagement: React.FC = () => {
               </div>
 
               {/* Footer controls */}
-              <div className="p-3.5 sm:p-4 bg-zinc-950/80 border-t border-zinc-850 flex justify-between gap-2.5 shrink-0">
+              <div className="p-4 bg-zinc-950/80 border-t border-zinc-850 flex justify-between gap-2.5">
                 {canEdit ? (
                   <button
                     onClick={() => {
@@ -1052,60 +1051,60 @@ export const EquipmentManagement: React.FC = () => {
 
       {/* Equipment Assignment Details Popup */}
       {busyEquipment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-[calc(100vw-1.25rem)] sm:w-full sm:max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
             
             {/* Header block */}
-            <div className="p-4 sm:p-6 border-b border-zinc-850 bg-zinc-950/80 flex items-center justify-between shrink-0">
-              <div className="min-w-0 pr-2">
-                <h4 className="text-base sm:text-lg font-bold text-white truncate">Equipment Assignment Details</h4>
-                <p className="text-xs text-zinc-400 mt-1 font-mono truncate">Active tracking log for {busyEquipment.equipment_name}</p>
+            <div className="p-6 border-b border-zinc-850 bg-zinc-950/80 flex items-center justify-between">
+              <div>
+                <h4 className="text-lg font-bold text-white">Equipment Assignment Details</h4>
+                <p className="text-xs text-zinc-400 mt-1 font-mono">Active tracking log for {busyEquipment.equipment_name}</p>
               </div>
               <button 
                 onClick={() => setBusyEquipment(null)} 
-                className="p-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-all cursor-pointer shrink-0"
+                className="p-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-all cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Body content */}
-            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
+            <div className="p-6 max-h-[60vh] overflow-y-auto space-y-4">
               {assignedEventsForBusyEquipment.length > 0 ? (
                 <div className="overflow-x-auto border border-zinc-850 rounded-2xl bg-zinc-950/20">
-                  <table className="w-full text-left border-collapse min-w-[500px]">
+                  <table className="w-full text-left border-collapse min-w-max">
                     <thead>
                       <tr className="border-b border-zinc-850 text-[10px] font-mono uppercase text-zinc-400 bg-zinc-950/50">
-                        <th className="p-3.5 whitespace-nowrap">Equipment Name</th>
-                        <th className="p-3.5 whitespace-nowrap">Event Name</th>
-                        <th className="p-3.5 whitespace-nowrap">Event Date</th>
-                        <th className="p-3.5 whitespace-nowrap">Event Time</th>
+                        <th className="p-3.5">Equipment Name</th>
+                        <th className="p-3.5">Event Name</th>
+                        <th className="p-3.5">Event Date</th>
+                        <th className="p-3.5">Event Time</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-850/45 text-xs text-zinc-300">
                       {assignedEventsForBusyEquipment.map((ev, idx) => (
                         <tr key={idx} className="hover:bg-zinc-950/35 transition-all">
-                          <td className="p-3.5 font-bold text-zinc-100 whitespace-nowrap">{ev.equipment_name}</td>
-                          <td className="p-3.5 text-amber-400 font-medium whitespace-nowrap">{ev.event_name}</td>
-                          <td className="p-3.5 font-mono text-zinc-300 whitespace-nowrap">{ev.event_date}</td>
-                          <td className="p-3.5 font-mono text-zinc-400 whitespace-nowrap">{ev.event_time}</td>
+                          <td className="p-3.5 font-bold text-zinc-100">{ev.equipment_name}</td>
+                          <td className="p-3.5 text-amber-400 font-medium">{ev.event_name}</td>
+                          <td className="p-3.5 font-mono text-zinc-300">{ev.event_date}</td>
+                          <td className="p-3.5 font-mono text-zinc-400">{ev.event_time}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               ) : (
-                <div className="p-8 sm:p-10 text-center border border-zinc-850 rounded-2xl bg-zinc-950/25">
+                <div className="p-10 text-center border border-zinc-850 rounded-2xl bg-zinc-950/25">
                   <p className="text-zinc-500 italic font-mono text-xs">No active event assignment found.</p>
                 </div>
               )}
             </div>
 
             {/* Footer block */}
-            <div className="p-3.5 sm:p-4 border-t border-zinc-850 bg-zinc-950/40 flex justify-end shrink-0">
+            <div className="p-4 border-t border-zinc-850 bg-zinc-950/40 flex justify-end">
               <button
                 onClick={() => setBusyEquipment(null)}
-                className="w-full sm:w-auto px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-350 hover:text-white font-mono text-xs font-bold rounded-xl transition-all cursor-pointer"
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-350 hover:text-white font-mono text-xs font-bold rounded-xl transition-all cursor-pointer"
               >
                 Close
               </button>
